@@ -270,7 +270,7 @@ impl Tokenizer {
             .print_error();
             return;
         }
-        let value: char = self.source[self.current];
+        let value: char = self.source[self.current - 1];
 
         if self.peek() != '\'' {
             crate::utils::errors::Error::init(

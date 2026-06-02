@@ -17,7 +17,7 @@ impl fmt::Display for Value {
             Value::Float(fl) => write!(f, "{}", fl),
             Value::String(s) => write!(f, "{}", s),
             Value::Bool(b) => write!(f, "{}", b),
-            Value::Char(c) => write!(f, "{}", c),
+            Value::Char(c) => write!(f, "'{}'", c),
             Value::Null => write!(f, "null"),
         }
     }
