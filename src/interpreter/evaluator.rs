@@ -36,6 +36,10 @@ impl Evaluator {
                 self.insert_value(name.clone(), val.clone());
                 val
             }
+            Expression::Call { name, args } => {
+                let evaluated_args = args.iter().map(|arg| self.evaluate(arg)).collect();
+                self.call_function(name, evaluated_args)
+            }
         }
     }
 
@@ -46,7 +50,7 @@ impl Evaluator {
     }
 
     pub fn get_value(&self, value_name: String) -> Value {
-        println!("target: {}", value_name.clone());
+        // println!("target: {}", value_name.clone());
         match self.enviroment.get(&value_name) {
             Some(val) => val.clone(),
             _ => {
@@ -59,6 +63,22 @@ impl Evaluator {
 
     pub fn insert_value(&mut self, value_name: String, value: Value) {
         self.enviroment.insert(value_name.clone(), value.clone());
-        println!("{}, {:?}", value_name.clone(), value.clone());
+        // println!("{}, {:?}", value_name.clone(), value.clone());
+    }
+
+    pub fn call_function(&mut self, name: &str, args: Vec<Value>) -> Value {
+        match name {
+            "print" => {
+                for arg in args {
+                    print!("{:?}", arg);
+                }
+                Value::Null
+            }
+
+            _ => {
+                Error::init(format!("undefined function {}", name), None, None).print_error();
+                unreachable!();
+            }
+        }
     }
 }

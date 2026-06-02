@@ -85,12 +85,38 @@ impl Parser {
     }
 
     pub fn parse_primary(&mut self) -> Expression {
-        println!("current index: {:?}", self.current);
-        println!("current token: {:?}", self.peek());
+        // println!("current index: {:?}", self.current);
+        // println!("current token: {:?}", self.peek());
 
         // is it identifier
         if self.match_type(&[TokenType::Identifier(String::new())]) {
             if let TokenType::Identifier(name) = self.previous() {
+                // is it function call?
+                if self.match_type(&[TokenType::LeftParen]) {
+                    let mut args = Vec::new();
+                    // need to extract this as helper function that returns bool tho
+                    if !(std::mem::discriminant(&self.peek())
+                        == std::mem::discriminant(&TokenType::RightParen))
+                    {
+                        loop {
+                            args.push(self.parse_expression());
+                            if !self.match_type(&[TokenType::Comma]) {
+                                break;
+                            }
+                        }
+                    }
+                    self.match_type(&[TokenType::RightParen]);
+                    return Expression::Call { name, args };
+                }
+
+                // is it assignment?
+                if self.match_type(&[TokenType::Assign]) {
+                    let value = self.parse_expression();
+                    return Expression::Assign {
+                        name,
+                        value: Box::new(value),
+                    };
+                }
                 return Expression::Identifier(name);
             }
         }

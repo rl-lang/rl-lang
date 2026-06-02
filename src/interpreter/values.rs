@@ -5,4 +5,5 @@ pub enum Value {
     String(String),
     Bool(bool),
     Char(char),
+    Null,
 }

@@ -22,4 +22,8 @@ pub enum Expression {
         name: String,
         value: Box<Expression>,
     },
+    Call {
+        name: String,
+        args: Vec<Expression>,
+    },
 }

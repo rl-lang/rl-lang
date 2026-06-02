@@ -36,18 +36,19 @@ fn main() {
 
     let lexer = lexer::tokenizer::Tokenizer::lex(&source_file);
 
-    let mut current_debug_line: usize = 0;
-    for token in lexer.iter() {
-        if token.line != current_debug_line {
-            print!("\n{} ", current_debug_line);
-            current_debug_line += 1;
-        }
-        if matches!(token.token, lexer::tokentypes::TokenType::Newline)
-            || matches!(token.token, lexer::tokentypes::TokenType::Eof)
-        {
-            continue;
-        }
-        print!("[{}] ", token.lexeme);
-    }
+    // let mut current_debug_line: usize = 0;
+    // for token in lexer.iter() {
+    //    if token.line != current_debug_line {
+    //        print!("\n{} ", current_debug_line);
+    //        current_debug_line += 1;
+    //    }
+    //    if matches!(token.token, lexer::tokentypes::TokenType::Newline)
+    //        || matches!(token.token, lexer::tokentypes::TokenType::Eof)
+    //    {
+    //        continue;
+    //    }
+    //    print!("[{}] ", token.lexeme);
+    // }
+
     let parser = Parser::parse(lexer);
 }

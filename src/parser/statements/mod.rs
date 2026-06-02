@@ -12,13 +12,13 @@ impl Parser {
                 self.advance();
                 let stmt = self.parse_variable_declartion();
                 evaluator.evaluate_statement(&stmt);
-                println!("{:?}", stmt);
+                // println!("{:?}", stmt);
             }
             _ => {
                 let expr = self.parse_expression();
-                println!("{:?}", expr);
-                let mut x = crate::interpreter::evaluator::Evaluator::new();
-                println!("{:?}", x.evaluate(&expr));
+                // println!("{:?}", expr);
+                // println!("{:?}", evaluator.evaluate(&expr));
+                evaluator.evaluate(&expr);
             }
         }
     }
