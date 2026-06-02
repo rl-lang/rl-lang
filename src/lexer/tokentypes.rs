@@ -54,10 +54,11 @@ pub enum TokenType {
     From,
     Or,
     And,
+    If,
+    Else,
 
     Const,
     Dec,
-    Mut,
     Int,
     Float,
     Bool,

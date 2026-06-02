@@ -194,7 +194,8 @@ impl Tokenizer {
             "true" => self.add_token(TokenType::BoolLiteral(true)),
             "false" => self.add_token(TokenType::BoolLiteral(false)),
             "dec" => self.add_token(TokenType::Dec),
-            "mut" => self.add_token(TokenType::Mut),
+            "if" => self.add_token(TokenType::If),
+            "else" => self.add_token(TokenType::Else),
 
             &_ => self.add_token(TokenType::Identifier(value)),
         }

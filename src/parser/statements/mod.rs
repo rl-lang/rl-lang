@@ -1,4 +1,3 @@
-// mod stdlib_functions;
 mod variable_declaration;
 
 use crate::{
