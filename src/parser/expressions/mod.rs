@@ -29,6 +29,10 @@ impl Parser {
             TokenType::LessEqual,
             TokenType::Greater,
             TokenType::GreaterEqual,
+            TokenType::PlusEqual,
+            TokenType::MinusEqual,
+            TokenType::StarEqual,
+            TokenType::SlashEqual,
         ]) {
             let operator = self.previous();
             let right = self.parse_term();

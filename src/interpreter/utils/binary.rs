@@ -98,6 +98,50 @@ impl Evaluator {
                     unreachable!();
                 }
             },
+
+            TokenType::PlusEqual => match (left, right) {
+                (Value::Integer(a), Value::Integer(b)) => Value::Integer(a + b),
+                (Value::Integer(a), Value::Float(b)) => Value::Integer(a + b as i64),
+                (Value::Float(a), Value::Integer(b)) => Value::Float(a + b as f64),
+                (Value::Float(a), Value::Float(b)) => Value::Float(a + b),
+                _ => {
+                    Error::init("type mismatch on +=".to_string(), None, None).print_error();
+                    unreachable!();
+                }
+            },
+            TokenType::MinusEqual => match (left, right) {
+                (Value::Integer(a), Value::Integer(b)) => Value::Integer(a - b),
+                (Value::Integer(a), Value::Float(b)) => Value::Integer(a - b as i64),
+                (Value::Float(a), Value::Integer(b)) => Value::Float(a - b as f64),
+                (Value::Float(a), Value::Float(b)) => Value::Float(a - b),
+                _ => {
+                    Error::init("type mismatch on -=".to_string(), None, None).print_error();
+                    unreachable!();
+                }
+            },
+
+            TokenType::StarEqual => match (left, right) {
+                (Value::Integer(a), Value::Integer(b)) => Value::Integer(a * b),
+                (Value::Integer(a), Value::Float(b)) => Value::Integer(a * b as i64),
+                (Value::Float(a), Value::Integer(b)) => Value::Float(a * b as f64),
+                (Value::Float(a), Value::Float(b)) => Value::Float(a * b),
+                _ => {
+                    Error::init("type mismatch on *=".to_string(), None, None).print_error();
+                    unreachable!();
+                }
+            },
+
+            TokenType::SlashEqual => match (left, right) {
+                (Value::Integer(a), Value::Integer(b)) => Value::Integer(a / b),
+                (Value::Integer(a), Value::Float(b)) => Value::Integer(a / b as i64),
+                (Value::Float(a), Value::Integer(b)) => Value::Float(a / b as f64),
+                (Value::Float(a), Value::Float(b)) => Value::Float(a / b),
+                _ => {
+                    Error::init("type mismatch on /=".to_string(), None, None).print_error();
+                    unreachable!();
+                }
+            },
+
             _ => {
                 Error::init("some error".to_string(), None, None).print_error();
                 unreachable!();
