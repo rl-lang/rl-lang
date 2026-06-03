@@ -51,18 +51,46 @@ impl Evaluator {
                 elseif_branch,
                 else_branch,
             } => {
-                self.evaluate_statement(if_branch);
+                if !self.evaluate_branch(if_branch) {
+                    // weather branch of the branches condition is
+                    // true and excuted or not
+                    let mut taken = false;
 
-                if let Some(branches) = elseif_branch {
-                    for branch in branches {
-                        self.evaluate_statement(branch);
+                    if let Some(branches) = elseif_branch {
+                        for branch in branches {
+                            if self.evaluate_branch(branch) {
+                                taken = true;
+                                break;
+                            };
+                        }
+                    }
+                    if !taken {
+                        if let Some(branch) = else_branch {
+                            self.evaluate_branch(branch);
+                        }
                     }
                 }
-
-                if let Some(branch) = else_branch {
-                    self.evaluate_statement(branch);
-                }
             }
+        }
+    }
+
+    fn evaluate_branch(&mut self, statement: &Statement) -> bool {
+        match statement {
+            Statement::ConditionalBranch { condition, body } => match condition {
+                Some(condition) => match self.evaluate(condition) {
+                    Value::Bool(true) => {
+                        self.evaluate_block(body);
+                        true
+                    }
+                    Value::Bool(false) => false,
+                    _ => panic!(),
+                },
+                None => {
+                    self.evaluate_block(body);
+                    true
+                }
+            },
+            _ => panic!(),
         }
     }
 

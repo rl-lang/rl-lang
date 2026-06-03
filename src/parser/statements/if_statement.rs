@@ -9,10 +9,11 @@ impl Parser {
             body: if_body,
         };
         let mut elseif_branch = Vec::new();
-        let else_body = Vec::new();
+        let mut else_body = Vec::new();
         while self.peek() == TokenType::Else {
             self.advance();
             if self.peek() == TokenType::If {
+                self.advance();
                 let branch_condition = self.parse_expression();
                 let branch_body = self.parse_block();
                 let branch = Statement::ConditionalBranch {
@@ -21,16 +22,23 @@ impl Parser {
                 };
                 elseif_branch.push(branch);
             } else {
-                let else_body = self.parse_block();
+                else_body = self.parse_block();
             }
         }
+
+        let else_branch = if else_body.is_empty() {
+            None
+        } else {
+            Some(Box::new(Statement::ConditionalBranch {
+                condition: None,
+                body: else_body,
+            }))
+        };
+
         Statement::Conditional {
             if_branch: Box::new(if_branch),
             elseif_branch: Some(elseif_branch),
-            else_branch: Some(Box::new(Statement::ConditionalBranch {
-                condition: None,
-                body: else_body,
-            })),
+            else_branch,
         }
     }
 }
