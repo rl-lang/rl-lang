@@ -19,7 +19,10 @@ impl fmt::Display for Value {
             Value::String(s) => write!(f, "{}", s),
             Value::Bool(b) => write!(f, "{}", b),
             Value::Char(c) => write!(f, "'{}'", c),
-            Value::Values(items) => write!(f, ""),
+            Value::Values(items) => {
+                let formatted: Vec<String> = items.iter().map(|v| v.to_string()).collect();
+                write!(f, "[{}]", formatted.join(", "))
+            }
             Value::Null => write!(f, "null"),
         }
     }

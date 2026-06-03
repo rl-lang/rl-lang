@@ -105,6 +105,7 @@ impl Parser {
                         .print_error();
                     }
                 }
+                self.match_type(&[TokenType::RightBracket]);
                 return Statement::Array {
                     name,
                     type_annotation: annoation_type,

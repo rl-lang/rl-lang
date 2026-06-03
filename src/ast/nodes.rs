@@ -26,4 +26,13 @@ pub enum Expression {
         name: String,
         args: Vec<Expression>,
     },
+    Index {
+        target: Box<Expression>,
+        index: Box<Expression>,
+    },
+    IndexAssign {
+        target: String,
+        index: Box<Expression>,
+        value: Box<Expression>,
+    },
 }

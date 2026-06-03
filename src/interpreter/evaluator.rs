@@ -18,7 +18,56 @@ impl Evaluator {
             Expression::Bool(b) => Value::Bool(*b),
             Expression::Float(f) => Value::Float(*f),
             Expression::Character(c) => Value::Char(*c),
+            Expression::Index { target, index } => {
+                let arr = self.evaluate(target);
+                let idx = self.evaluate(index);
+                match (arr, idx) {
+                    (Value::Values(items), Value::Integer(i)) => {
+                        let i = i as usize;
+                        if i >= items.len() {
+                            Error::init(
+                                format!("index {} out of bounds (len {})", i, items.len()),
+                                None,
+                                None,
+                            )
+                            .print_error();
+                            unreachable!()
+                        }
+                        items[i].clone()
+                    }
+                    _ => {
+                        Error::init("invalid index operation".to_string(), None, None)
+                            .print_error();
+                        unreachable!()
+                    }
+                }
+            }
 
+            Expression::IndexAssign {
+                target,
+                index,
+                value,
+            } => {
+                let idx = self.evaluate(index);
+                let val = self.evaluate(value);
+                match (self.environment.get_mut(target), idx) {
+                    (Some(Value::Values(items)), Value::Integer(i)) => {
+                        let i = i as usize;
+                        if i >= items.len() {
+                            Error::init(format!("index {} out of bounds", i), None, None)
+                                .print_error();
+                            unreachable!()
+                        }
+                        items[i] = val.clone();
+                    }
+                    _ => {
+                        Error::init(format!("'{}' is not an array", target), None, None)
+                            .print_error();
+                        unreachable!()
+                    }
+                }
+                val
+            }
             Expression::Grouping(inner) => self.evaluate(inner),
             Expression::Binary {
                 left,

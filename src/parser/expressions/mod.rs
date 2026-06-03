@@ -155,6 +155,25 @@ impl Parser {
                         value: Box::new(value),
                     };
                 }
+                if self.match_type(&[TokenType::LeftBracket]) {
+                    let index = self.parse_expression();
+                    self.match_type(&[TokenType::RightBracket]);
+
+                    // is it index-assign? arr[i] = val
+                    if self.match_type(&[TokenType::Assign]) {
+                        let value = self.parse_expression();
+                        return Expression::IndexAssign {
+                            target: name,
+                            index: Box::new(index),
+                            value: Box::new(value),
+                        };
+                    }
+
+                    return Expression::Index {
+                        target: Box::new(Expression::Identifier(name)),
+                        index: Box::new(index),
+                    };
+                }
                 return Expression::Identifier(name);
             }
         }

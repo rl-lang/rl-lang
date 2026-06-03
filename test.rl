@@ -1,29 +1,6 @@
-if (true) {
-    println("first if")
-}
-
-if (false) {
-
-  } else if (true) {
-      println("second if")
-    }
-
-if (false) {
-    
-  } else if (false) {}
-  else {
-      println("third if")
-    }
-
-dec int x = 1
-x += 1
-
-println(x)
-x -= -1
-x = x + 1
-println(x)
-x /= 2
-println(x)
-x *= 5
-println(x)
-dec arr[int] x = [1,3,5]
+dec arr[int] nums = [10, 20, 30]
+println(nums)        // [10, 20, 30]
+println(nums[1])     // 20
+nums[0] = 99
+println(nums[0])     // 99
+println(len(nums))   // 3
