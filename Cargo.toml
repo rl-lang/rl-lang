@@ -13,6 +13,13 @@ categories = ["command-line-utilities"]
 log = { version = "0.4", features = ["release_max_level_off"] }
 env_logger = "0.11"
 
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "test_benchmark"
+harness = false
+
 [[bin]]
 name = "rl"
 path = "src/main.rs"

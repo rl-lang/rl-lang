@@ -1,10 +1,10 @@
-use crate::{interpreter::evaluator::Evaluator, parser::parser::Parser};
-use log::{debug, error, info, warn};
-mod ast;
-mod interpreter;
-mod lexer;
-mod parser;
-mod utils;
+use log::{debug, info};
+use rl_lang::{
+    interpreter::evaluator::Evaluator,
+    lexer::tokenizer::Tokenizer,
+    parser::parser::Parser,
+    utils::errors::{Error, ErrorReason, Reason},
+};
 
 /// entry point for `rl` interpreter
 ///
@@ -38,13 +38,10 @@ fn main() {
 
     // check the source file if it ends with rl extension and then parse it to string
     if !arguments[2].ends_with(".rl") {
-        utils::errors::Error::init(
+        Error::init(
             "file extension is not .rl".to_string(),
             None,
-            Some(utils::errors::ErrorReason::init(
-                utils::errors::Reason::Compile,
-                None,
-            )),
+            Some(ErrorReason::init(Reason::Compile, None)),
         )
         .print_error();
         return;
@@ -54,13 +51,10 @@ fn main() {
         Ok(file) => file,
 
         Err(_) => {
-            utils::errors::Error::init(
+            Error::init(
                 "failed to read file".to_string(),
                 None,
-                Some(utils::errors::ErrorReason::init(
-                    utils::errors::Reason::Compile,
-                    None,
-                )),
+                Some(ErrorReason::init(Reason::Compile, None)),
             )
             .print_error();
             return;
@@ -70,7 +64,7 @@ fn main() {
     println!("[Parsing source file: {}]", arguments[2]);
     // phase one: lexing the source file into tokens
     info!("lexing the source file...");
-    let tokens = lexer::tokenizer::Tokenizer::lex(&source_file);
+    let tokens = Tokenizer::lex(&source_file);
 
     // phase two: parsing the tokens into ast tree
     info!("parsing the tokens into ast tree...");
