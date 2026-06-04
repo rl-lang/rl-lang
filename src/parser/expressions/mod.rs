@@ -197,6 +197,30 @@ impl Parser {
             }
         }
 
+        // is it array literal?
+        if self.match_type(&[TokenType::LeftBracket]) {
+            let mut items = Vec::new();
+            while self.peek() != TokenType::RightBracket {
+                items.push(self.parse_expression());
+                if self.peek() == TokenType::RightBracket {
+                    break;
+                }
+                if !self.match_type(&[TokenType::Comma]) {
+                    crate::utils::errors::Error::init(
+                        "expected ',' between array items".to_string(),
+                        None,
+                        Some(crate::utils::errors::ErrorReason::init(
+                            crate::utils::errors::Reason::Parse,
+                            None,
+                        )),
+                    )
+                    .print_error();
+                }
+            }
+            self.match_type(&[TokenType::RightBracket]);
+            return Expression::ArrayLiteral(items);
+        }
+        // panic
         // is it integer?
         if self.match_type(&[TokenType::NumberLiteral(0)]) {
             log::debug!("found number");

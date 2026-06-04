@@ -42,7 +42,10 @@ impl Evaluator {
                     }
                 }
             }
-
+            Expression::ArrayLiteral(items) => {
+                let values = items.iter().map(|e| self.evaluate(e)).collect();
+                Value::Values(values)
+            }
             Expression::IndexAssign {
                 target,
                 index,

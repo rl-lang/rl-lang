@@ -18,6 +18,7 @@ pub enum Expression {
     Float(f64),
     Character(char),
     Identifier(String),
+    ArrayLiteral(Vec<Expression>),
     Assign {
         name: String,
         value: Box<Expression>,
