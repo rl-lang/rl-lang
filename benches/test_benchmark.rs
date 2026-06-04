@@ -2,8 +2,7 @@ use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_ma
 use rl_lang::lexer::tokenizer::Tokenizer;
 use rl_lang::parser::parser::Parser;
 
-// ── source snippets ────────────────────────────────────────────────────────────
-
+// source snippets
 const SRC_ARRAY_DECL: &str = "\
 dec arr[int] my_int_array = [10, 20, 30]
 dec arr[bool] my_bool_array = [true, false, true]
