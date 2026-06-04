@@ -31,7 +31,7 @@ pub enum Expression {
         index: Box<Expression>,
     },
     IndexAssign {
-        target: String,
+        target: Box<Expression>,
         index: Box<Expression>,
         value: Box<Expression>,
     },

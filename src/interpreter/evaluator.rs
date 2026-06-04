@@ -50,22 +50,51 @@ impl Evaluator {
             } => {
                 let idx = self.evaluate(index);
                 let val = self.evaluate(value);
-                match (self.environment.get_mut(target), idx) {
-                    (Some(Value::Values(items)), Value::Integer(i)) => {
-                        let i = i as usize;
-                        if i >= items.len() {
-                            Error::init(format!("index {} out of bounds", i), None, None)
-                                .print_error();
-                            unreachable!()
-                        }
-                        items[i] = val.clone();
-                    }
-                    _ => {
-                        Error::init(format!("'{}' is not an array", target), None, None)
-                            .print_error();
-                        unreachable!()
+
+                // get the root array name
+                fn get_root_name(expression: &Expression) -> &str {
+                    match expression {
+                        Expression::Identifier(array_name) => array_name,
+                        Expression::Index { target, .. } => get_root_name(target),
+                        _ => unreachable!(),
                     }
                 }
+
+                fn get_indices_as_vec(
+                    expression: &Expression,
+                    evaluator: &mut Evaluator,
+                ) -> Vec<usize> {
+                    match expression {
+                        Expression::Identifier(_) => vec![],
+                        Expression::Index { target, index } => {
+                            let mut indices = get_indices_as_vec(target, evaluator);
+                            if let Value::Integer(i) = evaluator.evaluate(index) {
+                                indices.push(i as usize);
+                            }
+                            indices
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+
+                let root = get_root_name(&target).to_string();
+                let mut indices = get_indices_as_vec(&target, self);
+                if let Value::Integer(i) = idx {
+                    indices.push(i as usize);
+                }
+
+                let root_array = self.environment.get_mut(&root).unwrap();
+                let mut current_array = root_array;
+
+                for i in &indices[..indices.len() - 1] {
+                    if let Value::Values(items) = current_array {
+                        current_array = &mut items[*i];
+                    }
+                }
+                if let Value::Values(items) = current_array {
+                    items[*indices.last().unwrap()] = val.clone();
+                }
+
                 val
             }
             Expression::Grouping(inner) => self.evaluate(inner),

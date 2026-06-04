@@ -162,21 +162,36 @@ impl Parser {
                     let index = self.parse_expression();
                     self.match_type(&[TokenType::RightBracket]);
 
-                    // is it index-assign? arr[i] = val
-                    if self.match_type(&[TokenType::Assign]) {
-                        log::debug!("found array item assignment");
-                        let value = self.parse_expression();
-                        return Expression::IndexAssign {
-                            target: name,
-                            index: Box::new(index),
-                            value: Box::new(value),
+                    let mut expr = Expression::Index {
+                        target: Box::new(Expression::Identifier(name.clone())),
+                        index: Box::new(index),
+                    };
+
+                    // consume chained indices for nested arrays: arr[0][1][2]
+                    while self.peek() == TokenType::LeftBracket {
+                        self.advance();
+                        let next_index = self.parse_expression();
+                        self.match_type(&[TokenType::RightBracket]);
+                        expr = Expression::Index {
+                            target: Box::new(expr),
+                            index: Box::new(next_index),
                         };
                     }
 
-                    return Expression::Index {
-                        target: Box::new(Expression::Identifier(name)),
-                        index: Box::new(index),
-                    };
+                    // is it index-assign?
+                    if self.match_type(&[TokenType::Assign]) {
+                        log::debug!("found array item assignment");
+                        let value = self.parse_expression();
+                        if let Expression::Index { target, index } = expr {
+                            return Expression::IndexAssign {
+                                target,
+                                index,
+                                value: Box::new(value),
+                            };
+                        }
+                    }
+
+                    return expr;
                 }
                 return Expression::Identifier(name);
             }

@@ -64,3 +64,5 @@ dec arr[int] inner = [1, 2, 3]
 dec arr[arr[int]] nested = [inner, inner]
 println(nested)
 println(nested[1][2])
+nested[0][2] = 45
+println(nested[0][2])
