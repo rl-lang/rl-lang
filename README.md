@@ -1,3 +1,5 @@
+<img src="logo.svg" width="200">
+
 # RL - programming language
 
 ## statically typed interpreter language built in rust
