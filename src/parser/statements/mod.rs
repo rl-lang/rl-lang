@@ -10,10 +10,12 @@ use crate::{
 };
 
 impl Parser {
+    /// parsing [`TokenType`]s into [`Statement`]s
     pub fn parse_statement_to_ast(&mut self) -> Statement {
         match self.peek() {
             TokenType::Newline => {
                 self.advance();
+                log::info!("found newline while parser... skipping");
                 Statement::Expression(Expression::Integer(0))
             }
             TokenType::Dec => {
@@ -38,6 +40,7 @@ impl Parser {
         }
     }
 
+    /// parses the body between '{' '}' into list of [`Statement`]s
     pub fn parse_block(&mut self) -> Vec<Statement> {
         if !self.match_type(&[TokenType::LeftBrace]) {
             Error::init("expected '{'".to_string(), None, None).print_error();
