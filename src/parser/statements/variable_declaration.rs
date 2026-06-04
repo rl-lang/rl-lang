@@ -1,4 +1,8 @@
-use crate::{ast::statements::Statement, lexer::tokentypes::TokenType, parser::parser::Parser};
+use crate::{
+    ast::statements::{Statement, TypeAnnotation},
+    lexer::tokentypes::TokenType,
+    parser::parser::Parser,
+};
 
 impl Parser {
     pub fn parse_variable_declartion(&mut self) -> Statement {
@@ -8,14 +12,32 @@ impl Parser {
             if self.peek() == TokenType::LeftBracket {
                 self.advance();
                 let annoation_type = match self.peek() {
-                    TokenType::Int
-                    | TokenType::Float
-                    | TokenType::Bool
-                    | TokenType::String
-                    | TokenType::Char => {
-                        let t = self.peek();
+                    TokenType::Int => {
                         self.advance();
-                        t
+                        TypeAnnotation::Int
+                    }
+                    TokenType::Float => {
+                        self.advance();
+                        TypeAnnotation::Float
+                    }
+                    TokenType::Bool => {
+                        self.advance();
+                        TypeAnnotation::Bool
+                    }
+                    TokenType::String => {
+                        self.advance();
+                        TypeAnnotation::String
+                    }
+                    TokenType::Char => {
+                        self.advance();
+                        TypeAnnotation::Char
+                    }
+                    TokenType::Array => {
+                        self.advance();
+                        self.match_type(&[TokenType::LeftBracket]);
+                        let inner = self.parse_type();
+                        self.match_type(&[TokenType::RightBracket]);
+                        TypeAnnotation::Array(Box::new(inner))
                     }
                     _ => {
                         crate::utils::errors::Error::init(
@@ -175,6 +197,45 @@ impl Parser {
             name,
             type_annotation: var_type,
             value,
+        }
+    }
+}
+
+// should separate later
+impl Parser {
+    pub fn parse_type(&mut self) -> TypeAnnotation {
+        match self.peek() {
+            TokenType::Int => {
+                self.advance();
+                TypeAnnotation::Int
+            }
+            TokenType::Float => {
+                self.advance();
+                TypeAnnotation::Float
+            }
+            TokenType::Bool => {
+                self.advance();
+                TypeAnnotation::Bool
+            }
+            TokenType::String => {
+                self.advance();
+                TypeAnnotation::String
+            }
+            TokenType::Char => {
+                self.advance();
+                TypeAnnotation::Char
+            }
+            TokenType::Array => {
+                self.advance();
+                self.match_type(&[TokenType::LeftBracket]);
+                let inner = self.parse_type();
+                self.match_type(&[TokenType::RightBracket]);
+                TypeAnnotation::Array(Box::new(inner))
+            }
+            _ => {
+                // should add error later
+                unreachable!()
+            }
         }
     }
 }

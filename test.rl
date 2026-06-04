@@ -57,3 +57,10 @@ while (i < 10) {
   i += 1
 }
 println(arr_x) // [-5.8125, 90.09, 90.09, -95295373.51360005, 90.09, 90.09, 90.09, -9744278800898.861, 90.09, 90.09]
+
+
+// testing
+dec arr[int] inner = [1, 2, 3]
+dec arr[arr[int]] nested = [inner, inner]
+println(nested)
+println(nested[1][2])

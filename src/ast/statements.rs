@@ -9,7 +9,7 @@ pub enum Statement {
     },
     Array {
         name: String,
-        type_annotation: TokenType,
+        type_annotation: TypeAnnotation,
         value: Vec<Expression>,
     },
     Expression(Expression),
@@ -26,4 +26,14 @@ pub enum Statement {
         elseif_branch: Option<Vec<Statement>>,
         else_branch: Option<Box<Statement>>,
     },
+}
+
+#[derive(Debug, Clone)]
+pub enum TypeAnnotation {
+    Int,
+    Float,
+    Bool,
+    String,
+    Char,
+    Array(Box<TypeAnnotation>),
 }
