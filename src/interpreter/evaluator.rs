@@ -1,13 +1,19 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::{
     ast::nodes::Expression,
-    interpreter::{stdlib, values::Value},
+    interpreter::{
+        native::{IntoNativeFn, Module},
+        stdlib,
+        values::Value,
+    },
     utils::errors::Error,
 };
 
 pub struct Evaluator {
     pub environment: HashMap<String, (Value, bool)>,
+    root_module: Module,
 }
 
 impl Default for Evaluator {
@@ -88,7 +94,41 @@ impl Evaluator {
     pub fn new() -> Self {
         Self {
             environment: HashMap::new(),
+            root_module: Module::new(""),
         }
+    }
+
+    pub fn with_module(mut self, m: Module) -> Self {
+        self.root_module.submodules.insert(m.name.clone(), m);
+        self
+    }
+
+    pub fn with_function<F, A>(mut self, name: impl Into<String>, f: F) -> Self
+    where
+        F: IntoNativeFn<A>,
+    {
+        self.root_module
+            .functions
+            .insert(name.into(), f.into_native());
+        self
+    }
+
+    pub fn with_stdlib(self) -> Self {
+        self
+    }
+
+    pub fn call_path(&mut self, path: &[String], args: Vec<Value>) -> Value {
+        if let Some(f) = self.root_module.resolve(path) {
+            let f = Arc::clone(f);
+            return f(self, args);
+        }
+        Error::init(
+            format!("undefined function {}", path.join("::")),
+            None,
+            None,
+        )
+        .print_error();
+        unreachable!()
     }
 
     pub fn get_value(&self, value_name: String) -> Value {
