@@ -98,7 +98,7 @@ impl Evaluator {
                 }
             }
             Statement::ForRange { .. } => {
-                return; // for now
+                // for now
                 // let mut items_range: Vec<i64> = match **range {
                 // Statement::Range(r) => r,
                 // Statement::IterableRange(iterable_range) => {

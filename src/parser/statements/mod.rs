@@ -47,7 +47,7 @@ impl Parser {
                 self.parse_while()
             }
             TokenType::For => {
-                return Statement::Expression(Expression::Integer(0)); // for now
+                Statement::Expression(Expression::Integer(0)) // for now
                 // self.advance();
                 // log::info!("found `for` while parsing");
                 // self.parse_for()
