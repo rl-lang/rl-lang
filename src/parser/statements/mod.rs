@@ -1,5 +1,5 @@
 mod const_declaration;
-// mod for_statement;
+mod for_statement;
 mod if_statement;
 mod import_statement;
 mod variable_declaration;
@@ -47,10 +47,9 @@ impl Parser {
                 self.parse_while()
             }
             TokenType::For => {
-                Statement::Expression(Expression::Integer(0)) // for now
-                // self.advance();
-                // log::info!("found `for` while parsing");
-                // self.parse_for()
+                self.advance();
+                log::info!("found `for` while parsing");
+                self.parse_for()
             }
             TokenType::If => {
                 self.advance();

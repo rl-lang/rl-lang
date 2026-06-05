@@ -97,34 +97,24 @@ impl Evaluator {
                     self.evaluate(increment);
                 }
             }
-            Statement::ForRange { .. } => {
-                // for now
-                // let mut items_range: Vec<i64> = match **range {
-                // Statement::Range(r) => r,
-                // Statement::IterableRange(iterable_range) => {
-                //    let mut items = Vec::new();
-                //    for item in iterable_range {
-                //        match self.evaluate(item) {
-                //            Value::Float(f) => items.push(f),
-                //           Value::Integer(i) => items.push(i),
-                //            Value::String(s) => items.push(s),
-                //            Value::Bool(b) => items.push(b),
-                //            Value::Char(c) => items.push(c),
-                //            Value::Null => items.push(None),
-                //            _ => unreachable!(),
-                //        };
-                //    }
-                //    items
-                //}
-                // _ => {
-                //    Error::init("only ranges are supported for now".to_string(), None, None)
-                //        .print_error();
-                //    unreachable!()
-                //    }
-                //};
-                //for item in items_range {
-                //    self.evaluate_block(body);
-                //}
+            Statement::ForRange {
+                variable,
+                range,
+                body,
+            } => {
+                let items_range: Vec<i64> = match &**range {
+                    Statement::Range(r) => r.clone(),
+                    _ => {
+                        Error::init("only ranges are supported for now".to_string(), None, None)
+                            .print_error();
+                        unreachable!()
+                    }
+                };
+
+                for item in items_range {
+                    self.insert_value(variable.clone(), Value::Integer(item));
+                    self.evaluate_block(body);
+                }
             }
             Statement::ConditionalBranch { condition, body } => match condition {
                 Some(condition) => {

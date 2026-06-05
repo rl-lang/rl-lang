@@ -34,11 +34,11 @@ pub enum Statement {
         body: Vec<Statement>,
     },
     ForRange {
-        variable: Expression,
+        variable: String,
         range: Box<Statement>,
         body: Vec<Statement>,
     },
-    Range(Vec<Expression>),
+    Range(Vec<i64>),
     ConditionalBranch {
         condition: Option<Expression>,
         body: Vec<Statement>,
