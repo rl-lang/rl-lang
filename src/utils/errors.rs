@@ -39,6 +39,7 @@ impl Error {
     ///
     /// # example
     /// ```rust
+    /// use rl_lang::utils::errors::Error;
     /// Error::init("unexpected error".to_string(), Some(10), None);
     /// ```
     pub fn init(message: String, line: Option<usize>, reason: Option<ErrorReason>) -> Self {
@@ -85,7 +86,8 @@ impl ErrorReason {
     ///
     /// # example
     /// ```rust
-    /// ErrorReason::init(Reason::Lexer, Some(vec!["unknown token `$`",to_string()]))
+    /// use rl_lang::utils::errors::{ErrorReason, Reason};
+    /// ErrorReason::init(Reason::Lexer, Some(vec!["unknown token `$`".to_string()]));
     /// ```
     pub fn init(error_type: Reason, data: Option<Vec<String>>) -> Self {
         Self { error_type, data }
