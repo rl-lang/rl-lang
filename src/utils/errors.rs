@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use ariadne::{Color, Label, Report, ReportKind, Source};
 
+use crate::utils::source::SourceFile;
 use crate::utils::span::Span;
 
 /// represents an Interpreter error with optional line number and error category
@@ -104,6 +105,13 @@ impl Error {
     /// attach a human-readable source name (e.g. file path).
     pub fn with_source_name(mut self, name: impl Into<String>) -> Self {
         self.source_name = Some(name.into());
+        self
+    }
+
+    /// attach both the source text and name from a [`SourceFile`].
+    pub fn with_source_file(mut self, file: &SourceFile) -> Self {
+        self.source = Some(Arc::clone(&file.text));
+        self.source_name = Some(file.name.to_string());
         self
     }
 

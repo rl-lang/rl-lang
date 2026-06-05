@@ -5,6 +5,7 @@ use std::{
 
 use crate::{
     interpreter::evaluator::Evaluator, lexer::tokenizer::Tokenizer, parser::parser_logic::Parser,
+    utils::source::SourceFile,
 };
 
 pub fn repl() {
@@ -27,8 +28,16 @@ pub fn repl() {
             continue;
         }
 
+        let source = SourceFile::new("<repl>", input.to_string());
+        let tokens = match Tokenizer::lex(source) {
+            Ok(t) => t,
+            Err(e) => {
+                e.report_to_stderr();
+                continue;
+            }
+        };
+
         let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
-            let tokens = Tokenizer::lex(input);
             let statements = Parser::parse(tokens);
 
             for statement in statements {

@@ -1,10 +1,14 @@
 use crate::lexer::tokentypes::{Token, TokenType};
+use crate::utils::errors::Error;
+use crate::utils::source::SourceFile;
 use crate::utils::span::Span;
 
 /// converts raw text from source file into tokens
 ///
 /// it operates character by character and groups them into tokens
 pub struct Tokenizer {
+    /// the source file (text + name) for error reports
+    pub source_file: SourceFile,
     // the source if characters sequence
     pub source: Vec<char>,
     /// maps a char index to its byte offset in the original source string.
@@ -21,11 +25,11 @@ pub struct Tokenizer {
 }
 
 impl Tokenizer {
-    /// lexes a source string into [`Vec<Token>`]
+    /// lexes a [`SourceFile`] into [`Vec<Token>`]
     ///
-    /// appends and TokenType::Eof so parser work with clean list of tokens
-    pub fn lex(source: &str) -> Vec<super::tokentypes::Token> {
-        let chars: Vec<char> = source.chars().collect();
+    /// appends a TokenType::Eof so the parser works with a clean list of tokens.
+    pub fn lex(source_file: SourceFile) -> Result<Vec<Token>, Error> {
+        let chars: Vec<char> = source_file.text.chars().collect();
         let mut byte_offsets = Vec::with_capacity(chars.len() + 1);
         let mut offset = 0usize;
         for c in &chars {
@@ -35,6 +39,7 @@ impl Tokenizer {
         byte_offsets.push(offset);
 
         let mut lexer = Tokenizer {
+            source_file,
             source: chars,
             byte_offsets,
             tokens: Vec::new(),
@@ -43,15 +48,11 @@ impl Tokenizer {
             line: 1,
         };
 
-        // if not end of file scan those characters into tokens and add them to the holder
         while !lexer.is_at_end() {
-            // reset lexer position to the current character
             lexer.start = lexer.current;
-
-            lexer.scan_tokens();
+            lexer.scan_tokens()?;
         }
 
-        // to mark the end of file when parsing those tokens
         let eof_offset = *lexer.byte_offsets.last().unwrap();
         lexer.tokens.push(Token::new(
             TokenType::Eof,
@@ -61,11 +62,17 @@ impl Tokenizer {
         ));
 
         log::debug!("Recognized {} token(s)", lexer.tokens.len());
-        lexer.tokens
+        Ok(lexer.tokens)
     }
 
     /// Span covering the current token (from `self.start` to `self.current` in chars).
     pub fn current_span(&self) -> Span {
         Span::new(self.byte_offsets[self.start], self.byte_offsets[self.current])
+    }
+
+    /// build a [`Reason::Lexer`] error anchored at `span`, with the source attached.
+    pub fn err(&self, message: impl Into<String>, span: Span) -> Error {
+        Error::at(crate::utils::errors::Reason::Lexer, message, span)
+            .with_source_file(&self.source_file)
     }
 }
