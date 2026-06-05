@@ -71,18 +71,22 @@ pub enum TokenType {
     Eof,
 }
 
+use crate::utils::span::Span;
+
 pub struct Token {
     pub token: TokenType,
     pub line: usize,
     pub lexeme: String,
+    pub span: Span,
 }
 
 impl Token {
-    pub fn new(token: TokenType, lexeme: String, line: usize) -> Self {
+    pub fn new(token: TokenType, lexeme: String, line: usize, span: Span) -> Self {
         Token {
             token,
             lexeme,
             line,
+            span,
         }
     }
 }

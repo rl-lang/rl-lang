@@ -1,4 +1,5 @@
 use crate::lexer::tokentypes::{Token, TokenType};
+use crate::utils::span::Span;
 
 /// converts raw text from source file into tokens
 ///
@@ -6,6 +7,9 @@ use crate::lexer::tokentypes::{Token, TokenType};
 pub struct Tokenizer {
     // the source if characters sequence
     pub source: Vec<char>,
+    /// maps a char index to its byte offset in the original source string.
+    /// length is `source.len() + 1`; the final entry is the total byte length.
+    pub byte_offsets: Vec<usize>,
     // the accumlated token list
     pub tokens: Vec<super::tokentypes::Token>,
     /// the index of current character
@@ -21,8 +25,18 @@ impl Tokenizer {
     ///
     /// appends and TokenType::Eof so parser work with clean list of tokens
     pub fn lex(source: &str) -> Vec<super::tokentypes::Token> {
+        let chars: Vec<char> = source.chars().collect();
+        let mut byte_offsets = Vec::with_capacity(chars.len() + 1);
+        let mut offset = 0usize;
+        for c in &chars {
+            byte_offsets.push(offset);
+            offset += c.len_utf8();
+        }
+        byte_offsets.push(offset);
+
         let mut lexer = Tokenizer {
-            source: source.chars().collect(),
+            source: chars,
+            byte_offsets,
             tokens: Vec::new(),
             current: 0,
             start: 0,
@@ -38,11 +52,20 @@ impl Tokenizer {
         }
 
         // to mark the end of file when parsing those tokens
-        lexer
-            .tokens
-            .push(Token::new(TokenType::Eof, String::new(), lexer.line));
+        let eof_offset = *lexer.byte_offsets.last().unwrap();
+        lexer.tokens.push(Token::new(
+            TokenType::Eof,
+            String::new(),
+            lexer.line,
+            Span::new(eof_offset, eof_offset),
+        ));
 
         log::debug!("Recognized {} token(s)", lexer.tokens.len());
         lexer.tokens
+    }
+
+    /// Span covering the current token (from `self.start` to `self.current` in chars).
+    pub fn current_span(&self) -> Span {
+        Span::new(self.byte_offsets[self.start], self.byte_offsets[self.current])
     }
 }
