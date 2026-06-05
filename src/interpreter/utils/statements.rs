@@ -49,6 +49,55 @@ impl Evaluator {
                 }
                 self.evaluate_block(body);
             },
+            Statement::Range(..) => {}
+            Statement::For {
+                initializer,
+                condition,
+                increment,
+                body,
+            } => {
+                self.evaluate_statement(initializer);
+                loop {
+                    match self.evaluate(condition) {
+                        Value::Bool(true) => {}
+                        Value::Bool(false) => break,
+                        _ => {
+                            panic!();
+                        }
+                    }
+                    self.evaluate_block(body);
+                    self.evaluate(increment);
+                }
+            }
+            Statement::ForRange { .. } => {
+                return; // for now
+                // let mut items_range: Vec<i64> = match **range {
+                // Statement::Range(r) => r,
+                // Statement::IterableRange(iterable_range) => {
+                //    let mut items = Vec::new();
+                //    for item in iterable_range {
+                //        match self.evaluate(item) {
+                //            Value::Float(f) => items.push(f),
+                //           Value::Integer(i) => items.push(i),
+                //            Value::String(s) => items.push(s),
+                //            Value::Bool(b) => items.push(b),
+                //            Value::Char(c) => items.push(c),
+                //            Value::Null => items.push(None),
+                //            _ => unreachable!(),
+                //        };
+                //    }
+                //    items
+                //}
+                // _ => {
+                //    Error::init("only ranges are supported for now".to_string(), None, None)
+                //        .print_error();
+                //    unreachable!()
+                //    }
+                //};
+                //for item in items_range {
+                //    self.evaluate_block(body);
+                //}
+            }
             Statement::ConditionalBranch { condition, body } => match condition {
                 Some(condition) => {
                     match self.evaluate(condition) {

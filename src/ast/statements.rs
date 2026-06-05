@@ -27,6 +27,18 @@ pub enum Statement {
         condition: Expression,
         body: Vec<Statement>,
     },
+    For {
+        initializer: Box<Statement>,
+        condition: Expression,
+        increment: Expression,
+        body: Vec<Statement>,
+    },
+    ForRange {
+        variable: Expression,
+        range: Box<Statement>,
+        body: Vec<Statement>,
+    },
+    Range(Vec<Expression>),
     ConditionalBranch {
         condition: Option<Expression>,
         body: Vec<Statement>,
