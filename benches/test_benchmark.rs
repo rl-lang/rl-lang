@@ -20,6 +20,7 @@ dec char my_char = 'x'
 ";
 
 const SRC_LOOP: &str = "\
+get mod, pow from std::math
 dec int i = 0
 dec float x = 1.5
 dec arr[float] arr_x = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
@@ -37,6 +38,7 @@ while (i < 10) {
 ";
 
 const SRC_FULL: &str = "\
+get mod, pow, sin, cos, tan from std::math
 dec arr[int] my_int_array = [10, 20, 30]
 dec arr[bool] my_bool_array = [true, false, true]
 dec arr[string] my_string_array = [\"my\", \"world\", \"hello\"]

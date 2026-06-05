@@ -1,11 +1,39 @@
+use std::sync::Arc;
+
 use crate::{
     ast::statements::Statement,
     interpreter::{evaluator::Evaluator, values::Value},
+    utils::errors::Error,
 };
 
 impl Evaluator {
     pub fn evaluate_statement(&mut self, statement: &Statement) {
         match statement {
+            // the evaluator time
+            Statement::Import { names, path } => {
+                for name in names {
+                    // the actual fun is in native.rs
+                    // building the full path
+                    let mut full_path = path.clone();
+                    full_path.push(name.clone());
+
+                    // resolving the full path
+                    if let Some(f) = self.root_module.resolve(&full_path) {
+                        // making a pointer
+                        let f = Arc::clone(f);
+                        // registering the import
+                        self.root_module.functions.insert(name.clone(), f);
+                    } else {
+                        Error::init(
+                            format!("'{}' not found in '{}'", name, path.join("::")),
+                            None,
+                            None,
+                        )
+                        .print_error();
+                    }
+                }
+            }
+
             Statement::VariableDeclaration { name, value, .. } => {
                 let val = self.evaluate(value);
                 // should add type check here but for now assume the user input correctly

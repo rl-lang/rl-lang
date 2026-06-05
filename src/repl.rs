@@ -10,7 +10,7 @@ use crate::{
 pub fn repl() {
     panic::set_hook(Box::new(|_| {}));
 
-    let mut evaluator = Evaluator::new();
+    let mut evaluator = Evaluator::default().with_stdlib();
 
     loop {
         print!(">> ");

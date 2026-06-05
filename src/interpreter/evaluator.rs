@@ -13,7 +13,7 @@ use crate::{
 
 pub struct Evaluator {
     pub environment: HashMap<String, (Value, bool)>,
-    root_module: Module,
+    pub root_module: Module,
 }
 
 impl Default for Evaluator {
