@@ -114,16 +114,15 @@ impl Evaluator {
     }
 
     pub fn with_stdlib(self) -> Self {
-        self
+        self.with_module(stdlib::math::module())
+            .with_module(stdlib::display::module())
+            .with_module(stdlib::io::module())
     }
 
     pub fn call_path(&mut self, path: &[String], args: Vec<Value>) -> Value {
         if let Some(f) = self.root_module.resolve(path) {
             let f = Arc::clone(f);
             return f(self, args);
-        }
-        if path.len() == 1 {
-            return self.call_function(&path[0], args);
         }
         Error::init(
             format!("undefined function {}", path.join("::")),
@@ -167,16 +166,4 @@ impl Evaluator {
         self.environment.insert(value_name, (value, true));
     }
 
-    pub fn call_function(&mut self, name: &str, args: Vec<Value>) -> Value {
-        if stdlib::display::is_in_display(name) {
-            stdlib::display::match_std_display(name, args)
-        } else if stdlib::math::is_in_math(name) {
-            stdlib::math::match_std_math(name, args)
-        } else if stdlib::io::is_in_io(name) {
-            stdlib::io::match_std_io(name, args)
-        } else {
-            Error::init(format!("undefined function {}", name), None, None).print_error();
-            unreachable!();
-        }
-    }
 }

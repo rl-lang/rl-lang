@@ -85,7 +85,7 @@ fn main() {
 
     // phase three: evaluating the ast tree
     info!("evaluating the ast tree...");
-    let mut evaluator = Evaluator::default();
+    let mut evaluator = Evaluator::default().with_stdlib();
     for statement in statements {
         evaluator.evaluate_statement(&statement);
     }

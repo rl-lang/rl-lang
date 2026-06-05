@@ -1,10 +1,7 @@
-use crate::{interpreter::values::Value, utils::errors::Error};
+use crate::{interpreter::evaluator::Evaluator, interpreter::values::Value, utils::errors::Error};
 
-pub fn std_mod(args: Vec<Value>) -> Value {
-    if args.len() != 2 {
-        return Value::Null;
-    }
-    match (&args[0], &args[1]) {
+pub fn std_mod(_: &mut Evaluator, a: Value, b: Value) -> Value {
+    match (a, b) {
         (Value::Integer(a), Value::Integer(b)) => Value::Integer(a % b),
         (Value::Float(a), Value::Float(b)) => Value::Float(a % b),
         _ => {

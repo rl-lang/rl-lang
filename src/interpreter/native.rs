@@ -30,6 +30,14 @@ impl Module {
         self
     }
 
+    pub fn with_raw_function<F>(mut self, name: impl Into<String>, f: F) -> Self
+    where
+        F: Fn(&mut Evaluator, Vec<Value>) -> Value + Send + Sync + 'static,
+    {
+        self.functions.insert(name.into(), Arc::new(f));
+        self
+    }
+
     pub fn with_module(mut self, m: Module) -> Self {
         self.submodules.insert(m.name.clone(), m);
         self

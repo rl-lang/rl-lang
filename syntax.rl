@@ -48,18 +48,18 @@ dec arr[arr[int]] nested = [inner, inner]
 // 5. printing
 // ------------------------------------------------------------
 
-println(my_bool, my_int, my_string, my_float, my_char)  // true 1 string 1.0 x
+display::println(my_bool, my_int, my_string, my_float, my_char)  // true 1 string 1.0 x
 
-println(my_int_array)    // [10, 20, 30]
-println(my_bool_array)   // [true, false, true]
-println(my_string_array) // [my, world, hello]
-println(my_float_array)  // [1.0, 2.0, 3.0]
-println(my_char_array)   // [., r, l]
+display::println(my_int_array)    // [10, 20, 30]
+display::println(my_bool_array)   // [true, false, true]
+display::println(my_string_array) // [my, world, hello]
+display::println(my_float_array)  // [1.0, 2.0, 3.0]
+display::println(my_char_array)   // [., r, l]
 
-println(my_int_array[1]) // 20
+display::println(my_int_array[1]) // 20
 
-println(nested)          // [[1, 2, 3], [1, 2, 3]]
-println(nested[1][2])    // 3
+display::println(nested)          // [[1, 2, 3], [1, 2, 3]]
+display::println(nested[1][2])    // 3
 
 
 // ------------------------------------------------------------
@@ -68,33 +68,33 @@ println(nested[1][2])    // 3
 
 my_bool = !my_bool           // false
 my_bool_array[0] = my_bool   // [false, false, true]
-println(my_bool_array)
+display::println(my_bool_array)
 
 my_int += 3                  // 4
-my_int += pow(my_int, my_int) // 260
-println(my_int)
+my_int += math::pow(my_int, my_int) // 260
+display::println(my_int)
 
-my_int_array[0] = mod(my_int_array[1], my_int_array[2]) // 20
-println(my_int_array)
+my_int_array[0] = math::mod(my_int_array[1], my_int_array[2]) // 20
+display::println(my_int_array)
 
 nested[0][2] = 45
-println(nested[0][2]) // 45
+display::println(nested[0][2]) // 45
 
 
 // ------------------------------------------------------------
 // 7. math stdlib
 // ------------------------------------------------------------
 
-dec float my_float_sin = sin(my_float)
-dec float my_float_cos = cos(my_float)
-dec float my_float_tan = tan(my_float)
+dec float my_float_sin = math::sin(my_float)
+dec float my_float_cos = math::cos(my_float)
+dec float my_float_tan = math::tan(my_float)
 
-println(my_float_sin, my_float_cos, my_float_tan)
+display::println(my_float_sin, my_float_cos, my_float_tan)
 // 0.8414709848078965 0.5403023058681398 1.5574077246549023
 
-println(pow(2, 10))    // 1024
-println(mod(17, 5))    // 2
-println(len(my_int_array)) // 3
+display::println(math::pow(2, 10))    // 1024
+display::println(math::mod(17, 5))    // 2
+display::println(display::len(my_int_array)) // 3
 
 
 // ------------------------------------------------------------
@@ -104,13 +104,13 @@ println(len(my_int_array)) // 3
 dec int score = 75
 
 if (score >= 90) {
-  println("A")
+  display::println("A")
 } else if (score >= 75) {
-  println("B")
+  display::println("B")
 } else if (score >= 60) {
-  println("C")
+  display::println("C")
 } else {
-  println("F")
+  display::println("F")
 }
 
 
@@ -123,10 +123,10 @@ dec float x     = 1.5
 dec arr[float] arr_x = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 while (i < 10) {
-  if (mod(x, (x / 2.0)) > 10.0) {
-    arr_x[i] = x + pow(x, x)
-  } else if (mod(x, (x / 3.0)) == 0.0) {
-    arr_x[i] = x + -x * (x + pow(x, 3))
+  if (math::mod(x, (x / 2.0)) > 10.0) {
+    arr_x[i] = x + math::pow(x, x)
+  } else if (math::mod(x, (x / 3.0)) == 0.0) {
+    arr_x[i] = x + -x * (x + math::pow(x, 3))
   } else {
     arr_x[i] = 90.09
   }
@@ -135,7 +135,7 @@ while (i < 10) {
   i += 1
 }
 
-println(arr_x)
+display::println(arr_x)
 // [-5.8125, 90.09, 90.09, -95295373.51360005, 90.09, 90.09, 90.09, -9744278800898.861, 90.09, 90.09]
 
 
@@ -147,6 +147,6 @@ CONST arr[int]    PRIMES  = [2, 3, 5, 7, 11]
 CONST arr[string] DAYS    = ["sat", "sun", "mon", "tue", "wed", "thu", "fri"]
 CONST arr[float]  WEIGHTS = [0.1, 0.4, 0.5]
 
-println(PRIMES[0])  // 2
-println(DAYS[6])    // fri
-println(len(WEIGHTS)) // 3
+display::println(PRIMES[0])  // 2
+display::println(DAYS[6])    // fri
+display::println(display::len(WEIGHTS)) // 3
