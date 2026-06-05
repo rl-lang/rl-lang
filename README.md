@@ -124,6 +124,10 @@ body
 }
 ```
 
+## Contributors
+
+- [FlawlessDeveloper](https://github.com/FlawlessDeveloper) — native Rust function binding system and module system
+
 ## License
 
 Licensed under either of [MIT](LICENSE-MIT) or [Apache 2.0](LICENSE-APACHE) at your option.
