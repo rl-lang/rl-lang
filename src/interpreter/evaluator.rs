@@ -114,9 +114,12 @@ impl Evaluator {
     }
 
     pub fn with_stdlib(self) -> Self {
-        self.with_module(stdlib::math::module())
-            .with_module(stdlib::display::module())
-            .with_module(stdlib::io::module())
+        self.with_module(
+            Module::new("std")
+                .with_module(stdlib::math::module())
+                .with_module(stdlib::display::module())
+                .with_module(stdlib::io::module()),
+        )
     }
 
     pub fn call_path(&mut self, path: &[String], args: Vec<Value>) -> Value {
@@ -165,5 +168,4 @@ impl Evaluator {
         }
         self.environment.insert(value_name, (value, true));
     }
-
 }
