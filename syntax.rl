@@ -21,7 +21,7 @@ dec char   my_char   = 'x'
 CONST int    MAX_SIZE  = 100
 CONST float  PI        = 3.14159
 CONST bool   DEBUG     = false
-CONST string LANG_NAME = "rlink"
+CONST string LANG_NAME = "rl"
 CONST char   NEWLINE   = '\n'
 
 

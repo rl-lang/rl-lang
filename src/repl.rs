@@ -8,6 +8,8 @@ use crate::{
 };
 
 pub fn repl() {
+    panic::set_hook(Box::new(|_| {}));
+
     let mut evaluator = Evaluator::new();
 
     loop {
