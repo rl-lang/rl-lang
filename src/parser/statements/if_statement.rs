@@ -1,4 +1,6 @@
-use crate::{ast::statements::Statement, lexer::tokentypes::TokenType, parser::parser::Parser};
+use crate::{
+    ast::statements::Statement, lexer::tokentypes::TokenType, parser::parser_logic::Parser,
+};
 
 impl Parser {
     /// caled after hitting [`TokenType::If`] returing [`Statement::Conditional`]

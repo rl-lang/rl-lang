@@ -1,4 +1,4 @@
-use crate::{ast::statements::Statement, parser::parser::Parser};
+use crate::{ast::statements::Statement, parser::parser_logic::Parser};
 
 impl Parser {
     /// called when parser finds [`crate::lexer::tokentypes::TokenType::While`]

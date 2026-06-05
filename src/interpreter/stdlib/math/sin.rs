@@ -4,9 +4,9 @@ pub fn std_sin(args: Vec<Value>) -> Value {
     if args.len() != 1 {
         return Value::Null;
     }
-    let target: f64 = match args[0] {
-        Value::Integer(i) => i as f64,
-        Value::Float(fl) => fl,
+    match args[0] {
+        Value::Integer(i) => Value::Float((i as f64).sin()),
+        Value::Float(fl) => Value::Float(fl.sin()),
         _ => {
             Error::init(
                 "only integers and floats are supported".to_string(),
@@ -16,7 +16,5 @@ pub fn std_sin(args: Vec<Value>) -> Value {
             .print_error();
             unreachable!()
         }
-    };
-
-    Value::Float(target.sin())
+    }
 }

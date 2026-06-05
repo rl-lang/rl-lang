@@ -36,8 +36,8 @@ impl Evaluator {
             }
         }
 
-        let root = get_root_name(&target).to_string();
-        let mut indices = get_indices_as_vec(&target, self);
+        let root = get_root_name(target).to_string();
+        let mut indices = get_indices_as_vec(target, self);
         if let Value::Integer(i) = idx {
             indices.push(i as usize);
         }

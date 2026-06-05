@@ -77,10 +77,8 @@ impl Evaluator {
                             };
                         }
                     }
-                    if !taken {
-                        if let Some(branch) = else_branch {
-                            self.evaluate_branch(branch);
-                        }
+                    if !taken && let Some(branch) = else_branch {
+                        self.evaluate_branch(branch);
                     }
                 }
             }

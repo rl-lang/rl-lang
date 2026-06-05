@@ -1,6 +1,6 @@
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use rl_lang::lexer::tokenizer::Tokenizer;
-use rl_lang::parser::parser::Parser;
+use rl_lang::parser::parser_logic::Parser;
 
 // source snippets
 const SRC_ARRAY_DECL: &str = "\

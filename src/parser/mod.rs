@@ -1,4 +1,4 @@
 mod expressions;
-pub mod parser;
+pub mod parser_logic;
 mod statements;
 mod utils;

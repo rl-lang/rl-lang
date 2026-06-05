@@ -1,4 +1,4 @@
-use crate::{lexer::tokentypes::TokenType, parser::parser::Parser};
+use crate::{lexer::tokentypes::TokenType, parser::parser_logic::Parser};
 
 impl Parser {
     /// checks the current token if it is end of file ([`TokenType::Eof`]) or not

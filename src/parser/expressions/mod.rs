@@ -1,6 +1,6 @@
 use std::process::exit;
 
-use crate::{ast::nodes::Expression, lexer::tokentypes::TokenType, parser::parser::Parser};
+use crate::{ast::nodes::Expression, lexer::tokentypes::TokenType, parser::parser_logic::Parser};
 
 impl Parser {
     pub fn parse_expression(&mut self) -> Expression {

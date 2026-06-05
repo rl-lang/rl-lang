@@ -63,8 +63,9 @@ impl Error {
             Some(l) => println!("[{}) Error: {}]", l, self.message),
             None => println!("[Error: {}]", self.message),
         }
-        match &self.reason {
-            Some(r) => match &r.data {
+
+        if let Some(r) = &self.reason {
+            match &r.data {
                 Some(d) => {
                     println!("[{}]", r.get_type_string());
                     for l in d {
@@ -72,10 +73,9 @@ impl Error {
                     }
                 }
                 _ => println!("[{}]", r.get_type_string()),
-            },
-
-            None => {}
+            }
         }
+
         std::process::exit(1);
     }
 }

@@ -4,7 +4,7 @@ pub fn std_pow(args: Vec<Value>) -> Value {
     if args.len() != 2 {
         return Value::Null;
     }
-    let target = match (args[0].clone(), args[1].clone()) {
+    match (args[0].clone(), args[1].clone()) {
         (Value::Integer(a), Value::Integer(b)) => {
             let a = a as i32;
             let b = b as u32;
@@ -17,8 +17,8 @@ pub fn std_pow(args: Vec<Value>) -> Value {
             Value::Float(c)
         }
 
-        (Value::Float(a), Value::Float(b)) => Value::Float(a.clone().powf(b)),
-        (Value::Float(a), Value::Integer(b)) => Value::Float(a.clone().powi(b as i32)),
+        (Value::Float(a), Value::Float(b)) => Value::Float(a.powf(b)),
+        (Value::Float(a), Value::Integer(b)) => Value::Float(a.powi(b as i32)),
         _ => {
             Error::init(
                 "only integers and floats are supported".to_string(),
@@ -28,6 +28,5 @@ pub fn std_pow(args: Vec<Value>) -> Value {
             .print_error();
             unreachable!()
         }
-    };
-    target
+    }
 }

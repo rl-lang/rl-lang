@@ -5,7 +5,7 @@ mod while_statement;
 use crate::{
     ast::{nodes::Expression, statements::Statement},
     lexer::tokentypes::TokenType,
-    parser::parser::Parser,
+    parser::parser_logic::Parser,
     utils::errors::Error,
 };
 

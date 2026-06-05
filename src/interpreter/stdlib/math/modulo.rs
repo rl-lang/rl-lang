@@ -4,7 +4,7 @@ pub fn std_mod(args: Vec<Value>) -> Value {
     if args.len() != 2 {
         return Value::Null;
     }
-    let target = match (&args[0], &args[1]) {
+    match (&args[0], &args[1]) {
         (Value::Integer(a), Value::Integer(b)) => Value::Integer(a % b),
         (Value::Float(a), Value::Float(b)) => Value::Float(a % b),
         _ => {
@@ -16,6 +16,5 @@ pub fn std_mod(args: Vec<Value>) -> Value {
             .print_error();
             unreachable!()
         }
-    };
-    target
+    }
 }

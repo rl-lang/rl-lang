@@ -2,7 +2,7 @@ use log::{debug, info};
 use rl_lang::{
     interpreter::evaluator::Evaluator,
     lexer::tokenizer::Tokenizer,
-    parser::parser::Parser,
+    parser::parser_logic::Parser,
     utils::errors::{Error, ErrorReason, Reason},
 };
 
@@ -72,7 +72,7 @@ fn main() {
 
     // phase three: evaluating the ast tree
     info!("evaluating the ast tree...");
-    let mut evaluator = Evaluator::new();
+    let mut evaluator = Evaluator::default();
     for statement in statements {
         evaluator.evaluate_statement(&statement);
     }
