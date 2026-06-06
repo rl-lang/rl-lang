@@ -1,11 +1,12 @@
 use crate::{
-    ast::statements::{Statement, TypeAnnotation},
+    ast::statements::{Statement, StatementKind, TypeAnnotation},
     lexer::tokentypes::TokenType,
     parser::parser_logic::Parser,
+    utils::{errors::Error, span::Span},
 };
 
 impl Parser {
-    pub fn parse_variable_declartion(&mut self) -> Statement {
+    pub fn parse_variable_declartion(&mut self, start: Span) -> Result<Statement, Error> {
         log::debug!("{:?}", self.peek());
         log::debug!("parsing type");
         if self.match_type(&[TokenType::Array]) && self.peek() == TokenType::LeftBracket {
@@ -34,154 +35,88 @@ impl Parser {
                 TokenType::Array => {
                     self.advance();
                     self.match_type(&[TokenType::LeftBracket]);
-                    let inner = self.parse_type(true);
+                    let inner = self.parse_type(true)?;
                     self.match_type(&[TokenType::RightBracket]);
                     TypeAnnotation::Array(Box::new(inner))
                 }
-                _ => {
-                    crate::utils::errors::Error::init(
-                        "expected type after dec".to_string(),
-                        None,
-                        Some(crate::utils::errors::ErrorReason::init(
-                            crate::utils::errors::Reason::Parse,
-                            None,
-                        )),
-                    )
-                    .print_error();
-                    unreachable!()
-                }
+                _ => return Err(self.err("expected type after `dec`", self.peek_span())),
             };
             if !self.match_type(&[TokenType::RightBracket]) {
-                crate::utils::errors::Error::init(
-                    "expected ']' after type".to_string(),
-                    None,
-                    Some(crate::utils::errors::ErrorReason::init(
-                        crate::utils::errors::Reason::Parse,
-                        None,
-                    )),
-                )
-                .print_error();
+                return Err(self.err("expected `]` after type", self.peek_span()));
             }
 
             let name = match self.peek() {
                 TokenType::Identifier(n) => {
-                    let n = n.clone();
                     self.advance();
                     n
                 }
-                _ => {
-                    crate::utils::errors::Error::init(
-                        "expected name after array type".to_string(),
-                        None,
-                        Some(crate::utils::errors::ErrorReason::init(
-                            crate::utils::errors::Reason::Parse,
-                            None,
-                        )),
-                    )
-                    .print_error();
-                    unreachable!()
-                }
+                _ => return Err(self.err("expected name after array type", self.peek_span())),
             };
 
             if !self.match_type(&[TokenType::Assign]) {
-                crate::utils::errors::Error::init(
-                    "expected '=' after name".to_string(),
-                    None,
-                    Some(crate::utils::errors::ErrorReason::init(
-                        crate::utils::errors::Reason::Parse,
-                        None,
-                    )),
-                )
-                .print_error();
+                return Err(self.err("expected `=` after name", self.peek_span()));
             }
 
             if !self.match_type(&[TokenType::LeftBracket]) {
-                crate::utils::errors::Error::init(
-                    "expected '[' after type".to_string(),
-                    None,
-                    Some(crate::utils::errors::ErrorReason::init(
-                        crate::utils::errors::Reason::Parse,
-                        None,
-                    )),
-                )
-                .print_error();
+                return Err(self.err("expected `[` after `=`", self.peek_span()));
             }
             let mut items = Vec::new();
 
             while self.peek() != TokenType::RightBracket {
-                let value = self.parse_expression();
+                let value = self.parse_expression()?;
                 items.push(value);
                 if self.peek() == TokenType::RightBracket {
                     break;
                 }
                 if !self.match_type(&[TokenType::Comma]) {
-                    crate::utils::errors::Error::init(
-                        "expected ',' between list items".to_string(),
-                        None,
-                        Some(crate::utils::errors::ErrorReason::init(
-                            crate::utils::errors::Reason::Parse,
-                            None,
-                        )),
-                    )
-                    .print_error();
+                    return Err(self.err("expected `,` between list items", self.peek_span()));
                 }
             }
             self.match_type(&[TokenType::RightBracket]);
-            return Statement::Array {
-                name,
-                type_annotation: annoation_type,
-                value: items,
-            };
+            let span = start.join(self.previous_span());
+            return Ok(Statement::new(
+                StatementKind::Array {
+                    name,
+                    type_annotation: annoation_type,
+                    value: items,
+                },
+                span,
+            ));
         }
 
-        let var_type = self.parse_type(true);
+        let var_type = self.parse_type(true)?;
 
         let name = match self.peek() {
             TokenType::Identifier(n) => {
-                let n = n.clone();
                 self.advance();
                 n
             }
-            _ => {
-                crate::utils::errors::Error::init(
-                    "expected name after type".to_string(),
-                    None,
-                    Some(crate::utils::errors::ErrorReason::init(
-                        crate::utils::errors::Reason::Parse,
-                        None,
-                    )),
-                )
-                .print_error();
-                unreachable!()
-            }
+            _ => return Err(self.err("expected name after type", self.peek_span())),
         };
 
         if !self.match_type(&[TokenType::Assign]) {
-            crate::utils::errors::Error::init(
-                "expected '=' after name".to_string(),
-                None,
-                Some(crate::utils::errors::ErrorReason::init(
-                    crate::utils::errors::Reason::Parse,
-                    None,
-                )),
-            )
-            .print_error();
+            return Err(self.err("expected `=` after name", self.peek_span()));
         }
 
-        let value = self.parse_expression();
+        let value = self.parse_expression()?;
+        let span = start.join(value.span);
 
-        crate::ast::statements::Statement::VariableDeclaration {
-            name,
-            type_annotation: var_type,
-            value,
-        }
+        Ok(Statement::new(
+            StatementKind::VariableDeclaration {
+                name,
+                type_annotation: var_type,
+                value,
+            },
+            span,
+        ))
     }
 }
 
 // should separate later
 impl Parser {
-    pub fn parse_type(&mut self, is_mut: bool) -> TypeAnnotation {
-        match is_mut {
+    pub fn parse_type(&mut self, is_mut: bool) -> Result<TypeAnnotation, Error> {
+        let span = self.peek_span();
+        Ok(match is_mut {
             true => match self.peek() {
                 TokenType::Int => {
                     self.advance();
@@ -206,14 +141,11 @@ impl Parser {
                 TokenType::Array => {
                     self.advance();
                     self.match_type(&[TokenType::LeftBracket]);
-                    let inner = self.parse_type(true);
+                    let inner = self.parse_type(true)?;
                     self.match_type(&[TokenType::RightBracket]);
                     TypeAnnotation::Array(Box::new(inner))
                 }
-                _ => {
-                    // should add error later
-                    unreachable!()
-                }
+                _ => return Err(self.err("expected a type", span)),
             },
             false => match self.peek() {
                 TokenType::Int => {
@@ -239,15 +171,12 @@ impl Parser {
                 TokenType::Array => {
                     self.advance();
                     self.match_type(&[TokenType::LeftBracket]);
-                    let inner = self.parse_type(false);
+                    let inner = self.parse_type(false)?;
                     self.match_type(&[TokenType::RightBracket]);
                     TypeAnnotation::CArray(Box::new(inner))
                 }
-                _ => {
-                    // should add error later
-                    unreachable!()
-                }
+                _ => return Err(self.err("expected a type", span)),
             },
-        }
+        })
     }
 }

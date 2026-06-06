@@ -34,6 +34,8 @@ impl Tokenizer {
 
     pub fn add_token(&mut self, tokentype: TokenType) {
         let lexeme = self.source[self.start..self.current].iter().collect();
-        self.tokens.push(Token::new(tokentype, lexeme, self.line));
+        let span = self.current_span();
+        self.tokens
+            .push(Token::new(tokentype, lexeme, self.line, span));
     }
 }

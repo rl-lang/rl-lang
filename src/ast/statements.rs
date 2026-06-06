@@ -1,7 +1,21 @@
 use crate::ast::nodes::Expression;
+use crate::utils::span::Span;
 
-#[derive(Debug, PartialEq)]
-pub enum Statement {
+/// A statement paired with its source span.
+#[derive(Debug)]
+pub struct Statement {
+    pub kind: StatementKind,
+    pub span: Span,
+}
+
+impl Statement {
+    pub fn new(kind: StatementKind, span: Span) -> Self {
+        Self { kind, span }
+    }
+}
+
+#[derive(Debug)]
+pub enum StatementKind {
     VariableDeclaration {
         name: String,
         type_annotation: TypeAnnotation,
