@@ -180,8 +180,10 @@ impl Evaluator {
     }
 
     pub fn evaluate_block(&mut self, statements: &[Statement]) {
+        self.push_scope();
         for statement in statements {
             self.evaluate_statement(statement);
         }
+        self.pop_scope();
     }
 }
