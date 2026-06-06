@@ -1,6 +1,7 @@
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use rl_lang::lexer::tokenizer::Tokenizer;
 use rl_lang::parser::parser_logic::Parser;
+use rl_lang::utils::source::SourceFile;
 
 // source snippets
 const SRC_ARRAY_DECL: &str = "\
@@ -10,7 +11,6 @@ dec arr[string] my_string_array = [\"my\", \"world\", \"hello\"]
 dec arr[float] my_float_array = [1.0, 2.0, 3.0]
 dec arr[char] my_char_array = ['.', 'r', 'l']
 ";
-
 const SRC_VAR_DECL: &str = "\
 dec bool my_bool = true
 dec int my_int = 1
@@ -18,7 +18,6 @@ dec string my_string = \"string\"
 dec float my_float = 1.0
 dec char my_char = 'x'
 ";
-
 const SRC_LOOP: &str = "\
 get mod, pow from std::math
 dec int i = 0
@@ -36,7 +35,6 @@ while (i < 10) {
   i += 1
 }
 ";
-
 const SRC_FULL: &str = "\
 get mod, pow, sin, cos, tan from std::math
 dec arr[int] my_int_array = [10, 20, 30]
@@ -73,87 +71,94 @@ while (i < 10) {
 }
 ";
 
-// -=lexer benchmarks=-
+fn src(name: &str, text: &str) -> SourceFile {
+    SourceFile::new(name, text.to_string())
+}
 
+// -=lexer benchmarks=-
 fn bench_lexer(c: &mut Criterion) {
     let mut group = c.benchmark_group("lexer");
     group.measurement_time(std::time::Duration::from_secs(11));
     group.sample_size(200);
-
     for size in [1, 100, 500] {
-        let src = SRC_ARRAY_DECL.repeat(size);
+        let text = SRC_ARRAY_DECL.repeat(size);
         group.bench_with_input(
             BenchmarkId::new("array declarations", size),
-            &src,
-            |b, s| b.iter(|| Tokenizer::lex(black_box(s))),
+            &text,
+            |b, s| b.iter(|| Tokenizer::lex(src("bench", black_box(s)))),
         );
-
-        let src = SRC_VAR_DECL.repeat(size);
-        group.bench_with_input(BenchmarkId::new("var declarations", size), &src, |b, s| {
-            b.iter(|| Tokenizer::lex(black_box(s)))
+        let text = SRC_VAR_DECL.repeat(size);
+        group.bench_with_input(BenchmarkId::new("var declarations", size), &text, |b, s| {
+            b.iter(|| Tokenizer::lex(src("bench", black_box(s))))
         });
-
-        let src = SRC_LOOP.repeat(size);
-        group.bench_with_input(BenchmarkId::new("while loop", size), &src, |b, s| {
-            b.iter(|| Tokenizer::lex(black_box(s)))
+        let text = SRC_LOOP.repeat(size);
+        group.bench_with_input(BenchmarkId::new("while loop", size), &text, |b, s| {
+            b.iter(|| Tokenizer::lex(src("bench", black_box(s))))
         });
     }
-
-    // full program — only makes sense at size 1
     group.bench_function("full program", |b| {
-        b.iter(|| Tokenizer::lex(black_box(SRC_FULL)))
+        b.iter(|| Tokenizer::lex(src("bench", black_box(SRC_FULL))))
     });
-
     group.finish();
 }
 
 // -=parser benchmarks=-
-
 fn bench_parser(c: &mut Criterion) {
     let mut group = c.benchmark_group("parser");
     group.measurement_time(std::time::Duration::from_secs(11));
     group.sample_size(200);
-
     for size in [1, 100, 500] {
-        let src = SRC_ARRAY_DECL.repeat(size);
+        let text = SRC_ARRAY_DECL.repeat(size);
         group.bench_with_input(
             BenchmarkId::new("array declarations", size),
-            &src,
-            |b, s| b.iter(|| Parser::parse(Tokenizer::lex(black_box(s)))),
+            &text,
+            |b, s| {
+                b.iter(|| {
+                    let sf = src("bench", black_box(s));
+                    let tokens = Tokenizer::lex(sf.clone())?;
+                    Parser::parse(tokens, sf)
+                })
+            },
         );
-
-        let src = SRC_VAR_DECL.repeat(size);
-        group.bench_with_input(BenchmarkId::new("var declarations", size), &src, |b, s| {
-            b.iter(|| Parser::parse(Tokenizer::lex(black_box(s))))
+        let text = SRC_VAR_DECL.repeat(size);
+        group.bench_with_input(BenchmarkId::new("var declarations", size), &text, |b, s| {
+            b.iter(|| {
+                let sf = src("bench", black_box(s));
+                let tokens = Tokenizer::lex(sf.clone())?;
+                Parser::parse(tokens, sf)
+            })
         });
-
-        let src = SRC_LOOP.repeat(size);
-        group.bench_with_input(BenchmarkId::new("while loop", size), &src, |b, s| {
-            b.iter(|| Parser::parse(Tokenizer::lex(black_box(s))))
+        let text = SRC_LOOP.repeat(size);
+        group.bench_with_input(BenchmarkId::new("while loop", size), &text, |b, s| {
+            b.iter(|| {
+                let sf = src("bench", black_box(s));
+                let tokens = Tokenizer::lex(sf.clone())?;
+                Parser::parse(tokens, sf)
+            })
         });
     }
-
     group.bench_function("full program", |b| {
-        b.iter(|| Parser::parse(Tokenizer::lex(black_box(SRC_FULL))))
+        b.iter(|| {
+            let sf = src("bench", black_box(SRC_FULL));
+            let tokens = Tokenizer::lex(sf.clone())?;
+            Parser::parse(tokens, sf)
+        })
     });
-
     group.finish();
 }
 
 // -=lexer + parser benchmarks=-
-
 fn bench_pipeline(c: &mut Criterion) {
     let mut group = c.benchmark_group("pipeline");
     group.measurement_time(std::time::Duration::from_secs(11));
     group.sample_size(200);
-
     group.bench_function("full program", |b| {
         b.iter(|| {
-            let tokens = Tokenizer::lex(black_box(SRC_FULL));
-            Parser::parse(tokens)
+            let sf = src("bench", black_box(SRC_FULL));
+            let tokens = Tokenizer::lex(sf.clone())?;
+            Parser::parse(tokens, sf)
         })
     });
-
     group.finish();
 }
 
