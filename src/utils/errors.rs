@@ -156,9 +156,7 @@ impl Error {
             if let Some(help) = &self.help {
                 builder = builder.with_help(help);
             }
-            let _ = builder
-                .finish()
-                .eprint((name, Source::from(src.as_str())));
+            let _ = builder.finish().eprint((name, Source::from(src.as_str())));
         } else {
             self.fallback_text();
         }

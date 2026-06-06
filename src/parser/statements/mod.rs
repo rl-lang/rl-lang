@@ -37,7 +37,7 @@ impl Parser {
                 // log it
                 log::info!("found `get` for import while parsing");
                 // parse it
-                self.parse_import()
+                self.parse_import(start)
             }
             TokenType::Dec => {
                 self.advance();

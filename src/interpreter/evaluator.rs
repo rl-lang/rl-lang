@@ -17,7 +17,7 @@ use crate::{
 };
 
 pub struct Evaluator {
-    pub environment: HashMap<String, (Value, bool)>,
+    pub environment: Vec<HashMap<String, (Value, bool)>>,
     pub source_file: Option<SourceFile>,
     root_module: Module,
 }
@@ -31,7 +31,7 @@ impl Default for Evaluator {
 impl Evaluator {
     pub fn new() -> Self {
         Self {
-            environment: HashMap::new(),
+            environment: vec![HashMap::new()],
             source_file: None,
             root_module: Module::new(""),
         }
@@ -161,37 +161,6 @@ impl Evaluator {
             }
         };
         Ok(value)
-    }
-
-    pub fn get_value(&self, name: &str, span: Span) -> Result<Value, Error> {
-        match self.environment.get(name) {
-            Some((val, _)) => Ok(val.clone()),
-            None => {
-                let mut err = self.err(format!("undefined variable {}", name), span);
-                if let Some(suggestion) =
-                    closest_match(name, self.environment.keys().map(|s| s.as_str()))
-                {
-                    err = err.with_help(format!("did you mean `{}`?", suggestion));
-                }
-                Err(err)
-            }
-        }
-    }
-
-    pub fn insert_value(&mut self, name: String, value: Value, span: Span) -> Result<(), Error> {
-        if let Some((_, true)) = self.environment.get(&name) {
-            return Err(self.err(format!("cannot assign to constant '{}'", name), span));
-        }
-        self.environment.insert(name, (value, false));
-        Ok(())
-    }
-
-    pub fn insert_const(&mut self, name: String, value: Value, span: Span) -> Result<(), Error> {
-        if self.environment.contains_key(&name) {
-            return Err(self.err(format!("'{}' is already declared", name), span));
-        }
-        self.environment.insert(name, (value, true));
-        Ok(())
     }
 
     pub fn call_path(

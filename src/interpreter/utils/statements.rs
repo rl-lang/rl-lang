@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use crate::{
     ast::statements::{Statement, StatementKind},
     interpreter::{evaluator::Evaluator, values::Value},
@@ -80,6 +78,9 @@ impl Evaluator {
                     self.evaluate(increment)?;
                 }
                 self.pop_scope();
+            }
+            StatementKind::Import { .. } => {
+                // imports are resolved at parse time; nothing to evaluate
             }
             StatementKind::ForRange { .. } => {
                 return Ok(()); // for now

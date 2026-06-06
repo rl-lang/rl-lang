@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     interpreter::{evaluator::Evaluator, values::Value},
-    utils::errors::Error,
+    utils::{errors::Error, span::Span, suggest::closest_match},
 };
 
 impl Evaluator {
@@ -14,46 +14,54 @@ impl Evaluator {
         self.environment.pop();
     }
 
-    pub fn get_value(&self, value_name: String) -> Value {
+    pub fn get_value(&self, name: &str, span: Span) -> Result<Value, Error> {
         for scope in self.environment.iter().rev() {
-            if let Some((val, _)) = scope.get(&value_name) {
-                return val.clone();
+            if let Some((val, _)) = scope.get(name) {
+                return Ok(val.clone());
             }
         }
-        Error::init(format!("undefined variable {}", &value_name), None, None).print_error();
-        unreachable!();
+        let all_keys = self
+            .environment
+            .iter()
+            .flat_map(|s| s.keys().map(|k| k.as_str()));
+        let mut err = self.err(format!("undefined variable {}", name), span);
+        if let Some(suggestion) = closest_match(name, all_keys) {
+            err = err.with_help(format!("did you mean `{}`?", suggestion));
+        }
+        Err(err)
     }
 
-    pub fn insert_value(&mut self, value_name: String, value: Value) {
+    pub fn insert_value(&mut self, name: String, value: Value, span: Span) -> Result<(), Error> {
+        for scope in self.environment.iter().rev() {
+            if let Some((_, true)) = scope.get(&name) {
+                return Err(self.err(format!("cannot assign to constant '{}'", name), span));
+            }
+        }
+        if let Some(scope) = self.environment.last_mut() {
+            scope.insert(name, (value, false));
+        }
+        Ok(())
+    }
+
+    pub fn insert_const(&mut self, name: String, value: Value, span: Span) -> Result<(), Error> {
         let scope = self.environment.last_mut().unwrap();
-        scope.insert(value_name, (value, false));
+        if scope.contains_key(&name) {
+            return Err(self.err(format!("'{}' is already declared", name), span));
+        }
+        scope.insert(name, (value, true));
+        Ok(())
     }
 
-    pub fn assign_value(&mut self, value_name: String, value: Value) {
+    pub fn assign_value(&mut self, name: String, value: Value, span: Span) -> Result<(), Error> {
         for scope in self.environment.iter_mut().rev() {
-            if let Some(entry) = scope.get_mut(&value_name) {
+            if let Some(entry) = scope.get_mut(&name) {
                 if entry.1 {
-                    Error::init(
-                        format!("cannot assign to constant '{}'", value_name),
-                        None,
-                        None,
-                    )
-                    .print_error();
-                    unreachable!();
+                    return Err(self.err(format!("cannot assign to constant '{}'", name), span));
                 }
                 entry.0 = value;
-                return;
+                return Ok(());
             }
         }
-        Error::init(format!("undefined variable '{}'", value_name), None, None).print_error();
-        unreachable!();
-    }
-    pub fn insert_const(&mut self, value_name: String, value: Value) {
-        let scope = self.environment.last_mut().unwrap();
-        if scope.contains_key(&value_name) {
-            Error::init(format!("'{}' is already declared", value_name), None, None).print_error();
-            unreachable!();
-        }
-        scope.insert(value_name, (value, true));
+        Err(self.err(format!("undefined variable '{}'", name), span))
     }
 }

@@ -1,114 +1,96 @@
 use crate::{
-    ast::{nodes::Expression, statements::Statement},
+    ast::{
+        nodes::ExpressionKind,
+        statements::{Statement, StatementKind},
+    },
     lexer::tokentypes::TokenType,
     parser::parser_logic::Parser,
     utils::errors::Error,
 };
 
 impl Parser {
-    pub fn parse_for(&mut self) -> Statement {
+    pub fn parse_for(&mut self, start: crate::utils::span::Span) -> Result<Statement, Error> {
         if matches!(self.peek(), TokenType::LeftBracket) {
             self.advance();
-            let initializer = Box::new(self.parse_variable_declartion());
+            let init_start = self.peek_span();
+            let initializer = Box::new(self.parse_variable_declartion(init_start)?);
             self.match_type(&[TokenType::Comma]);
-            let condition = self.parse_expression();
+            let condition = self.parse_expression()?;
             self.match_type(&[TokenType::Comma]);
-            let increment = self.parse_expression();
+            let increment = self.parse_expression()?;
             self.match_type(&[TokenType::RightBracket]);
-            let body = self.parse_block();
-            Statement::For {
-                initializer,
-                condition,
-                increment,
-                body,
-            }
+            let body = self.parse_block()?;
+            let span = start.join(self.previous_span());
+            Ok(Statement::new(
+                StatementKind::For {
+                    initializer,
+                    condition,
+                    increment,
+                    body,
+                },
+                span,
+            ))
         } else if matches!(self.peek(), TokenType::Identifier(_)) {
-            let variable_name = match self.parse_expression() {
-                Expression::Identifier(name) => name,
-                _ => {
-                    Error::init("for-range expects identifier".to_string(), None, None)
-                        .print_error();
-                    unreachable!();
-                }
+            let ident_expr = self.parse_expression()?;
+            let variable_name = match ident_expr.kind {
+                ExpressionKind::Identifier(name) => name,
+                _ => return Err(self.err("for-range expects identifier", ident_expr.span)),
             };
-            self.advance();
             self.match_type(&[TokenType::In]);
 
             let range = if matches!(self.peek(), TokenType::NumberLiteral(_)) {
-                let range_start = match self.parse_expression() {
-                    Expression::Integer(i) => i,
-                    _ => {
-                        Error::init("range should be integers only".to_string(), None, None)
-                            .print_error();
-                        unreachable!()
-                    }
+                let start_expr = self.parse_expression()?;
+                let range_start = match start_expr.kind {
+                    ExpressionKind::Integer(i) => i,
+                    _ => return Err(self.err("range should be integers only", start_expr.span)),
                 };
-
                 self.match_type(&[TokenType::DotDot]);
-                let range_end = match self.parse_expression() {
-                    Expression::Integer(i) => i,
-                    _ => {
-                        Error::init("range should be integers only".to_string(), None, None)
-                            .print_error();
-                        unreachable!()
-                    }
+                let end_expr = self.parse_expression()?;
+                let range_end = match end_expr.kind {
+                    ExpressionKind::Integer(i) => i,
+                    _ => return Err(self.err("range should be integers only", end_expr.span)),
                 };
                 let range_vec: Vec<i64> = (range_start..range_end).collect();
-                Box::new(Statement::Range(range_vec))
+                let span = start.join(self.previous_span());
+                Box::new(Statement::new(StatementKind::Range(range_vec), span))
             } else if self.match_type(&[TokenType::LeftBracket]) {
                 let mut items = Vec::new();
-
                 while self.peek() != TokenType::RightBracket {
-                    let value = self.parse_expression();
+                    let value = self.parse_expression()?;
                     items.push(value);
                     if self.peek() == TokenType::RightBracket {
                         break;
                     }
                     if !self.match_type(&[TokenType::Comma]) {
-                        crate::utils::errors::Error::init(
-                            "expected ',' between list items".to_string(),
-                            None,
-                            Some(crate::utils::errors::ErrorReason::init(
-                                crate::utils::errors::Reason::Parse,
-                                None,
-                            )),
-                        )
-                        .print_error();
+                        return Err(self.err("expected ',' between list items", self.peek_span()));
                     }
                 }
                 self.match_type(&[TokenType::RightBracket]);
-
-                let iterable = {
-                    let mut iterable_list = Vec::new();
-                    for item in items {
-                        match item {
-                            Expression::Integer(i) => iterable_list.push(i),
-                            _ => {
-                                Error::init(format!("{item:?} is not integer"), None, None)
-                                    .print_error();
-                                unreachable!()
-                            }
-                        }
+                let mut iterable_list = Vec::new();
+                for item in items {
+                    match item.kind {
+                        ExpressionKind::Integer(i) => iterable_list.push(i),
+                        _ => return Err(self.err("list items must be integers", item.span)),
                     }
-                    iterable_list
-                };
-
-                Box::new(Statement::Range(iterable))
+                }
+                let span = start.join(self.previous_span());
+                Box::new(Statement::new(StatementKind::Range(iterable_list), span))
             } else {
-                Error::init("expected range or array".to_string(), None, None).print_error();
-                unreachable!()
+                return Err(self.err("expected range or array", self.peek_span()));
             };
 
-            let body = self.parse_block();
-
-            Statement::ForRange {
-                variable: variable_name,
-                range,
-                body,
-            }
+            let body = self.parse_block()?;
+            let span = start.join(self.previous_span());
+            Ok(Statement::new(
+                StatementKind::ForRange {
+                    variable: variable_name,
+                    range,
+                    body,
+                },
+                span,
+            ))
         } else {
-            Error::init("wrong usage of for".to_string(), None, None).print_error();
-            unreachable!()
+            Err(self.err("wrong usage of for", self.peek_span()))
         }
     }
 }
