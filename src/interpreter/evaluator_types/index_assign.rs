@@ -43,27 +43,33 @@ impl Evaluator {
             indices.push(i as usize);
         }
 
-        let (root_array, is_const) = self.environment.get_mut(&root).unwrap();
-        if *is_const {
-            Error::init(
-                format!("cannot assign to constant '{}'", root_array),
-                None,
-                None,
-            )
-            .print_error();
-            unreachable!();
-        }
-        let mut current_array = root_array;
+        for scope in self.environment.iter_mut().rev() {
+            if let Some((root_array, is_const)) = scope.get_mut(&root) {
+                if *is_const {
+                    Error::init(
+                        format!("cannot assign to constant '{}'", root_array),
+                        None,
+                        None,
+                    )
+                    .print_error();
+                    unreachable!();
+                }
 
-        for i in &indices[..indices.len() - 1] {
-            if let Value::Values(items) = current_array {
-                current_array = &mut items[*i];
+                let mut current_array = root_array;
+
+                for i in &indices[..indices.len() - 1] {
+                    if let Value::Values(items) = current_array {
+                        current_array = &mut items[*i];
+                    }
+                }
+                if let Value::Values(items) = current_array {
+                    items[*indices.last().unwrap()] = val.clone();
+                }
+
+                return val;
             }
         }
-        if let Value::Values(items) = current_array {
-            items[*indices.last().unwrap()] = val.clone();
-        }
-
-        val
+        Error::init(format!("undefined variable {}", root), None, None).print_error();
+        unreachable!()
     }
 }

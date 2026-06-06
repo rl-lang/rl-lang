@@ -12,7 +12,7 @@ use crate::{
 };
 
 pub struct Evaluator {
-    pub environment: HashMap<String, (Value, bool)>,
+    pub environment: Vec<HashMap<String, (Value, bool)>>,
     pub root_module: Module,
 }
 
@@ -81,7 +81,7 @@ impl Evaluator {
             Expression::Identifier(name) => self.get_value(name.clone()),
             Expression::Assign { name, value } => {
                 let val = self.evaluate(value);
-                self.insert_value(name.clone(), val.clone());
+                self.assign_value(name.clone(), val.clone());
                 val
             }
             Expression::Call { path, args } => {
@@ -93,7 +93,7 @@ impl Evaluator {
 
     pub fn new() -> Self {
         Self {
-            environment: HashMap::new(),
+            environment: vec![HashMap::new()],
             root_module: Module::new(""),
         }
     }
@@ -134,38 +134,5 @@ impl Evaluator {
         )
         .print_error();
         unreachable!()
-    }
-
-    pub fn get_value(&self, value_name: String) -> Value {
-        // println!("target: {}", value_name.clone());
-        match self.environment.get(&value_name) {
-            Some((val, _)) => val.clone(),
-            None => {
-                Error::init(format!("undefined variable {}", &value_name), None, None)
-                    .print_error();
-                unreachable!();
-            }
-        }
-    }
-
-    pub fn insert_value(&mut self, value_name: String, value: Value) {
-        if let Some((_, true)) = self.environment.get(&value_name) {
-            Error::init(
-                format!("cannot assign to constant '{}'", value_name),
-                None,
-                None,
-            )
-            .print_error();
-            unreachable!();
-        }
-        self.environment.insert(value_name, (value, false));
-    }
-
-    pub fn insert_const(&mut self, value_name: String, value: Value) {
-        if self.environment.contains_key(&value_name) {
-            Error::init(format!("'{}' is already declared", value_name), None, None).print_error();
-            unreachable!();
-        }
-        self.environment.insert(value_name, (value, true));
     }
 }

@@ -65,6 +65,7 @@ impl Evaluator {
             }
 
             Statement::Expression(expr) => {
+                // println!("DEBUG expr: {expr:?}");
                 self.evaluate(expr);
             }
             Statement::While { condition, body } => loop {
@@ -84,6 +85,7 @@ impl Evaluator {
                 increment,
                 body,
             } => {
+                self.push_scope();
                 self.evaluate_statement(initializer);
                 loop {
                     match self.evaluate(condition) {
@@ -96,6 +98,7 @@ impl Evaluator {
                     self.evaluate_block(body);
                     self.evaluate(increment);
                 }
+                self.pop_scope();
             }
             Statement::ForRange {
                 variable,
@@ -112,9 +115,11 @@ impl Evaluator {
                 };
 
                 for item in items_range {
+                    self.push_scope();
                     self.insert_value(variable.clone(), Value::Integer(item));
                     self.evaluate_block(body);
                 }
+                self.pop_scope();
             }
             Statement::ConditionalBranch { condition, body } => match condition {
                 Some(condition) => {
@@ -180,8 +185,10 @@ impl Evaluator {
     }
 
     pub fn evaluate_block(&mut self, statements: &[Statement]) {
+        self.push_scope();
         for statement in statements {
             self.evaluate_statement(statement);
         }
+        self.pop_scope();
     }
 }
