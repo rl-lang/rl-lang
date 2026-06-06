@@ -1,8 +1,13 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::{
     ast::nodes::{Expression, ExpressionKind},
-    interpreter::{stdlib, values::Value},
+    interpreter::{
+        native::{IntoNativeFn, Module},
+        stdlib,
+        values::Value,
+    },
     utils::{
         errors::{Error, Reason},
         source::SourceFile,
@@ -14,6 +19,7 @@ use crate::{
 pub struct Evaluator {
     pub environment: HashMap<String, (Value, bool)>,
     pub source_file: Option<SourceFile>,
+    root_module: Module,
 }
 
 impl Default for Evaluator {
@@ -27,6 +33,7 @@ impl Evaluator {
         Self {
             environment: HashMap::new(),
             source_file: None,
+            root_module: Module::new(""),
         }
     }
 
@@ -37,6 +44,30 @@ impl Evaluator {
 
     pub fn set_source_file(&mut self, file: SourceFile) {
         self.source_file = Some(file);
+    }
+
+    pub fn with_module(mut self, m: Module) -> Self {
+        self.root_module.submodules.insert(m.name.clone(), m);
+        self
+    }
+
+    pub fn with_function<F, A>(mut self, name: impl Into<String>, f: F) -> Self
+    where
+        F: IntoNativeFn<A>,
+    {
+        self.root_module
+            .functions
+            .insert(name.into(), f.into_native());
+        self
+    }
+
+    pub fn with_stdlib(self) -> Self {
+        self.with_module(
+            Module::new("std")
+                .with_module(stdlib::math::module())
+                .with_module(stdlib::display::module())
+                .with_module(stdlib::io::module()),
+        )
     }
 
     /// Build a [`Reason::Runtime`] error anchored at `span`, with source attached when known.
@@ -121,12 +152,12 @@ impl Evaluator {
                 self.insert_value(name.clone(), val.clone(), expression.span)?;
                 val
             }
-            ExpressionKind::Call { name, args } => {
+            ExpressionKind::Call { path, args } => {
                 let mut evaluated_args = Vec::with_capacity(args.len());
                 for arg in args {
                     evaluated_args.push(self.evaluate(arg)?);
                 }
-                self.call_function(name, evaluated_args, expression.span)?
+                self.call_path(path, evaluated_args, expression.span)?
             }
         };
         Ok(value)
@@ -163,29 +194,28 @@ impl Evaluator {
         Ok(())
     }
 
-    pub fn call_function(
+    pub fn call_path(
         &mut self,
-        name: &str,
+        path: &[String],
         args: Vec<Value>,
         span: Span,
     ) -> Result<Value, Error> {
-        if stdlib::display::is_in_display(name) {
-            Ok(stdlib::display::match_std_display(name, args))
-        } else if stdlib::math::is_in_math(name) {
-            Ok(stdlib::math::match_std_math(name, args))
-        } else if stdlib::io::is_in_io(name) {
-            Ok(stdlib::io::match_std_io(name, args))
-        } else {
-            let mut err = self.err(format!("undefined function {}", name), span);
+        if let Some(f) = self.root_module.resolve(path) {
+            let f = Arc::clone(f);
+            return Ok(f(self, args));
+        }
+        let mut err = self.err(format!("undefined function {}", path.join("::")), span);
+        // suggest a stdlib leaf name if the last segment is a close typo
+        if let Some(last) = path.last() {
             let candidates = stdlib::display::KEYWORDS
                 .iter()
                 .chain(stdlib::math::KEYWORDS)
                 .chain(stdlib::io::KEYWORDS)
                 .copied();
-            if let Some(suggestion) = closest_match(name, candidates) {
+            if let Some(suggestion) = closest_match(last, candidates) {
                 err = err.with_help(format!("did you mean `{}`?", suggestion));
             }
-            Err(err)
         }
+        Err(err)
     }
 }

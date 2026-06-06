@@ -167,7 +167,21 @@ impl Parser {
         if self.match_type(&[TokenType::Identifier(String::new())]) {
             log::debug!("found identifier");
             let ident_span = self.previous_span();
-            if let TokenType::Identifier(name) = self.previous() {
+            if let TokenType::Identifier(first) = self.previous() {
+                // consume :: segments to build a module path
+                let mut path = vec![first];
+                while self.match_type(&[TokenType::ColonColon]) {
+                    if !self.match_type(&[TokenType::Identifier(String::new())]) {
+                        return Err(
+                            self.err("expected identifier after `::`", self.peek_span())
+                        );
+                    }
+                    if let TokenType::Identifier(seg) = self.previous() {
+                        path.push(seg);
+                    }
+                }
+                let path_span = start.join(self.previous_span());
+
                 // is it function call?
                 if self.match_type(&[TokenType::LeftParen]) {
                     log::debug!("found function call");
@@ -184,8 +198,17 @@ impl Parser {
                     }
                     self.match_type(&[TokenType::RightParen]);
                     let span = start.join(self.previous_span());
-                    return Ok(Expression::new(ExpressionKind::Call { name, args }, span));
+                    return Ok(Expression::new(ExpressionKind::Call { path, args }, span));
                 }
+
+                // not a call: module paths aren't first-class values
+                if path.len() > 1 {
+                    return Err(self.err(
+                        format!("module path `{}` used as value", path.join("::")),
+                        path_span,
+                    ));
+                }
+                let name = path.pop().unwrap();
 
                 // is it assignment?
                 if self.match_type(&[TokenType::Assign]) {

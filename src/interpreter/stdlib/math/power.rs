@@ -1,22 +1,13 @@
-use crate::{interpreter::values::Value, utils::errors::Error};
+use crate::{interpreter::evaluator::Evaluator, interpreter::values::Value, utils::errors::Error};
 
-pub fn std_pow(args: Vec<Value>) -> Value {
-    if args.len() != 2 {
-        return Value::Null;
-    }
-    match (args[0].clone(), args[1].clone()) {
+pub fn std_pow(_: &mut Evaluator, base: Value, exponent: Value) -> Value {
+    match (base, exponent) {
         (Value::Integer(a), Value::Integer(b)) => {
             let a = a as i32;
             let b = b as u32;
-            let c = a.pow(b) as i64;
-            Value::Integer(c)
+            Value::Integer(a.pow(b) as i64)
         }
-        (Value::Integer(a), Value::Float(b)) => {
-            let a = a as f64;
-            let c = a.powf(b);
-            Value::Float(c)
-        }
-
+        (Value::Integer(a), Value::Float(b)) => Value::Float((a as f64).powf(b)),
         (Value::Float(a), Value::Float(b)) => Value::Float(a.powf(b)),
         (Value::Float(a), Value::Integer(b)) => Value::Float(a.powi(b as i32)),
         _ => {
