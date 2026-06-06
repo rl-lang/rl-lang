@@ -1,7 +1,21 @@
 use crate::lexer::tokentypes;
+use crate::utils::span::Span;
 
-#[derive(Debug, PartialEq)]
-pub enum Expression {
+/// An expression paired with its source span.
+#[derive(Debug)]
+pub struct Expression {
+    pub kind: ExpressionKind,
+    pub span: Span,
+}
+
+impl Expression {
+    pub fn new(kind: ExpressionKind, span: Span) -> Self {
+        Self { kind, span }
+    }
+}
+
+#[derive(Debug)]
+pub enum ExpressionKind {
     Integer(i64),
     Binary {
         left: Box<Expression>,

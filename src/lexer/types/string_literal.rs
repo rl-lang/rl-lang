@@ -1,4 +1,5 @@
 use crate::lexer::{tokenizer::Tokenizer, tokentypes::TokenType};
+use crate::utils::errors::Error;
 
 impl Tokenizer {
     /// scans a double quoted literal
@@ -6,7 +7,7 @@ impl Tokenizer {
     /// supports multi-line strings by incrementing the line counter
     /// when hitting \n
     /// returns TokenType::StringLiteral
-    pub fn string_literal(&mut self) {
+    pub fn string_literal(&mut self) -> Result<(), Error> {
         while !self.is_at_end() && self.peek() != '"' {
             if self.peek() == '\n' {
                 self.line += 1;
@@ -15,16 +16,7 @@ impl Tokenizer {
         }
 
         if self.is_at_end() {
-            crate::utils::errors::Error::init(
-                "Unterminated String".to_string(),
-                Some(self.line),
-                Some(crate::utils::errors::ErrorReason::init(
-                    crate::utils::errors::Reason::Lexer,
-                    None,
-                )),
-            )
-            .print_error();
-            return;
+            return Err(self.err("unterminated string", self.current_span()));
         }
 
         self.advance();
@@ -33,5 +25,6 @@ impl Tokenizer {
             .iter()
             .collect();
         self.add_token(TokenType::StringLiteral(value));
+        Ok(())
     }
 }

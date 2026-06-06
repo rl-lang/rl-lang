@@ -4,7 +4,10 @@ use rl_lang::{
     lexer::tokenizer::Tokenizer,
     parser::parser_logic::Parser,
     repl,
-    utils::errors::{Error, ErrorReason, Reason},
+    utils::{
+        errors::{Error, ErrorReason, Reason},
+        source::SourceFile,
+    },
 };
 
 /// entry point for `rl` interpreter
@@ -75,19 +78,38 @@ fn main() {
     };
 
     println!("[Parsing source file: {}]", arguments[2]);
+    let source = SourceFile::new(arguments[2].as_str(), source_file);
+
     // phase one: lexing the source file into tokens
     info!("lexing the source file...");
-    let tokens = Tokenizer::lex(&source_file);
+    let tokens = match Tokenizer::lex(source.clone()) {
+        Ok(t) => t,
+        Err(e) => {
+            e.report_to_stderr();
+            std::process::exit(1);
+        }
+    };
 
     // phase two: parsing the tokens into ast tree
     info!("parsing the tokens into ast tree...");
-    let statements = Parser::parse(tokens);
+    let statements = match Parser::parse(tokens, source.clone()) {
+        Ok(s) => s,
+        Err(e) => {
+            e.report_to_stderr();
+            std::process::exit(1);
+        }
+    };
 
     // phase three: evaluating the ast tree
     info!("evaluating the ast tree...");
-    let mut evaluator = Evaluator::default().with_stdlib();
+    let mut evaluator = Evaluator::default()
+        .with_stdlib()
+        .with_source_file(source);
     for statement in statements {
-        evaluator.evaluate_statement(&statement);
+        if let Err(e) = evaluator.evaluate_statement(&statement) {
+            e.report_to_stderr();
+            std::process::exit(1);
+        }
     }
     info!("evaluation done")
 }

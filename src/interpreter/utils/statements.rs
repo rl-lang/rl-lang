@@ -1,194 +1,167 @@
 use std::sync::Arc;
 
 use crate::{
-    ast::statements::Statement,
+    ast::statements::{Statement, StatementKind},
     interpreter::{evaluator::Evaluator, values::Value},
     utils::errors::Error,
 };
 
 impl Evaluator {
-    pub fn evaluate_statement(&mut self, statement: &Statement) {
-        match statement {
-            // the evaluator time
-            Statement::Import { names, path } => {
-                for name in names {
-                    // the actual fun is in native.rs
-                    // building the full path
-                    let mut full_path = path.clone();
-                    full_path.push(name.clone());
-
-                    // resolving the full path
-                    if let Some(f) = self.root_module.resolve(&full_path) {
-                        // making a pointer
-                        let f = Arc::clone(f);
-                        // registering the import
-                        self.root_module.functions.insert(name.clone(), f);
-                    } else {
-                        Error::init(
-                            format!("'{}' not found in '{}'", name, path.join("::")),
-                            None,
-                            None,
-                        )
-                        .print_error();
-                    }
-                }
+    pub fn evaluate_statement(&mut self, statement: &Statement) -> Result<(), Error> {
+        match &statement.kind {
+            StatementKind::VariableDeclaration { name, value, .. } => {
+                let val = self.evaluate(value)?;
+                self.insert_value(name.clone(), val, statement.span)?;
             }
 
-            Statement::VariableDeclaration { name, value, .. } => {
-                let val = self.evaluate(value);
-                // should add type check here but for now assume the user input correctly
-                self.insert_value(name.clone(), val);
-            }
-
-            Statement::Array { name, value, .. } => {
+            StatementKind::Array { name, value, .. } => {
                 let mut items: Vec<Value> = Vec::new();
                 for item in value {
-                    let item = self.evaluate(item);
-                    items.push(item);
+                    items.push(self.evaluate(item)?);
                 }
-                self.insert_value(name.clone(), Value::Values(items));
+                self.insert_value(name.clone(), Value::Values(items), statement.span)?;
             }
 
-            Statement::ConstantDeclaration { name, value, .. } => {
-                let val = self.evaluate(value);
-                // should add type check here but for now assume the user input correctly
-                self.insert_const(name.clone(), val);
+            StatementKind::ConstantDeclaration { name, value, .. } => {
+                let val = self.evaluate(value)?;
+                self.insert_const(name.clone(), val, statement.span)?;
             }
 
-            Statement::ConstantArray { name, value, .. } => {
+            StatementKind::ConstantArray { name, value, .. } => {
                 let mut items: Vec<Value> = Vec::new();
                 for item in value {
-                    let item = self.evaluate(item);
-                    items.push(item);
+                    items.push(self.evaluate(item)?);
                 }
-                self.insert_const(name.clone(), Value::Values(items));
+                self.insert_const(name.clone(), Value::Values(items), statement.span)?;
             }
 
-            Statement::Expression(expr) => {
-                // println!("DEBUG expr: {expr:?}");
-                self.evaluate(expr);
+            StatementKind::Expression(expr) => {
+                self.evaluate(expr)?;
             }
-            Statement::While { condition, body } => loop {
-                match self.evaluate(condition) {
+            StatementKind::While { condition, body } => loop {
+                let v = self.evaluate(condition)?;
+                match v {
                     Value::Bool(true) => {}
                     Value::Bool(false) => break,
-                    _ => {
-                        panic!();
+                    other => {
+                        return Err(self
+                            .err("while condition must be a bool", statement.span)
+                            .with_label(
+                                condition.span,
+                                format!("this is {}, expected bool", other.type_name()),
+                            ));
                     }
                 }
-                self.evaluate_block(body);
+                self.evaluate_block(body)?;
             },
-            Statement::Range(..) => {}
-            Statement::For {
+            StatementKind::Range(..) => {}
+            StatementKind::For {
                 initializer,
                 condition,
                 increment,
                 body,
             } => {
-                self.push_scope();
-                self.evaluate_statement(initializer);
+                self.evaluate_statement(initializer)?;
                 loop {
-                    match self.evaluate(condition) {
+                    let v = self.evaluate(condition)?;
+                    match v {
                         Value::Bool(true) => {}
                         Value::Bool(false) => break,
-                        _ => {
-                            panic!();
+                        other => {
+                            return Err(self
+                                .err("for condition must be a bool", statement.span)
+                                .with_label(
+                                    condition.span,
+                                    format!("this is {}, expected bool", other.type_name()),
+                                ));
                         }
                     }
-                    self.evaluate_block(body);
-                    self.evaluate(increment);
+                    self.evaluate_block(body)?;
+                    self.evaluate(increment)?;
                 }
                 self.pop_scope();
             }
-            Statement::ForRange {
-                variable,
-                range,
-                body,
-            } => {
-                let items_range: Vec<i64> = match &**range {
-                    Statement::Range(r) => r.clone(),
-                    _ => {
-                        Error::init("only ranges are supported for now".to_string(), None, None)
-                            .print_error();
-                        unreachable!()
-                    }
-                };
-
-                for item in items_range {
-                    self.push_scope();
-                    self.insert_value(variable.clone(), Value::Integer(item));
-                    self.evaluate_block(body);
-                }
-                self.pop_scope();
+            StatementKind::ForRange { .. } => {
+                return Ok(()); // for now
             }
-            Statement::ConditionalBranch { condition, body } => match condition {
+            StatementKind::ConditionalBranch { condition, body } => match condition {
                 Some(condition) => {
-                    match self.evaluate(condition) {
+                    let v = self.evaluate(condition)?;
+                    match v {
                         Value::Bool(true) => {}
-                        Value::Bool(false) => {
-                            return;
-                        }
-                        _ => {
-                            panic!();
+                        Value::Bool(false) => return Ok(()),
+                        other => {
+                            return Err(self
+                                .err("condition must be a bool", statement.span)
+                                .with_label(
+                                    condition.span,
+                                    format!("this is {}, expected bool", other.type_name()),
+                                ));
                         }
                     }
-                    self.evaluate_block(body);
+                    self.evaluate_block(body)?;
                 }
                 _ => {
-                    self.evaluate_block(body);
+                    self.evaluate_block(body)?;
                 }
             },
-            Statement::Conditional {
+            StatementKind::Conditional {
                 if_branch,
                 elseif_branch,
                 else_branch,
             } => {
-                if !self.evaluate_branch(if_branch) {
-                    // weather branch of the branches condition is
-                    // true and excuted or not
+                if !self.evaluate_branch(if_branch)? {
                     let mut taken = false;
 
                     if let Some(branches) = elseif_branch {
                         for branch in branches {
-                            if self.evaluate_branch(branch) {
+                            if self.evaluate_branch(branch)? {
                                 taken = true;
                                 break;
                             };
                         }
                     }
                     if !taken && let Some(branch) = else_branch {
-                        self.evaluate_branch(branch);
+                        self.evaluate_branch(branch)?;
                     }
                 }
             }
         }
+        Ok(())
     }
 
-    fn evaluate_branch(&mut self, statement: &Statement) -> bool {
-        match statement {
-            Statement::ConditionalBranch { condition, body } => match condition {
-                Some(condition) => match self.evaluate(condition) {
-                    Value::Bool(true) => {
-                        self.evaluate_block(body);
-                        true
+    fn evaluate_branch(&mut self, statement: &Statement) -> Result<bool, Error> {
+        match &statement.kind {
+            StatementKind::ConditionalBranch { condition, body } => match condition {
+                Some(condition) => {
+                    let v = self.evaluate(condition)?;
+                    match v {
+                        Value::Bool(true) => {
+                            self.evaluate_block(body)?;
+                            Ok(true)
+                        }
+                        Value::Bool(false) => Ok(false),
+                        other => Err(self
+                            .err("condition must be a bool", statement.span)
+                            .with_label(
+                                condition.span,
+                                format!("this is {}, expected bool", other.type_name()),
+                            )),
                     }
-                    Value::Bool(false) => false,
-                    _ => panic!(),
-                },
+                }
                 None => {
-                    self.evaluate_block(body);
-                    true
+                    self.evaluate_block(body)?;
+                    Ok(true)
                 }
             },
-            _ => panic!(),
+            _ => Err(self.err("expected conditional branch", statement.span)),
         }
     }
 
-    pub fn evaluate_block(&mut self, statements: &[Statement]) {
-        self.push_scope();
+    pub fn evaluate_block(&mut self, statements: &[Statement]) -> Result<(), Error> {
         for statement in statements {
-            self.evaluate_statement(statement);
+            self.evaluate_statement(statement)?;
         }
-        self.pop_scope();
+        Ok(())
     }
 }
