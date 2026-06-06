@@ -4,6 +4,8 @@ pub mod println;
 
 use crate::interpreter::native::Module;
 
+pub const KEYWORDS: &[&str] = &["print", "println", "len"];
+
 pub fn module() -> Module {
     Module::new("display")
         .with_raw_function("print", print::std_print)

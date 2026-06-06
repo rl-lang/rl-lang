@@ -1,11 +1,12 @@
 use crate::lexer::{tokenizer::Tokenizer, tokentypes::TokenType};
+use crate::utils::errors::Error;
 
 impl Tokenizer {
     /// scans the current character and returns the correct token
     ///
     /// for multi character tokens (e.g. '==') it peeks ahead
     /// and decide which token to return
-    pub fn scan_tokens(&mut self) {
+    pub fn scan_tokens(&mut self) -> Result<(), Error> {
         let current_character = self.advance();
         match current_character {
             '{' => self.add_token(TokenType::LeftBrace),
@@ -122,12 +123,18 @@ impl Tokenizer {
                 self.add_token(TokenType::Newline)
             }
 
-            '\'' => self.character_literal(),
-            '"' => self.string_literal(),
+            '\'' => self.character_literal()?,
+            '"' => self.string_literal()?,
 
             '0'..='9' => self.number_literal(),
             'a'..='z' | 'A'..='Z' => self.identifier(),
-            _ => {}
+            other => {
+                return Err(self.err(
+                    format!("unexpected character `{}`", other),
+                    self.current_span(),
+                ));
+            }
         }
+        Ok(())
     }
 }

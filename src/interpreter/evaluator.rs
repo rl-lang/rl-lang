@@ -2,17 +2,23 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::{
-    ast::nodes::Expression,
+    ast::nodes::{Expression, ExpressionKind},
     interpreter::{
         native::{IntoNativeFn, Module},
         stdlib,
         values::Value,
     },
-    utils::errors::Error,
+    utils::{
+        errors::{Error, Reason},
+        source::SourceFile,
+        span::Span,
+        suggest::closest_match,
+    },
 };
 
 pub struct Evaluator {
     pub environment: Vec<HashMap<String, (Value, bool)>>,
+    pub source_file: Option<SourceFile>,
     pub root_module: Module,
 }
 
@@ -23,79 +29,21 @@ impl Default for Evaluator {
 }
 
 impl Evaluator {
-    pub fn evaluate(&mut self, expression: &Expression) -> Value {
-        match expression {
-            Expression::Integer(i) => Value::Integer(*i),
-            Expression::String(s) => Value::String(s.clone()),
-            Expression::Bool(b) => Value::Bool(*b),
-            Expression::Float(f) => Value::Float(*f),
-            Expression::Character(c) => Value::Char(*c),
-            Expression::Index { target, index } => {
-                let arr = self.evaluate(target);
-                let idx = self.evaluate(index);
-                match (arr, idx) {
-                    (Value::Values(items), Value::Integer(i)) => {
-                        let i = i as usize;
-                        if i >= items.len() {
-                            Error::init(
-                                format!("index {} out of bounds (len {})", i, items.len()),
-                                None,
-                                None,
-                            )
-                            .print_error();
-                            unreachable!()
-                        }
-                        items[i].clone()
-                    }
-                    _ => {
-                        Error::init("invalid index operation".to_string(), None, None)
-                            .print_error();
-                        unreachable!()
-                    }
-                }
-            }
-            Expression::ArrayLiteral(items) => {
-                let values = items.iter().map(|e| self.evaluate(e)).collect();
-                Value::Values(values)
-            }
-            Expression::IndexAssign {
-                target,
-                index,
-                value,
-            } => self.index_assign(target, index, value),
-            Expression::Grouping(inner) => self.evaluate(inner),
-            Expression::Binary {
-                left,
-                operator,
-                right,
-            } => {
-                let left = self.evaluate(left);
-                let right = self.evaluate(right);
-                self.match_binary_operator(left, right, operator)
-            }
-            Expression::Unary { operator, operand } => {
-                let operand = self.evaluate(operand);
-                self.match_unary_operator(operand, operator)
-            }
-
-            Expression::Identifier(name) => self.get_value(name.clone()),
-            Expression::Assign { name, value } => {
-                let val = self.evaluate(value);
-                self.assign_value(name.clone(), val.clone());
-                val
-            }
-            Expression::Call { path, args } => {
-                let evaluated_args = args.iter().map(|arg| self.evaluate(arg)).collect();
-                self.call_path(path, evaluated_args)
-            }
-        }
-    }
-
     pub fn new() -> Self {
         Self {
             environment: vec![HashMap::new()],
+            source_file: None,
             root_module: Module::new(""),
         }
+    }
+
+    pub fn with_source_file(mut self, file: SourceFile) -> Self {
+        self.source_file = Some(file);
+        self
+    }
+
+    pub fn set_source_file(&mut self, file: SourceFile) {
+        self.source_file = Some(file);
     }
 
     pub fn with_module(mut self, m: Module) -> Self {
@@ -122,17 +70,121 @@ impl Evaluator {
         )
     }
 
-    pub fn call_path(&mut self, path: &[String], args: Vec<Value>) -> Value {
+    /// Build a [`Reason::Runtime`] error anchored at `span`, with source attached when known.
+    pub fn err(&self, message: impl Into<String>, span: Span) -> Error {
+        let err = Error::at(Reason::Runtime, message, span);
+        match &self.source_file {
+            Some(file) => err.with_source_file(file),
+            None => err,
+        }
+    }
+
+    pub fn evaluate(&mut self, expression: &Expression) -> Result<Value, Error> {
+        let value = match &expression.kind {
+            ExpressionKind::Integer(i) => Value::Integer(*i),
+            ExpressionKind::String(s) => Value::String(s.clone()),
+            ExpressionKind::Bool(b) => Value::Bool(*b),
+            ExpressionKind::Float(f) => Value::Float(*f),
+            ExpressionKind::Character(c) => Value::Char(*c),
+            ExpressionKind::Index { target, index } => {
+                let arr = self.evaluate(target)?;
+                let idx = self.evaluate(index)?;
+                match (&arr, &idx) {
+                    (Value::Values(items), Value::Integer(i)) => {
+                        let i_usize = *i as usize;
+                        if i_usize >= items.len() {
+                            return Err(self
+                                .err(
+                                    format!("index {} out of bounds (len {})", i, items.len()),
+                                    expression.span,
+                                )
+                                .with_label(
+                                    target.span,
+                                    format!("this array has length {}", items.len()),
+                                ));
+                        }
+                        items[i_usize].clone()
+                    }
+                    _ => {
+                        return Err(self
+                            .err("invalid index operation", expression.span)
+                            .with_label(target.span, format!("this is {}", arr.type_name()))
+                            .with_label(index.span, format!("this is {}", idx.type_name())));
+                    }
+                }
+            }
+            ExpressionKind::ArrayLiteral(items) => {
+                let mut values = Vec::with_capacity(items.len());
+                for e in items {
+                    values.push(self.evaluate(e)?);
+                }
+                Value::Values(values)
+            }
+            ExpressionKind::IndexAssign {
+                target,
+                index,
+                value,
+            } => self.index_assign(target, index, value, expression.span)?,
+            ExpressionKind::Grouping(inner) => self.evaluate(inner)?,
+            ExpressionKind::Binary {
+                left,
+                operator,
+                right,
+            } => {
+                let left_val = self.evaluate(left)?;
+                let right_val = self.evaluate(right)?;
+                self.match_binary_operator(
+                    left_val,
+                    left.span,
+                    right_val,
+                    right.span,
+                    operator,
+                    expression.span,
+                )?
+            }
+            ExpressionKind::Unary { operator, operand } => {
+                let operand_val = self.evaluate(operand)?;
+                self.match_unary_operator(operand_val, operand.span, operator, expression.span)?
+            }
+            ExpressionKind::Identifier(name) => self.get_value(name, expression.span)?,
+            ExpressionKind::Assign { name, value } => {
+                let val = self.evaluate(value)?;
+                self.insert_value(name.clone(), val.clone(), expression.span)?;
+                val
+            }
+            ExpressionKind::Call { path, args } => {
+                let mut evaluated_args = Vec::with_capacity(args.len());
+                for arg in args {
+                    evaluated_args.push(self.evaluate(arg)?);
+                }
+                self.call_path(path, evaluated_args, expression.span)?
+            }
+        };
+        Ok(value)
+    }
+
+    pub fn call_path(
+        &mut self,
+        path: &[String],
+        args: Vec<Value>,
+        span: Span,
+    ) -> Result<Value, Error> {
         if let Some(f) = self.root_module.resolve(path) {
             let f = Arc::clone(f);
-            return f(self, args);
+            return Ok(f(self, args));
         }
-        Error::init(
-            format!("undefined function {}", path.join("::")),
-            None,
-            None,
-        )
-        .print_error();
-        unreachable!()
+        let mut err = self.err(format!("undefined function {}", path.join("::")), span);
+        // suggest a stdlib leaf name if the last segment is a close typo
+        if let Some(last) = path.last() {
+            let candidates = stdlib::display::KEYWORDS
+                .iter()
+                .chain(stdlib::math::KEYWORDS)
+                .chain(stdlib::io::KEYWORDS)
+                .copied();
+            if let Some(suggestion) = closest_match(last, candidates) {
+                err = err.with_help(format!("did you mean `{}`?", suggestion));
+            }
+        }
+        Err(err)
     }
 }

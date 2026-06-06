@@ -17,6 +17,8 @@ pub mod tan;
 
 use crate::interpreter::native::Module;
 
+pub const KEYWORDS: &[&str] = &["sin", "cos", "tan", "pow", "mod"];
+
 pub fn module() -> Module {
     Module::new("math")
         .with_function("sin", sin::std_sin)

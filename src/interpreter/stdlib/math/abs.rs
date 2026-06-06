@@ -3,6 +3,7 @@ use crate::{
     utils::errors::Error,
 };
 
+/// returns the absolute value of number
 pub fn std_abs(_: &mut Evaluator, a: Value) -> Value {
     match a {
         Value::Integer(i) => Value::Integer(i.abs()),

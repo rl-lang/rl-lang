@@ -11,6 +11,21 @@ pub enum Value {
     Null,
 }
 
+impl Value {
+    /// Human-readable type name used in error labels (e.g. "int", "bool", "array").
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            Value::Integer(_) => "int",
+            Value::Float(_) => "float",
+            Value::String(_) => "string",
+            Value::Bool(_) => "bool",
+            Value::Char(_) => "char",
+            Value::Values(_) => "array",
+            Value::Null => "null",
+        }
+    }
+}
+
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

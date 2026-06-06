@@ -12,6 +12,7 @@ categories = ["command-line-utilities"]
 [dependencies]
 log = { version = "0.4", features = ["release_max_level_off"] }
 env_logger = "0.11"
+ariadne = "0.5"
 
 [dev-dependencies]
 criterion = "0.5"

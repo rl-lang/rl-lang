@@ -1,6 +1,22 @@
-use crate::{lexer::tokentypes::TokenType, parser::parser_logic::Parser};
+use crate::{
+    lexer::tokentypes::TokenType, parser::parser_logic::Parser, utils::span::Span,
+};
 
 impl Parser {
+    /// span of the token currently being looked at (peek position).
+    pub fn peek_span(&self) -> Span {
+        self.tokens[self.current].span
+    }
+
+    /// span of the most recently consumed token.
+    pub fn previous_span(&self) -> Span {
+        if self.current == 0 {
+            self.tokens[0].span
+        } else {
+            self.tokens[self.current - 1].span
+        }
+    }
+
     /// checks the current token if it is end of file ([`TokenType::Eof`]) or not
     ///
     /// if Eof -> true which indicates the last token

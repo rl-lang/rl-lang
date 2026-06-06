@@ -1,10 +1,12 @@
 use crate::{
-    ast::statements::Statement, lexer::tokentypes::TokenType, parser::parser_logic::Parser,
+    ast::statements::{Statement, StatementKind},
+    lexer::tokentypes::TokenType,
+    parser::parser_logic::Parser,
     utils::errors::Error,
 };
 
 impl Parser {
-    pub fn parse_import(&mut self) -> Statement {
+    pub fn parse_import(&mut self, start: crate::utils::span::Span) -> Result<Statement, Error> {
         // target would be
         // use println, print from std::display
         // which means use will be consumed when found by parser
@@ -13,7 +15,6 @@ impl Parser {
         // checks for comma and coloncolon ummm might make loop
 
         let mut names = Vec::new();
-
         loop {
             match self.peek() {
                 TokenType::Identifier(name) => {
@@ -22,11 +23,7 @@ impl Parser {
                     // adding the target to names list
                     names.push(name);
                 }
-                _ => {
-                    Error::init("expected identifier after 'get'".to_string(), None, None)
-                        .print_error();
-                    unreachable!()
-                }
+                _ => return Err(self.err("expected identifier after 'get'", self.peek_span())),
             }
 
             if !self.match_type(&[TokenType::Comma]) {
@@ -35,7 +32,7 @@ impl Parser {
         }
 
         if !self.match_type(&[TokenType::From]) {
-            Error::init("expected 'from' after names".to_string(), None, None).print_error();
+            return Err(self.err("expected 'from' after names", self.peek_span()));
         }
 
         let mut path = Vec::new();
@@ -47,10 +44,7 @@ impl Parser {
                     // adding the target to names list
                     path.push(segment);
                 }
-                _ => {
-                    Error::init("expected path after 'from'".to_string(), None, None).print_error();
-                    unreachable!()
-                }
+                _ => return Err(self.err("expected path after 'from'", self.peek_span())),
             }
 
             if !self.match_type(&[TokenType::ColonColon]) {
@@ -58,6 +52,7 @@ impl Parser {
             }
         }
 
-        Statement::Import { names, path }
+        let span = start.join(self.previous_span());
+        Ok(Statement::new(StatementKind::Import { names, path }, span))
     }
 }
