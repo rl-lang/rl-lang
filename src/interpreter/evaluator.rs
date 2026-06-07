@@ -179,6 +179,7 @@ impl Evaluator {
             let candidates = stdlib::display::KEYWORDS
                 .iter()
                 .chain(stdlib::math::KEYWORDS)
+                .chain(stdlib::math::constants::KEYWORDS)
                 .chain(stdlib::io::KEYWORDS)
                 .copied();
             if let Some(suggestion) = closest_match(last, candidates) {
