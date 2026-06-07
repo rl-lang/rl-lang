@@ -8,6 +8,7 @@ pub mod clamp;
 pub mod constants;
 pub mod cos;
 pub mod degrees;
+pub mod exp;
 pub mod floor;
 pub mod log;
 pub mod log10;
@@ -26,7 +27,7 @@ use crate::interpreter::native::Module;
 
 pub const KEYWORDS: &[&str] = &[
     "sin", "cos", "tan", "pow", "mod", "abs", "ceil", "clamp", "floor", "round", "log", "log2",
-    "log10", "max", "min", "sqrt", "atan", "acos", "asin", "atan2", "radians", "degrees",
+    "log10", "max", "min", "sqrt", "atan", "acos", "asin", "atan2", "radians", "degrees", "exp",
 ];
 
 pub fn module() -> Module {
@@ -53,5 +54,6 @@ pub fn module() -> Module {
         .with_function("asin", asin::std_asin)
         .with_function("degrees", degrees::std_degrees)
         .with_function("radians", radians::std_radians)
+        .with_function("exp", exp::std_exp)
         .with_module(constants::module())
 }
