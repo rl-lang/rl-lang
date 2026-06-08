@@ -16,6 +16,7 @@ impl Expression {
 
 #[derive(Debug, Clone)]
 pub enum ExpressionKind {
+    Null,
     Integer(i64),
     Binary {
         left: Box<Expression>,

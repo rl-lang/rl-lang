@@ -172,9 +172,7 @@ impl Parser {
                 let mut path = vec![first];
                 while self.match_type(&[TokenType::ColonColon]) {
                     if !self.match_type(&[TokenType::Identifier(String::new())]) {
-                        return Err(
-                            self.err("expected identifier after `::`", self.peek_span())
-                        );
+                        return Err(self.err("expected identifier after `::`", self.peek_span()));
                     }
                     if let TokenType::Identifier(seg) = self.previous() {
                         path.push(seg);
@@ -273,7 +271,10 @@ impl Parser {
 
                     return Ok(expr);
                 }
-                return Ok(Expression::new(ExpressionKind::Identifier(name), ident_span));
+                return Ok(Expression::new(
+                    ExpressionKind::Identifier(name),
+                    ident_span,
+                ));
             }
         }
 
@@ -341,13 +342,22 @@ impl Parser {
             }
         }
 
+        // is it null?
+        if self.match_type(&[TokenType::Null]) {
+            let span = self.previous_span();
+            return Ok(Expression::new(ExpressionKind::Null, span));
+        }
+
         // is it (Expression)?
         if self.match_type(&[TokenType::LeftParen]) {
             log::debug!("found group start");
             let inner = self.parse_expression()?;
             self.match_type(&[TokenType::RightParen]);
             let span = start.join(self.previous_span());
-            return Ok(Expression::new(ExpressionKind::Grouping(Box::new(inner)), span));
+            return Ok(Expression::new(
+                ExpressionKind::Grouping(Box::new(inner)),
+                span,
+            ));
         }
 
         Err(self.err("expected expression", self.peek_span()))

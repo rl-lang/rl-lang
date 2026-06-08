@@ -112,14 +112,19 @@ impl Evaluator {
                         }
                         let declared = p.type_annotation.clone();
 
-                        let types_match = match (&declared, &value_type) {
-                            (TypeAnnotation::Array(_), TypeAnnotation::Array(inner))
-                                if **inner == TypeAnnotation::Null =>
-                            {
-                                true
-                            }
-                            _ => declared == value_type,
-                        };
+                        // Null is assignable to any type (implicit nullability).
+                        // Type-checking against the declared type is skipped when
+                        // the incoming value is Null — the null-use error fires
+                        // later at the point of use instead.
+                        let types_match = matches!(value, Value::Null)
+                            || match (&declared, &value_type) {
+                                (TypeAnnotation::Array(_), TypeAnnotation::Array(inner))
+                                    if **inner == TypeAnnotation::Null =>
+                                {
+                                    true
+                                }
+                                _ => declared == value_type,
+                            };
                         if !types_match {
                             return Err(self.err(
                                 format!(
