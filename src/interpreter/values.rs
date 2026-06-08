@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::ast::statements::{Param, Statement};
+use crate::ast::statements::{Param, Statement, TypeAnnotation};
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -14,6 +14,7 @@ pub enum Value {
     Function {
         params: Vec<Param>,
         body: Vec<Statement>,
+        return_type: Option<TypeAnnotation>,
     },
 }
 

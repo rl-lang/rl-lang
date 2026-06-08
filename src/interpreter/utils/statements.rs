@@ -220,10 +220,16 @@ impl Evaluator {
                 }
             }
 
-            StatementKind::FunctionDeclaration { name, params, body } => {
+            StatementKind::FunctionDeclaration {
+                name,
+                params,
+                return_type,
+                body,
+            } => {
                 let func = Value::Function {
                     params: params.clone(),
                     body: body.clone(),
+                    return_type: Some(return_type.clone()),
                 };
                 self.insert_value(
                     name.clone(),

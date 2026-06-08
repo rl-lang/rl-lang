@@ -216,7 +216,12 @@ impl Evaluator {
         if path.len() == 1 {
             let func = self.get_value(&path[0], span)?;
 
-            if let Value::Function { params, body } = func {
+            if let Value::Function {
+                params,
+                body,
+                return_type,
+            } = func
+            {
                 if params.len() != args.len() {
                     return Err(self.err(
                         format!(
@@ -259,11 +264,51 @@ impl Evaluator {
                     self.insert_value(param.param_name.clone(), arg, arg_type, span)?;
                 }
 
-                self.evaluate_block(&body)?;
+                for statement in &body {
+                    self.evaluate_statement(statement)?;
+                    if self.return_value.is_some() {
+                        break;
+                    }
+                }
 
                 let result = self.return_value.take().unwrap_or(Value::Null);
 
                 self.environment = saved_env;
+
+                if let Some(expected) = &return_type {
+                    let actual = match &result {
+                        Value::Integer(_) => TypeAnnotation::Int,
+                        Value::Float(_) => TypeAnnotation::Float,
+                        Value::String(_) => TypeAnnotation::String,
+                        Value::Bool(_) => TypeAnnotation::Bool,
+                        Value::Char(_) => TypeAnnotation::Char,
+                        Value::Values(items) => {
+                            let inner = items
+                                .first()
+                                .map(|v| match v {
+                                    Value::Integer(_) => TypeAnnotation::Int,
+                                    Value::Float(_) => TypeAnnotation::Float,
+                                    Value::String(_) => TypeAnnotation::String,
+                                    Value::Bool(_) => TypeAnnotation::Bool,
+                                    Value::Char(_) => TypeAnnotation::Char,
+                                    _ => TypeAnnotation::Null,
+                                })
+                                .unwrap_or(TypeAnnotation::Null);
+                            TypeAnnotation::Array(Box::new(inner))
+                        }
+                        Value::Null => TypeAnnotation::Null,
+                        Value::Function { .. } => TypeAnnotation::Fn,
+                    };
+                    if *expected != actual {
+                        return Err(self.err(
+                            format!(
+                                "function '{}' declared to return {:?} but returned {:?}",
+                                path[0], expected, actual
+                            ),
+                            span,
+                        ));
+                    }
+                }
 
                 return Ok(result);
             }

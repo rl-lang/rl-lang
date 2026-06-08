@@ -66,6 +66,7 @@ pub enum StatementKind {
     FunctionDeclaration {
         name: String,
         params: Vec<Param>,
+        return_type: TypeAnnotation,
         body: Vec<Statement>,
     },
     Return(Option<Expression>),
