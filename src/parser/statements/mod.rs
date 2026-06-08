@@ -88,6 +88,19 @@ impl Parser {
                 let span = start.join(self.previous_span());
                 Ok(Statement::new(StatementKind::Return(expr), span))
             }
+
+            TokenType::Break => {
+                self.advance();
+                let span = start.join(self.previous_span());
+                Ok(Statement::new(StatementKind::Break, span))
+            }
+
+            TokenType::Continue => {
+                self.advance();
+                let span = start.join(self.previous_span());
+                Ok(Statement::new(StatementKind::Continue, span))
+            }
+
             _ => {
                 log::info!("parsing the current tokens as expression");
                 let expr = self.parse_expression()?;

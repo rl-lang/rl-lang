@@ -34,6 +34,8 @@ pub struct Evaluator {
     pub source_file: Option<SourceFile>,
     pub root_module: Module,
     pub return_value: Option<Value>,
+    pub is_breaking: bool,
+    pub is_continuing: bool,
 }
 
 impl Default for Evaluator {
@@ -49,6 +51,8 @@ impl Evaluator {
             source_file: None,
             root_module: Module::new(""),
             return_value: None,
+            is_breaking: false,
+            is_continuing: false,
         }
     }
 
