@@ -43,7 +43,7 @@ impl Evaluator {
         &mut self,
         name: String,
         value: Value,
-        type_annotation: Option<TypeAnnotation>,
+        type_annotation: TypeAnnotation,
         span: Span,
     ) -> Result<(), Error> {
         for scope in self.environment.iter().rev() {
@@ -76,7 +76,7 @@ impl Evaluator {
         &mut self,
         name: String,
         value: Value,
-        type_annotation: Option<TypeAnnotation>,
+        type_annotation: TypeAnnotation,
         span: Span,
     ) -> Result<(), Error> {
         let scope = self.environment.last_mut().unwrap();
@@ -94,7 +94,13 @@ impl Evaluator {
         Ok(())
     }
 
-    pub fn assign_value(&mut self, name: String, value: Value, span: Span) -> Result<(), Error> {
+    pub fn assign_value(
+        &mut self,
+        name: String,
+        value: Value,
+        value_type: TypeAnnotation,
+        span: Span,
+    ) -> Result<(), Error> {
         for scope in self.environment.iter_mut().rev() {
             if let Some(entry) = scope.get_mut(&name) {
                 match entry {
@@ -104,6 +110,26 @@ impl Evaluator {
                                 self.err(format!("cannot assign to constant '{}'", name), span)
                             );
                         }
+                        let declared = p.type_annotation.clone();
+
+                        let types_match = match (&declared, &value_type) {
+                            (TypeAnnotation::Array(_), TypeAnnotation::Array(inner))
+                                if **inner == TypeAnnotation::Null =>
+                            {
+                                true
+                            }
+                            _ => declared == value_type,
+                        };
+                        if !types_match {
+                            return Err(self.err(
+                                format!(
+                                    "cannot assign {:?} to variable '{}' declared as {:?}",
+                                    value_type, name, declared
+                                ),
+                                span,
+                            ));
+                        }
+
                         p.value = value;
                         return Ok(());
                     }

@@ -21,7 +21,7 @@ use crate::{
 
 pub struct PItem {
     pub value: Value,
-    pub type_annotation: Option<TypeAnnotation>,
+    pub type_annotation: TypeAnnotation,
     pub is_const: bool,
 }
 
@@ -164,7 +164,30 @@ impl Evaluator {
             ExpressionKind::Identifier(name) => self.get_value(name, expression.span)?,
             ExpressionKind::Assign { name, value } => {
                 let val = self.evaluate(value)?;
-                self.insert_value(name.clone(), val.clone(), None, expression.span)?;
+                let inferred_type = match &val {
+                    Value::Integer(_) => TypeAnnotation::Int,
+                    Value::Float(_) => TypeAnnotation::Float,
+                    Value::String(_) => TypeAnnotation::String,
+                    Value::Bool(_) => TypeAnnotation::Bool,
+                    Value::Char(_) => TypeAnnotation::Char,
+                    Value::Values(items) => {
+                        let inner = items
+                            .first()
+                            .map(|v| match v {
+                                Value::Integer(_) => TypeAnnotation::Int,
+                                Value::Float(_) => TypeAnnotation::Float,
+                                Value::String(_) => TypeAnnotation::String,
+                                Value::Bool(_) => TypeAnnotation::Bool,
+                                Value::Char(_) => TypeAnnotation::Char,
+                                _ => TypeAnnotation::Null,
+                            })
+                            .unwrap_or(TypeAnnotation::Null);
+                        TypeAnnotation::Array(Box::new(inner))
+                    }
+                    Value::Null => TypeAnnotation::Null,
+                    Value::Function { .. } => TypeAnnotation::Fn,
+                };
+                self.assign_value(name.clone(), val.clone(), inferred_type, expression.span)?;
                 val
             }
             ExpressionKind::Call { path, args } => {
@@ -210,8 +233,32 @@ impl Evaluator {
                 self.environment = vec![HashMap::new()];
 
                 for (param, arg) in params.iter().zip(args) {
-                    self.insert_value(param.param_name.clone(), arg, None, span)?;
+                    let arg_type = match &arg {
+                        Value::Integer(_) => TypeAnnotation::Int,
+                        Value::Float(_) => TypeAnnotation::Float,
+                        Value::String(_) => TypeAnnotation::String,
+                        Value::Bool(_) => TypeAnnotation::Bool,
+                        Value::Char(_) => TypeAnnotation::Char,
+                        Value::Values(items) => {
+                            let inner = items
+                                .first()
+                                .map(|v| match v {
+                                    Value::Integer(_) => TypeAnnotation::Int,
+                                    Value::Float(_) => TypeAnnotation::Float,
+                                    Value::String(_) => TypeAnnotation::String,
+                                    Value::Bool(_) => TypeAnnotation::Bool,
+                                    Value::Char(_) => TypeAnnotation::Char,
+                                    _ => TypeAnnotation::Null,
+                                })
+                                .unwrap_or(TypeAnnotation::Null);
+                            TypeAnnotation::Array(Box::new(inner))
+                        }
+                        Value::Null => TypeAnnotation::Null,
+                        Value::Function { .. } => TypeAnnotation::Fn,
+                    };
+                    self.insert_value(param.param_name.clone(), arg, arg_type, span)?;
                 }
+
                 self.evaluate_block(&body)?;
 
                 let result = self.return_value.take().unwrap_or(Value::Null);

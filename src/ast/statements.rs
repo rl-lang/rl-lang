@@ -93,6 +93,8 @@ pub enum TypeAnnotation {
     CString,
     CChar,
     CArray(Box<TypeAnnotation>),
+    Fn,
+    Null,
 }
 
 #[derive(Debug, Clone)]
