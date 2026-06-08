@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    ast::statements::{Statement, StatementKind, TypeAnnotation},
+    ast::statements::{Statement, StatementKind},
     interpreter::{evaluator::Evaluator, values::Value},
     utils::errors::Error,
 };
@@ -11,30 +11,7 @@ impl Evaluator {
         match &statement.kind {
             StatementKind::VariableDeclaration { name, value, .. } => {
                 let val = self.evaluate(value)?;
-                let inferred_type = match &val {
-                    Value::Integer(_) => TypeAnnotation::Int,
-                    Value::Float(_) => TypeAnnotation::Float,
-                    Value::String(_) => TypeAnnotation::String,
-                    Value::Bool(_) => TypeAnnotation::Bool,
-                    Value::Char(_) => TypeAnnotation::Char,
-                    Value::Values(items) => {
-                        let inner = items
-                            .first()
-                            .map(|v| match v {
-                                Value::Integer(_) => TypeAnnotation::Int,
-                                Value::Float(_) => TypeAnnotation::Float,
-                                Value::String(_) => TypeAnnotation::String,
-                                Value::Bool(_) => TypeAnnotation::Bool,
-                                Value::Char(_) => TypeAnnotation::Char,
-                                _ => TypeAnnotation::Null,
-                            })
-                            .unwrap_or(TypeAnnotation::Null);
-                        TypeAnnotation::Array(Box::new(inner))
-                    }
-                    Value::Null => TypeAnnotation::Null,
-                    Value::Function { .. } => TypeAnnotation::Fn,
-                };
-
+                let inferred_type = Evaluator::infer_type(&val);
                 self.insert_value(name.clone(), val, inferred_type, statement.span)?;
             }
 
@@ -43,47 +20,13 @@ impl Evaluator {
                 for item in value {
                     items.push(self.evaluate(item)?);
                 }
-                let inner = items
-                    .first()
-                    .map(|v| match v {
-                        Value::Integer(_) => TypeAnnotation::Int,
-                        Value::Float(_) => TypeAnnotation::Float,
-                        Value::String(_) => TypeAnnotation::String,
-                        Value::Bool(_) => TypeAnnotation::Bool,
-                        Value::Char(_) => TypeAnnotation::Char,
-                        _ => TypeAnnotation::Null,
-                    })
-                    .unwrap_or(TypeAnnotation::Null);
-                let arr_type = TypeAnnotation::Array(Box::new(inner));
+                let arr_type = Evaluator::infer_type(&Value::Values(items.clone()));
                 self.insert_value(name.clone(), Value::Values(items), arr_type, statement.span)?;
             }
 
             StatementKind::ConstantDeclaration { name, value, .. } => {
                 let val = self.evaluate(value)?;
-                let inferred_type = match &val {
-                    Value::Integer(_) => TypeAnnotation::Int,
-                    Value::Float(_) => TypeAnnotation::Float,
-                    Value::String(_) => TypeAnnotation::String,
-                    Value::Bool(_) => TypeAnnotation::Bool,
-                    Value::Char(_) => TypeAnnotation::Char,
-                    Value::Values(items) => {
-                        let inner = items
-                            .first()
-                            .map(|v| match v {
-                                Value::Integer(_) => TypeAnnotation::Int,
-                                Value::Float(_) => TypeAnnotation::Float,
-                                Value::String(_) => TypeAnnotation::String,
-                                Value::Bool(_) => TypeAnnotation::Bool,
-                                Value::Char(_) => TypeAnnotation::Char,
-                                _ => TypeAnnotation::Null,
-                            })
-                            .unwrap_or(TypeAnnotation::Null);
-                        TypeAnnotation::Array(Box::new(inner))
-                    }
-                    Value::Null => TypeAnnotation::Null,
-                    Value::Function { .. } => TypeAnnotation::Fn,
-                };
-
+                let inferred_type = Evaluator::infer_type(&val);
                 self.insert_const(name.clone(), val, inferred_type, statement.span)?;
             }
 
@@ -92,23 +35,14 @@ impl Evaluator {
                 for item in value {
                     items.push(self.evaluate(item)?);
                 }
-                let inner = items
-                    .first()
-                    .map(|v| match v {
-                        Value::Integer(_) => TypeAnnotation::Int,
-                        Value::Float(_) => TypeAnnotation::Float,
-                        Value::String(_) => TypeAnnotation::String,
-                        Value::Bool(_) => TypeAnnotation::Bool,
-                        Value::Char(_) => TypeAnnotation::Char,
-                        _ => TypeAnnotation::Null,
-                    })
-                    .unwrap_or(TypeAnnotation::Null);
-                let arr_type = TypeAnnotation::Array(Box::new(inner));
+                let arr_type = Evaluator::infer_type(&Value::Values(items.clone()));
                 self.insert_const(name.clone(), Value::Values(items), arr_type, statement.span)?;
             }
+
             StatementKind::Expression(expr) => {
                 self.evaluate(expr)?;
             }
+
             StatementKind::While { condition, body } => loop {
                 let v = self.evaluate(condition)?;
                 match v {
@@ -125,7 +59,9 @@ impl Evaluator {
                 }
                 self.evaluate_block(body)?;
             },
+
             StatementKind::Range(..) => {}
+
             StatementKind::For {
                 initializer,
                 condition,
@@ -152,6 +88,7 @@ impl Evaluator {
                 }
                 self.pop_scope();
             }
+
             StatementKind::Import { names, path } => {
                 // imports are resolved at parse time; nothing to evaluate
                 // or thats what i though
@@ -174,9 +111,11 @@ impl Evaluator {
                     self.root_module.functions.insert(name, f);
                 }
             }
+
             StatementKind::ForRange { .. } => {
                 return Ok(()); // for now
             }
+
             StatementKind::ConditionalBranch { condition, body } => match condition {
                 Some(condition) => {
                     let v = self.evaluate(condition)?;
@@ -198,6 +137,7 @@ impl Evaluator {
                     self.evaluate_block(body)?;
                 }
             },
+
             StatementKind::Conditional {
                 if_branch,
                 elseif_branch,
@@ -233,8 +173,8 @@ impl Evaluator {
                 };
                 self.insert_value(
                     name.clone(),
-                    func.clone(),
-                    TypeAnnotation::Fn,
+                    func,
+                    crate::ast::statements::TypeAnnotation::Fn,
                     statement.span,
                 )?;
             }

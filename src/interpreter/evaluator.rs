@@ -235,32 +235,12 @@ impl Evaluator {
                 }
 
                 let saved_env = std::mem::take(&mut self.environment);
+                let saved_return = self.return_value.take();
                 self.environment = vec![HashMap::new()];
+                self.push_scope();
 
                 for (param, arg) in params.iter().zip(args) {
-                    let arg_type = match &arg {
-                        Value::Integer(_) => TypeAnnotation::Int,
-                        Value::Float(_) => TypeAnnotation::Float,
-                        Value::String(_) => TypeAnnotation::String,
-                        Value::Bool(_) => TypeAnnotation::Bool,
-                        Value::Char(_) => TypeAnnotation::Char,
-                        Value::Values(items) => {
-                            let inner = items
-                                .first()
-                                .map(|v| match v {
-                                    Value::Integer(_) => TypeAnnotation::Int,
-                                    Value::Float(_) => TypeAnnotation::Float,
-                                    Value::String(_) => TypeAnnotation::String,
-                                    Value::Bool(_) => TypeAnnotation::Bool,
-                                    Value::Char(_) => TypeAnnotation::Char,
-                                    _ => TypeAnnotation::Null,
-                                })
-                                .unwrap_or(TypeAnnotation::Null);
-                            TypeAnnotation::Array(Box::new(inner))
-                        }
-                        Value::Null => TypeAnnotation::Null,
-                        Value::Function { .. } => TypeAnnotation::Fn,
-                    };
+                    let arg_type = Self::infer_type(&arg);
                     self.insert_value(param.param_name.clone(), arg, arg_type, span)?;
                 }
 
@@ -274,39 +254,20 @@ impl Evaluator {
                 let result = self.return_value.take().unwrap_or(Value::Null);
 
                 self.environment = saved_env;
+                self.return_value = saved_return;
 
                 if let Some(expected) = &return_type {
-                    let actual = match &result {
-                        Value::Integer(_) => TypeAnnotation::Int,
-                        Value::Float(_) => TypeAnnotation::Float,
-                        Value::String(_) => TypeAnnotation::String,
-                        Value::Bool(_) => TypeAnnotation::Bool,
-                        Value::Char(_) => TypeAnnotation::Char,
-                        Value::Values(items) => {
-                            let inner = items
-                                .first()
-                                .map(|v| match v {
-                                    Value::Integer(_) => TypeAnnotation::Int,
-                                    Value::Float(_) => TypeAnnotation::Float,
-                                    Value::String(_) => TypeAnnotation::String,
-                                    Value::Bool(_) => TypeAnnotation::Bool,
-                                    Value::Char(_) => TypeAnnotation::Char,
-                                    _ => TypeAnnotation::Null,
-                                })
-                                .unwrap_or(TypeAnnotation::Null);
-                            TypeAnnotation::Array(Box::new(inner))
+                    if *expected != TypeAnnotation::Null {
+                        let actual = Self::infer_type(&result);
+                        if *expected != actual {
+                            return Err(self.err(
+                                format!(
+                                    "function '{}' declared to return {:?} but returned {:?}",
+                                    path[0], expected, actual
+                                ),
+                                span,
+                            ));
                         }
-                        Value::Null => TypeAnnotation::Null,
-                        Value::Function { .. } => TypeAnnotation::Fn,
-                    };
-                    if *expected != actual {
-                        return Err(self.err(
-                            format!(
-                                "function '{}' declared to return {:?} but returned {:?}",
-                                path[0], expected, actual
-                            ),
-                            span,
-                        ));
                     }
                 }
 
@@ -328,5 +289,25 @@ impl Evaluator {
             }
         }
         Err(err)
+    }
+
+    /// Infer the [`TypeAnnotation`] of a runtime [`Value`].
+    pub fn infer_type(value: &Value) -> TypeAnnotation {
+        match value {
+            Value::Integer(_) => TypeAnnotation::Int,
+            Value::Float(_) => TypeAnnotation::Float,
+            Value::String(_) => TypeAnnotation::String,
+            Value::Bool(_) => TypeAnnotation::Bool,
+            Value::Char(_) => TypeAnnotation::Char,
+            Value::Values(items) => {
+                let inner = items
+                    .first()
+                    .map(|v| Self::infer_type(v))
+                    .unwrap_or(TypeAnnotation::Null);
+                TypeAnnotation::Array(Box::new(inner))
+            }
+            Value::Null => TypeAnnotation::Null,
+            Value::Function { .. } => TypeAnnotation::Fn,
+        }
     }
 }
