@@ -71,6 +71,9 @@ pub enum StatementKind {
     },
     Return(Option<Expression>),
 
+    Break,
+    Continue,
+
     /// the start of awesomeness
     Import {
         /// list of the functions name

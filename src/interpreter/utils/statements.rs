@@ -58,6 +58,19 @@ impl Evaluator {
                     }
                 }
                 self.evaluate_block(body)?;
+
+                if self.is_breaking {
+                    self.is_breaking = false;
+                    break;
+                }
+
+                if self.is_continuing {
+                    self.is_continuing = false;
+                }
+
+                if self.return_value.is_some() {
+                    break;
+                }
             },
 
             StatementKind::Range(..) => {}
@@ -84,6 +97,22 @@ impl Evaluator {
                         }
                     }
                     self.evaluate_block(body)?;
+
+                    if self.is_breaking {
+                        self.is_breaking = false;
+                        break;
+                    }
+
+                    if self.is_continuing {
+                        self.is_continuing = false;
+                        self.evaluate(increment)?;
+                        continue;
+                    }
+
+                    if self.return_value.is_some() {
+                        break;
+                    }
+
                     self.evaluate(increment)?;
                 }
                 self.pop_scope();
@@ -187,6 +216,14 @@ impl Evaluator {
 
                 self.return_value = Some(value);
             }
+
+            StatementKind::Break => {
+                self.is_breaking = true;
+            }
+
+            StatementKind::Continue => {
+                self.is_continuing = true;
+            }
         }
         Ok(())
     }
@@ -223,7 +260,7 @@ impl Evaluator {
         self.push_scope();
         for statement in statements {
             self.evaluate_statement(statement)?;
-            if self.return_value.is_some() {
+            if self.return_value.is_some() || self.is_breaking || self.is_continuing {
                 break;
             }
         }
