@@ -11,36 +11,8 @@ impl Parser {
         log::debug!("parsing type");
         if self.match_type(&[TokenType::Array]) && self.peek() == TokenType::LeftBracket {
             self.advance();
-            let annoation_type = match self.peek() {
-                TokenType::Int => {
-                    self.advance();
-                    TypeAnnotation::Int
-                }
-                TokenType::Float => {
-                    self.advance();
-                    TypeAnnotation::Float
-                }
-                TokenType::Bool => {
-                    self.advance();
-                    TypeAnnotation::Bool
-                }
-                TokenType::String => {
-                    self.advance();
-                    TypeAnnotation::String
-                }
-                TokenType::Char => {
-                    self.advance();
-                    TypeAnnotation::Char
-                }
-                TokenType::Array => {
-                    self.advance();
-                    self.match_type(&[TokenType::LeftBracket]);
-                    let inner = self.parse_type(true)?;
-                    self.match_type(&[TokenType::RightBracket]);
-                    TypeAnnotation::Array(Box::new(inner))
-                }
-                _ => return Err(self.err("expected type after `dec`", self.peek_span())),
-            };
+            let annoation_type = self.parse_param_type()?;
+
             if !self.match_type(&[TokenType::RightBracket]) {
                 return Err(self.err("expected `]` after type", self.peek_span()));
             }
@@ -138,6 +110,10 @@ impl Parser {
                     self.advance();
                     TypeAnnotation::Char
                 }
+                TokenType::Fn => {
+                    self.advance();
+                    TypeAnnotation::Fn
+                }
                 TokenType::Array => {
                     self.advance();
                     self.match_type(&[TokenType::LeftBracket]);
@@ -167,6 +143,10 @@ impl Parser {
                 TokenType::Char => {
                     self.advance();
                     TypeAnnotation::CChar
+                }
+                TokenType::Fn => {
+                    self.advance();
+                    TypeAnnotation::Fn
                 }
                 TokenType::Array => {
                     self.advance();
