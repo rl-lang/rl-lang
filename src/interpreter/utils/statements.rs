@@ -141,8 +141,83 @@ impl Evaluator {
                 }
             }
 
-            StatementKind::ForRange { .. } => {
-                return Ok(()); // for now
+            StatementKind::ForRange {
+                variable,
+                range,
+                body,
+            } => {
+                let items = match &range.kind {
+                    StatementKind::Range(items) => items.clone(),
+                    _ => {
+                        return Err(
+                            self.err("for-range: expected a range statement", statement.span)
+                        );
+                    }
+                };
+
+                for item in items {
+                    self.push_scope();
+                    self.insert_value(
+                        variable.clone(),
+                        Value::Integer(item),
+                        crate::ast::statements::TypeAnnotation::Int,
+                        statement.span,
+                    )?;
+                    self.evaluate_block(body)?;
+                    self.pop_scope();
+
+                    if self.is_breaking {
+                        self.is_breaking = false;
+                    }
+
+                    if self.is_continuing {
+                        self.is_continuing = false;
+                    }
+
+                    if self.return_value.is_some() {
+                        break;
+                    }
+                }
+            }
+
+            StatementKind::ForEach {
+                variable,
+                iterable,
+                body,
+            } => {
+                let arr = self.evaluate(iterable)?;
+                let items = match arr {
+                    Value::Values(items) => items,
+                    other => {
+                        return Err(self
+                            .err("for-each: expected an array", statement.span)
+                            .with_label(
+                                iterable.span,
+                                format!("this is {}, expected array", other.type_name()),
+                            ));
+                    }
+                };
+                for item in items {
+                    let item_type = Evaluator::infer_type(&item);
+                    self.push_scope();
+                    self.insert_value(variable.clone(), item, item_type, statement.span)?;
+
+                    self.evaluate_block(body)?;
+                    self.pop_scope();
+
+                    if self.is_breaking {
+                        self.is_breaking = false;
+                        break;
+                    }
+
+                    if self.is_continuing {
+                        self.is_continuing = false;
+                    }
+
+                    if self.return_value.is_some() {
+                        break;
+                    }
+                }
             }
 
             StatementKind::ConditionalBranch { condition, body } => match condition {

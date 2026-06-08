@@ -52,6 +52,11 @@ pub enum StatementKind {
         range: Box<Statement>,
         body: Vec<Statement>,
     },
+    ForEach {
+        variable: String,
+        iterable: Expression,
+        body: Vec<Statement>,
+    },
     Range(Vec<i64>),
     ConditionalBranch {
         condition: Option<Expression>,

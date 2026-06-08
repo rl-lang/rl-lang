@@ -56,11 +56,9 @@ impl Parser {
                 self.parse_while(start)
             }
             TokenType::For => {
-                let span = self.peek_span();
-                Ok(Statement::new(
-                    StatementKind::Expression(Expression::new(ExpressionKind::Integer(0), span)),
-                    span,
-                )) // for now
+                self.advance();
+                log::info!("found `for` while parsing");
+                self.parse_for(start)
             }
             TokenType::If => {
                 self.advance();
