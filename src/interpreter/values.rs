@@ -1,5 +1,7 @@
 use std::fmt;
 
+use crate::ast::statements::{Param, Statement, TypeAnnotation};
+
 #[derive(Debug, Clone)]
 pub enum Value {
     Integer(i64),
@@ -9,6 +11,11 @@ pub enum Value {
     Char(char),
     Values(Vec<Value>),
     Null,
+    Function {
+        params: Vec<Param>,
+        body: Vec<Statement>,
+        return_type: Option<TypeAnnotation>,
+    },
 }
 
 impl Value {
@@ -22,6 +29,7 @@ impl Value {
             Value::Char(_) => "char",
             Value::Values(_) => "array",
             Value::Null => "null",
+            Value::Function { .. } => "function",
         }
     }
 }
@@ -39,6 +47,13 @@ impl fmt::Display for Value {
                 write!(f, "[{}]", formatted.join(", "))
             }
             Value::Null => write!(f, "null"),
+            Value::Function { params, .. } => {
+                let mut params_name = vec![];
+                for param in params {
+                    params_name.push(param.param_name.clone());
+                }
+                write!(f, "<fn({})>", params_name.join(", "))
+            }
         }
     }
 }

@@ -66,6 +66,8 @@ pub enum TokenType {
     Char,
     Array,
 
+    Arrow,
+
     Newline,
 
     Eof,

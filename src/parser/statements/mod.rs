@@ -1,5 +1,6 @@
 mod const_declaration;
 mod for_statement;
+mod function_declaration;
 mod if_statement;
 mod import_statement;
 mod variable_declaration;
@@ -65,6 +66,27 @@ impl Parser {
                 self.advance();
                 log::info!("found `if` while parsing");
                 self.parse_if(start)
+            }
+
+            TokenType::Fn => {
+                self.advance();
+                log::info!("found 'fn' while parsing");
+                self.parse_function(start)
+            }
+
+            TokenType::Return => {
+                self.advance();
+                // if next token can start an expression, parse it
+                let expr = if !matches!(self.peek(), TokenType::Newline)
+                    && !matches!(self.peek(), TokenType::RightBrace)
+                    && !self.is_at_end()
+                {
+                    Some(self.parse_expression()?)
+                } else {
+                    None
+                };
+                let span = start.join(self.previous_span());
+                Ok(Statement::new(StatementKind::Return(expr), span))
             }
             _ => {
                 log::info!("parsing the current tokens as expression");

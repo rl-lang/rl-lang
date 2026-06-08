@@ -102,6 +102,9 @@ impl Tokenizer {
                 if self.peek() == '=' {
                     self.advance();
                     self.add_token(TokenType::MinusEqual);
+                } else if self.peek() == '>' {
+                    self.advance();
+                    self.add_token(TokenType::Arrow);
                 } else {
                     self.add_token(TokenType::Minus);
                 }

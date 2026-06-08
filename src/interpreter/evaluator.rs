@@ -2,7 +2,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::{
-    ast::nodes::{Expression, ExpressionKind},
+    ast::{
+        nodes::{Expression, ExpressionKind},
+        statements::TypeAnnotation,
+    },
     interpreter::{
         native::{IntoNativeFn, Module},
         stdlib,
@@ -16,10 +19,21 @@ use crate::{
     },
 };
 
+pub struct PItem {
+    pub value: Value,
+    pub type_annotation: TypeAnnotation,
+    pub is_const: bool,
+}
+
+pub enum EnvironmentItem {
+    PItem(PItem),
+}
+
 pub struct Evaluator {
-    pub environment: Vec<HashMap<String, (Value, bool)>>,
+    pub environment: Vec<HashMap<String, EnvironmentItem>>,
     pub source_file: Option<SourceFile>,
     pub root_module: Module,
+    pub return_value: Option<Value>,
 }
 
 impl Default for Evaluator {
@@ -34,6 +48,7 @@ impl Evaluator {
             environment: vec![HashMap::new()],
             source_file: None,
             root_module: Module::new(""),
+            return_value: None,
         }
     }
 
@@ -149,7 +164,30 @@ impl Evaluator {
             ExpressionKind::Identifier(name) => self.get_value(name, expression.span)?,
             ExpressionKind::Assign { name, value } => {
                 let val = self.evaluate(value)?;
-                self.insert_value(name.clone(), val.clone(), expression.span)?;
+                let inferred_type = match &val {
+                    Value::Integer(_) => TypeAnnotation::Int,
+                    Value::Float(_) => TypeAnnotation::Float,
+                    Value::String(_) => TypeAnnotation::String,
+                    Value::Bool(_) => TypeAnnotation::Bool,
+                    Value::Char(_) => TypeAnnotation::Char,
+                    Value::Values(items) => {
+                        let inner = items
+                            .first()
+                            .map(|v| match v {
+                                Value::Integer(_) => TypeAnnotation::Int,
+                                Value::Float(_) => TypeAnnotation::Float,
+                                Value::String(_) => TypeAnnotation::String,
+                                Value::Bool(_) => TypeAnnotation::Bool,
+                                Value::Char(_) => TypeAnnotation::Char,
+                                _ => TypeAnnotation::Null,
+                            })
+                            .unwrap_or(TypeAnnotation::Null);
+                        TypeAnnotation::Array(Box::new(inner))
+                    }
+                    Value::Null => TypeAnnotation::Null,
+                    Value::Function { .. } => TypeAnnotation::Fn,
+                };
+                self.assign_value(name.clone(), val.clone(), inferred_type, expression.span)?;
                 val
             }
             ExpressionKind::Call { path, args } => {
@@ -173,6 +211,109 @@ impl Evaluator {
             let f = Arc::clone(f);
             return Ok(f(self, args));
         }
+
+        // detect user defined functions
+        if path.len() == 1 {
+            let func = self.get_value(&path[0], span)?;
+
+            if let Value::Function {
+                params,
+                body,
+                return_type,
+            } = func
+            {
+                if params.len() != args.len() {
+                    return Err(self.err(
+                        format!(
+                            "function '{}' expects {} argument(s), got {}",
+                            path[0],
+                            params.len(),
+                            args.len()
+                        ),
+                        span,
+                    ));
+                }
+
+                let saved_env = std::mem::take(&mut self.environment);
+                self.environment = vec![HashMap::new()];
+
+                for (param, arg) in params.iter().zip(args) {
+                    let arg_type = match &arg {
+                        Value::Integer(_) => TypeAnnotation::Int,
+                        Value::Float(_) => TypeAnnotation::Float,
+                        Value::String(_) => TypeAnnotation::String,
+                        Value::Bool(_) => TypeAnnotation::Bool,
+                        Value::Char(_) => TypeAnnotation::Char,
+                        Value::Values(items) => {
+                            let inner = items
+                                .first()
+                                .map(|v| match v {
+                                    Value::Integer(_) => TypeAnnotation::Int,
+                                    Value::Float(_) => TypeAnnotation::Float,
+                                    Value::String(_) => TypeAnnotation::String,
+                                    Value::Bool(_) => TypeAnnotation::Bool,
+                                    Value::Char(_) => TypeAnnotation::Char,
+                                    _ => TypeAnnotation::Null,
+                                })
+                                .unwrap_or(TypeAnnotation::Null);
+                            TypeAnnotation::Array(Box::new(inner))
+                        }
+                        Value::Null => TypeAnnotation::Null,
+                        Value::Function { .. } => TypeAnnotation::Fn,
+                    };
+                    self.insert_value(param.param_name.clone(), arg, arg_type, span)?;
+                }
+
+                for statement in &body {
+                    self.evaluate_statement(statement)?;
+                    if self.return_value.is_some() {
+                        break;
+                    }
+                }
+
+                let result = self.return_value.take().unwrap_or(Value::Null);
+
+                self.environment = saved_env;
+
+                if let Some(expected) = &return_type {
+                    let actual = match &result {
+                        Value::Integer(_) => TypeAnnotation::Int,
+                        Value::Float(_) => TypeAnnotation::Float,
+                        Value::String(_) => TypeAnnotation::String,
+                        Value::Bool(_) => TypeAnnotation::Bool,
+                        Value::Char(_) => TypeAnnotation::Char,
+                        Value::Values(items) => {
+                            let inner = items
+                                .first()
+                                .map(|v| match v {
+                                    Value::Integer(_) => TypeAnnotation::Int,
+                                    Value::Float(_) => TypeAnnotation::Float,
+                                    Value::String(_) => TypeAnnotation::String,
+                                    Value::Bool(_) => TypeAnnotation::Bool,
+                                    Value::Char(_) => TypeAnnotation::Char,
+                                    _ => TypeAnnotation::Null,
+                                })
+                                .unwrap_or(TypeAnnotation::Null);
+                            TypeAnnotation::Array(Box::new(inner))
+                        }
+                        Value::Null => TypeAnnotation::Null,
+                        Value::Function { .. } => TypeAnnotation::Fn,
+                    };
+                    if *expected != actual {
+                        return Err(self.err(
+                            format!(
+                                "function '{}' declared to return {:?} but returned {:?}",
+                                path[0], expected, actual
+                            ),
+                            span,
+                        ));
+                    }
+                }
+
+                return Ok(result);
+            }
+        }
+
         let mut err = self.err(format!("undefined function {}", path.join("::")), span);
         // suggest a stdlib leaf name if the last segment is a close typo
         if let Some(last) = path.last() {

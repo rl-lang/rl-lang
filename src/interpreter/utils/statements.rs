@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    ast::statements::{Statement, StatementKind},
+    ast::statements::{Statement, StatementKind, TypeAnnotation},
     interpreter::{evaluator::Evaluator, values::Value},
     utils::errors::Error,
 };
@@ -11,7 +11,31 @@ impl Evaluator {
         match &statement.kind {
             StatementKind::VariableDeclaration { name, value, .. } => {
                 let val = self.evaluate(value)?;
-                self.insert_value(name.clone(), val, statement.span)?;
+                let inferred_type = match &val {
+                    Value::Integer(_) => TypeAnnotation::Int,
+                    Value::Float(_) => TypeAnnotation::Float,
+                    Value::String(_) => TypeAnnotation::String,
+                    Value::Bool(_) => TypeAnnotation::Bool,
+                    Value::Char(_) => TypeAnnotation::Char,
+                    Value::Values(items) => {
+                        let inner = items
+                            .first()
+                            .map(|v| match v {
+                                Value::Integer(_) => TypeAnnotation::Int,
+                                Value::Float(_) => TypeAnnotation::Float,
+                                Value::String(_) => TypeAnnotation::String,
+                                Value::Bool(_) => TypeAnnotation::Bool,
+                                Value::Char(_) => TypeAnnotation::Char,
+                                _ => TypeAnnotation::Null,
+                            })
+                            .unwrap_or(TypeAnnotation::Null);
+                        TypeAnnotation::Array(Box::new(inner))
+                    }
+                    Value::Null => TypeAnnotation::Null,
+                    Value::Function { .. } => TypeAnnotation::Fn,
+                };
+
+                self.insert_value(name.clone(), val, inferred_type, statement.span)?;
             }
 
             StatementKind::Array { name, value, .. } => {
@@ -19,12 +43,48 @@ impl Evaluator {
                 for item in value {
                     items.push(self.evaluate(item)?);
                 }
-                self.insert_value(name.clone(), Value::Values(items), statement.span)?;
+                let inner = items
+                    .first()
+                    .map(|v| match v {
+                        Value::Integer(_) => TypeAnnotation::Int,
+                        Value::Float(_) => TypeAnnotation::Float,
+                        Value::String(_) => TypeAnnotation::String,
+                        Value::Bool(_) => TypeAnnotation::Bool,
+                        Value::Char(_) => TypeAnnotation::Char,
+                        _ => TypeAnnotation::Null,
+                    })
+                    .unwrap_or(TypeAnnotation::Null);
+                let arr_type = TypeAnnotation::Array(Box::new(inner));
+                self.insert_value(name.clone(), Value::Values(items), arr_type, statement.span)?;
             }
 
             StatementKind::ConstantDeclaration { name, value, .. } => {
                 let val = self.evaluate(value)?;
-                self.insert_const(name.clone(), val, statement.span)?;
+                let inferred_type = match &val {
+                    Value::Integer(_) => TypeAnnotation::Int,
+                    Value::Float(_) => TypeAnnotation::Float,
+                    Value::String(_) => TypeAnnotation::String,
+                    Value::Bool(_) => TypeAnnotation::Bool,
+                    Value::Char(_) => TypeAnnotation::Char,
+                    Value::Values(items) => {
+                        let inner = items
+                            .first()
+                            .map(|v| match v {
+                                Value::Integer(_) => TypeAnnotation::Int,
+                                Value::Float(_) => TypeAnnotation::Float,
+                                Value::String(_) => TypeAnnotation::String,
+                                Value::Bool(_) => TypeAnnotation::Bool,
+                                Value::Char(_) => TypeAnnotation::Char,
+                                _ => TypeAnnotation::Null,
+                            })
+                            .unwrap_or(TypeAnnotation::Null);
+                        TypeAnnotation::Array(Box::new(inner))
+                    }
+                    Value::Null => TypeAnnotation::Null,
+                    Value::Function { .. } => TypeAnnotation::Fn,
+                };
+
+                self.insert_const(name.clone(), val, inferred_type, statement.span)?;
             }
 
             StatementKind::ConstantArray { name, value, .. } => {
@@ -32,9 +92,20 @@ impl Evaluator {
                 for item in value {
                     items.push(self.evaluate(item)?);
                 }
-                self.insert_const(name.clone(), Value::Values(items), statement.span)?;
+                let inner = items
+                    .first()
+                    .map(|v| match v {
+                        Value::Integer(_) => TypeAnnotation::Int,
+                        Value::Float(_) => TypeAnnotation::Float,
+                        Value::String(_) => TypeAnnotation::String,
+                        Value::Bool(_) => TypeAnnotation::Bool,
+                        Value::Char(_) => TypeAnnotation::Char,
+                        _ => TypeAnnotation::Null,
+                    })
+                    .unwrap_or(TypeAnnotation::Null);
+                let arr_type = TypeAnnotation::Array(Box::new(inner));
+                self.insert_const(name.clone(), Value::Values(items), arr_type, statement.span)?;
             }
-
             StatementKind::Expression(expr) => {
                 self.evaluate(expr)?;
             }
@@ -148,6 +219,34 @@ impl Evaluator {
                     }
                 }
             }
+
+            StatementKind::FunctionDeclaration {
+                name,
+                params,
+                return_type,
+                body,
+            } => {
+                let func = Value::Function {
+                    params: params.clone(),
+                    body: body.clone(),
+                    return_type: Some(return_type.clone()),
+                };
+                self.insert_value(
+                    name.clone(),
+                    func.clone(),
+                    TypeAnnotation::Fn,
+                    statement.span,
+                )?;
+            }
+
+            StatementKind::Return(expr) => {
+                let value = match expr {
+                    Some(e) => self.evaluate(e)?,
+                    None => Value::Null,
+                };
+
+                self.return_value = Some(value);
+            }
         }
         Ok(())
     }
@@ -181,9 +280,14 @@ impl Evaluator {
     }
 
     pub fn evaluate_block(&mut self, statements: &[Statement]) -> Result<(), Error> {
+        self.push_scope();
         for statement in statements {
             self.evaluate_statement(statement)?;
+            if self.return_value.is_some() {
+                break;
+            }
         }
+        self.pop_scope();
         Ok(())
     }
 }
