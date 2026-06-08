@@ -1,5 +1,8 @@
 use crate::{
-    lexer::tokentypes::TokenType, parser::parser_logic::Parser, utils::span::Span,
+    ast::statements::TypeAnnotation,
+    lexer::tokentypes::TokenType,
+    parser::parser_logic::Parser,
+    utils::{errors::Error, span::Span},
 };
 
 impl Parser {
@@ -84,5 +87,59 @@ impl Parser {
         }
         log::debug!("Token {:?} did not match any in [{:?}]", self.peek(), types);
         false
+    }
+
+    pub fn parse_param_type(&mut self) -> Result<TypeAnnotation, Error> {
+        if matches!(self.peek(), TokenType::Array) {
+            self.advance();
+            return Ok(TypeAnnotation::Array(self.nested_array_type()?));
+        }
+        match self.peek() {
+            TokenType::Int => {
+                self.advance();
+                Ok(TypeAnnotation::Int)
+            }
+            TokenType::Float => {
+                self.advance();
+                Ok(TypeAnnotation::Float)
+            }
+            TokenType::Bool => {
+                self.advance();
+                Ok(TypeAnnotation::Bool)
+            }
+            TokenType::String => {
+                self.advance();
+                Ok(TypeAnnotation::String)
+            }
+            TokenType::Char => {
+                self.advance();
+                Ok(TypeAnnotation::Char)
+            }
+            TokenType::Fn => {
+                self.advance();
+                Ok(TypeAnnotation::Fn)
+            }
+            _ => Err(self.err("expected type", self.peek_span())),
+        }
+    }
+
+    pub fn nested_array_type(&mut self) -> Result<Box<TypeAnnotation>, Error> {
+        match self.peek() {
+            TokenType::LeftBracket => {
+                self.advance();
+                match self.parse_param_type()? {
+                    a => match self.peek() {
+                        TokenType::RightBracket => {
+                            self.advance();
+                            Ok(Box::new(TypeAnnotation::Array(Box::new(a))))
+                        }
+
+                        _ => Err(self.err("expected ']'", self.peek_span())),
+                    },
+                }
+            }
+
+            _ => Err(self.err("expected '['", self.peek_span())),
+        }
     }
 }

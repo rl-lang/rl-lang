@@ -1,3 +1,4 @@
+use crate::ast::statements::{Param, Statement, TypeAnnotation};
 use crate::lexer::tokentypes;
 use crate::utils::span::Span;
 
@@ -50,5 +51,11 @@ pub enum ExpressionKind {
         target: Box<Expression>,
         index: Box<Expression>,
         value: Box<Expression>,
+    },
+
+    Lambda {
+        params: Vec<Param>,
+        return_type: Option<TypeAnnotation>,
+        body: Vec<Statement>,
     },
 }

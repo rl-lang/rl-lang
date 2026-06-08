@@ -360,6 +360,49 @@ impl Parser {
             ));
         }
 
+        // is it lambda?
+        if self.match_type(&[TokenType::Fn]) {
+            let lambda_start = self.previous_span();
+            self.match_type(&[TokenType::LeftParen]);
+
+            let mut params: Vec<crate::ast::statements::Param> = Vec::new();
+            while !self.match_type(&[TokenType::RightParen]) {
+                let param_type = self.parse_param_type()?;
+                let param_name = match self.peek() {
+                    TokenType::Identifier(n) => {
+                        self.advance();
+                        n
+                    }
+                    _ => return Err(self.err("expected parameter name", self.peek_span())),
+                };
+                params.push(crate::ast::statements::Param {
+                    param_name,
+                    param_type,
+                });
+                if !self.match_type(&[TokenType::Comma]) {
+                    break;
+                }
+            }
+            self.match_type(&[TokenType::RightParen]);
+
+            let return_type = if self.match_type(&[TokenType::Arrow]) {
+                Some(self.parse_param_type()?)
+            } else {
+                None
+            };
+
+            let body = self.parse_block()?;
+            let span = lambda_start.join(self.previous_span());
+            return Ok(Expression::new(
+                ExpressionKind::Lambda {
+                    params,
+                    return_type,
+                    body,
+                },
+                span,
+            ));
+        }
+
         Err(self.err("expected expression", self.peek_span()))
     }
 }

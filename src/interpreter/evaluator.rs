@@ -216,6 +216,16 @@ impl Evaluator {
                 }
                 self.call_path(path, evaluated_args, expression.span)?
             }
+
+            ExpressionKind::Lambda {
+                params,
+                return_type,
+                body,
+            } => Value::Function {
+                params: params.clone(),
+                body: body.clone(),
+                return_type: return_type.clone(),
+            },
         };
         Ok(value)
     }
