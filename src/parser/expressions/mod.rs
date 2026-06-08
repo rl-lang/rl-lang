@@ -252,6 +252,28 @@ impl Parser {
                         );
                     }
 
+                    // is it a call on the result of an index, e.g. fns[0](arg)?
+                    if self.match_type(&[TokenType::LeftParen]) {
+                        let mut args = Vec::new();
+                        if self.peek() != TokenType::RightParen {
+                            loop {
+                                args.push(self.parse_expression()?);
+                                if !self.match_type(&[TokenType::Comma]) {
+                                    break;
+                                }
+                            }
+                        }
+                        self.match_type(&[TokenType::RightParen]);
+                        let span = start.join(self.previous_span());
+                        return Ok(Expression::new(
+                            ExpressionKind::CallExpr {
+                                callee: Box::new(expr),
+                                args,
+                            },
+                            span,
+                        ));
+                    }
+
                     // is it index-assign?
                     if self.match_type(&[TokenType::Assign]) {
                         log::debug!("found array item assignment");
@@ -356,6 +378,49 @@ impl Parser {
             let span = start.join(self.previous_span());
             return Ok(Expression::new(
                 ExpressionKind::Grouping(Box::new(inner)),
+                span,
+            ));
+        }
+
+        // is it lambda?
+        if self.match_type(&[TokenType::Fn]) {
+            let lambda_start = self.previous_span();
+            self.match_type(&[TokenType::LeftParen]);
+
+            let mut params: Vec<crate::ast::statements::Param> = Vec::new();
+            while !self.match_type(&[TokenType::RightParen]) {
+                let param_type = self.parse_param_type()?;
+                let param_name = match self.peek() {
+                    TokenType::Identifier(n) => {
+                        self.advance();
+                        n
+                    }
+                    _ => return Err(self.err("expected parameter name", self.peek_span())),
+                };
+                params.push(crate::ast::statements::Param {
+                    param_name,
+                    param_type,
+                });
+                if !self.match_type(&[TokenType::Comma]) {
+                    break;
+                }
+            }
+            self.match_type(&[TokenType::RightParen]);
+
+            let return_type = if self.match_type(&[TokenType::Arrow]) {
+                Some(self.parse_param_type()?)
+            } else {
+                None
+            };
+
+            let body = self.parse_block()?;
+            let span = lambda_start.join(self.previous_span());
+            return Ok(Expression::new(
+                ExpressionKind::Lambda {
+                    params,
+                    return_type,
+                    body,
+                },
                 span,
             ));
         }

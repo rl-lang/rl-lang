@@ -19,12 +19,14 @@ use crate::{
     },
 };
 
+#[derive(Debug, Clone)]
 pub struct PItem {
     pub value: Value,
     pub type_annotation: TypeAnnotation,
     pub is_const: bool,
 }
 
+#[derive(Debug, Clone)]
 pub enum EnvironmentItem {
     PItem(PItem),
 }
@@ -216,8 +218,98 @@ impl Evaluator {
                 }
                 self.call_path(path, evaluated_args, expression.span)?
             }
+
+            ExpressionKind::CallExpr { callee, args } => {
+                let func_val = self.evaluate(callee)?;
+                let mut evaluated_args = Vec::with_capacity(args.len());
+                for arg in args {
+                    let val = self.evaluate(arg)?;
+                    self.check_not_null(&val, arg.span)?;
+                    evaluated_args.push(val);
+                }
+                self.call_value(func_val, evaluated_args, expression.span)?
+            }
+
+            ExpressionKind::Lambda {
+                params,
+                return_type,
+                body,
+            } => Value::Function {
+                params: params.clone(),
+                body: body.clone(),
+                return_type: return_type.clone(),
+                captured_env: self.environment.clone(),
+            },
         };
         Ok(value)
+    }
+
+    pub fn call_value(
+        &mut self,
+        func: Value,
+        args: Vec<Value>,
+        span: Span,
+    ) -> Result<Value, Error> {
+        if let Value::Function {
+            params,
+            body,
+            return_type,
+            captured_env,
+        } = func
+        {
+            if params.len() != args.len() {
+                return Err(self.err(
+                    format!(
+                        "function '' expects {} argument(s), got {}",
+                        params.len(),
+                        args.len()
+                    ),
+                    span,
+                ));
+            }
+
+            let saved_env = std::mem::take(&mut self.environment);
+            let saved_return = self.return_value.take();
+
+            self.environment = captured_env;
+            self.push_scope();
+
+            for (param, arg) in params.iter().zip(args) {
+                let arg_type = Self::infer_type(&arg);
+                self.insert_value(param.param_name.clone(), arg, arg_type, span)?;
+            }
+
+            for statement in &body {
+                self.evaluate_statement(statement)?;
+                if self.return_value.is_some() {
+                    break;
+                }
+            }
+
+            let result = self.return_value.take().unwrap_or(Value::Null);
+
+            self.environment = saved_env;
+            self.return_value = saved_return;
+
+            if let Some(expected) = &return_type {
+                if *expected != TypeAnnotation::Null {
+                    let actual = Self::infer_type(&result);
+                    if *expected != actual {
+                        return Err(self.err(
+                            format!(
+                                "function '' declared to return {:?} but returned {:?}",
+                                expected, actual
+                            ),
+                            span,
+                        ));
+                    }
+                }
+            }
+
+            return Ok(result);
+        }
+
+        Err(self.err("value is not callable", span))
     }
 
     pub fn call_path(
@@ -239,6 +331,7 @@ impl Evaluator {
                 params,
                 body,
                 return_type,
+                captured_env,
             } = func
             {
                 if params.len() != args.len() {
@@ -260,7 +353,7 @@ impl Evaluator {
                 // Fresh single-frame environment for the callee (Bug 4: push its
                 // own scope so the params live in their own block, consistent
                 // with evaluate_block semantics).
-                self.environment = vec![HashMap::new()];
+                self.environment = captured_env;
                 self.push_scope();
 
                 for (param, arg) in params.iter().zip(args) {

@@ -274,6 +274,7 @@ impl Evaluator {
                     params: params.clone(),
                     body: body.clone(),
                     return_type: Some(return_type.clone()),
+                    captured_env: vec![],
                 };
                 self.insert_value(
                     name.clone(),
@@ -281,6 +282,17 @@ impl Evaluator {
                     crate::ast::statements::TypeAnnotation::Fn,
                     statement.span,
                 )?;
+
+                let snapshot = self.environment.clone();
+                if let Some(scope) = self.environment.last_mut() {
+                    if let Some(crate::interpreter::evaluator::EnvironmentItem::PItem(p)) =
+                        scope.get_mut(name)
+                    {
+                        if let Value::Function { captured_env, .. } = &mut p.value {
+                            *captured_env = snapshot;
+                        }
+                    }
+                }
             }
 
             StatementKind::Return(expr) => {

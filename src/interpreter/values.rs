@@ -1,6 +1,9 @@
 use std::fmt;
 
-use crate::ast::statements::{Param, Statement, TypeAnnotation};
+use crate::{
+    ast::statements::{Param, Statement, TypeAnnotation},
+    interpreter::evaluator::EnvironmentItem,
+};
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -15,6 +18,7 @@ pub enum Value {
         params: Vec<Param>,
         body: Vec<Statement>,
         return_type: Option<TypeAnnotation>,
+        captured_env: Vec<std::collections::HashMap<String, EnvironmentItem>>,
     },
 }
 
