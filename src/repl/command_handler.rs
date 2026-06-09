@@ -115,7 +115,7 @@ pub fn handle_command(
             let content: String = output
                 .iter()
                 .filter_map(|l| match l {
-                    OutputLine::Input(s) if !s.trim_start().starts_with(':') => Some(s.clone()),
+                    OutputLine::ValidInput(s) => Some(s.clone()),
                     _ => None,
                 })
                 .collect::<Vec<_>>()

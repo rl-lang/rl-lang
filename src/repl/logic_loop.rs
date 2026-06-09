@@ -178,7 +178,11 @@ pub fn run_repl(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
                         if !full.trim().is_empty() {
                             history.push(full.trim().to_string());
                         }
-                        eval_input(full.trim(), &mut evaluator, &mut output);
+
+                        let success = eval_input(full.trim(), &mut evaluator, &mut output);
+                        if success {
+                            output.push(OutputLine::ValidInput(full.trim().to_string()));
+                        }
                     }
                 }
 

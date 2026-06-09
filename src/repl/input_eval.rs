@@ -6,14 +6,14 @@ use crate::{
     utils::source::SourceFile,
 };
 
-pub fn eval_input(input: &str, evaluator: &mut Evaluator, output: &mut Vec<OutputLine>) {
+pub fn eval_input(input: &str, evaluator: &mut Evaluator, output: &mut Vec<OutputLine>) -> bool {
     let source = SourceFile::new("<repl>", input.to_string());
 
     let tokens = match Tokenizer::lex(source.clone()) {
         Ok(t) => t,
         Err(e) => {
             output.push(OutputLine::Error(format!("error: {}", e.message())));
-            return;
+            return false;
         }
     };
 
@@ -21,12 +21,14 @@ pub fn eval_input(input: &str, evaluator: &mut Evaluator, output: &mut Vec<Outpu
         Ok(s) => s,
         Err(e) => {
             output.push(OutputLine::Error(format!("error: {}", e.message())));
-            return;
+            return false;
         }
     };
 
     evaluator.set_source_file(source);
     evaluator.output_buffer = Some(String::new());
+
+    let mut success = true;
 
     for statement in &statements {
         if let crate::ast::statements::StatementKind::Expression(expr) = &statement.kind {
@@ -45,11 +47,13 @@ pub fn eval_input(input: &str, evaluator: &mut Evaluator, output: &mut Vec<Outpu
                 }
                 Err(e) => {
                     output.push(OutputLine::Error(format!("error: {}", e.message())));
+                    success = false;
                     break;
                 }
             }
         } else if let Err(e) = evaluator.evaluate_statement(statement) {
             output.push(OutputLine::Error(format!("error: {}", e.message())));
+            success = false;
             break;
         }
     }
@@ -61,4 +65,6 @@ pub fn eval_input(input: &str, evaluator: &mut Evaluator, output: &mut Vec<Outpu
             }
         }
     }
+
+    success
 }
