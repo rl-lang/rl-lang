@@ -25,6 +25,21 @@ pub fn render_output(output: &[OutputLine]) -> Vec<Line<'static>> {
                 spans.extend(highlight(code));
                 Line::from(spans)
             }
+            OutputLine::ValidInput(s) => {
+                let (prefix, code) = if s.starts_with(".. ") {
+                    (".. ", &s[3..])
+                } else {
+                    (">> ", s.as_str())
+                };
+                let mut spans = vec![Span::styled(
+                    prefix,
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                )];
+                spans.extend(highlight(code));
+                Line::from(spans)
+            }
             OutputLine::Result(s) => {
                 // try to highlight if it is correct
                 let spans = highlight(s);
