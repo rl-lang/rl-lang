@@ -1,0 +1,97 @@
+name: CI & Release
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: cargo test
+        run: cargo test --all-features
+
+      - name: cargo clippy
+        run: cargo clippy -- -D warnings
+
+  release:
+    name: Release
+    needs: check
+    if: startsWith(github.ref, 'refs/tags/v')
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            name_default: rl
+            name_debug: rl_debug
+
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            name_default: rl.exe
+            name_debug: rl_debug.exe
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build default
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Copy default binary (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: cp target/${{ matrix.target }}/release/rl ${{ matrix.name_default }}
+
+      - name: Copy default binary (Windows)
+        if: matrix.os == 'windows-latest'
+        run: copy target\${{ matrix.target }}\release\rl.exe ${{ matrix.name_default }}
+        shell: cmd
+
+      - name: Build debug feature
+        run: cargo build --release --features debug --target ${{ matrix.target }}
+
+      - name: Copy debug binary (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: cp target/${{ matrix.target }}/release/rl ${{ matrix.name_debug }}
+
+      - name: Copy debug binary (Windows)
+        if: matrix.os == 'windows-latest'
+        run: copy target\${{ matrix.target }}\release\rl.exe ${{ matrix.name_debug }}
+        shell: cmd
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: |
+            ${{ matrix.name_default }}
+            ${{ matrix.name_debug }}
+
+  publish:
+    name: Publish Release
+    needs: release
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          generate_release_notes: true

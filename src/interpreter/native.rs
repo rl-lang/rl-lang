@@ -5,7 +5,7 @@ use crate::interpreter::evaluator::Evaluator;
 use crate::interpreter::values::Value;
 use crate::utils::errors::Error;
 
-pub type NativeFn = Arc<dyn Fn(&mut Evaluator, Vec<Value>) -> Value + Send + Sync>;
+pub type NativeFn = Arc<dyn Fn(&mut Evaluator, Vec<Value>) -> Result<Value, Error> + Send + Sync>;
 
 pub struct Module {
     pub name: String,
@@ -32,7 +32,7 @@ impl Module {
 
     pub fn with_raw_function<F>(mut self, name: impl Into<String>, f: F) -> Self
     where
-        F: Fn(&mut Evaluator, Vec<Value>) -> Value + Send + Sync + 'static,
+        F: Fn(&mut Evaluator, Vec<Value>) -> Result<Value, Error> + Send + Sync + 'static,
     {
         self.functions.insert(name.into(), Arc::new(f));
         self
@@ -56,76 +56,90 @@ impl Module {
 }
 
 pub trait FromValue: Sized {
-    fn from_value(v: Value) -> Self;
-}
-
-fn type_error(expected: &str, got: &Value) -> ! {
-    Error::init(
-        format!("expected {}, got {:?}", expected, got),
-        None,
-        None,
-    )
-    .print_error();
-    unreachable!()
+    fn from_value(v: Value) -> Result<Self, Error>;
 }
 
 impl FromValue for Value {
-    fn from_value(v: Value) -> Self {
-        v
+    fn from_value(v: Value) -> Result<Self, Error> {
+        Ok(v)
     }
 }
 
 impl FromValue for i64 {
-    fn from_value(v: Value) -> Self {
+    fn from_value(v: Value) -> Result<Self, Error> {
         match v {
-            Value::Integer(i) => i,
-            other => type_error("integer", &other),
+            Value::Integer(i) => Ok(i),
+            other => Err(Error::init(
+                format!("expected integer, got {}", other.type_name()),
+                None,
+                None,
+            )),
         }
     }
 }
 
 impl FromValue for f64 {
-    fn from_value(v: Value) -> Self {
+    fn from_value(v: Value) -> Result<Self, Error> {
         match v {
-            Value::Float(f) => f,
-            Value::Integer(i) => i as f64,
-            other => type_error("float", &other),
+            Value::Float(f) => Ok(f),
+            Value::Integer(i) => Ok(i as f64),
+            other => Err(Error::init(
+                format!("expected float, got {}", other.type_name()),
+                None,
+                None,
+            )),
         }
     }
 }
 
 impl FromValue for String {
-    fn from_value(v: Value) -> Self {
+    fn from_value(v: Value) -> Result<Self, Error> {
         match v {
-            Value::String(s) => s,
-            other => type_error("string", &other),
+            Value::String(s) => Ok(s),
+            other => Err(Error::init(
+                format!("expected string, got {}", other.type_name()),
+                None,
+                None,
+            )),
         }
     }
 }
 
 impl FromValue for bool {
-    fn from_value(v: Value) -> Self {
+    fn from_value(v: Value) -> Result<Self, Error> {
         match v {
-            Value::Bool(b) => b,
-            other => type_error("bool", &other),
+            Value::Bool(b) => Ok(b),
+            other => Err(Error::init(
+                format!("expected bool, got {}", other.type_name()),
+                None,
+                None,
+            )),
         }
     }
 }
 
 impl FromValue for char {
-    fn from_value(v: Value) -> Self {
+    fn from_value(v: Value) -> Result<Self, Error> {
         match v {
-            Value::Char(c) => c,
-            other => type_error("char", &other),
+            Value::Char(c) => Ok(c),
+            other => Err(Error::init(
+                format!("expected char, got {}", other.type_name()),
+                None,
+                None,
+            )),
         }
     }
 }
 
 impl<T: FromValue> FromValue for Vec<T> {
-    fn from_value(v: Value) -> Self {
+    fn from_value(v: Value) -> Result<Self, Error> {
         match v {
             Value::Values(items) => items.into_iter().map(T::from_value).collect(),
-            other => type_error("array", &other),
+            other => Err(Error::init(
+                format!("expected array, got {}", other.type_name()),
+                None,
+                None,
+            )),
         }
     }
 }
@@ -186,30 +200,28 @@ pub trait IntoNativeFn<Args> {
     fn into_native(self) -> NativeFn;
 }
 
-fn arity_error(expected: usize, got: usize) -> ! {
-    Error::init(
-        format!("expected {} argument(s), got {}", expected, got),
-        None,
-        None,
-    )
-    .print_error();
-    unreachable!()
-}
-
 impl<F, R> IntoNativeFn<()> for F
 where
     F: Fn(&mut Evaluator) -> R + Send + Sync + 'static,
     R: IntoValue,
 {
     fn into_native(self) -> NativeFn {
-        Arc::new(move |rt: &mut Evaluator, args: Vec<Value>| -> Value {
-            if !args.is_empty() {
-                arity_error(0, args.len());
-            }
-            self(rt).into_value()
-        })
+        Arc::new(
+            move |rt: &mut Evaluator, args: Vec<Value>| -> Result<Value, Error> {
+                if !args.is_empty() {
+                    return Err(Error::init(
+                        format!("expected 0 argument(s), got {}", args.len()),
+                        None,
+                        None,
+                    ));
+                }
+                Ok(self(rt).into_value())
+            },
+        )
     }
 }
+
+pub struct Fallible<T>(std::marker::PhantomData<T>);
 
 macro_rules! impl_into_native_fn {
     ($count:literal, $(($ty:ident, $var:ident)),+) => {
@@ -220,28 +232,99 @@ macro_rules! impl_into_native_fn {
             $($ty: FromValue),+
         {
             fn into_native(self) -> NativeFn {
-                Arc::new(move |rt: &mut Evaluator, args: Vec<Value>| -> Value {
+                Arc::new(move |rt: &mut Evaluator, args: Vec<Value>| -> Result<Value, Error> {
                     if args.len() != $count {
-                        arity_error($count, args.len());
+                        return Err(Error::init(
+                            format!("expected {} argument(s), got {}", $count, args.len()),
+                            None, None,
+                        ));
                     }
                     let mut iter = args.into_iter();
-                    $(
-                        let $var = <$ty>::from_value(iter.next().unwrap());
-                    )+
-                    self(rt, $($var),+).into_value()
+                    $(let $var = <$ty>::from_value(iter.next().unwrap())?;)+
+                    Ok(self(rt, $($var),+).into_value())
+                })
+            }
+        }
+
+        impl<F, R, $($ty),+> IntoNativeFn<(Fallible<($($ty,)+)>,)> for F
+        where
+            F: Fn(&mut Evaluator, $($ty),+) -> Result<R, Error> + Send + Sync + 'static,
+            R: IntoValue,
+            $($ty: FromValue),+
+        {
+            fn into_native(self) -> NativeFn {
+                Arc::new(move |rt: &mut Evaluator, args: Vec<Value>| -> Result<Value, Error> {
+                    if args.len() != $count {
+                        return Err(Error::init(
+                            format!("expected {} argument(s), got {}", $count, args.len()),
+                            None, None,
+                        ));
+                    }
+                    let mut iter = args.into_iter();
+                    $(let $var = <$ty>::from_value(iter.next().unwrap())?;)+
+                    Ok(self(rt, $($var),+)?.into_value())
                 })
             }
         }
     };
 }
-
 impl_into_native_fn!(1, (A1, a1));
 impl_into_native_fn!(2, (A1, a1), (A2, a2));
 impl_into_native_fn!(3, (A1, a1), (A2, a2), (A3, a3));
 impl_into_native_fn!(4, (A1, a1), (A2, a2), (A3, a3), (A4, a4));
 impl_into_native_fn!(5, (A1, a1), (A2, a2), (A3, a3), (A4, a4), (A5, a5));
-impl_into_native_fn!(6, (A1, a1), (A2, a2), (A3, a3), (A4, a4), (A5, a5), (A6, a6));
-impl_into_native_fn!(7, (A1, a1), (A2, a2), (A3, a3), (A4, a4), (A5, a5), (A6, a6), (A7, a7));
-impl_into_native_fn!(8, (A1, a1), (A2, a2), (A3, a3), (A4, a4), (A5, a5), (A6, a6), (A7, a7), (A8, a8));
-impl_into_native_fn!(9, (A1, a1), (A2, a2), (A3, a3), (A4, a4), (A5, a5), (A6, a6), (A7, a7), (A8, a8), (A9, a9));
-impl_into_native_fn!(10, (A1, a1), (A2, a2), (A3, a3), (A4, a4), (A5, a5), (A6, a6), (A7, a7), (A8, a8), (A9, a9), (A10, a10));
+impl_into_native_fn!(
+    6,
+    (A1, a1),
+    (A2, a2),
+    (A3, a3),
+    (A4, a4),
+    (A5, a5),
+    (A6, a6)
+);
+impl_into_native_fn!(
+    7,
+    (A1, a1),
+    (A2, a2),
+    (A3, a3),
+    (A4, a4),
+    (A5, a5),
+    (A6, a6),
+    (A7, a7)
+);
+impl_into_native_fn!(
+    8,
+    (A1, a1),
+    (A2, a2),
+    (A3, a3),
+    (A4, a4),
+    (A5, a5),
+    (A6, a6),
+    (A7, a7),
+    (A8, a8)
+);
+impl_into_native_fn!(
+    9,
+    (A1, a1),
+    (A2, a2),
+    (A3, a3),
+    (A4, a4),
+    (A5, a5),
+    (A6, a6),
+    (A7, a7),
+    (A8, a8),
+    (A9, a9)
+);
+impl_into_native_fn!(
+    10,
+    (A1, a1),
+    (A2, a2),
+    (A3, a3),
+    (A4, a4),
+    (A5, a5),
+    (A6, a6),
+    (A7, a7),
+    (A8, a8),
+    (A9, a9),
+    (A10, a10)
+);

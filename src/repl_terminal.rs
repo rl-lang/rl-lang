@@ -8,7 +8,7 @@ use crate::{
     utils::source::SourceFile,
 };
 
-pub fn repl() {
+pub fn start_repl() {
     panic::set_hook(Box::new(|_| {}));
 
     let mut evaluator = Evaluator::default().with_stdlib();

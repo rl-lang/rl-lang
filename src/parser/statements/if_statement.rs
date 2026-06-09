@@ -10,6 +10,7 @@ impl Parser {
     pub fn parse_if(&mut self, start: Span) -> Result<Statement, Error> {
         let if_condition = self.parse_expression()?;
         let if_body = self.parse_block()?;
+        #[cfg(feature = "debug")]
         log::debug!("parsed if branch");
         let if_branch_span = start.join(self.previous_span());
         let if_branch = Statement::new(
@@ -41,6 +42,7 @@ impl Parser {
                     },
                     span,
                 );
+                #[cfg(feature = "debug")]
                 log::debug!("parsed else if branch");
                 elseif_branch.push(branch);
                 while matches!(self.peek(), TokenType::Newline) {
@@ -56,6 +58,7 @@ impl Parser {
         let else_branch = if else_body.is_empty() {
             None
         } else {
+            #[cfg(feature = "debug")]
             log::debug!("parsed else branch");
             let span = else_start.unwrap_or(if_branch_span).join(else_end_span);
             Some(Box::new(Statement::new(

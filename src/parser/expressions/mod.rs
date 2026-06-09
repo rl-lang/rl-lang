@@ -158,13 +158,16 @@ impl Parser {
     }
 
     pub fn parse_primary(&mut self) -> Result<Expression, Error> {
+        #[cfg(feature = "debug")]
         log::debug!("current index: {:?}", self.current);
+        #[cfg(feature = "debug")]
         log::debug!("current token: {:?}", self.peek());
 
         let start = self.peek_span();
 
         // is it identifier
         if self.match_type(&[TokenType::Identifier(String::new())]) {
+            #[cfg(feature = "debug")]
             log::debug!("found identifier");
             let ident_span = self.previous_span();
             if let TokenType::Identifier(first) = self.previous() {
@@ -172,9 +175,7 @@ impl Parser {
                 let mut path = vec![first];
                 while self.match_type(&[TokenType::ColonColon]) {
                     if !self.match_type(&[TokenType::Identifier(String::new())]) {
-                        return Err(
-                            self.err("expected identifier after `::`", self.peek_span())
-                        );
+                        return Err(self.err("expected identifier after `::`", self.peek_span()));
                     }
                     if let TokenType::Identifier(seg) = self.previous() {
                         path.push(seg);
@@ -184,6 +185,7 @@ impl Parser {
 
                 // is it function call?
                 if self.match_type(&[TokenType::LeftParen]) {
+                    #[cfg(feature = "debug")]
                     log::debug!("found function call");
                     let mut args = Vec::new();
                     if !(std::mem::discriminant(&self.peek())
@@ -212,6 +214,7 @@ impl Parser {
 
                 // is it assignment?
                 if self.match_type(&[TokenType::Assign]) {
+                    #[cfg(feature = "debug")]
                     log::debug!("found variable assignment");
                     let value = self.parse_expression()?;
                     let span = start.join(value.span);
@@ -254,8 +257,31 @@ impl Parser {
                         );
                     }
 
+                    // is it a call on the result of an index, e.g. fns[0](arg)?
+                    if self.match_type(&[TokenType::LeftParen]) {
+                        let mut args = Vec::new();
+                        if self.peek() != TokenType::RightParen {
+                            loop {
+                                args.push(self.parse_expression()?);
+                                if !self.match_type(&[TokenType::Comma]) {
+                                    break;
+                                }
+                            }
+                        }
+                        self.match_type(&[TokenType::RightParen]);
+                        let span = start.join(self.previous_span());
+                        return Ok(Expression::new(
+                            ExpressionKind::CallExpr {
+                                callee: Box::new(expr),
+                                args,
+                            },
+                            span,
+                        ));
+                    }
+
                     // is it index-assign?
                     if self.match_type(&[TokenType::Assign]) {
+                        #[cfg(feature = "debug")]
                         log::debug!("found array item assignment");
                         let value = self.parse_expression()?;
                         let span = start.join(value.span);
@@ -273,7 +299,10 @@ impl Parser {
 
                     return Ok(expr);
                 }
-                return Ok(Expression::new(ExpressionKind::Identifier(name), ident_span));
+                return Ok(Expression::new(
+                    ExpressionKind::Identifier(name),
+                    ident_span,
+                ));
             }
         }
 
@@ -295,6 +324,7 @@ impl Parser {
         }
         // is it integer?
         if self.match_type(&[TokenType::NumberLiteral(0)]) {
+            #[cfg(feature = "debug")]
             log::debug!("found number");
             let span = self.previous_span();
             if let TokenType::NumberLiteral(n) = self.previous() {
@@ -304,6 +334,7 @@ impl Parser {
 
         // is it String?
         if self.match_type(&[TokenType::StringLiteral(String::new())]) {
+            #[cfg(feature = "debug")]
             log::debug!("found string");
             let span = self.previous_span();
             if let TokenType::StringLiteral(s) = self.previous() {
@@ -317,6 +348,7 @@ impl Parser {
             TokenType::CharacterLiteral(_)
         ) {
             self.advance();
+            #[cfg(feature = "debug")]
             log::debug!("found characher");
             let span = self.previous_span();
             if let TokenType::CharacterLiteral(c) = self.previous() {
@@ -334,6 +366,7 @@ impl Parser {
 
         // is it float??
         if self.match_type(&[TokenType::FloatLiteral(0.0)]) {
+            #[cfg(feature = "debug")]
             log::debug!("oh no found float");
             let span = self.previous_span();
             if let TokenType::FloatLiteral(f) = self.previous() {
@@ -341,13 +374,66 @@ impl Parser {
             }
         }
 
+        // is it null?
+        if self.match_type(&[TokenType::Null]) {
+            let span = self.previous_span();
+            return Ok(Expression::new(ExpressionKind::Null, span));
+        }
+
         // is it (Expression)?
         if self.match_type(&[TokenType::LeftParen]) {
+            #[cfg(feature = "debug")]
             log::debug!("found group start");
             let inner = self.parse_expression()?;
             self.match_type(&[TokenType::RightParen]);
             let span = start.join(self.previous_span());
-            return Ok(Expression::new(ExpressionKind::Grouping(Box::new(inner)), span));
+            return Ok(Expression::new(
+                ExpressionKind::Grouping(Box::new(inner)),
+                span,
+            ));
+        }
+
+        // is it lambda?
+        if self.match_type(&[TokenType::Fn]) {
+            let lambda_start = self.previous_span();
+            self.match_type(&[TokenType::LeftParen]);
+
+            let mut params: Vec<crate::ast::statements::Param> = Vec::new();
+            while !self.match_type(&[TokenType::RightParen]) {
+                let param_type = self.parse_param_type()?;
+                let param_name = match self.peek() {
+                    TokenType::Identifier(n) => {
+                        self.advance();
+                        n
+                    }
+                    _ => return Err(self.err("expected parameter name", self.peek_span())),
+                };
+                params.push(crate::ast::statements::Param {
+                    param_name,
+                    param_type,
+                });
+                if !self.match_type(&[TokenType::Comma]) {
+                    break;
+                }
+            }
+            self.match_type(&[TokenType::RightParen]);
+
+            let return_type = if self.match_type(&[TokenType::Arrow]) {
+                Some(self.parse_param_type()?)
+            } else {
+                None
+            };
+
+            let body = self.parse_block()?;
+            let span = lambda_start.join(self.previous_span());
+            return Ok(Expression::new(
+                ExpressionKind::Lambda {
+                    params,
+                    return_type,
+                    body,
+                },
+                span,
+            ));
         }
 
         Err(self.err("expected expression", self.peek_span()))

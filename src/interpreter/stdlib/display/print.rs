@@ -1,12 +1,24 @@
 use crate::interpreter::evaluator::Evaluator;
 use crate::interpreter::values::Value;
+use crate::utils::errors::Error;
 
-pub fn std_print(_: &mut Evaluator, args: Vec<Value>) -> Value {
-    for (i, arg) in args.iter().enumerate() {
-        if i > 0 {
-            print!(" ");
-        }
-        print!("{}", arg);
+pub fn std_print(evaluator: &mut Evaluator, args: Vec<Value>) -> Result<Value, Error> {
+    let text = args
+        .iter()
+        .enumerate()
+        .map(|(i, a)| {
+            if i > 0 {
+                format!(" {}", a)
+            } else {
+                format!("{}", a)
+            }
+        })
+        .collect::<String>();
+
+    if let Some(buffer) = &mut evaluator.output_buffer {
+        buffer.push_str(&text);
+    } else {
+        print!("{}", text);
     }
-    Value::Null
+    Ok(Value::Null)
 }

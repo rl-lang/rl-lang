@@ -26,6 +26,8 @@ impl Parser {
             tokens,
             current: 0,
         };
+
+        #[cfg(feature = "debug")]
         log::info!("parser initialized");
         let mut statements = Vec::new();
 
@@ -33,6 +35,7 @@ impl Parser {
             statements.push(parser.parse_statement_to_ast()?);
         }
 
+        #[cfg(feature = "debug")]
         log::info!("parsing complete");
         Ok(statements)
     }

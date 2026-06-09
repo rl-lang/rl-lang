@@ -1,8 +1,9 @@
+use crate::ast::statements::{Param, Statement, TypeAnnotation};
 use crate::lexer::tokentypes;
 use crate::utils::span::Span;
 
 /// An expression paired with its source span.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Expression {
     pub kind: ExpressionKind,
     pub span: Span,
@@ -14,8 +15,9 @@ impl Expression {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ExpressionKind {
+    Null,
     Integer(i64),
     Binary {
         left: Box<Expression>,
@@ -49,5 +51,15 @@ pub enum ExpressionKind {
         target: Box<Expression>,
         index: Box<Expression>,
         value: Box<Expression>,
+    },
+
+    Lambda {
+        params: Vec<Param>,
+        return_type: Option<TypeAnnotation>,
+        body: Vec<Statement>,
+    },
+    CallExpr {
+        callee: Box<Expression>,
+        args: Vec<Expression>,
     },
 }

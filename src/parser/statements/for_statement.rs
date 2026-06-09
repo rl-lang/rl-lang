@@ -76,7 +76,23 @@ impl Parser {
                 let span = start.join(self.previous_span());
                 Box::new(Statement::new(StatementKind::Range(iterable_list), span))
             } else {
-                return Err(self.err("expected range or array", self.peek_span()));
+                if matches!(self.peek(), TokenType::Identifier(_)) {
+                    let iterable_expression = self.parse_expression()?;
+                    let body = self.parse_block()?;
+                    let span = start.join(self.previous_span());
+                    return Ok(Statement::new(
+                        StatementKind::ForEach {
+                            variable: variable_name,
+                            iterable: iterable_expression,
+                            body,
+                        },
+                        span,
+                    ));
+                }
+                return Err(self.err(
+                    "expected range (e.g. 1..10), array literal ([1, 2, 3], or array variable",
+                    self.peek_span(),
+                ));
             };
 
             let body = self.parse_block()?;

@@ -1,6 +1,9 @@
 use crate::{
     ast::nodes::{Expression, ExpressionKind},
-    interpreter::{evaluator::Evaluator, values::Value},
+    interpreter::{
+        evaluator::{EnvironmentItem, Evaluator},
+        values::Value,
+    },
     utils::{errors::Error, span::Span},
 };
 
@@ -47,23 +50,35 @@ impl Evaluator {
         }
 
         for scope in self.environment.iter().rev() {
-            if let Some((_, true)) = scope.get(&root) {
-                return Err(self.err(format!("cannot assign to constant '{}'", root), span));
+            if let Some(env_item) = scope.get(&root) {
+                match env_item {
+                    EnvironmentItem::PItem(p) => {
+                        if p.is_const {
+                            return Err(
+                                self.err(format!("cannot assign to constant '{}'", root), span)
+                            );
+                        }
+                    }
+                }
             }
         }
 
         for scope in self.environment.iter_mut().rev() {
-            if let Some((root_val, _)) = scope.get_mut(&root) {
-                let mut current = root_val;
-                for i in &indices[..indices.len() - 1] {
-                    if let Value::Values(items) = current {
-                        current = &mut items[*i];
+            if let Some(env_item) = scope.get_mut(&root) {
+                match env_item {
+                    EnvironmentItem::PItem(p) => {
+                        let mut current = &mut p.value;
+                        for i in &indices[..indices.len() - 1] {
+                            if let Value::Values(items) = current {
+                                current = &mut items[*i];
+                            }
+                        }
+                        if let Value::Values(items) = current {
+                            items[*indices.last().unwrap()] = val.clone();
+                        }
+                        return Ok(val);
                     }
                 }
-                if let Value::Values(items) = current {
-                    items[*indices.last().unwrap()] = val.clone();
-                }
-                return Ok(val);
             }
         }
 

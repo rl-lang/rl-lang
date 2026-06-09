@@ -14,20 +14,55 @@ impl Parser {
         // std::display will be separated to std display and thrown in another Vec<String>
         // checks for comma and coloncolon ummm might make loop
 
-        let mut names = Vec::new();
-        loop {
-            match self.peek() {
-                TokenType::Identifier(name) => {
-                    // consuming the token
-                    self.advance();
-                    // adding the target to names list
-                    names.push(name);
+        let first = match self.peek() {
+            TokenType::Identifier(name) => name,
+            _ => return Err(self.err("expected identifier after 'get'", self.peek_span())),
+        };
+        self.advance();
+
+        if self.match_type(&[TokenType::ColonColon]) {
+            let mut segments = vec![first];
+            loop {
+                match self.peek() {
+                    TokenType::Identifier(seg) => {
+                        self.advance();
+                        segments.push(seg);
+                    }
+
+                    _ => return Err(self.err("expected identifier after '::'", self.peek_span())),
                 }
-                _ => return Err(self.err("expected identifier after 'get'", self.peek_span())),
+                if !self.match_type(&[TokenType::ColonColon]) {
+                    break;
+                }
             }
 
-            if !self.match_type(&[TokenType::Comma]) {
-                break;
+            let name = segments.pop().unwrap();
+            let span = start.join(self.previous_span());
+            return Ok(Statement::new(
+                StatementKind::Import {
+                    names: vec![name],
+                    path: segments,
+                },
+                span,
+            ));
+        }
+
+        let mut names = vec![first];
+        if self.match_type(&[TokenType::Comma]) {
+            loop {
+                match self.peek() {
+                    TokenType::Identifier(name) => {
+                        // consuming the token
+                        self.advance();
+                        // adding the target to names list
+                        names.push(name);
+                    }
+                    _ => return Err(self.err("expected identifier after 'get'", self.peek_span())),
+                }
+
+                if !self.match_type(&[TokenType::Comma]) {
+                    break;
+                }
             }
         }
 

@@ -1,6 +1,11 @@
 pub mod ast;
+#[cfg(feature = "eval")]
 pub mod interpreter;
 pub mod lexer;
+pub mod logic_loops;
 pub mod parser;
+#[cfg(feature = "repl_tui")]
 pub mod repl;
+#[cfg(feature = "repl_terminal")]
+pub mod repl_terminal;
 pub mod utils;

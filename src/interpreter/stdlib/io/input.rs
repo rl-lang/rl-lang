@@ -2,9 +2,9 @@ use std::io;
 
 use crate::{interpreter::evaluator::Evaluator, interpreter::values::Value, utils::errors::Error};
 
-pub fn std_input(_: &mut Evaluator, args: Vec<Value>) -> Value {
+pub fn std_input(_: &mut Evaluator, args: Vec<Value>) -> Result<Value, Error> {
     match args.len() {
-        0 => read_line(),
+        0 => Ok(read_line()),
         1 => {
             let prompt = match args.into_iter().next().unwrap() {
                 Value::Integer(i) => i.to_string(),
@@ -16,12 +16,13 @@ pub fn std_input(_: &mut Evaluator, args: Vec<Value>) -> Value {
                 _ => "".to_string(),
             };
             println!("{}", prompt);
-            read_line()
+            Ok(read_line())
         }
-        _ => {
-            Error::init("incorrect usage".to_string(), None, None).print_error();
-            unreachable!()
-        }
+        n => Err(Error::init(
+            format!("input() expects 0 or 1 argument(s), got {}", n),
+            None,
+            None,
+        )),
     }
 }
 
