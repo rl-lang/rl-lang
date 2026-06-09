@@ -46,7 +46,7 @@ fn main() {
     #[cfg(feature = "debug")]
     debug!("used arguments [{:?}]", arguments);
 
-    if cfg!(feature = "run") && arguments[1] == "run" {
+    if cfg!(feature = "run") && arguments.len() == 3 && arguments[1] == "run" {
         #[cfg(feature = "debug")]
         log::info!("starting the interpreter");
     } else if cfg!(feature = "repl") && arguments.len() == 2 && arguments[1] == "repl" {
@@ -63,6 +63,11 @@ fn main() {
         }
         return;
     } else {
+        println!("Error: wrong usage");
+        println!("\n[Interpreter Mode]");
+        println!("rl run <source-file.rl>\t\t(rl run test.rl)");
+        println!("\n[REPL Mode]");
+        println!("rl repl");
         return;
     }
 
