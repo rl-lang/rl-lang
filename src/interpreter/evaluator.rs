@@ -232,6 +232,19 @@ impl Evaluator {
                 self.call_value(func_val, evaluated_args, expression.span)?
             }
 
+            ExpressionKind::MethodCall {
+                caller,
+                method,
+                args,
+            } => {
+                let first_arg = self.evaluate(caller)?;
+                let mut evaluated_args = vec![first_arg];
+                // elevate and push the args
+                for arg in args {
+                    evaluated_args.push(self.evaluate(arg)?);
+                }
+                self.call_path(&[method.clone()], evaluated_args, expression.span)?
+            }
             ExpressionKind::Lambda {
                 params,
                 return_type,

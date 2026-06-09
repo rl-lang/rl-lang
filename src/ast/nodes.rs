@@ -43,6 +43,12 @@ pub enum ExpressionKind {
         path: Vec<String>,
         args: Vec<Expression>,
     },
+
+    MethodCall {
+        caller: Box<Expression>,
+        method: String,
+        args: Vec<Expression>,
+    },
     Index {
         target: Box<Expression>,
         index: Box<Expression>,
