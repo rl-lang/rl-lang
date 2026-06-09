@@ -1,4 +1,4 @@
-use std::{fs, panic, path::PathBuf};
+use std::{fs, path::PathBuf};
 
 use ratatui::style::{Color, Modifier, Style};
 
@@ -115,7 +115,7 @@ pub fn handle_command(
             let content: String = output
                 .iter()
                 .filter_map(|l| match l {
-                    OutputLine::Input(s) => Some(s.clone()),
+                    OutputLine::Input(s) if !s.trim_start().starts_with(':') => Some(s.clone()),
                     _ => None,
                 })
                 .collect::<Vec<_>>()
@@ -153,36 +153,37 @@ pub fn handle_command(
                 Ok(content) => {
                     let source =
                         SourceFile::new(path.to_str().unwrap_or("<file>"), content.clone());
-                    let eval_result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
-                        let tokens = Tokenizer::lex(source.clone())?;
-                        let stmts = Parser::parse(tokens, source.clone())?;
-                        Ok::<_, crate::utils::errors::Error>(stmts)
-                    }));
-                    match eval_result {
-                        Ok(Ok(stmts)) => {
-                            evaluator.set_source_file(source);
-                            let mut ok = true;
-                            for stmt in stmts {
-                                if let Err(e) = evaluator.evaluate_statement(&stmt) {
-                                    push_error(output, &e);
-                                    ok = false;
-                                    break;
-                                }
-                            }
-                            if ok {
-                                attached.push(path.clone());
-                                output
-                                    .push(OutputLine::Info(format!("attached {}", path.display())));
-                            }
+                    let tokens = match Tokenizer::lex(source.clone()) {
+                        Ok(t) => t,
+                        Err(e) => {
+                            push_error(output, &e);
+                            return;
                         }
-                        Ok(Err(e)) => push_error(output, &e),
-                        Err(_) => output.push(OutputLine::Error("attach: aborted".into())),
+                    };
+                    let stmts = match Parser::parse(tokens, source.clone()) {
+                        Ok(s) => s,
+                        Err(e) => {
+                            push_error(output, &e);
+                            return;
+                        }
+                    };
+                    evaluator.set_source_file(source);
+                    let mut ok = true;
+                    for stmt in &stmts {
+                        if let Err(e) = evaluator.evaluate_statement(stmt) {
+                            push_error(output, &e);
+                            ok = false;
+                            break;
+                        }
+                    }
+                    if ok {
+                        attached.push(path.clone());
+                        output.push(OutputLine::Info(format!("attached {}", path.display())));
                     }
                 }
                 Err(e) => output.push(OutputLine::Error(format!("attach failed: {}", e))),
             }
         }
-
         ":detach" => {
             if parts.len() < 2 || parts[1].trim().is_empty() {
                 output.push(OutputLine::Error(":detach requires a filename".into()));
