@@ -50,6 +50,7 @@ impl Tokenizer {
             Span::new(eof_char_index, eof_char_index),
         ));
 
+        #[cfg(feature = "debug")]
         log::debug!("Recognized {} token(s)", lexer.tokens.len());
         Ok(lexer.tokens)
     }

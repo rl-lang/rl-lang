@@ -158,13 +158,16 @@ impl Parser {
     }
 
     pub fn parse_primary(&mut self) -> Result<Expression, Error> {
+        #[cfg(feature = "debug")]
         log::debug!("current index: {:?}", self.current);
+        #[cfg(feature = "debug")]
         log::debug!("current token: {:?}", self.peek());
 
         let start = self.peek_span();
 
         // is it identifier
         if self.match_type(&[TokenType::Identifier(String::new())]) {
+            #[cfg(feature = "debug")]
             log::debug!("found identifier");
             let ident_span = self.previous_span();
             if let TokenType::Identifier(first) = self.previous() {
@@ -182,6 +185,7 @@ impl Parser {
 
                 // is it function call?
                 if self.match_type(&[TokenType::LeftParen]) {
+                    #[cfg(feature = "debug")]
                     log::debug!("found function call");
                     let mut args = Vec::new();
                     if !(std::mem::discriminant(&self.peek())
@@ -210,6 +214,7 @@ impl Parser {
 
                 // is it assignment?
                 if self.match_type(&[TokenType::Assign]) {
+                    #[cfg(feature = "debug")]
                     log::debug!("found variable assignment");
                     let value = self.parse_expression()?;
                     let span = start.join(value.span);
@@ -276,6 +281,7 @@ impl Parser {
 
                     // is it index-assign?
                     if self.match_type(&[TokenType::Assign]) {
+                        #[cfg(feature = "debug")]
                         log::debug!("found array item assignment");
                         let value = self.parse_expression()?;
                         let span = start.join(value.span);
@@ -318,6 +324,7 @@ impl Parser {
         }
         // is it integer?
         if self.match_type(&[TokenType::NumberLiteral(0)]) {
+            #[cfg(feature = "debug")]
             log::debug!("found number");
             let span = self.previous_span();
             if let TokenType::NumberLiteral(n) = self.previous() {
@@ -327,6 +334,7 @@ impl Parser {
 
         // is it String?
         if self.match_type(&[TokenType::StringLiteral(String::new())]) {
+            #[cfg(feature = "debug")]
             log::debug!("found string");
             let span = self.previous_span();
             if let TokenType::StringLiteral(s) = self.previous() {
@@ -340,6 +348,7 @@ impl Parser {
             TokenType::CharacterLiteral(_)
         ) {
             self.advance();
+            #[cfg(feature = "debug")]
             log::debug!("found characher");
             let span = self.previous_span();
             if let TokenType::CharacterLiteral(c) = self.previous() {
@@ -357,6 +366,7 @@ impl Parser {
 
         // is it float??
         if self.match_type(&[TokenType::FloatLiteral(0.0)]) {
+            #[cfg(feature = "debug")]
             log::debug!("oh no found float");
             let span = self.previous_span();
             if let TokenType::FloatLiteral(f) = self.previous() {
@@ -372,6 +382,7 @@ impl Parser {
 
         // is it (Expression)?
         if self.match_type(&[TokenType::LeftParen]) {
+            #[cfg(feature = "debug")]
             log::debug!("found group start");
             let inner = self.parse_expression()?;
             self.match_type(&[TokenType::RightParen]);

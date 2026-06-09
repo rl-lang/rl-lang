@@ -23,6 +23,7 @@ impl Parser {
         match self.peek() {
             TokenType::Newline => {
                 self.advance();
+                #[cfg(feature = "debug")]
                 log::info!("found newline while parsing... skipping");
                 let span = self.previous_span();
                 Ok(Statement::new(
@@ -36,38 +37,45 @@ impl Parser {
                 // consume it
                 self.advance();
                 // log it
+                #[cfg(feature = "debug")]
                 log::info!("found `get` for import while parsing");
                 // parse it
                 self.parse_import(start)
             }
             TokenType::Dec => {
                 self.advance();
+                #[cfg(feature = "debug")]
                 log::info!("found `declaration` for variable while parsing");
                 self.parse_variable_declartion(start)
             }
             TokenType::Const => {
                 self.advance();
+                #[cfg(feature = "debug")]
                 log::info!("found `declaration` for constant while parsing");
                 self.parse_const_declartion(start)
             }
             TokenType::While => {
                 self.advance();
+                #[cfg(feature = "debug")]
                 log::info!("found `while` while parsing");
                 self.parse_while(start)
             }
             TokenType::For => {
                 self.advance();
+                #[cfg(feature = "debug")]
                 log::info!("found `for` while parsing");
                 self.parse_for(start)
             }
             TokenType::If => {
                 self.advance();
+                #[cfg(feature = "debug")]
                 log::info!("found `if` while parsing");
                 self.parse_if(start)
             }
 
             TokenType::Fn => {
                 self.advance();
+                #[cfg(feature = "debug")]
                 log::info!("found 'fn' while parsing");
                 self.parse_function(start)
             }
@@ -100,6 +108,7 @@ impl Parser {
             }
 
             _ => {
+                #[cfg(feature = "debug")]
                 log::info!("parsing the current tokens as expression");
                 let expr = self.parse_expression()?;
                 let span = expr.span;
@@ -115,6 +124,7 @@ impl Parser {
         }
         let mut statements = Vec::new();
 
+        #[cfg(feature = "debug")]
         log::info!("parsing body into statements");
         while !self.match_type(&[TokenType::RightBrace, TokenType::Eof]) {
             if matches!(self.peek(), TokenType::Newline) {

@@ -1,14 +1,18 @@
+#[cfg(feature = "debug")]
 use log::{debug, info};
-use rl_lang::{
-    interpreter::evaluator::Evaluator,
-    lexer::tokenizer::Tokenizer,
-    parser::parser_logic::Parser,
-    repl,
-    utils::{
-        errors::{Error, ErrorReason, Reason},
-        source::SourceFile,
-    },
+
+use rl_lang::logic_loops::{eval_loop, lexing_loop, parsing_loop, validate_source_arg};
+
+use rl_lang::utils::{
+    errors::{Error, ErrorReason, Reason},
+    source::SourceFile,
 };
+
+#[cfg(feature = "repl_tui")]
+use rl_lang::repl::start_repl;
+
+#[cfg(feature = "repl_terminal")]
+use rl_lang::repl_terminal::repl;
 
 /// entry point for `rl` interpreter
 ///
@@ -23,32 +27,41 @@ use rl_lang::{
 /// 3. **evaluating**
 fn main() {
     // initializing the logger
+    #[cfg(feature = "debug")]
     env_logger::Builder::new()
         .filter_level(log::LevelFilter::Debug)
         .target(env_logger::Target::Pipe(Box::new(
             std::fs::File::create("log.txt").unwrap(),
         )))
         .init();
+    #[cfg(feature = "debug")]
     info!("logger initialized");
 
     // arguments
+    #[cfg(feature = "debug")]
     info!("reading arguments");
+
     let arguments: Vec<String> = std::env::args().collect();
+
+    #[cfg(feature = "debug")]
     debug!("used arguments [{:?}]", arguments);
-    if arguments.len() == 3 && arguments[1] != "run" {
-        eprintln!("Usage: rlp run <source-file.rl>");
-        return;
-    } else if arguments.len() == 3 && arguments[1] == "run" {
+
+    if cfg!(feature = "run") && arguments[1] == "run" {
+        #[cfg(feature = "debug")]
         log::info!("starting the interpreter");
-    } else if arguments.len() == 2 && arguments[1] == "repl" {
-        log::info!("starting repl shell");
-        println!("[Starting REPL shell]");
-        repl::repl();
+    } else if cfg!(feature = "repl") && arguments.len() == 2 && arguments[1] == "repl" {
+        if cfg!(feature = "repl_tui") {
+            #[cfg(feature = "debug")]
+            log::info!("starting repl TUI");
+            start_repl();
+        } else if cfg!(feature = "repl_terminal") {
+            #[cfg(feature = "debug")]
+            log::info!("starting repl terminal shell");
+            println!("[Starting REPL shell]");
+            start_repl();
+        }
         return;
     } else {
-        log::info!("falling back to repl");
-        println!("[Starting REPL shell]");
-        repl::repl();
         return;
     }
 
@@ -63,53 +76,19 @@ fn main() {
         return;
     }
 
-    let source_file = match std::fs::read_to_string(&arguments[2]) {
-        Ok(file) => file,
-
-        Err(_) => {
-            Error::init(
-                "failed to read file".to_string(),
-                None,
-                Some(ErrorReason::init(Reason::Compile, None)),
-            )
-            .print_error();
-            return;
-        }
-    };
+    let source_file = validate_source_arg(&arguments).unwrap_or_else(|_| std::process::exit(1));
 
     println!("[Parsing source file: {}]", arguments[2]);
     let source = SourceFile::new(arguments[2].as_str(), source_file);
 
     // phase one: lexing the source file into tokens
-    info!("lexing the source file...");
-    let tokens = match Tokenizer::lex(source.clone()) {
-        Ok(t) => t,
-        Err(e) => {
-            e.report_to_stderr();
-            std::process::exit(1);
-        }
-    };
+    let tokens = lexing_loop(source.clone());
 
     // phase two: parsing the tokens into ast tree
-    info!("parsing the tokens into ast tree...");
-    let statements = match Parser::parse(tokens, source.clone()) {
-        Ok(s) => s,
-        Err(e) => {
-            e.report_to_stderr();
-            std::process::exit(1);
-        }
-    };
+    let statements = parsing_loop(source.clone(), tokens);
 
     // phase three: evaluating the ast tree
-    info!("evaluating the ast tree...");
-    let mut evaluator = Evaluator::default()
-        .with_stdlib()
-        .with_source_file(source);
-    for statement in statements {
-        if let Err(e) = evaluator.evaluate_statement(&statement) {
-            e.report_to_stderr();
-            std::process::exit(1);
-        }
+    if cfg!(feature = "eval") {
+        eval_loop(source, statements);
     }
-    info!("evaluation done")
 }

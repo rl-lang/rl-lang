@@ -7,7 +7,9 @@ use crate::{
 
 impl Parser {
     pub fn parse_variable_declartion(&mut self, start: Span) -> Result<Statement, Error> {
+        #[cfg(feature = "debug")]
         log::debug!("{:?}", self.peek());
+        #[cfg(feature = "debug")]
         log::debug!("parsing type");
         if self.match_type(&[TokenType::Array]) && self.peek() == TokenType::LeftBracket {
             self.advance();

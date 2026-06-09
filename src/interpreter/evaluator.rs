@@ -38,6 +38,7 @@ pub struct Evaluator {
     pub return_value: Option<Value>,
     pub is_breaking: bool,
     pub is_continuing: bool,
+    pub output_buffer: Option<String>,
 }
 
 impl Default for Evaluator {
@@ -55,6 +56,7 @@ impl Evaluator {
             return_value: None,
             is_breaking: false,
             is_continuing: false,
+            output_buffer: None,
         }
     }
 
