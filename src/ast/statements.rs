@@ -86,6 +86,15 @@ pub enum StatementKind {
         /// list of paths to functions
         path: Vec<String>,
     },
+
+    ImportFile {
+        path: Vec<String>,
+    },
+
+    ImportFileNamed {
+        path: Vec<String>,
+        names: Vec<String>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
