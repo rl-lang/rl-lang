@@ -238,8 +238,7 @@ impl Evaluator {
                 args,
             } => {
                 let first_arg = self.evaluate(caller)?;
-                let mut evaluated_args = Vec::with_capacity(args.len() + 1);
-                evaluated_args.push(first_arg);
+                let mut evaluated_args = vec![first_arg];
                 // elevate and push the args
                 for arg in args {
                     evaluated_args.push(self.evaluate(arg)?);
