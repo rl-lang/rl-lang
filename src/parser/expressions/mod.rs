@@ -297,7 +297,7 @@ impl Parser {
                         }
                     }
 
-                    return Ok(expr);
+                    return self.parse_postfix(expr, start);
                 }
                 return Ok(Expression::new(
                     ExpressionKind::Identifier(name),
