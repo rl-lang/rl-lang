@@ -3,7 +3,9 @@ use std::sync::Arc;
 use crate::{
     ast::statements::{Statement, StatementKind},
     interpreter::{evaluator::Evaluator, values::Value},
-    utils::errors::Error,
+    lexer::tokenizer::Tokenizer,
+    parser::parser_logic::Parser,
+    utils::{errors::Error, source::SourceFile},
 };
 
 impl Evaluator {
@@ -138,6 +140,73 @@ impl Evaluator {
                     .collect();
                 for (name, f) in fns {
                     self.root_module.functions.insert(name, f);
+                }
+            }
+
+            StatementKind::ImportFile { path } => {
+                let file_path = format!("{}.rl", path.join("/"));
+                let source_text = std::fs::read_to_string(&file_path).map_err(|_| {
+                    self.err(
+                        format!("could not read file '{}'", file_path),
+                        statement.span,
+                    )
+                })?;
+                let source_file = SourceFile::new(&*file_path, source_text);
+                let tokens = Tokenizer::lex(source_file.clone())?;
+                let stmts = Parser::parse(tokens, source_file)?;
+                self.push_scope();
+                for stmt in &stmts {
+                    self.evaluate_statement(stmt)?;
+                }
+
+                let exported: Vec<_> = self
+                    .environment
+                    .last()
+                    .unwrap()
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect();
+                self.pop_scope();
+                for (name, item) in exported {
+                    self.environment.last_mut().unwrap().insert(name, item);
+                }
+            }
+
+            StatementKind::ImportFileNamed { path, names } => {
+                let file_path = format!("{}.rl", path.join("/"));
+                let source_text = std::fs::read_to_string(&file_path).map_err(|_| {
+                    self.err(
+                        format!("could not read file '{}'", file_path),
+                        statement.span,
+                    )
+                })?;
+                let source_file = SourceFile::new(&*file_path, source_text);
+                let tokens = Tokenizer::lex(source_file.clone())?;
+                let stmts = Parser::parse(tokens, source_file)?;
+                self.push_scope();
+                for stmt in &stmts {
+                    self.evaluate_statement(stmt)?;
+                }
+                let exported: Vec<_> = self
+                    .environment
+                    .last()
+                    .unwrap()
+                    .iter()
+                    .filter(|(k, _)| names.contains(k))
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect();
+                self.pop_scope();
+                if let Some(not_found) = names
+                    .iter()
+                    .find(|n| !exported.iter().any(|(k, _)| k == *n))
+                {
+                    return Err(self.err(
+                        format!("'{}' is not defined in '{}'", not_found, file_path),
+                        statement.span,
+                    ));
+                }
+                for (name, item) in exported {
+                    self.environment.last_mut().unwrap().insert(name, item);
                 }
             }
 

@@ -1,5 +1,5 @@
 #[cfg(feature = "debug")]
-use log::{debug, info};
+use log::info;
 
 use crate::utils::errors::{Error, ErrorReason, Reason};
 
