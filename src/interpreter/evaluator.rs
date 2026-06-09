@@ -243,7 +243,11 @@ impl Evaluator {
                 for arg in args {
                     evaluated_args.push(self.evaluate(arg)?);
                 }
-                self.call_path(&[method.clone()], evaluated_args, expression.span)?
+                self.call_path(
+                    std::slice::from_ref(method),
+                    evaluated_args,
+                    expression.span,
+                )?
             }
             ExpressionKind::Lambda {
                 params,
