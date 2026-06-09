@@ -4,4 +4,4 @@ pub mod native;
 mod scopes;
 mod stdlib;
 mod utils;
-mod values;
+pub mod values;

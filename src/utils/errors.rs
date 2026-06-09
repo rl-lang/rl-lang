@@ -56,6 +56,7 @@ impl Error {
     /// legacy constructor: builds an error with just a message, optional line, and reason.
     /// Used by call sites that haven't been migrated to span-based errors yet.
     pub fn init(message: String, line: Option<usize>, reason: Option<ErrorReason>) -> Self {
+        #[cfg(feature = "debug")]
         log::debug!("Error: {}", message);
         Self {
             message,
@@ -73,6 +74,7 @@ impl Error {
     /// the `span` becomes the primary anchor of the report.
     pub fn at(kind: Reason, message: impl Into<String>, span: Span) -> Self {
         let message = message.into();
+        #[cfg(feature = "debug")]
         log::debug!("Error: {}", message);
         Self {
             message: message.clone(),
@@ -207,5 +209,11 @@ impl ErrorReason {
             Reason::Runtime => "Runtime Error",
         }
         .to_string()
+    }
+}
+
+impl Error {
+    pub fn message(&self) -> &str {
+        &self.message
     }
 }

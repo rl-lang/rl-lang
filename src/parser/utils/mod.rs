@@ -24,6 +24,7 @@ impl Parser {
     ///
     /// if Eof -> true which indicates the last token
     pub fn is_at_end(&self) -> bool {
+        #[cfg(feature = "debug")]
         if matches!(self.peek(), TokenType::Eof) {
             log::debug!("countered token [TokenType::Eof] indicating end of tokens for the file");
         }
@@ -34,12 +35,14 @@ impl Parser {
     pub fn advance(&mut self) {
         if !self.is_at_end() {
             self.current += 1;
+            #[cfg(feature = "debug")]
             log::debug!("advancing the parser current token: {}", self.current);
         }
     }
 
     /// returns [`TokenType`] of current token without consuming it
     pub fn peek(&self) -> TokenType {
+        #[cfg(feature = "debug")]
         log::debug!(
             "returning current token: [{:?}]",
             &self.tokens[self.current].token
@@ -49,6 +52,7 @@ impl Parser {
 
     /// returns the previous [`TokenType`] that got consumed
     pub fn previous(&self) -> TokenType {
+        #[cfg(feature = "debug")]
         log::debug!(
             "returning previous token: [{:?}]",
             &self.tokens[self.current - 1].token
@@ -80,11 +84,13 @@ impl Parser {
     pub fn match_type(&mut self, types: &[TokenType]) -> bool {
         for token_type in types {
             if self.check(token_type) {
+                #[cfg(feature = "debug")]
                 log::debug!("Token {:?} matched one in [{:?}]", self.peek(), types);
                 self.advance();
                 return true;
             }
         }
+        #[cfg(feature = "debug")]
         log::debug!("Token {:?} did not match any in [{:?}]", self.peek(), types);
         false
     }

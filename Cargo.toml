@@ -10,12 +10,25 @@ keywords = ["language", "interpreter", "cli"]
 categories = ["command-line-utilities"]
 
 [dependencies]
-log = { version = "0.4", features = ["release_max_level_off"] }
-env_logger = "0.11"
+log = { version = "0.4", features = ["release_max_level_off"] , optional = true }
+env_logger = {version = "0.11" , optional = true}
 ariadne = "0.5"
+ratatui = {version = "0.29", optional = true}
+crossterm = {version = "0.28", optional = true}
 
 [dev-dependencies]
 criterion = "0.5"
+
+[features]
+default = ["repl", "repl_tui", "run", "eval"]
+run = []
+repl = []
+repl_terminal = []
+repl_tui = ["dep:ratatui","dep:crossterm"]
+debug = ["dep:env_logger", "dep:log"]
+eval = []
+vm = []
+cranelift = []
 
 [[bench]]
 name = "test_benchmark"
