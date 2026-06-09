@@ -5,16 +5,10 @@ use ariadne::{Color, Label, Report, ReportKind, Source};
 use crate::utils::source::SourceFile;
 use crate::utils::span::Span;
 
-/// represents an Interpreter error with optional line number and error category
-pub struct Error {
-    /// readable message
-    message: String,
-    /// line number of error in source file (legacy; superseded by `primary.0` when present)
-    line: Option<usize>,
-    /// the category and optional context of the error
-    reason: Option<ErrorReason>,
+/// heavy optional fields, heap-allocated so `Error` stays small on the stack
+struct ErrorDetail {
     /// primary span (anchor of the ariadne report) and its label text
-    primary: Option<(Span, String)>,
+    primary: (Span, String),
     /// secondary spans with labels
     labels: Vec<(Span, String)>,
     /// source string for rendering; supplied by the subsystem that built the error
@@ -23,6 +17,18 @@ pub struct Error {
     source_name: Option<String>,
     /// optional help/hint line shown after the snippet (e.g. "did you mean foo?")
     help: Option<String>,
+}
+
+/// represents an Interpreter error with optional line number and error category
+pub struct Error {
+    /// readable message
+    message: String,
+    /// line number of error in source file (legacy; superseded by `detail.primary.0` when present)
+    line: Option<usize>,
+    /// the category and optional context of the error
+    reason: Option<ErrorReason>,
+    /// boxed span-aware detail; `None` for legacy errors that have no span
+    detail: Option<Box<ErrorDetail>>,
 }
 
 /// provides an error category with optional error context
@@ -62,11 +68,7 @@ impl Error {
             message,
             line,
             reason,
-            primary: None,
-            labels: Vec::new(),
-            source: None,
-            source_name: None,
-            help: None,
+            detail: None,
         }
     }
 
@@ -80,50 +82,62 @@ impl Error {
             message: message.clone(),
             line: None,
             reason: Some(ErrorReason::init(kind, None)),
-            primary: Some((span, message)),
-            labels: Vec::new(),
-            source: None,
-            source_name: None,
-            help: None,
+            detail: Some(Box::new(ErrorDetail {
+                primary: (span, message),
+                labels: Vec::new(),
+                source: None,
+                source_name: None,
+                help: None,
+            })),
         }
     }
 
     /// override the primary label text (defaults to the error message).
     pub fn with_primary_label(mut self, label: impl Into<String>) -> Self {
-        if let Some((sp, _)) = self.primary {
-            self.primary = Some((sp, label.into()));
+        if let Some(d) = &mut self.detail {
+            d.primary.1 = label.into();
         }
         self
     }
 
     /// add a secondary label to the report.
     pub fn with_label(mut self, span: Span, label: impl Into<String>) -> Self {
-        self.labels.push((span, label.into()));
+        if let Some(d) = &mut self.detail {
+            d.labels.push((span, label.into()));
+        }
         self
     }
 
     /// attach the source string so ariadne can render snippets.
     pub fn with_source(mut self, source: Arc<String>) -> Self {
-        self.source = Some(source);
+        if let Some(d) = &mut self.detail {
+            d.source = Some(source);
+        }
         self
     }
 
     /// attach a human-readable source name (e.g. file path).
     pub fn with_source_name(mut self, name: impl Into<String>) -> Self {
-        self.source_name = Some(name.into());
+        if let Some(d) = &mut self.detail {
+            d.source_name = Some(name.into());
+        }
         self
     }
 
     /// attach a help/hint line shown beneath the snippet (e.g. "did you mean foo?").
     pub fn with_help(mut self, help: impl Into<String>) -> Self {
-        self.help = Some(help.into());
+        if let Some(d) = &mut self.detail {
+            d.help = Some(help.into());
+        }
         self
     }
 
     /// attach both the source text and name from a [`SourceFile`].
     pub fn with_source_file(mut self, file: &SourceFile) -> Self {
-        self.source = Some(Arc::clone(&file.text));
-        self.source_name = Some(file.name.to_string());
+        if let Some(d) = &mut self.detail {
+            d.source = Some(Arc::clone(&file.text));
+            d.source_name = Some(file.name.to_string());
+        }
         self
     }
 
@@ -139,8 +153,11 @@ impl Error {
     /// renders the error to stderr without terminating. used by call sites that already
     /// own their control flow (e.g. anything returning `Result`).
     pub fn report_to_stderr(&self) {
-        if let (Some(src), Some((sp, primary_label))) = (&self.source, &self.primary) {
-            let name: &str = self.source_name.as_deref().unwrap_or("<source>");
+        if let Some(d) = &self.detail
+            && let Some(src) = &d.source
+        {
+            let name: &str = d.source_name.as_deref().unwrap_or("<source>");
+            let (sp, primary_label) = &d.primary;
             let mut builder = Report::build(ReportKind::Error, (name, sp.start..sp.end))
                 .with_message(&self.message)
                 .with_label(
@@ -148,20 +165,21 @@ impl Error {
                         .with_message(primary_label)
                         .with_color(Color::Red),
                 );
-            for (lsp, label) in &self.labels {
+            for (lsp, label) in &d.labels {
                 builder = builder.with_label(
                     Label::new((name, lsp.start..lsp.end))
                         .with_message(label)
                         .with_color(Color::Yellow),
                 );
             }
-            if let Some(help) = &self.help {
+            if let Some(help) = &d.help {
                 builder = builder.with_help(help);
             }
             let _ = builder.finish().eprint((name, Source::from(src.as_str())));
-        } else {
-            self.fallback_text();
+            return;
         }
+
+        self.fallback_text();
     }
 
     /// legacy text rendering kept verbatim from the original implementation.

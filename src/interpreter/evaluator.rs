@@ -113,7 +113,7 @@ impl Evaluator {
             Value::Values(items) => {
                 let inner = items
                     .first()
-                    .map(|v| Self::infer_type(v))
+                    .map(Self::infer_type)
                     .unwrap_or(TypeAnnotation::Null);
                 TypeAnnotation::Array(Box::new(inner))
             }
@@ -293,18 +293,18 @@ impl Evaluator {
             self.environment = saved_env;
             self.return_value = saved_return;
 
-            if let Some(expected) = &return_type {
-                if *expected != TypeAnnotation::Null {
-                    let actual = Self::infer_type(&result);
-                    if *expected != actual {
-                        return Err(self.err(
-                            format!(
-                                "function '' declared to return {:?} but returned {:?}",
-                                expected, actual
-                            ),
-                            span,
-                        ));
-                    }
+            if let Some(expected) = &return_type
+                && *expected != TypeAnnotation::Null
+            {
+                let actual = Self::infer_type(&result);
+                if *expected != actual {
+                    return Err(self.err(
+                        format!(
+                            "function '' declared to return {:?} but returned {:?}",
+                            expected, actual
+                        ),
+                        span,
+                    ));
                 }
             }
 
@@ -379,18 +379,18 @@ impl Evaluator {
                 // Return-type check: skip when the annotation is Null (i.e. no
                 // `->` was written) — that means the function is void and the
                 // return value is intentionally ignored (Bug 3 fix).
-                if let Some(expected) = &return_type {
-                    if *expected != TypeAnnotation::Null {
-                        let actual = Self::infer_type(&result);
-                        if *expected != actual {
-                            return Err(self.err(
-                                format!(
-                                    "function '{}' declared to return {:?} but returned {:?}",
-                                    path[0], expected, actual
-                                ),
-                                span,
-                            ));
-                        }
+                if let Some(expected) = &return_type
+                    && *expected != TypeAnnotation::Null
+                {
+                    let actual = Self::infer_type(&result);
+                    if *expected != actual {
+                        return Err(self.err(
+                            format!(
+                                "function '{}' declared to return {:?} but returned {:?}",
+                                path[0], expected, actual
+                            ),
+                            span,
+                        ));
                     }
                 }
 

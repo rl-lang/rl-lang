@@ -133,15 +133,13 @@ impl Parser {
         match self.peek() {
             TokenType::LeftBracket => {
                 self.advance();
-                match self.parse_param_type()? {
-                    a => match self.peek() {
-                        TokenType::RightBracket => {
-                            self.advance();
-                            Ok(Box::new(TypeAnnotation::Array(Box::new(a))))
-                        }
-
-                        _ => Err(self.err("expected ']'", self.peek_span())),
-                    },
+                let a = self.parse_param_type()?;
+                match self.peek() {
+                    TokenType::RightBracket => {
+                        self.advance();
+                        Ok(Box::new(TypeAnnotation::Array(Box::new(a))))
+                    }
+                    _ => Err(self.err("expected ']'", self.peek_span())),
                 }
             }
 

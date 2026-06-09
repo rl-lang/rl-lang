@@ -13,16 +13,16 @@ use super::{
     utils::source::SourceFile,
 };
 
-pub fn validate_source_arg(arguments: &[String]) -> Result<String, ()> {
+pub fn validate_source_arg(arguments: &[String]) -> Result<String, &'static str> {
     let path = arguments.get(2).ok_or_else(|| {
         Error::init(
             "no source file provided".to_string(),
             None,
             Some(ErrorReason::init(Reason::Compile, None)),
         )
-        .print_error()
+        .print_error();
+        "no source file provided"
     })?;
-
     if !path.ends_with(".rl") {
         Error::init(
             "file extension is not .rl".to_string(),
@@ -30,45 +30,40 @@ pub fn validate_source_arg(arguments: &[String]) -> Result<String, ()> {
             Some(ErrorReason::init(Reason::Compile, None)),
         )
         .print_error();
-        return Err(());
+        return Err("file extension is not .rl");
     }
-
     std::fs::read_to_string(path).map_err(|_| {
         Error::init(
             "failed to read file".to_string(),
             None,
             Some(ErrorReason::init(Reason::Compile, None)),
         )
-        .print_error()
+        .print_error();
+        "failed to read file"
     })
 }
-
 pub fn lexing_loop(source: SourceFile) -> Vec<Token> {
     #[cfg(feature = "debug")]
     info!("lexing the source file...");
-    let tokens = match Tokenizer::lex(source.clone()) {
+    match Tokenizer::lex(source.clone()) {
         Ok(t) => t,
         Err(e) => {
             e.report_to_stderr();
             std::process::exit(1);
         }
-    };
-
-    tokens
+    }
 }
 
 pub fn parsing_loop(source: SourceFile, tokens: Vec<Token>) -> Vec<Statement> {
     #[cfg(feature = "debug")]
     info!("parsing the tokens into ast tree...");
-    let statements = match Parser::parse(tokens, source.clone()) {
+    match Parser::parse(tokens, source.clone()) {
         Ok(s) => s,
         Err(e) => {
             e.report_to_stderr();
             std::process::exit(1);
         }
-    };
-
-    statements
+    }
 }
 
 #[cfg(feature = "eval")]

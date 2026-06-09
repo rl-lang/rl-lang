@@ -8,12 +8,12 @@ pub fn std_is_prime(_: &mut Evaluator, x: i64) -> bool {
     if x < 4 {
         return true;
     }
-    if x % 2 == 0 || x % 3 == 0 {
+    if x.is_multiple_of(2) || x.is_multiple_of(3) {
         return false;
     }
     let mut i = 5;
     while i * i <= x {
-        if x % i == 0 || x % (i + 2) == 0 {
+        if x.is_multiple_of(i) || x.is_multiple_of(i + 2) {
             return false;
         }
         i += 6;

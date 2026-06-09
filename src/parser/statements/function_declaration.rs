@@ -36,7 +36,7 @@ impl Parser {
                     self.advance();
                     params.push(Param {
                         param_name: p,
-                        param_type: param_type,
+                        param_type,
                     });
                 }
                 _ => return Err(self.err("expected parameter name", self.peek_span())),
@@ -66,7 +66,7 @@ impl Parser {
             StatementKind::FunctionDeclaration {
                 name,
                 params,
-                return_type: return_type,
+                return_type,
                 body,
             },
             span,

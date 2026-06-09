@@ -187,20 +187,16 @@ pub fn run_repl(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
                 }
 
                 // backspace
-                (_, KeyCode::Backspace) => {
-                    if cursor_pos > 0 {
-                        let byte_pos = char_to_byte(&input_buf, cursor_pos - 1);
-                        input_buf.remove(byte_pos);
-                        cursor_pos -= 1;
-                    }
+                (_, KeyCode::Backspace) if cursor_pos > 0 => {
+                    let byte_pos = char_to_byte(&input_buf, cursor_pos - 1);
+                    input_buf.remove(byte_pos);
+                    cursor_pos -= 1;
                 }
 
                 // delete
-                (_, KeyCode::Delete) => {
-                    if cursor_pos < input_buf.chars().count() {
-                        let byte_pos = char_to_byte(&input_buf, cursor_pos);
-                        input_buf.remove(byte_pos);
-                    }
+                (_, KeyCode::Delete) if cursor_pos < input_buf.chars().count() => {
+                    let byte_pos = char_to_byte(&input_buf, cursor_pos);
+                    input_buf.remove(byte_pos);
                 }
 
                 // word jump (ctrl+left / ctrl+right)
@@ -229,16 +225,12 @@ pub fn run_repl(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
                 }
 
                 // cursor movement
-                (_, KeyCode::Left) => {
-                    if cursor_pos > 0 {
-                        cursor_pos -= 1;
-                    }
+                (_, KeyCode::Left) if cursor_pos > 0 => {
+                    cursor_pos = cursor_pos.saturating_sub(1);
                 }
 
-                (_, KeyCode::Right) => {
-                    if cursor_pos < input_buf.chars().count() {
-                        cursor_pos += 1;
-                    }
+                (_, KeyCode::Right) if cursor_pos < input_buf.chars().count() => {
+                    cursor_pos += 1;
                 }
 
                 (_, KeyCode::Home) => cursor_pos = 0,

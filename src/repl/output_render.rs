@@ -11,8 +11,8 @@ pub fn render_output(output: &[OutputLine]) -> Vec<Line<'static>> {
         .map(|line| match line {
             OutputLine::Input(s) => {
                 // strips ".. "
-                let (prefix, code) = if s.starts_with(".. ") {
-                    (".. ", &s[3..])
+                let (prefix, code) = if let Some(stripped) = s.strip_prefix(".. ") {
+                    (".. ", stripped)
                 } else {
                     (">> ", s.as_str())
                 };
@@ -26,8 +26,8 @@ pub fn render_output(output: &[OutputLine]) -> Vec<Line<'static>> {
                 Line::from(spans)
             }
             OutputLine::ValidInput(s) => {
-                let (prefix, code) = if s.starts_with(".. ") {
-                    (".. ", &s[3..])
+                let (prefix, code) = if let Some(stripped) = s.strip_prefix(".. ") {
+                    (".. ", stripped)
                 } else {
                     (">> ", s.as_str())
                 };

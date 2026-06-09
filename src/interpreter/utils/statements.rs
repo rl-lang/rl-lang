@@ -284,14 +284,12 @@ impl Evaluator {
                 )?;
 
                 let snapshot = self.environment.clone();
-                if let Some(scope) = self.environment.last_mut() {
-                    if let Some(crate::interpreter::evaluator::EnvironmentItem::PItem(p)) =
+                if let Some(scope) = self.environment.last_mut()
+                    && let Some(crate::interpreter::evaluator::EnvironmentItem::PItem(p)) =
                         scope.get_mut(name)
-                    {
-                        if let Value::Function { captured_env, .. } = &mut p.value {
-                            *captured_env = snapshot;
-                        }
-                    }
+                    && let Value::Function { captured_env, .. } = &mut p.value
+                {
+                    *captured_env = snapshot;
                 }
             }
 
