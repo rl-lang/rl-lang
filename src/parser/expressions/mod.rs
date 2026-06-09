@@ -301,7 +301,6 @@ impl Parser {
                         }
                     }
 
-                    let expr = Expression::new(ExpressionKind::Identifier(name), ident_span);
                     return self.parse_postfix(expr, start);
                 }
                 let expr = Expression::new(ExpressionKind::Identifier(name), ident_span);
