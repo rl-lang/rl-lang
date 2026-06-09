@@ -3,13 +3,18 @@ use crate::{
     utils::errors::Error,
 };
 
-pub fn std_max(_: &mut Evaluator, a: Value, b: Value) -> Value {
+pub fn std_max(_: &mut Evaluator, a: Value, b: Value) -> Result<Value, Error> {
     match (a, b) {
-        (Value::Integer(a), Value::Integer(b)) => Value::Integer(a.max(b)),
-        (Value::Float(a), Value::Float(b)) => Value::Float(a.max(b)),
-        _ => {
-            Error::init("".to_string(), None, None).print_error();
-            unreachable!()
-        }
+        (Value::Integer(a), Value::Integer(b)) => Ok(Value::Integer(a.max(b))),
+        (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a.max(b))),
+        (a, b) => Err(Error::init(
+            format!(
+                "max() expects a number, got ({}, {})",
+                a.type_name(),
+                b.type_name()
+            ),
+            None,
+            None,
+        )),
     }
 }

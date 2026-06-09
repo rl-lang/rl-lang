@@ -3,13 +3,14 @@ use crate::{
     utils::errors::Error,
 };
 
-pub fn std_log(_: &mut Evaluator, a: Value) -> Value {
+pub fn std_log(_: &mut Evaluator, a: Value) -> Result<Value, Error> {
     match a {
-        Value::Integer(i) => Value::Float((i as f64).ln()),
-        Value::Float(f) => Value::Float(f.ln()),
-        _ => {
-            Error::init("".to_string(), None, None).print_error();
-            unreachable!()
-        }
+        Value::Integer(i) => Ok(Value::Float((i as f64).ln())),
+        Value::Float(f) => Ok(Value::Float(f.ln())),
+        other => Err(Error::init(
+            format!("log() expects a number, got {}", other.type_name()),
+            None,
+            None,
+        )),
     }
 }

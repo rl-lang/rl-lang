@@ -3,13 +3,14 @@ use crate::{
     utils::errors::Error,
 };
 
-pub fn std_sqrt(_: &mut Evaluator, a: Value) -> Value {
+pub fn std_sqrt(_: &mut Evaluator, a: Value) -> Result<Value, Error> {
     match a {
-        Value::Integer(i) => Value::Float((i as f64).sqrt()),
-        Value::Float(f) => Value::Float(f.sqrt()),
-        _ => {
-            Error::init("".to_string(), None, None).print_error();
-            unreachable!()
-        }
+        Value::Integer(i) => Ok(Value::Float((i as f64).sqrt())),
+        Value::Float(f) => Ok(Value::Float(f.sqrt())),
+        other => Err(Error::init(
+            format!("round() expects a number, got {}", other.type_name(),),
+            None,
+            None,
+        )),
     }
 }

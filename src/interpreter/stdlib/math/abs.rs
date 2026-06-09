@@ -4,13 +4,14 @@ use crate::{
 };
 
 /// returns the absolute value of number
-pub fn std_abs(_: &mut Evaluator, a: Value) -> Value {
+pub fn std_abs(_: &mut Evaluator, a: Value) -> Result<Value, Error> {
     match a {
-        Value::Integer(i) => Value::Integer(i.abs()),
-        Value::Float(f) => Value::Float(f.abs()),
-        _ => {
-            Error::init("".to_string(), None, None).print_error();
-            unreachable!()
-        }
+        Value::Integer(i) => Ok(Value::Integer(i.abs())),
+        Value::Float(f) => Ok(Value::Float(f.abs())),
+        other => Err(Error::init(
+            format!("abs() expects a number, got {}", other.type_name()),
+            None,
+            None,
+        )),
     }
 }

@@ -1,7 +1,8 @@
 use crate::interpreter::evaluator::Evaluator;
 use crate::interpreter::values::Value;
+use crate::utils::errors::Error;
 
-pub fn std_println(evaluator: &mut Evaluator, args: Vec<Value>) -> Value {
+pub fn std_println(evaluator: &mut Evaluator, args: Vec<Value>) -> Result<Value, Error> {
     let text = args
         .iter()
         .enumerate()
@@ -20,5 +21,5 @@ pub fn std_println(evaluator: &mut Evaluator, args: Vec<Value>) -> Value {
     } else {
         println!("{}", text);
     }
-    Value::Null
+    Ok(Value::Null)
 }

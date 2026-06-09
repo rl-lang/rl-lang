@@ -3,13 +3,14 @@ use crate::{
     utils::errors::Error,
 };
 
-pub fn std_round(_: &mut Evaluator, a: Value) -> Value {
+pub fn std_round(_: &mut Evaluator, a: Value) -> Result<Value, Error> {
     match a {
-        Value::Integer(i) => Value::Integer(i),
-        Value::Float(f) => Value::Float(f.round()),
-        _ => {
-            Error::init("".to_string(), None, None).print_error();
-            unreachable!()
-        }
+        Value::Integer(i) => Ok(Value::Integer(i)),
+        Value::Float(f) => Ok(Value::Float(f.round())),
+        other => Err(Error::init(
+            format!("round() expects a number, got {}", other.type_name(),),
+            None,
+            None,
+        )),
     }
 }

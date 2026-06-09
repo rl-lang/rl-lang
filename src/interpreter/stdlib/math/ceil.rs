@@ -3,13 +3,14 @@ use crate::{
     utils::errors::Error,
 };
 
-pub fn std_ceil(_: &mut Evaluator, a: Value) -> Value {
+pub fn std_ceil(_: &mut Evaluator, a: Value) -> Result<Value, Error> {
     match a {
-        Value::Integer(i) => Value::Integer(i),
-        Value::Float(f) => Value::Float(f.ceil()),
-        _ => {
-            Error::init("".to_string(), None, None).print_error();
-            unreachable!()
-        }
+        Value::Integer(i) => Ok(Value::Integer(i)),
+        Value::Float(f) => Ok(Value::Float(f.ceil())),
+        other => Err(Error::init(
+            format!("ceil() expects a number, got {}", other.type_name()),
+            None,
+            None,
+        )),
     }
 }
