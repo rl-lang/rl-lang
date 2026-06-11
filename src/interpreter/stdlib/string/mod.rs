@@ -2,6 +2,7 @@ mod bytes;
 mod char_at;
 mod chars;
 mod concat;
+mod contains;
 mod is_empty;
 mod repeat;
 mod reverse;
@@ -27,6 +28,7 @@ pub const KEYWORDS: &[&str] = &[
     "bytes",
     "chars",
     "slice",
+    "contains",
 ];
 
 pub fn module() -> Module {
@@ -44,4 +46,5 @@ pub fn module() -> Module {
         .with_function("chars", chars::std_chars)
         .with_function("reverse", reverse::std_reverse)
         .with_function("slice", slice::std_slice)
+        .with_function("contains", contains::std_cotains)
 }
