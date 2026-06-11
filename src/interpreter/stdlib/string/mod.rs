@@ -1,3 +1,4 @@
+mod repeat;
 mod to_lower;
 mod to_upper;
 mod trim;
@@ -6,7 +7,14 @@ mod trim_start;
 
 use crate::interpreter::native::Module;
 
-pub const KEYWORDS: &[&str] = &["to_lower", "to_upper", "trim", "trim_end", "trim_start"];
+pub const KEYWORDS: &[&str] = &[
+    "to_lower",
+    "to_upper",
+    "trim",
+    "trim_end",
+    "trim_start",
+    "repeat",
+];
 
 pub fn module() -> Module {
     Module::new("str")
@@ -15,4 +23,5 @@ pub fn module() -> Module {
         .with_function("trim", trim::std_trim)
         .with_function("trim_end", trim_end::std_trim_end)
         .with_function("trim_start", trim_start::std_trim_start)
+        .with_function("repeat", repeat::std_repeat)
 }
