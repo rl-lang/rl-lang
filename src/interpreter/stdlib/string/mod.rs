@@ -65,4 +65,7 @@ pub fn module() -> Module {
         .with_function("ends_with", ends_with::std_ends_with)
         .with_function("join", join::std_join)
         .with_function("split", split::std_split)
+        .with_function("pad_right", pad_right::std_pad_right)
+        .with_function("pad_left", pad_left::std_pad_left)
+        .with_function("replace", replace::std_replace)
 }
