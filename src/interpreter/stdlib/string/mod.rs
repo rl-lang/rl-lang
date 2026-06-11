@@ -3,10 +3,12 @@ mod char_at;
 mod chars;
 mod concat;
 mod contains;
+mod ends_with;
 mod is_empty;
 mod repeat;
 mod reverse;
 mod slice;
+mod starts_with;
 mod to_lower;
 mod to_upper;
 mod trim;
@@ -29,6 +31,8 @@ pub const KEYWORDS: &[&str] = &[
     "chars",
     "slice",
     "contains",
+    "starts_with",
+    "ends_with",
 ];
 
 pub fn module() -> Module {
@@ -47,4 +51,6 @@ pub fn module() -> Module {
         .with_function("reverse", reverse::std_reverse)
         .with_function("slice", slice::std_slice)
         .with_function("contains", contains::std_cotains)
+        .with_function("starts_with", starts_with::std_starts_with)
+        .with_function("ends_with", ends_with::std_ends_with)
 }
