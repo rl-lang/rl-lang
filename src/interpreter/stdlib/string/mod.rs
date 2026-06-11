@@ -5,6 +5,7 @@ mod concat;
 mod is_empty;
 mod repeat;
 mod reverse;
+mod slice;
 mod to_lower;
 mod to_upper;
 mod trim;
@@ -25,6 +26,7 @@ pub const KEYWORDS: &[&str] = &[
     "char_at",
     "bytes",
     "chars",
+    "slice",
 ];
 
 pub fn module() -> Module {
@@ -41,4 +43,5 @@ pub fn module() -> Module {
         .with_function("bytes", bytes::std_bytes)
         .with_function("chars", chars::std_chars)
         .with_function("reverse", reverse::std_reverse)
+        .with_function("slice", slice::std_slice)
 }

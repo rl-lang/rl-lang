@@ -3,7 +3,7 @@ use crate::{interpreter::evaluator::Evaluator, utils::errors::Error};
 pub fn std_char_at(_: &mut Evaluator, string: String, index: i64) -> Result<char, Error> {
     let mut chars = string.chars();
     let chars_count = chars.clone().count();
-    if (index as usize + 1) > chars_count {
+    if index as usize >= chars_count {
         return Err(Error::init(
             format!(
                 "index out of bounds string length is {} , used {}",
