@@ -3,7 +3,9 @@ mod char_at;
 mod chars;
 mod concat;
 mod contains;
+mod count;
 mod ends_with;
+mod index_of;
 mod is_empty;
 mod join;
 mod pad_left;
@@ -43,6 +45,8 @@ pub const KEYWORDS: &[&str] = &[
     "pad_right",
     "split",
     "join",
+    "count",
+    "index_of",
 ];
 
 pub fn module() -> Module {
@@ -68,4 +72,6 @@ pub fn module() -> Module {
         .with_function("pad_right", pad_right::std_pad_right)
         .with_function("pad_left", pad_left::std_pad_left)
         .with_function("replace", replace::std_replace)
+        .with_function("count", count::std_count)
+        .with_function("index_of", index_of::std_index_of)
 }
