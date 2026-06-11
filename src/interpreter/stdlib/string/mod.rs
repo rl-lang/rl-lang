@@ -5,6 +5,7 @@ mod concat;
 mod contains;
 mod ends_with;
 mod is_empty;
+mod join;
 mod repeat;
 mod reverse;
 mod slice;
@@ -33,6 +34,7 @@ pub const KEYWORDS: &[&str] = &[
     "contains",
     "starts_with",
     "ends_with",
+    "join",
 ];
 
 pub fn module() -> Module {
@@ -53,4 +55,5 @@ pub fn module() -> Module {
         .with_function("contains", contains::std_cotains)
         .with_function("starts_with", starts_with::std_starts_with)
         .with_function("ends_with", ends_with::std_ends_with)
+        .with_function("join", join::std_join)
 }
