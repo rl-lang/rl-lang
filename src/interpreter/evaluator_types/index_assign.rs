@@ -69,11 +69,11 @@ impl Evaluator {
                     EnvironmentItem::PItem(p) => {
                         let mut current = &mut p.value;
                         for i in &indices[..indices.len() - 1] {
-                            if let Value::Values(items) = current {
+                            if let Value::Values { items, .. } = current {
                                 current = &mut items[*i];
                             }
                         }
-                        if let Value::Values(items) = current {
+                        if let Value::Values { items, .. } = current {
                             items[*indices.last().unwrap()] = val.clone();
                         }
                         return Ok(val);
@@ -81,7 +81,6 @@ impl Evaluator {
                 }
             }
         }
-
         Err(self.err(format!("undefined variable '{}'", root), span))
     }
 }

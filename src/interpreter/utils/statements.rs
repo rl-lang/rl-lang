@@ -17,13 +17,25 @@ impl Evaluator {
                 self.insert_value(name.clone(), val, inferred_type, statement.span)?;
             }
 
-            StatementKind::Array { name, value, .. } => {
+            StatementKind::Array {
+                name,
+                value,
+                type_annotation,
+            } => {
                 let mut items: Vec<Value> = Vec::new();
                 for item in value {
                     items.push(self.evaluate(item)?);
                 }
-                let arr_type = Evaluator::infer_type(&Value::Values(items.clone()));
-                self.insert_value(name.clone(), Value::Values(items), arr_type, statement.span)?;
+                let arr_type = type_annotation.clone();
+                self.insert_value(
+                    name.clone(),
+                    Value::Values {
+                        items_type: arr_type.clone(),
+                        items,
+                    },
+                    arr_type,
+                    statement.span,
+                )?;
             }
 
             StatementKind::ConstantDeclaration { name, value, .. } => {
@@ -32,13 +44,25 @@ impl Evaluator {
                 self.insert_const(name.clone(), val, inferred_type, statement.span)?;
             }
 
-            StatementKind::ConstantArray { name, value, .. } => {
+            StatementKind::ConstantArray {
+                name,
+                value,
+                type_annotation,
+            } => {
                 let mut items: Vec<Value> = Vec::new();
                 for item in value {
                     items.push(self.evaluate(item)?);
                 }
-                let arr_type = Evaluator::infer_type(&Value::Values(items.clone()));
-                self.insert_const(name.clone(), Value::Values(items), arr_type, statement.span)?;
+                let arr_type = type_annotation.clone();
+                self.insert_const(
+                    name.clone(),
+                    Value::Values {
+                        items_type: arr_type.clone(),
+                        items,
+                    },
+                    arr_type,
+                    statement.span,
+                )?;
             }
 
             StatementKind::Expression(expr) => {
@@ -257,7 +281,7 @@ impl Evaluator {
             } => {
                 let arr = self.evaluate(iterable)?;
                 let items = match arr {
-                    Value::Values(items) => items,
+                    Value::Values { items, .. } => items,
                     other => {
                         return Err(self
                             .err("for-each: expected an array", statement.span)

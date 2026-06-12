@@ -113,7 +113,7 @@ impl Evaluator {
             Value::String(_) => TypeAnnotation::String,
             Value::Bool(_) => TypeAnnotation::Bool,
             Value::Char(_) => TypeAnnotation::Char,
-            Value::Values(items) => {
+            Value::Values { items, .. } => {
                 let inner = items
                     .first()
                     .map(Self::infer_type)
@@ -148,7 +148,7 @@ impl Evaluator {
                 let idx = self.evaluate(index)?;
                 self.check_not_null(&idx, index.span)?;
                 match (&arr, &idx) {
-                    (Value::Values(items), Value::Integer(i)) => {
+                    (Value::Values { items, .. }, Value::Integer(i)) => {
                         let i_usize = *i as usize;
                         if i_usize >= items.len() {
                             return Err(self
@@ -176,8 +176,16 @@ impl Evaluator {
                 for e in items {
                     values.push(self.evaluate(e)?);
                 }
-                Value::Values(values)
+                let items_type = values
+                    .first()
+                    .map(Self::infer_type)
+                    .unwrap_or(TypeAnnotation::Null);
+                Value::Values {
+                    items_type,
+                    items: values,
+                }
             }
+
             ExpressionKind::IndexAssign {
                 target,
                 index,
