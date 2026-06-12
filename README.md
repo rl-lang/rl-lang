@@ -227,8 +227,8 @@ Import with `get <names> from std::<module>`.
 | `log2(x)`         | base-2 logarithm                                |
 | `log10(x)`        | base-10 logarithm                               |
 | `exp(x)`          | eˣ                                              |
-| `degrees(x)`      | radians → degrees                               |
-| `radians(x)`      | degrees → radians                               |
+| `degrees(x)`      | radians -> degrees                               |
+| `radians(x)`      | degrees -> radians                               |
 | `hypot(a, b)`     | hypotenuse                                      |
 | `gcd(a, b)`       | greatest common divisor                         |
 | `lcm(a, b)`       | least common multiple                           |
@@ -299,8 +299,6 @@ Install the [rl-lang extension](https://github.com/MohamedGonem/vscode-rl) for s
 ### Tree-sitter
 
 A Tree-sitter grammar is available at [MohamedGonem/tree-sitter-rl](https://github.com/MohamedGonem/tree-sitter-rl) for editors that support it (Neovim, Helix, Zed, etc.).
-
-Highlight queries are also bundled in this repo at `highlight/highlights.scm`.
 
 ## Benchmarks
 
