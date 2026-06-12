@@ -1,6 +1,8 @@
 use crate::interpreter::native::Module;
 
 mod arr_concat;
+mod arr_first;
+mod arr_last;
 mod arr_reverse;
 mod insert;
 mod pop;
@@ -14,6 +16,8 @@ pub const KEYWORDS: &[&str] = &[
     "remove",
     "arr_reverse",
     "arr_concat",
+    "arr_first",
+    "arr_last",
 ];
 
 pub fn module() -> Module {
@@ -24,4 +28,6 @@ pub fn module() -> Module {
         .with_function("remove", remove::std_remove)
         .with_function("arr_reverse", arr_reverse::std_arr_reverse)
         .with_function("arr_concat", arr_concat::std_arr_concat)
+        .with_function("arr_first", arr_first::std_arr_first)
+        .with_function("arr_last", arr_last::std_arr_last)
 }
