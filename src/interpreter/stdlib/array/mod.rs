@@ -4,8 +4,9 @@ mod insert;
 mod pop;
 mod push;
 mod remove;
+mod rev;
 
-pub const KEYWORDS: &[&str] = &["push", "pop", "insert", "remove"];
+pub const KEYWORDS: &[&str] = &["push", "pop", "insert", "remove", "rev"];
 
 pub fn module() -> Module {
     Module::new("array")
@@ -13,4 +14,5 @@ pub fn module() -> Module {
         .with_function("pop", pop::std_pop)
         .with_function("insert", insert::std_insert)
         .with_function("remove", remove::std_remove)
+        .with_function("rev", rev::std_rev)
 }
