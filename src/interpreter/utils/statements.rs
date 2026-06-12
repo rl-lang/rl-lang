@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    ast::statements::{Statement, StatementKind},
+    ast::statements::{Statement, StatementKind, TypeAnnotation},
     interpreter::{evaluator::Evaluator, values::Value},
     lexer::tokenizer::Tokenizer,
     parser::parser_logic::Parser,
@@ -24,7 +24,18 @@ impl Evaluator {
             } => {
                 let mut items: Vec<Value> = Vec::new();
                 for item in value {
-                    items.push(self.evaluate(item)?);
+                    let val = self.evaluate(item)?;
+                    let val_type = Self::infer_type(&val);
+                    if val_type != *type_annotation && val_type != TypeAnnotation::Null {
+                        return Err(self.err(
+                            format!(
+                                "type mismatch: array expects {:?}, got {:?}",
+                                type_annotation, val_type
+                            ),
+                            item.span,
+                        ));
+                    }
+                    items.push(val);
                 }
                 let arr_type = type_annotation.clone();
                 self.insert_value(
@@ -37,7 +48,6 @@ impl Evaluator {
                     statement.span,
                 )?;
             }
-
             StatementKind::ConstantDeclaration { name, value, .. } => {
                 let val = self.evaluate(value)?;
                 let inferred_type = Evaluator::infer_type(&val);
@@ -51,7 +61,18 @@ impl Evaluator {
             } => {
                 let mut items: Vec<Value> = Vec::new();
                 for item in value {
-                    items.push(self.evaluate(item)?);
+                    let val = self.evaluate(item)?;
+                    let val_type = Self::infer_type(&val);
+                    if val_type != *type_annotation && val_type != TypeAnnotation::Null {
+                        return Err(self.err(
+                            format!(
+                                "type mismatch: array expects {:?}, got {:?}",
+                                type_annotation, val_type
+                            ),
+                            item.span,
+                        ));
+                    }
+                    items.push(val);
                 }
                 let arr_type = type_annotation.clone();
                 self.insert_const(
@@ -64,7 +85,6 @@ impl Evaluator {
                     statement.span,
                 )?;
             }
-
             StatementKind::Expression(expr) => {
                 self.evaluate(expr)?;
             }

@@ -1,5 +1,8 @@
 use crate::{
-    ast::nodes::{Expression, ExpressionKind},
+    ast::{
+        nodes::{Expression, ExpressionKind},
+        statements::TypeAnnotation,
+    },
     interpreter::{
         evaluator::{EnvironmentItem, Evaluator},
         values::Value,
@@ -73,7 +76,19 @@ impl Evaluator {
                                 current = &mut items[*i];
                             }
                         }
-                        if let Value::Values { items, .. } = current {
+                        if let Value::Values { items_type, items } = current {
+                            let val_type = Self::infer_type(&val);
+                            if val_type != *items_type && val_type != TypeAnnotation::Null {
+                                let err = Error::init(
+                                    format!(
+                                        "type mismatch: array is {:?}, cannot assign {:?}",
+                                        items_type, val_type
+                                    ),
+                                    None,
+                                    None,
+                                );
+                                return Err(err);
+                            }
                             items[*indices.last().unwrap()] = val.clone();
                         }
                         return Ok(val);
