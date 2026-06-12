@@ -24,8 +24,8 @@
 - ~`product(arr)`~
 - ~`min_of(arr)`~
 - ~`max_of(arr)`~
-- `first(arr)`
-- `last(arr)`
-- `is_empty(arr)`
+- ~`first(arr)`~
+- ~`last(arr)`~
+- ~`is_empty(arr)`~
 - `fill(n, val)`
 - `range(start, end, step)`

@@ -2,6 +2,7 @@ use crate::interpreter::native::Module;
 
 mod arr_concat;
 mod arr_first;
+mod arr_is_empty;
 mod arr_last;
 mod arr_max;
 mod arr_min;
@@ -28,6 +29,7 @@ pub const KEYWORDS: &[&str] = &[
     "arr_sum",
     "arr_product",
     "arr_unique",
+    "arr_is_empty",
 ];
 
 pub fn module() -> Module {
@@ -45,4 +47,5 @@ pub fn module() -> Module {
         .with_function("arr_sum", arr_sum::std_arr_sum)
         .with_function("arr_product", arr_product::std_arr_product)
         .with_function("arr_unique", arr_unique::std_arr_unique)
+        .with_function("arr_is_empty", arr_is_empty::std_arr_is_empty)
 }
