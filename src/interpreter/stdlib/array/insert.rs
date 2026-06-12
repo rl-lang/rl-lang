@@ -4,9 +4,22 @@ use crate::{
     utils::errors::Error,
 };
 
-pub fn std_push(_: &mut Evaluator, array: Value, value: Value) -> Result<Value, Error> {
+pub fn std_insert(
+    _: &mut Evaluator,
+    array: Value,
+    value: Value,
+    index: i64,
+) -> Result<Value, Error> {
     match array {
         Value::Values { items_type, items } => {
+            if index as usize >= items.len() {
+                return Err(Error::init(
+                    format!("index out of bounds: {}", index),
+                    None,
+                    None,
+                ));
+            }
+
             let val_type = Evaluator::infer_type(&value);
             if val_type != items_type && val_type != TypeAnnotation::Null {
                 return Err(Error::init(
@@ -19,14 +32,14 @@ pub fn std_push(_: &mut Evaluator, array: Value, value: Value) -> Result<Value, 
                 ));
             }
             let mut v = items;
-            v.push(value);
+            v.insert(index as usize, value);
             Ok(Value::Values {
                 items_type,
                 items: v,
             })
         }
         _ => Err(Error::init(
-            "push() accepts only arrays".to_string(),
+            "push() accepts only arrays and values".to_string(),
             None,
             None,
         )),

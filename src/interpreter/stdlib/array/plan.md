@@ -1,8 +1,8 @@
 # array (next immediate)
-- `push(arr, val)`
-- `pop(arr)`
-- `insert(arr, i, val)`
-- `remove(arr, i)`
+- ~~`push(arr, val)`~~
+- ~~`pop(arr)`~~
+- ~~`insert(arr, i, val)`~~
+- ~~`remove(arr, i)`~~
 - `reverse(arr)`
 - `sort(arr)`
 - `sort_by(arr, fn)`
