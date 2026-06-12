@@ -1,0 +1,15 @@
+# fs
+- `path_exists(p)`
+- `path_is_file(p)`
+- `path_is_dir(p)`
+- `mkdir(p)`
+- `mkdir_all(p)`
+- `rmdir(p)`
+- `list_dir(p)`
+- `list_dir_recursive(p)`
+- `copy_file(src, dst)`
+- `move_file(src, dst)`
+- `file_size(p)`
+- `file_modified(p)`
+- `temp_dir()`
+- `temp_file()`
