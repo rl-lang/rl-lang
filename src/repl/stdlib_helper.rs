@@ -72,7 +72,7 @@ pub fn stdlib_entries() -> Vec<StdEntry> {
                 ("PHI()", "golden ratio (~1.618)"),
                 ("PI()", "π (~3.14159)"),
                 ("SQRT_2()", "square root of 2 (~1.414)"),
-                ("TUA()", "τ = 2π (~6.283)"),
+                ("TAU()", "τ = 2π (~6.283)"),
             ],
         },
         StdEntry {
