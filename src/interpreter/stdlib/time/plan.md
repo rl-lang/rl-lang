@@ -1,0 +1,21 @@
+# time
+- `now()`
+- `now_sec()`
+- `elapsed(start)`
+- `format_time(ts, fmt)`
+- `year()`
+- `month()`
+- `day()`
+- `hour()`
+- `minute()`
+- `second()`
+- `is_leap_year(y)`
+- `date_add(ts, days)`
+- `date_sub(ts, days)`
+- `date_diff(ts1, ts2)`
+- `weekday(ts)`
+- `week_of_year(ts)`
+- `days_in_month(year, month)`
+- `parse_date(s, fmt)`
+- `timezone_offset()`
+- `utc_now()`
