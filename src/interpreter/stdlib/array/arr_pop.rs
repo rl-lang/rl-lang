@@ -11,7 +11,7 @@ pub fn std_arr_pop(_: &mut Evaluator, array: Value) -> Result<Value, Error> {
         } => {
             if items.is_empty() {
                 return Err(Error::init(
-                    "pop() called on empty array".to_string(),
+                    "arr_pop() called on empty array".to_string(),
                     None,
                     None,
                 ));
@@ -20,7 +20,7 @@ pub fn std_arr_pop(_: &mut Evaluator, array: Value) -> Result<Value, Error> {
             Ok(Value::Values { items_type, items })
         }
         _ => Err(Error::init(
-            "pop() accepts only arrays".to_string(),
+            "arr_pop() accepts only arrays".to_string(),
             None,
             None,
         )),

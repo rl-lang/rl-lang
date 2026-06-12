@@ -11,7 +11,7 @@ pub fn std_arr_reverse(_: &mut Evaluator, array: Value) -> Result<Value, Error> 
             Ok(Value::Values { items_type, items })
         }
         _ => Err(Error::init(
-            "rev() accepts only arrays".to_string(),
+            "arr_reverse() accepts only arrays".to_string(),
             None,
             None,
         )),

@@ -3,7 +3,9 @@ use crate::interpreter::native::Module;
 mod arr_concat;
 mod arr_contains;
 mod arr_count;
+mod arr_fill;
 mod arr_first;
+mod arr_flatten;
 mod arr_index_of;
 mod arr_insert;
 mod arr_is_empty;
@@ -13,8 +15,11 @@ mod arr_min;
 mod arr_pop;
 mod arr_product;
 mod arr_push;
+mod arr_range;
 mod arr_remove;
 mod arr_reverse;
+mod arr_slice;
+mod arr_sort;
 mod arr_sum;
 mod arr_unique;
 
@@ -36,6 +41,11 @@ pub const KEYWORDS: &[&str] = &[
     "arr_count",
     "arr_contains",
     "arr_index_of",
+    "arr_sort",
+    "arr_slice",
+    "arr_flatten",
+    "arr_range",
+    "arr_fill",
 ];
 
 pub fn module() -> Module {
@@ -57,4 +67,9 @@ pub fn module() -> Module {
         .with_function("arr_index_of", arr_index_of::std_arr_index_of)
         .with_function("arr_count", arr_count::std_arr_count)
         .with_function("arr_contains", arr_contains::std_arr_contains)
+        .with_function("arr_range", arr_range::std_arr_range)
+        .with_function("arr_flatten", arr_flatten::std_arr_flatten)
+        .with_function("arr_sort", arr_sort::std_arr_sort)
+        .with_function("arr_fill", arr_fill::std_arr_fill)
+        .with_function("arr_slice", arr_slice::std_arr_slice)
 }

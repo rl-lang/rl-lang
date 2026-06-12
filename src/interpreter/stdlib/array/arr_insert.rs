@@ -39,7 +39,7 @@ pub fn std_arr_insert(
             })
         }
         _ => Err(Error::init(
-            "push() accepts only arrays and values".to_string(),
+            "arr_insert() accepts only arrays and values".to_string(),
             None,
             None,
         )),

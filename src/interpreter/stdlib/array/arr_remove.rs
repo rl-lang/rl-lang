@@ -21,7 +21,7 @@ pub fn std_arr_remove(_: &mut Evaluator, array: Value, index: i64) -> Result<Val
             })
         }
         _ => Err(Error::init(
-            "remove() accepts only arrays".to_string(),
+            "arr_remove() accepts only arrays".to_string(),
             None,
             None,
         )),

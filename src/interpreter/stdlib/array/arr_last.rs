@@ -14,7 +14,7 @@ pub fn std_arr_last(_: &mut Evaluator, array: Value) -> Result<Value, Error> {
             )),
         },
         _ => Err(Error::init(
-            "first() accepts only arrays".to_string(),
+            "arr_last() accepts only arrays".to_string(),
             None,
             None,
         )),

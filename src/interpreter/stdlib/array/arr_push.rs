@@ -26,7 +26,7 @@ pub fn std_arr_push(_: &mut Evaluator, array: Value, value: Value) -> Result<Val
             })
         }
         _ => Err(Error::init(
-            "push() accepts only arrays".to_string(),
+            "arr_push() accepts only arrays".to_string(),
             None,
             None,
         )),

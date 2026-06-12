@@ -33,7 +33,7 @@ pub fn std_arr_concat(_: &mut Evaluator, array1: Value, array2: Value) -> Result
             })
         }
         _ => Err(Error::init(
-            "push() accepts only arrays".to_string(),
+            "arr_concat() accepts only arrays".to_string(),
             None,
             None,
         )),
