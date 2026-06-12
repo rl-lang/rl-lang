@@ -20,6 +20,10 @@ pub fn std_to_string(_: &mut Evaluator, value: Value) -> Result<String, Error> {
             None,
             None,
         )),
-        Value::Null => Ok("null".to_string()),
+        Value::Null => Err(Error::init(
+            format!("cannot parse \"null\" as string"),
+            None,
+            None,
+        )),
     }
 }

@@ -90,7 +90,8 @@ impl Evaluator {
                 .with_module(stdlib::math::module())
                 .with_module(stdlib::display::module())
                 .with_module(stdlib::io::module())
-                .with_module(stdlib::string::module()),
+                .with_module(stdlib::string::module())
+                .with_module(stdlib::types::module()),
         )
     }
 
@@ -425,6 +426,7 @@ impl Evaluator {
                 .chain(stdlib::math::constants::KEYWORDS)
                 .chain(stdlib::io::KEYWORDS)
                 .chain(stdlib::string::KEYWORDS)
+                .chain(stdlib::types::KEYWORDS)
                 .copied();
             if let Some(suggestion) = closest_match(last, candidates) {
                 err = err.with_help(format!("did you mean `{}`?", suggestion));

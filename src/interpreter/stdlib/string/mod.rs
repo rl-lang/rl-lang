@@ -16,10 +16,7 @@ mod reverse;
 mod slice;
 mod split;
 mod starts_with;
-mod string_to_float;
-mod string_to_int;
 mod to_lower;
-mod to_string;
 mod to_upper;
 mod trim;
 mod trim_end;
@@ -50,9 +47,6 @@ pub const KEYWORDS: &[&str] = &[
     "join",
     "count",
     "index_of",
-    "string_to_float",
-    "string_to_int",
-    "to_string",
 ];
 
 pub fn module() -> Module {
@@ -80,7 +74,4 @@ pub fn module() -> Module {
         .with_function("replace", replace::std_replace)
         .with_function("count", count::std_count)
         .with_function("index_of", index_of::std_index_of)
-        .with_function("to_string", to_string::std_to_string)
-        .with_function("string_to_float", string_to_float::std_parse_float)
-        .with_function("string_to_int", string_to_int::std_parse_int)
 }
