@@ -83,6 +83,7 @@ impl Evaluator {
                 increment,
                 body,
             } => {
+                self.push_scope();
                 self.evaluate_statement(initializer)?;
                 loop {
                     let v = self.evaluate(condition)?;

@@ -1,0 +1,11 @@
+# process
+- `args`
+- `exit(code)`
+- `env(key)`
+- `set_env(key, val)`
+- `cwd()`
+- `set_cwd(path)`
+- `exec(cmd)`
+- `exec_code(cmd)`
+- `pid()`
+- `sleep(ms)`

@@ -22,7 +22,7 @@ pub mod nan;
 pub mod phi;
 pub mod pi;
 pub mod sqrt_2;
-pub mod tua;
+pub mod tau;
 
 use crate::interpreter::native::Module;
 
@@ -51,6 +51,7 @@ pub const KEYWORDS: &[&str] = &[
     "SQRT_2",
     "EULER_GAMMA",
     "PHI",
+    "TAU",
 ];
 
 pub fn module() -> Module {
@@ -58,7 +59,7 @@ pub fn module() -> Module {
         .with_function("E", e::std_e)
         .with_function("PI", pi::std_pi)
         .with_function("PHI", phi::std_phi)
-        .with_function("TUA", tua::std_tua)
+        .with_function("TAU", tau::std_tau)
         .with_function("INF", inf::std_inf)
         .with_function("NAN", nan::std_nan)
         .with_function("is_inf", is_inf::std_is_inf)

@@ -2,7 +2,7 @@ use crate::ast::nodes::Expression;
 use crate::utils::span::Span;
 
 /// A statement paired with its source span.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Statement {
     pub kind: StatementKind,
     pub span: Span,
@@ -14,7 +14,7 @@ impl Statement {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum StatementKind {
     VariableDeclaration {
         name: String,
@@ -115,7 +115,7 @@ pub enum TypeAnnotation {
     Null,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Param {
     pub param_name: String,
     pub param_type: TypeAnnotation,

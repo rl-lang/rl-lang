@@ -1,0 +1,12 @@
+# io
+- `eprint(msg)`
+- `eprintln(msg)`
+- `read_int()`
+- `read_float()`
+- `read_file(path)`
+- `write_file(path, content)`
+- `append_file(path, content)`
+- `file_exists(path)`
+- `delete_file(path)`
+- `read_lines(path)`
+- `read_bytes(path)`

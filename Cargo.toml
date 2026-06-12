@@ -1,6 +1,6 @@
 [package]
 name = "rl-lang"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "A simple interpreted programming language"
@@ -32,6 +32,10 @@ cranelift = []
 
 [[bench]]
 name = "test_benchmark"
+harness = false
+[[bench]]
+
+name = "v0_1_0"
 harness = false
 
 [[bin]]

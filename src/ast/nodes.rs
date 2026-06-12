@@ -3,7 +3,7 @@ use crate::lexer::tokentypes;
 use crate::utils::span::Span;
 
 /// An expression paired with its source span.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Expression {
     pub kind: ExpressionKind,
     pub span: Span,
@@ -15,7 +15,7 @@ impl Expression {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ExpressionKind {
     Null,
     Integer(i64),
