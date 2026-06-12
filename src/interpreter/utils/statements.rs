@@ -11,12 +11,14 @@ use crate::{
 impl Evaluator {
     pub fn evaluate_statement(&mut self, statement: &Statement) -> Result<(), Error> {
         match &statement.kind {
-            StatementKind::VariableDeclaration { name, value, .. } => {
+            StatementKind::VariableDeclaration {
+                name,
+                value,
+                type_annotation,
+            } => {
                 let val = self.evaluate(value)?;
-                let inferred_type = Evaluator::infer_type(&val);
-                self.insert_value(name.clone(), val, inferred_type, statement.span)?;
+                self.insert_value(name.clone(), val, type_annotation.clone(), statement.span)?;
             }
-
             StatementKind::Array {
                 name,
                 value,
@@ -48,12 +50,14 @@ impl Evaluator {
                     statement.span,
                 )?;
             }
-            StatementKind::ConstantDeclaration { name, value, .. } => {
+            StatementKind::ConstantDeclaration {
+                name,
+                value,
+                type_annotation,
+            } => {
                 let val = self.evaluate(value)?;
-                let inferred_type = Evaluator::infer_type(&val);
-                self.insert_const(name.clone(), val, inferred_type, statement.span)?;
+                self.insert_const(name.clone(), val, type_annotation.clone(), statement.span)?;
             }
-
             StatementKind::ConstantArray {
                 name,
                 value,
