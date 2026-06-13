@@ -15,6 +15,16 @@ fn dec_float() {
 }
 
 #[test]
+fn int_assigned_float_is_error() {
+    assert!(eval_program("dec int x = 1.0").is_err());
+}
+
+#[test]
+fn float_assigned_int_is_error() {
+    assert!(eval_program("dec float x = 1").is_err());
+}
+
+#[test]
 fn int_undefined_variable_is_error() {
     assert!(eval_program("dec int x = y").is_err());
 }
