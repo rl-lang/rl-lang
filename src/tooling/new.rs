@@ -3,7 +3,7 @@ pub fn create_project(name: &str) {
     let toml = format!(
         r#"[project]
 name = "{}"
-version = "v0.0.1"
+version = "0.0.1"
 entry = "main.rl"
 "#,
         name
