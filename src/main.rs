@@ -31,7 +31,17 @@ enum Commands {
     Dev,
 
     /// Create a new project directory
-    New { name: String },
+    New {
+        /// Name for the project
+        name: String,
+    },
+
+    /// Print language reference and stdlib documentation
+    // will be useful for multi use hehehe
+    Docs {
+        /// Topic to show (WIP)
+        topic: Option<String>,
+    },
 
     /// Start the LSP server
     #[cfg(feature = "lsp")]
@@ -60,6 +70,10 @@ fn main() {
         Commands::Dev => {}
 
         Commands::New { .. } => {}
+
+        // will move stdlib helper from repl to docs/ as single source of truth
+        // not because i am lazy... really...
+        Commands::Docs { .. } => {}
 
         Commands::Repl => {
             #[cfg(feature = "repl_tui")]
