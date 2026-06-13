@@ -204,6 +204,11 @@ impl Error {
             }
         }
     }
+
+    // adds a way to extract bytes from span in Error
+    pub fn span(&self) -> Option<crate::utils::span::Span> {
+        self.detail.as_ref().map(|d| d.primary.0)
+    }
 }
 
 impl ErrorReason {
