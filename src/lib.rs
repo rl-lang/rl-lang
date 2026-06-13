@@ -3,6 +3,8 @@ pub mod ast;
 pub mod interpreter;
 pub mod lexer;
 pub mod logic_loops;
+#[cfg(feature = "lsp")]
+pub mod lsp;
 pub mod parser;
 #[cfg(feature = "repl_tui")]
 pub mod repl;
