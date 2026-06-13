@@ -1,107 +1,64 @@
-#[cfg(feature = "debug")]
-use log::{debug, info};
+use clap::{Parser, Subcommand};
+use std::path::PathBuf;
 
+use rl_lang::logic_loops::{eval_loop, lexing_loop, parsing_loop};
 #[cfg(feature = "lsp")]
 use rl_lang::lsp::run_lsp;
-
-use rl_lang::logic_loops::{eval_loop, lexing_loop, parsing_loop, validate_source_arg};
-
-use rl_lang::utils::{
-    errors::{Error, ErrorReason, Reason},
-    source::SourceFile,
-};
-
 #[cfg(feature = "repl_tui")]
 use rl_lang::repl;
-
 #[cfg(feature = "repl_terminal")]
 use rl_lang::repl_terminal;
+use rl_lang::utils::source::SourceFile;
 
-/// entry point for `rl` interpreter
-///
-/// # usage
-/// ```bash
-/// rl run <source.rl>
-/// ```
-///
-/// # phases
-/// 1. **lexing**
-/// 2. **parsing**
-/// 3. **evaluating**
+#[derive(Parser)]
+#[command(name = "rl", version, about = "The rl programming language")]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Run a .rl source file
+    Run {
+        /// Path to the .rl file
+        file: PathBuf,
+    },
+    /// Start the REPL
+    Repl,
+    /// Start the LSP server
+    #[cfg(feature = "lsp")]
+    Lsp,
+}
+
 fn main() {
-    // initializing the logger
-    #[cfg(feature = "debug")]
-    env_logger::Builder::new()
-        .filter_level(log::LevelFilter::Debug)
-        .target(env_logger::Target::Pipe(Box::new(
-            std::fs::File::create("log.txt").unwrap(),
-        )))
-        .init();
-    #[cfg(feature = "debug")]
-    info!("logger initialized");
+    let cli = Cli::parse();
 
-    // arguments
-    #[cfg(feature = "debug")]
-    info!("reading arguments");
+    match cli.command {
+        Commands::Run { file } => {
+            let path = file.to_str().unwrap().to_string();
+            let source_text = std::fs::read_to_string(&file).unwrap_or_else(|_| {
+                eprintln!("error: could not read file '{}'", file.display());
+                std::process::exit(1);
+            });
+            let source = SourceFile::new(&*path, source_text);
+            let tokens = lexing_loop(source.clone());
+            let statements = parsing_loop(source.clone(), tokens);
+            if cfg!(feature = "eval") {
+                eval_loop(source, statements);
+            }
+        }
 
-    let arguments: Vec<String> = std::env::args().collect();
-
-    #[cfg(feature = "debug")]
-    debug!("used arguments [{:?}]", arguments);
-
-    if cfg!(feature = "run") && arguments.len() == 3 && arguments[1] == "run" {
-        #[cfg(feature = "debug")]
-        log::info!("starting the interpreter");
-    } else if cfg!(feature = "repl") && arguments.len() == 2 && arguments[1] == "repl" {
-        if cfg!(feature = "repl_tui") {
-            #[cfg(feature = "debug")]
-            log::info!("starting repl TUI");
+        Commands::Repl => {
+            #[cfg(feature = "repl_tui")]
             repl::start_repl();
-        } else if cfg!(feature = "repl_terminal") {
-            #[cfg(feature = "debug")]
-            log::info!("starting repl terminal shell");
-            println!("[Starting REPL shell]");
             #[cfg(feature = "repl_terminal")]
             repl_terminal::start_repl();
         }
-        return;
-    } else if cfg!(feature = "lsp") && arguments.len() == 2 && arguments[1] == "lsp" {
+
         #[cfg(feature = "lsp")]
-        tokio::runtime::Runtime::new().unwrap().block_on(run_lsp());
-        return;
-    } else {
-        println!("Error: wrong usage");
-        println!("\n[Interpreter Mode]");
-        println!("rl run <source-file.rl>\t\t(rl run test.rl)");
-        println!("\n[REPL Mode]");
-        println!("rl repl");
-        return;
-    }
-
-    // check the source file if it ends with rl extension and then parse it to string
-    if !arguments[2].ends_with(".rl") {
-        Error::init(
-            "file extension is not .rl".to_string(),
-            None,
-            Some(ErrorReason::init(Reason::Compile, None)),
-        )
-        .print_error();
-        return;
-    }
-
-    let source_file = validate_source_arg(&arguments).unwrap_or_else(|_| std::process::exit(1));
-
-    println!("[Parsing source file: {}]", arguments[2]);
-    let source = SourceFile::new(arguments[2].as_str(), source_file);
-
-    // phase one: lexing the source file into tokens
-    let tokens = lexing_loop(source.clone());
-
-    // phase two: parsing the tokens into ast tree
-    let statements = parsing_loop(source.clone(), tokens);
-
-    // phase three: evaluating the ast tree
-    if cfg!(feature = "eval") {
-        eval_loop(source, statements);
+        Commands::Lsp => {
+            tokio::runtime::Runtime::new().unwrap().block_on(run_lsp());
+        }
     }
 }
