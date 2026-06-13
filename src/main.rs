@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
+use rl_lang::tooling::new::create_project;
 use std::path::PathBuf;
 
-use rl_lang::logic_loops::{eval_loop, lexing_loop, parsing_loop};
 #[cfg(feature = "lsp")]
 use rl_lang::lsp::run_lsp;
 #[cfg(feature = "repl_tui")]
@@ -9,6 +9,10 @@ use rl_lang::repl;
 #[cfg(feature = "repl_terminal")]
 use rl_lang::repl_terminal;
 use rl_lang::utils::source::SourceFile;
+use rl_lang::{
+    logic_loops::{eval_loop, lexing_loop, parsing_loop},
+    tooling::dev::read_rl_toml,
+};
 
 #[derive(Parser)]
 #[command(name = "rl", version, about = "The rl programming language")]
@@ -66,10 +70,27 @@ fn main() {
             }
         }
 
-        // will add in next branch
-        Commands::Dev => {}
-
-        Commands::New { .. } => {}
+        Commands::Dev => {
+            let config = read_rl_toml();
+            let path = std::path::PathBuf::from(&config.project.entry);
+            let source_text = std::fs::read_to_string(&path).unwrap_or_else(|_| {
+                eprintln!(
+                    "error: could not read entry file '{}'",
+                    config.project.entry
+                );
+                std::process::exit(1);
+            });
+            println!("[{}] v{}", config.project.name, config.project.version);
+            let source = SourceFile::new(&*config.project.entry, source_text);
+            let tokens = lexing_loop(source.clone());
+            let statements = parsing_loop(source.clone(), tokens);
+            if cfg!(feature = "eval") {
+                eval_loop(source, statements);
+            }
+        }
+        Commands::New { name } => {
+            create_project(&name);
+        }
 
         // will move stdlib helper from repl to docs/ as single source of truth
         // not because i am lazy... really...

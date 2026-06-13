@@ -1,4 +1,4 @@
-fn create_project(name: &str) {
+pub fn create_project(name: &str) {
     // the project coniguration file
     let toml = format!(
         r#"[project]
