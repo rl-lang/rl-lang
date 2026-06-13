@@ -1,6 +1,9 @@
 #[cfg(feature = "debug")]
 use log::{debug, info};
 
+#[cfg(feature = "lsp")]
+use rl_lang::lsp::run_lsp;
+
 use rl_lang::logic_loops::{eval_loop, lexing_loop, parsing_loop, validate_source_arg};
 
 use rl_lang::utils::{
@@ -61,6 +64,10 @@ fn main() {
             #[cfg(feature = "repl_terminal")]
             repl_terminal::start_repl();
         }
+        return;
+    } else if cfg!(feature = "lsp") && arguments.len() == 2 && arguments[1] == "lsp" {
+        #[cfg(feature = "lsp")]
+        run_lsp();
         return;
     } else {
         println!("Error: wrong usage");
