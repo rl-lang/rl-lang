@@ -17,6 +17,16 @@ impl Evaluator {
                 type_annotation,
             } => {
                 let val = self.evaluate(value)?;
+                let val_type = Self::infer_type(&val);
+                if val_type != *type_annotation && val_type != TypeAnnotation::Null {
+                    return Err(self.err(
+                        format!(
+                            "type mismatch: expected {:?}, got {:?}",
+                            type_annotation, val_type
+                        ),
+                        statement.span,
+                    ));
+                }
                 self.insert_value(name.clone(), val, type_annotation.clone(), statement.span)?;
             }
             StatementKind::Array {
@@ -56,6 +66,16 @@ impl Evaluator {
                 type_annotation,
             } => {
                 let val = self.evaluate(value)?;
+                let val_type = Self::infer_type(&val);
+                if val_type != *type_annotation && val_type != TypeAnnotation::Null {
+                    return Err(self.err(
+                        format!(
+                            "type mismatch: expected {:?}, got {:?}",
+                            type_annotation, val_type
+                        ),
+                        statement.span,
+                    ));
+                }
                 self.insert_const(name.clone(), val, type_annotation.clone(), statement.span)?;
             }
             StatementKind::ConstantArray {
