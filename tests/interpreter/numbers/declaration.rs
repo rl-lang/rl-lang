@@ -4,19 +4,13 @@ use crate::common::eval_program;
 
 #[test]
 fn dec_int() {
-    let evaluator = match eval_program("dec int x = 42") {
-        Ok(e) => e,
-        Err(_) => panic!(),
-    };
+    let evaluator = eval_program("dec int x = 42").unwrap();
     assert_eq!(evaluator.get_value_raw("x"), Some(Value::Integer(42)));
 }
 
 #[test]
 fn dec_float() {
-    let evaluator = match eval_program("dec float x = 42") {
-        Ok(e) => e,
-        Err(_) => panic!(),
-    };
+    let evaluator = eval_program("dec float x = 42").unwrap();
     assert_eq!(evaluator.get_value_raw("x"), Some(Value::Integer(42)));
 }
 
