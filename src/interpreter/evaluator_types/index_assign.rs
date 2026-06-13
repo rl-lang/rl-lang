@@ -77,7 +77,7 @@ impl Evaluator {
                             }
                         }
                         if let Value::Values { items_type, items } = current {
-                            let val_type = Self::infer_type(&val);
+                            let val_type = Self::infer_type(&val, false);
                             if val_type != *items_type && val_type != TypeAnnotation::Null {
                                 let err = Error::init(
                                     format!(

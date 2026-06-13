@@ -7,7 +7,7 @@ use crate::{
 pub fn std_arr_push(_: &mut Evaluator, array: Value, value: Value) -> Result<Value, Error> {
     match array {
         Value::Values { items_type, items } => {
-            let val_type = Evaluator::infer_type(&value);
+            let val_type = Evaluator::infer_type(&value, false);
             if val_type != items_type && val_type != TypeAnnotation::Null {
                 return Err(Error::init(
                     format!(

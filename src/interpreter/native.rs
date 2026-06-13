@@ -123,7 +123,6 @@ impl FromValue for f64 {
     fn from_value(v: Value) -> Result<Self, Error> {
         match v {
             Value::Float(f) => Ok(f),
-            Value::Integer(i) => Ok(i as f64),
             other => Err(Error::init(
                 format!("expected float, got {}", other.type_name()),
                 None,

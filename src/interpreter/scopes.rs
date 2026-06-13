@@ -143,4 +143,14 @@ impl Evaluator {
         }
         Err(self.err(format!("undefined variable '{}'", name), span))
     }
+
+    // tests
+    pub fn get_value_raw(&self, name: &str) -> Option<Value> {
+        for scope in self.environment.iter().rev() {
+            if let Some(EnvironmentItem::PItem(p)) = scope.get(name) {
+                return Some(p.value.clone());
+            }
+        }
+        None
+    }
 }

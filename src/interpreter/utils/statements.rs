@@ -17,6 +17,16 @@ impl Evaluator {
                 type_annotation,
             } => {
                 let val = self.evaluate(value)?;
+                let val_type = Self::infer_type(&val, false);
+                if val_type != *type_annotation && val_type != TypeAnnotation::Null {
+                    return Err(self.err(
+                        format!(
+                            "type mismatch: expected {:?}, got {:?}",
+                            type_annotation, val_type
+                        ),
+                        statement.span,
+                    ));
+                }
                 self.insert_value(name.clone(), val, type_annotation.clone(), statement.span)?;
             }
             StatementKind::Array {
@@ -27,7 +37,7 @@ impl Evaluator {
                 let mut items: Vec<Value> = Vec::new();
                 for item in value {
                     let val = self.evaluate(item)?;
-                    let val_type = Self::infer_type(&val);
+                    let val_type = Self::infer_type(&val, false);
                     if val_type != *type_annotation && val_type != TypeAnnotation::Null {
                         return Err(self.err(
                             format!(
@@ -56,6 +66,16 @@ impl Evaluator {
                 type_annotation,
             } => {
                 let val = self.evaluate(value)?;
+                let val_type = Self::infer_type(&val, true);
+                if val_type != *type_annotation && val_type != TypeAnnotation::Null {
+                    return Err(self.err(
+                        format!(
+                            "type mismatch: expected {:?}, got {:?}",
+                            type_annotation, val_type
+                        ),
+                        statement.span,
+                    ));
+                }
                 self.insert_const(name.clone(), val, type_annotation.clone(), statement.span)?;
             }
             StatementKind::ConstantArray {
@@ -66,7 +86,7 @@ impl Evaluator {
                 let mut items: Vec<Value> = Vec::new();
                 for item in value {
                     let val = self.evaluate(item)?;
-                    let val_type = Self::infer_type(&val);
+                    let val_type = Self::infer_type(&val, false);
                     if val_type != *type_annotation && val_type != TypeAnnotation::Null {
                         return Err(self.err(
                             format!(
@@ -316,7 +336,7 @@ impl Evaluator {
                     }
                 };
                 for item in items {
-                    let item_type = Evaluator::infer_type(&item);
+                    let item_type = Evaluator::infer_type(&item, false);
                     self.push_scope();
                     self.insert_value(variable.clone(), item, item_type, statement.span)?;
 
