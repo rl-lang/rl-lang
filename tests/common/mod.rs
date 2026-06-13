@@ -1,4 +1,8 @@
-use rl_lang::{ast::statements::Statement, utils::source::SourceFile};
+use rl_lang::{
+    ast::statements::Statement,
+    interpreter::evaluator::Evaluator,
+    utils::{errors::Error, source::SourceFile},
+};
 
 pub fn lex(source: &str) -> Vec<rl_lang::lexer::tokentypes::Token> {
     let text = SourceFile::new("test", source.to_string());
@@ -7,4 +11,15 @@ pub fn lex(source: &str) -> Vec<rl_lang::lexer::tokentypes::Token> {
 
 pub fn parse(source: &str) -> Vec<Statement> {
     rl_lang::logic_loops::parsing_loop(SourceFile::new("test", source.to_string()), lex(source))
+}
+
+pub fn eval_program(source: &str) -> Result<Evaluator, Error> {
+    let file = SourceFile::new("test", source.to_string());
+    let tokens = rl_lang::lexer::tokenizer::Tokenizer::lex(file.clone())?;
+    let stmts = rl_lang::parser::parser_logic::Parser::parse(tokens, file.clone())?;
+    let mut evaluator = Evaluator::default().with_stdlib().with_source_file(file);
+    for stmt in &stmts {
+        evaluator.evaluate_statement(stmt)?;
+    }
+    Ok(evaluator)
 }
