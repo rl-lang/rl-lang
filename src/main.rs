@@ -40,6 +40,12 @@ enum Commands {
         name: String,
     },
 
+    /// Checks the file for errors
+    Check {
+        /// Path to the .rl file
+        file: PathBuf,
+    },
+
     /// Print language reference and stdlib documentation
     // will be useful for multi use hehehe
     Docs {
@@ -88,6 +94,19 @@ fn main() {
                 eval_loop(source, statements);
             }
         }
+
+        Commands::Check { file } => {
+            let path = file.to_str().unwrap().to_string();
+            let source_text = std::fs::read_to_string(&file).unwrap_or_else(|_| {
+                eprintln!("error: could not read file '{}'", file.display());
+                std::process::exit(1);
+            });
+            let source = SourceFile::new(&*path, source_text);
+            let tokens = lexing_loop(source.clone());
+            parsing_loop(source.clone(), tokens);
+            println!("ok");
+        }
+
         Commands::New { name } => {
             create_project(&name);
         }
