@@ -11,7 +11,43 @@ fn dec_int() {
 #[test]
 fn dec_float() {
     let evaluator = eval_program("dec float x = 42.0").unwrap();
+    assert_eq!(evaluator.get_value_raw("x"), Some(Value::Float(42.0)));
+}
+
+#[test]
+fn const_int() {
+    let evaluator = eval_program("CONST int x = 42").unwrap();
     assert_eq!(evaluator.get_value_raw("x"), Some(Value::Integer(42)));
+}
+
+#[test]
+fn const_float() {
+    let evaluator = eval_program("CONST float x = 42.0").unwrap();
+    assert_eq!(evaluator.get_value_raw("x"), Some(Value::Float(42.0)));
+}
+
+#[test]
+fn assign_int() {
+    let evaluator = eval_program("dec int x = 42\nx = 3").unwrap();
+    assert_eq!(evaluator.get_value_raw("x"), Some(Value::Integer(3)));
+}
+
+#[test]
+fn assign_float() {
+    let evaluator = eval_program("dec float x = 42.0\nx = 3.0").unwrap();
+    assert_eq!(evaluator.get_value_raw("x"), Some(Value::Float(3.0)));
+}
+
+#[test]
+fn compound_assign_int() {
+    let evaluator = eval_program("dec int x = 42\nx += 3").unwrap();
+    assert_eq!(evaluator.get_value_raw("x"), Some(Value::Integer(45)));
+}
+
+#[test]
+fn compound_assign_float() {
+    let evaluator = eval_program("dec float x = 42.0\nx += 3.0").unwrap();
+    assert_eq!(evaluator.get_value_raw("x"), Some(Value::Float(45.0)));
 }
 
 #[test]

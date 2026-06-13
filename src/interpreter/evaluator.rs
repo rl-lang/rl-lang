@@ -106,19 +106,53 @@ impl Evaluator {
     }
 
     /// Infer the [`TypeAnnotation`] of a runtime [`Value`].
-    pub fn infer_type(value: &Value) -> TypeAnnotation {
+    pub fn infer_type(value: &Value, is_const: bool) -> TypeAnnotation {
         match value {
-            Value::Integer(_) => TypeAnnotation::Int,
-            Value::Float(_) => TypeAnnotation::Float,
-            Value::String(_) => TypeAnnotation::String,
-            Value::Bool(_) => TypeAnnotation::Bool,
-            Value::Char(_) => TypeAnnotation::Char,
+            Value::Integer(_) => {
+                if is_const {
+                    TypeAnnotation::CInt
+                } else {
+                    TypeAnnotation::Int
+                }
+            }
+            Value::Float(_) => {
+                if is_const {
+                    TypeAnnotation::CFloat
+                } else {
+                    TypeAnnotation::Float
+                }
+            }
+            Value::String(_) => {
+                if is_const {
+                    TypeAnnotation::CString
+                } else {
+                    TypeAnnotation::String
+                }
+            }
+            Value::Bool(_) => {
+                if is_const {
+                    TypeAnnotation::CBool
+                } else {
+                    TypeAnnotation::Bool
+                }
+            }
+            Value::Char(_) => {
+                if is_const {
+                    TypeAnnotation::CChar
+                } else {
+                    TypeAnnotation::Char
+                }
+            }
             Value::Values { items, .. } => {
                 let inner = items
                     .first()
-                    .map(Self::infer_type)
+                    .map(|v| Self::infer_type(v, false))
                     .unwrap_or(TypeAnnotation::Null);
-                TypeAnnotation::Array(Box::new(inner))
+                if is_const {
+                    TypeAnnotation::CArray(Box::new(inner))
+                } else {
+                    TypeAnnotation::Array(Box::new(inner))
+                }
             }
             Value::Null => TypeAnnotation::Null,
             Value::Function { .. } => TypeAnnotation::Fn,
@@ -178,7 +212,7 @@ impl Evaluator {
                 }
                 let items_type = values
                     .first()
-                    .map(Self::infer_type)
+                    .map(|v| Self::infer_type(v, false))
                     .unwrap_or(TypeAnnotation::Null);
                 Value::Values {
                     items_type,
@@ -218,7 +252,7 @@ impl Evaluator {
             ExpressionKind::Identifier(name) => self.get_value(name, expression.span)?,
             ExpressionKind::Assign { name, value } => {
                 let val = self.evaluate(value)?;
-                let inferred_type = Self::infer_type(&val);
+                let inferred_type = Self::infer_type(&val, false);
                 self.assign_value(name.clone(), val.clone(), inferred_type, expression.span)?;
                 val
             }
@@ -305,7 +339,7 @@ impl Evaluator {
             self.push_scope();
 
             for (param, arg) in params.iter().zip(args) {
-                let arg_type = Self::infer_type(&arg);
+                let arg_type = Self::infer_type(&arg, false);
                 self.insert_value(param.param_name.clone(), arg, arg_type, span)?;
             }
 
@@ -324,7 +358,7 @@ impl Evaluator {
             if let Some(expected) = &return_type
                 && *expected != TypeAnnotation::Null
             {
-                let actual = Self::infer_type(&result);
+                let actual = Self::infer_type(&result, false);
                 if *expected != actual {
                     return Err(self.err(
                         format!(
@@ -387,7 +421,7 @@ impl Evaluator {
                 self.push_scope();
 
                 for (param, arg) in params.iter().zip(args) {
-                    let arg_type = Self::infer_type(&arg);
+                    let arg_type = Self::infer_type(&arg, false);
                     self.insert_value(param.param_name.clone(), arg, arg_type, span)?;
                 }
 
@@ -410,7 +444,7 @@ impl Evaluator {
                 if let Some(expected) = &return_type
                     && *expected != TypeAnnotation::Null
                 {
-                    let actual = Self::infer_type(&result);
+                    let actual = Self::infer_type(&result, false);
                     if *expected != actual {
                         return Err(self.err(
                             format!(
