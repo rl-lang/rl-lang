@@ -4,7 +4,6 @@ mod input_eval;
 mod lines_types;
 mod logic_loop;
 mod output_render;
-mod stdlib_helper;
 mod syntax_highlighting;
 mod utils;
 
