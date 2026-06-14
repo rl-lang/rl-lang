@@ -6,7 +6,7 @@ pub static MATH: StdEntry = StdEntry {
     functions: FUNCTIONS,
 };
 
-static FUNCTIONS: &'static [FnEntry] = &[FnEntry {
+static FUNCTIONS: &'static [&'static FnEntry] = &[&FnEntry {
     signature: "abs(number)",
     description: "returns the absolute value of number",
     example: "get std::math::abs\nget std::display::println\n\ndec int x = -1\nx.abs()\t//1",

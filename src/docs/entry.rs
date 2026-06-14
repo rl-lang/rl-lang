@@ -18,7 +18,7 @@ pub struct StdEntry {
     // what is the std entry used for
     pub description: &'static str,
     // std functions
-    pub functions: &'static [FnEntry],
+    pub functions: &'static [&'static FnEntry],
 }
 
 // entry for explaining concepts of `rl` like variables
