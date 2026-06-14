@@ -1,4 +1,5 @@
 pub mod ast;
+pub mod docs;
 #[cfg(feature = "eval")]
 pub mod interpreter;
 pub mod lexer;

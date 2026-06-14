@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use rl_lang::docs;
 use rl_lang::tooling::new::create_project;
 use std::path::PathBuf;
 
@@ -113,7 +114,10 @@ fn main() {
 
         // will move stdlib helper from repl to docs/ as single source of truth
         // not because i am lazy... really...
-        Commands::Docs { .. } => {}
+        Commands::Docs { .. } => {
+            let enteries = docs::entries::stdlib_entries();
+            println!("{}", docs::std_to_markdown(&enteries))
+        }
 
         Commands::Repl => {
             #[cfg(feature = "repl_tui")]

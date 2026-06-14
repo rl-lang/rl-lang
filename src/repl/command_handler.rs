@@ -6,7 +6,7 @@ use crate::{
     interpreter::evaluator::Evaluator,
     lexer::tokenizer::Tokenizer,
     parser::parser_logic::Parser,
-    repl::{lines_types::OutputLine, stdlib_helper::stdlib_entries, utils::push_error},
+    repl::{lines_types::OutputLine, utils::push_error},
     utils::source::SourceFile,
 };
 
@@ -76,7 +76,7 @@ pub fn handle_command(
                     "stdlib modules".to_string(),
                     header,
                 )]));
-                for entry in stdlib_entries() {
+                for entry in crate::docs::entries::stdlib_entries() {
                     output.push(OutputLine::Styled(vec![
                         ("  std".to_string(), sep),
                         ("::".to_string(), sep),
@@ -85,14 +85,16 @@ pub fn handle_command(
                 }
             } else {
                 let mod_name = parts[1].trim();
-                let entries = stdlib_entries();
+                let entries = crate::docs::entries::stdlib_entries();
                 if let Some(entry) = entries.iter().find(|e| e.name == mod_name) {
                     output.push(OutputLine::Styled(vec![
                         ("std".to_string(), sep),
                         ("::".to_string(), sep),
                         (entry.name.to_string(), modname),
                     ]));
-                    for (signature, description) in entry.functions {
+                    for function in entry.functions {
+                        let signature = function.signature;
+                        let description = function.description;
                         let pad = " ".repeat(32_usize.saturating_sub(signature.len()));
                         output.push(OutputLine::Styled(vec![
                             ("  ".to_string(), sep),
