@@ -112,8 +112,6 @@ fn main() {
             create_project(&name);
         }
 
-        // will move stdlib helper from repl to docs/ as single source of truth
-        // not because i am lazy... really...
         Commands::Docs { topic } => {
             let std_entries = docs::entries::stdlib_entries();
             let concept_entries = docs::entries::concept_entries();
