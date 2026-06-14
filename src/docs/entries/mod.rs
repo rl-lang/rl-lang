@@ -9,5 +9,6 @@ pub fn stdlib_entries() -> Vec<&'static StdEntry> {
         &stdlib::display::DISPLAY,
         &stdlib::io::IO,
         &stdlib::arrays::ARRAY,
+        &stdlib::str::STR,
     ]
 }
