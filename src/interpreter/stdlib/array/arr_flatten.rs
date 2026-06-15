@@ -15,7 +15,7 @@ pub fn std_arr_flatten(_: &mut Evaluator, array: Value) -> Result<Value, Error> 
             }
 
             Ok(Value::Values {
-                items_type: items_type,
+                items_type,
                 items: items
                     .into_iter()
                     .flat_map(|v| {

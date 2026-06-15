@@ -5,7 +5,7 @@ pub static MATH: StdEntry = StdEntry {
     functions: FUNCTIONS,
 };
 
-static FUNCTIONS: &'static [&'static FnEntry] = &[
+static FUNCTIONS: &[&FnEntry] = &[
     &ABS, &ACOS, &ASIN, &ATAN, &ATAN2, &CEIL, &CLAMP, &COS, &DEGREES, &EXP, &FACTORIAL, &FIBONACCI,
     &FLOOR, &GCD, &HYPOT, &IS_PRIME, &LCM, &LERP, &LOG, &LOG2, &LOG10, &MAP_RANGE, &MAX, &MIN,
     &MOD, &POW, &RADIANS, &ROUND, &SIGN, &SIN, &SQRT, &TAN,

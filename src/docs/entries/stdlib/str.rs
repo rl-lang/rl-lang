@@ -6,7 +6,7 @@ pub static STR: StdEntry = StdEntry {
     functions: FUNCTIONS,
 };
 
-static FUNCTIONS: &'static [&'static FnEntry] = &[
+static FUNCTIONS: &[&FnEntry] = &[
     &BYTES,
     &CHAR_AT,
     &CHARS,
