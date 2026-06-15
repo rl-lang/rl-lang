@@ -5,7 +5,7 @@ pub static MATH_CONSTS: StdEntry = StdEntry {
     functions: FUNCTIONS,
 };
 
-static FUNCTIONS: &'static [&'static FnEntry] = &[
+static FUNCTIONS: &[&FnEntry] = &[
     &E,
     &EULER_GAMMA,
     &FRAC_1_PI,

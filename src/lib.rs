@@ -9,7 +9,6 @@ pub mod lsp;
 pub mod parser;
 #[cfg(feature = "repl_tui")]
 pub mod repl;
-#[cfg(feature = "repl_terminal")]
-pub mod repl_terminal;
+
 pub mod tooling;
 pub mod utils;

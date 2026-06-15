@@ -6,7 +6,7 @@ pub static ARRAY: StdEntry = StdEntry {
     functions: FUNCTIONS,
 };
 
-static FUNCTIONS: &'static [&'static FnEntry] = &[
+static FUNCTIONS: &[&FnEntry] = &[
     &ARR_CONCAT,
     &ARR_CONTAINS,
     &ARR_COUNT,

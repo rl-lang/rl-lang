@@ -6,7 +6,7 @@ pub static DISPLAY: StdEntry = StdEntry {
     functions: FUNCTIONS,
 };
 
-static FUNCTIONS: &'static [&'static FnEntry] = &[&PRINT, &PRINTLN, &LEN];
+static FUNCTIONS: &[&FnEntry] = &[&PRINT, &PRINTLN, &LEN];
 
 static PRINT: FnEntry = FnEntry {
     signature: "print(x)",

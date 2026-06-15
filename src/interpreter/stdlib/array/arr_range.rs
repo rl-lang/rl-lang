@@ -8,7 +8,7 @@ pub fn std_arr_range(_: &mut Evaluator, start: i64, end: i64, step: i64) -> Valu
         items_type: TypeAnnotation::Int,
         items: (start..end)
             .step_by(step as usize)
-            .map(|v| Value::Integer(v))
+            .map(Value::Integer)
             .collect(),
     }
 }

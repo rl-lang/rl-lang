@@ -211,6 +211,7 @@ impl Parser {
                         path_span,
                     ));
                 }
+                // safe unwrap
                 let name = path.pop().unwrap();
 
                 // is it assignment?
@@ -461,7 +462,7 @@ impl Parser {
                 let method = if let TokenType::Identifier(name) = self.previous() {
                     name
                 } else {
-                    unreachable!()
+                    return Err(self.err("expected method name after '.'", self.peek_span()));
                 };
 
                 // expect (args)

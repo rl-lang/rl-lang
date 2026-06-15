@@ -6,7 +6,7 @@ pub static TYPES: StdEntry = StdEntry {
     functions: FUNCTIONS,
 };
 
-static FUNCTIONS: &'static [&'static FnEntry] = &[
+static FUNCTIONS: &[&FnEntry] = &[
     &IS_BOOL, &IS_CHAR, &IS_FLOAT, &IS_INT, &IS_NULL, &IS_STRING, &TO_BIN, &TO_BOOL, &TO_CHAR,
     &TO_FLOAT, &TO_HEX, &TO_INT, &TO_OCT, &TO_STRING,
 ];

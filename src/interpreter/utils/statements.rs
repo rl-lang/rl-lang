@@ -190,23 +190,25 @@ impl Evaluator {
             }
 
             StatementKind::Import { names, path } => {
-                // imports are resolved at parse time; nothing to evaluate
-                // or thats what i though
-                // forgot that the file is removed after pr ;-;
+                let module_path = path.join("::");
                 let mut module = &self.root_module;
                 for seg in path {
-                    module = module.submodules.get(seg).expect("import: unknown module");
+                    module = module.submodules.get(seg).ok_or_else(|| {
+                        self.err(format!("unknown module '{}'", seg), statement.span)
+                    })?;
                 }
                 let fns: Vec<_> = names
                     .iter()
                     .map(|name| {
-                        let f = module
-                            .functions
-                            .get(name)
-                            .unwrap_or_else(|| panic!("import: unknown function '{}'", name));
-                        (name.clone(), Arc::clone(f))
+                        let f = module.functions.get(name).ok_or_else(|| {
+                            self.err(
+                                format!("'{}' is not defined in 'std::{}'", name, module_path),
+                                statement.span,
+                            )
+                        })?;
+                        Ok((name.clone(), Arc::clone(f)))
                     })
-                    .collect();
+                    .collect::<Result<_, Error>>()?;
                 for (name, f) in fns {
                     self.root_module.functions.insert(name, f);
                 }
@@ -231,13 +233,17 @@ impl Evaluator {
                 let exported: Vec<_> = self
                     .environment
                     .last()
-                    .unwrap()
+                    .ok_or_else(|| self.err("no active scope", statement.span))?
                     .iter()
                     .map(|(k, v)| (k.clone(), v.clone()))
                     .collect();
                 self.pop_scope();
+                let no_scope_err = self.err("no active scope", statement.span);
                 for (name, item) in exported {
-                    self.environment.last_mut().unwrap().insert(name, item);
+                    self.environment
+                        .last_mut()
+                        .ok_or_else(|| no_scope_err.clone())?
+                        .insert(name, item);
                 }
             }
 
@@ -259,9 +265,8 @@ impl Evaluator {
                 let exported: Vec<_> = self
                     .environment
                     .last()
-                    .unwrap()
+                    .ok_or_else(|| self.err("no active scope", statement.span))?
                     .iter()
-                    .filter(|(k, _)| names.contains(k))
                     .map(|(k, v)| (k.clone(), v.clone()))
                     .collect();
                 self.pop_scope();
@@ -274,8 +279,12 @@ impl Evaluator {
                         statement.span,
                     ));
                 }
+                let no_scope_err = self.err("no active scope", statement.span);
                 for (name, item) in exported {
-                    self.environment.last_mut().unwrap().insert(name, item);
+                    self.environment
+                        .last_mut()
+                        .ok_or_else(|| no_scope_err.clone())?
+                        .insert(name, item);
                 }
             }
 
@@ -306,6 +315,7 @@ impl Evaluator {
 
                     if self.is_breaking {
                         self.is_breaking = false;
+                        break;
                     }
 
                     if self.is_continuing {

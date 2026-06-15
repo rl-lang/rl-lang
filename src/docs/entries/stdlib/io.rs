@@ -6,7 +6,7 @@ pub static IO: StdEntry = StdEntry {
     functions: FUNCTIONS,
 };
 
-static FUNCTIONS: &'static [&'static FnEntry] = &[&INPUT, &INPUT_PROMPT];
+static FUNCTIONS: &[&FnEntry] = &[&INPUT, &INPUT_PROMPT];
 
 static INPUT: FnEntry = FnEntry {
     signature: "input()",

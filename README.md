@@ -94,7 +94,7 @@ cargo clippy -- -D warnings # lints
 cargo bench                 # criterion benchmarks
 ```
 
-Feature flags: `run`, `repl`, `repl_tui`, `eval`. All are on by default except `debug`, `repl_terminal` and `lsp` (unstable but works).
+Feature flags: `run`, `repl`, `repl_tui`, `eval`. All are on by default except `debug` and `lsp` (unstable but works).
 
 ## Contributors
 

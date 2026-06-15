@@ -6,7 +6,7 @@ use crate::utils::source::SourceFile;
 use crate::utils::span::Span;
 
 /// heavy optional fields, heap-allocated so `Error` stays small on the stack
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct ErrorDetail {
     /// primary span (anchor of the ariadne report) and its label text
     primary: (Span, String),
@@ -21,7 +21,7 @@ struct ErrorDetail {
 }
 
 /// represents an Interpreter error with optional line number and error category
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Error {
     /// readable message
     message: String,
@@ -34,7 +34,7 @@ pub struct Error {
 }
 
 /// provides an error category with optional error context
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ErrorReason {
     /// error category
     error_type: Reason,

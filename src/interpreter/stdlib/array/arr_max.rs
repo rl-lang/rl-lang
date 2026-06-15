@@ -1,7 +1,7 @@
 use crate::{
     ast::statements::TypeAnnotation,
     interpreter::{evaluator::Evaluator, values::Value},
-    utils::errors::Error,
+    utils::errors::{Error, ErrorReason, Reason},
 };
 
 pub fn std_arr_max(_: &mut Evaluator, array: Value) -> Result<Value, Error> {
@@ -19,7 +19,11 @@ pub fn std_arr_max(_: &mut Evaluator, array: Value) -> Result<Value, Error> {
                     })
                     .max()
                     .ok_or_else(|| {
-                        Error::init("arr_max() called on empty array".to_string(), None, None)
+                        Error::init(
+                            "arr_max() called on empty array".to_string(),
+                            None,
+                            Some(ErrorReason::init(Reason::Runtime, None)),
+                        )
                     })?;
                 Ok(Value::Integer(max))
             }
@@ -33,22 +37,26 @@ pub fn std_arr_max(_: &mut Evaluator, array: Value) -> Result<Value, Error> {
                             None
                         }
                     })
-                    .max_by(|a, b| a.partial_cmp(b).unwrap())
+                    .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
                     .ok_or_else(|| {
-                        Error::init("arr_max() called on empty array".to_string(), None, None)
+                        Error::init(
+                            "arr_max() called on empty array".to_string(),
+                            None,
+                            Some(ErrorReason::init(Reason::Runtime, None)),
+                        )
                     })?;
                 Ok(Value::Float(max))
             }
             _ => Err(Error::init(
                 "arr_max() accepts only int or float arrays".to_string(),
                 None,
-                None,
+                Some(ErrorReason::init(Reason::Runtime, None)),
             )),
         },
         _ => Err(Error::init(
             "arr_max() accepts only arrays".to_string(),
             None,
-            None,
+            Some(ErrorReason::init(Reason::Runtime, None)),
         )),
     }
 }

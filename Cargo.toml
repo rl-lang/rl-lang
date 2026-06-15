@@ -29,7 +29,6 @@ criterion = "0.5"
 default = ["repl", "repl_tui", "run", "eval"]
 run = []
 repl = []
-repl_terminal = []
 repl_tui = ["dep:ratatui","dep:crossterm"]
 debug = ["dep:env_logger", "dep:log"]
 eval = []
@@ -53,4 +52,3 @@ path = "src/main.rs"
 opt-level = 3
 lto = true
 codegen-units = 1
-

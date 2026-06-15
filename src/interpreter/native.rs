@@ -4,7 +4,7 @@ use std::sync::Arc;
 use crate::ast::statements::TypeAnnotation;
 use crate::interpreter::evaluator::Evaluator;
 use crate::interpreter::values::Value;
-use crate::utils::errors::Error;
+use crate::utils::errors::{Error, ErrorReason, Reason};
 
 pub type NativeFn = Arc<dyn Fn(&mut Evaluator, Vec<Value>) -> Result<Value, Error> + Send + Sync>;
 
@@ -113,7 +113,7 @@ impl FromValue for i64 {
             other => Err(Error::init(
                 format!("expected integer, got {}", other.type_name()),
                 None,
-                None,
+                Some(ErrorReason::init(Reason::Runtime, None)),
             )),
         }
     }
@@ -126,7 +126,7 @@ impl FromValue for f64 {
             other => Err(Error::init(
                 format!("expected float, got {}", other.type_name()),
                 None,
-                None,
+                Some(ErrorReason::init(Reason::Runtime, None)),
             )),
         }
     }
@@ -139,7 +139,7 @@ impl FromValue for String {
             other => Err(Error::init(
                 format!("expected string, got {}", other.type_name()),
                 None,
-                None,
+                Some(ErrorReason::init(Reason::Runtime, None)),
             )),
         }
     }
@@ -152,7 +152,7 @@ impl FromValue for bool {
             other => Err(Error::init(
                 format!("expected bool, got {}", other.type_name()),
                 None,
-                None,
+                Some(ErrorReason::init(Reason::Runtime, None)),
             )),
         }
     }
@@ -165,7 +165,7 @@ impl FromValue for char {
             other => Err(Error::init(
                 format!("expected char, got {}", other.type_name()),
                 None,
-                None,
+                Some(ErrorReason::init(Reason::Runtime, None)),
             )),
         }
     }
@@ -178,7 +178,7 @@ impl<T: FromValue> FromValue for Vec<T> {
             other => Err(Error::init(
                 format!("expected array, got {}", other.type_name()),
                 None,
-                None,
+                Some(ErrorReason::init(Reason::Runtime, None)),
             )),
         }
     }
@@ -255,7 +255,7 @@ where
                     return Err(Error::init(
                         format!("expected 0 argument(s), got {}", args.len()),
                         None,
-                        None,
+                        Some(ErrorReason::init(Reason::Runtime, None)),
                     ));
                 }
                 Ok(self(rt).into_value())
@@ -279,7 +279,7 @@ macro_rules! impl_into_native_fn {
                     if args.len() != $count {
                         return Err(Error::init(
                             format!("expected {} argument(s), got {}", $count, args.len()),
-                            None, None,
+                            None, Some(ErrorReason::init(Reason::Runtime, None)),
                         ));
                     }
                     let mut iter = args.into_iter();
@@ -300,7 +300,7 @@ macro_rules! impl_into_native_fn {
                     if args.len() != $count {
                         return Err(Error::init(
                             format!("expected {} argument(s), got {}", $count, args.len()),
-                            None, None,
+                            None, Some(ErrorReason::init(Reason::Runtime, None)),
                         ));
                     }
                     let mut iter = args.into_iter();
