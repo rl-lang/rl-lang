@@ -79,7 +79,8 @@ impl Evaluator {
         type_annotation: TypeAnnotation,
         span: Span,
     ) -> Result<(), Error> {
-        let scope = self.environment.last_mut().unwrap();
+        let no_scope_err = self.err("no active scope", span);
+        let scope = self.environment.last_mut().ok_or(no_scope_err)?;
         if scope.contains_key(&name) {
             return Err(self.err(format!("'{}' is already declared", name), span));
         }
