@@ -190,23 +190,25 @@ impl Evaluator {
             }
 
             StatementKind::Import { names, path } => {
-                // imports are resolved at parse time; nothing to evaluate
-                // or thats what i though
-                // forgot that the file is removed after pr ;-;
+                let module_path = path.join("::");
                 let mut module = &self.root_module;
                 for seg in path {
-                    module = module.submodules.get(seg).expect("import: unknown module");
+                    module = module.submodules.get(seg).ok_or_else(|| {
+                        self.err(format!("unknown module '{}'", seg), statement.span)
+                    })?;
                 }
                 let fns: Vec<_> = names
                     .iter()
                     .map(|name| {
-                        let f = module
-                            .functions
-                            .get(name)
-                            .unwrap_or_else(|| panic!("import: unknown function '{}'", name));
-                        (name.clone(), Arc::clone(f))
+                        let f = module.functions.get(name).ok_or_else(|| {
+                            self.err(
+                                format!("'{}' is not defined in 'std::{}'", name, module_path),
+                                statement.span,
+                            )
+                        })?;
+                        Ok((name.clone(), Arc::clone(f)))
                     })
-                    .collect();
+                    .collect::<Result<_, Error>>()?;
                 for (name, f) in fns {
                     self.root_module.functions.insert(name, f);
                 }
