@@ -1,5 +1,14 @@
+use std::io;
+
 pub fn create_project(name: &str) {
-    // the project coniguration file
+    if let Err(e) = try_create_project(name) {
+        eprintln!("error: failed to create project '{}': {}", name, e);
+        std::process::exit(1);
+    }
+    println!("created project '{}'", name);
+}
+
+fn try_create_project(name: &str) -> io::Result<()> {
     let toml = format!(
         r#"[project]
 name = "{}"
@@ -9,7 +18,6 @@ entry = "main.rl"
         name
     );
 
-    // the demo function of project
     let main = r#"get println from std::display
 
 fn main() {
@@ -19,19 +27,14 @@ fn main() {
 main()
 "#;
 
-    // create project folder
-    std::fs::create_dir(name).unwrap();
+    std::fs::create_dir(name)?;
+    std::fs::write(format!("{}/rl.toml", name), toml)?;
+    std::fs::write(format!("{}/main.rl", name), main)?;
+    std::fs::write(format!("{}/.gitignore", name), "")?;
 
-    // write files
-    std::fs::write(format!("{}/rl.toml", name), toml).unwrap();
-    std::fs::write(format!("{}/main.rl", name), main).unwrap();
-    std::fs::write(format!("{}/.gitignore", name), "").unwrap();
-
-    // git init
     std::process::Command::new("git")
         .args(["init", name])
-        .output()
-        .unwrap();
+        .output()?;
 
-    println!("created project '{}'", name);
+    Ok(())
 }
