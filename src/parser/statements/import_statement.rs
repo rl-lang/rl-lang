@@ -32,7 +32,9 @@ impl Parser {
             let span = start.join(self.previous_span());
             let is_std = segments[0] == "std";
             return if is_std {
-                let name = segments.pop().unwrap();
+                let name = segments
+                    .pop()
+                    .ok_or_else(|| self.err("expected function name after '::'", start))?;
                 Ok(Statement::new(
                     StatementKind::Import {
                         names: vec![name],

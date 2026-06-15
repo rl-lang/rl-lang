@@ -62,7 +62,13 @@ fn main() {
 
     match cli.command {
         Commands::Run { file } => {
-            let path = file.to_str().unwrap().to_string();
+            let path = file
+                .to_str()
+                .unwrap_or_else(|| {
+                    eprintln!("error: invalid file path");
+                    std::process::exit(1);
+                })
+                .to_string();
             let source_text = std::fs::read_to_string(&file).unwrap_or_else(|_| {
                 eprintln!("error: could not read file '{}'", file.display());
                 std::process::exit(1);
@@ -95,7 +101,13 @@ fn main() {
         }
 
         Commands::Check { file } => {
-            let path = file.to_str().unwrap().to_string();
+            let path = file
+                .to_str()
+                .unwrap_or_else(|| {
+                    eprintln!("error: invalid file path");
+                    std::process::exit(1);
+                })
+                .to_string();
             let source_text = std::fs::read_to_string(&file).unwrap_or_else(|_| {
                 eprintln!("error: could not read file '{}'", file.display());
                 std::process::exit(1);
@@ -155,8 +167,12 @@ fn main() {
         }
 
         #[cfg(feature = "lsp")]
-        Commands::Lsp => {
-            tokio::runtime::Runtime::new().unwrap().block_on(run_lsp());
-        }
+        Commands::Lsp => match tokio::runtime::Runtime::new() {
+            Ok(rt) => rt.block_on(run_lsp()),
+            Err(e) => {
+                eprintln!("error: failed to start LSP runtime: {}", e);
+                std::process::exit(1);
+            }
+        },
     }
 }
