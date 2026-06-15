@@ -308,6 +308,7 @@ impl Evaluator {
 
                     if self.is_breaking {
                         self.is_breaking = false;
+                        break;
                     }
 
                     if self.is_continuing {
