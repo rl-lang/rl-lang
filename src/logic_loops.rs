@@ -1,15 +1,13 @@
-#[cfg(feature = "debug")]
-use log::info;
-
 #[cfg(feature = "eval")]
 use super::interpreter::evaluator::Evaluator;
-
 use super::{
     ast::statements::Statement,
     lexer::{tokenizer::Tokenizer, tokentypes::Token},
     parser::parser_logic::Parser,
     utils::source::SourceFile,
 };
+#[cfg(feature = "debug")]
+use log::info;
 
 pub fn lexing_loop(source: SourceFile) -> Vec<Token> {
     #[cfg(feature = "debug")]
@@ -36,17 +34,19 @@ pub fn parsing_loop(source: SourceFile, tokens: Vec<Token>) -> Vec<Statement> {
 }
 
 #[cfg(feature = "eval")]
-pub fn eval_loop(source: SourceFile, statements: Vec<Statement>) {
+pub fn eval_loop(source: SourceFile, statements: Vec<Statement>, base_dir: std::path::PathBuf) {
     #[cfg(feature = "debug")]
     info!("evaluating the ast tree...");
-    let mut evaluator = Evaluator::default().with_stdlib().with_source_file(source);
+    let mut evaluator = Evaluator::default()
+        .with_stdlib()
+        .with_source_file(source)
+        .with_base_dir(base_dir);
     for statement in statements {
         if let Err(e) = evaluator.evaluate_statement(&statement) {
             e.report_to_stderr();
             std::process::exit(1);
         }
     }
-
     #[cfg(feature = "debug")]
     info!("evaluation done");
 }
