@@ -30,6 +30,7 @@ static FUNCTIONS: &[&FnEntry] = &[
     &TRIM,
     &TRIM_END,
     &TRIM_START,
+    &FORMAT,
 ];
 
 static BYTES: FnEntry = FnEntry {
@@ -53,7 +54,7 @@ static CHARS: FnEntry = FnEntry {
 static CONCAT: FnEntry = FnEntry {
     signature: "concat(a, b, ...)",
     description: "concatenates any number of values into a single string",
-    example: "get std::str::concat\n\nconcat(\"hello\", \" \", \"world\") // \"hello world\"",
+    example: "get std::str::concat\n\nconcat(\"hello\", \" \", \"world\") // hello world",
 };
 
 static CONTAINS: FnEntry = FnEntry {
@@ -89,43 +90,43 @@ static IS_EMPTY: FnEntry = FnEntry {
 static JOIN: FnEntry = FnEntry {
     signature: "join(arr, delim)",
     description: "joins an array into a string with delim between each element",
-    example: "get std::str::join\n\njoin([\"a\", \"b\", \"c\"], \"-\") // \"a-b-c\"",
+    example: "get std::str::join\n\njoin([\"a\", \"b\", \"c\"], \"-\") // a-b-c",
 };
 
 static PAD_LEFT: FnEntry = FnEntry {
     signature: "pad_left(str, width, char)",
     description: "pads str on the left with char until the total length reaches width",
-    example: "get std::str::pad_left\n\npad_left(\"5\", 3, '0') // \"005\"",
+    example: "get std::str::pad_left\n\npad_left(\"5\", 3, '0') // 005",
 };
 
 static PAD_RIGHT: FnEntry = FnEntry {
     signature: "pad_right(str, width, char)",
     description: "pads str on the right with char until the total length reaches width",
-    example: "get std::str::pad_right\n\npad_right(\"hi\", 5, '.') // \"hi...\"",
+    example: "get std::str::pad_right\n\npad_right(\"hi\", 5, '.') // hi...",
 };
 
 static REPEAT: FnEntry = FnEntry {
     signature: "repeat(str, count)",
     description: "returns str repeated count times",
-    example: "get std::str::repeat\n\nrepeat(\"ab\", 3) // \"ababab\"",
+    example: "get std::str::repeat\n\nrepeat(\"ab\", 3) // ababab",
 };
 
 static REPLACE: FnEntry = FnEntry {
     signature: "replace(str, from, to)",
     description: "replaces all occurrences of from with to in str",
-    example: "get std::str::replace\n\nreplace(\"foo bar foo\", \"foo\", \"baz\") // \"baz bar baz\"",
+    example: "get std::str::replace\n\nreplace(\"foo bar foo\", \"foo\", \"baz\") // baz bar baz",
 };
 
 static REVERSE: FnEntry = FnEntry {
     signature: "reverse(str)",
     description: "returns str with characters in reverse order",
-    example: "get std::str::reverse\n\nreverse(\"hello\") // \"olleh\"",
+    example: "get std::str::reverse\n\nreverse(\"hello\") // olleh",
 };
 
 static SLICE: FnEntry = FnEntry {
     signature: "slice(str, start, end)",
     description: "returns a substring from start to end (exclusive)",
-    example: "get std::str::slice\n\nslice(\"hello\", 1, 4) // \"ell\"",
+    example: "get std::str::slice\n\nslice(\"hello\", 1, 4) // ell",
 };
 
 static SPLIT: FnEntry = FnEntry {
@@ -143,29 +144,35 @@ static STARTS_WITH: FnEntry = FnEntry {
 static TO_LOWER: FnEntry = FnEntry {
     signature: "to_lower(str)",
     description: "returns str with all characters converted to lowercase",
-    example: "get std::str::to_lower\n\nto_lower(\"HELLO\") // \"hello\"",
+    example: "get std::str::to_lower\n\nto_lower(\"HELLO\") // hello",
 };
 
 static TO_UPPER: FnEntry = FnEntry {
     signature: "to_upper(str)",
     description: "returns str with all characters converted to uppercase",
-    example: "get std::str::to_upper\n\nto_upper(\"hello\") // \"HELLO\"",
+    example: "get std::str::to_upper\n\nto_upper(\"hello\") // HELLO",
 };
 
 static TRIM: FnEntry = FnEntry {
     signature: "trim(str)",
     description: "removes leading and trailing whitespace from str",
-    example: "get std::str::trim\n\ntrim(\"  hi  \") // \"hi\"",
+    example: "get std::str::trim\n\ntrim(\"  hi  \") // hi",
 };
 
 static TRIM_END: FnEntry = FnEntry {
     signature: "trim_end(str)",
     description: "removes trailing whitespace from str",
-    example: "get std::str::trim_end\n\ntrim_end(\"hi  \") // \"hi\"",
+    example: "get std::str::trim_end\n\ntrim_end(\"hi  \") // hi",
 };
 
 static TRIM_START: FnEntry = FnEntry {
     signature: "trim_start(str)",
     description: "removes leading whitespace from str",
-    example: "get std::str::trim_start\n\ntrim_start(\"  hi\") // \"hi\"",
+    example: "get std::str::trim_start\n\ntrim_start(\"  hi\") // hi",
+};
+
+static FORMAT: FnEntry = FnEntry {
+    signature: "format(template, ...)",
+    description: "replaces each \"{}\" in template with the corresponding argument, in order",
+    example: "get std::str::format\n\nformat(\"{} is {}\", \"age\", 30) // age is 30",
 };
