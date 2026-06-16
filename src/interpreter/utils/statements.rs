@@ -248,6 +248,7 @@ impl Evaluator {
                     .environment
                     .last()
                     .ok_or_else(|| self.err("no active scope", statement.span))?
+                    .borrow()
                     .iter()
                     .map(|(k, v)| (k.clone(), v.clone()))
                     .collect();
@@ -261,6 +262,7 @@ impl Evaluator {
                     self.environment
                         .last_mut()
                         .ok_or_else(|| no_scope_err.clone())?
+                        .borrow_mut()
                         .insert(name, item);
                 }
             }
@@ -299,6 +301,7 @@ impl Evaluator {
                     .environment
                     .last()
                     .ok_or_else(|| self.err("no active scope", statement.span))?
+                    .borrow()
                     .iter()
                     .map(|(k, v)| (k.clone(), v.clone()))
                     .collect();
@@ -320,6 +323,7 @@ impl Evaluator {
                     self.environment
                         .last_mut()
                         .ok_or_else(|| no_scope_err.clone())?
+                        .borrow_mut()
                         .insert(name, item);
                 }
             }
@@ -470,7 +474,7 @@ impl Evaluator {
                 let snapshot = self.environment.clone();
                 if let Some(scope) = self.environment.last_mut()
                     && let Some(crate::interpreter::evaluator::EnvironmentItem::PItem(p)) =
-                        scope.get_mut(name)
+                        scope.borrow_mut().get_mut(name)
                     && let Value::Function { captured_env, .. } = &mut p.value
                 {
                     *captured_env = snapshot;
