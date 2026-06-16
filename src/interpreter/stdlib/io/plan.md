@@ -1,6 +1,6 @@
 # io
-- `eprint(msg)`
-- `eprintln(msg)`
+- ~`eprint(msg)`~
+- ~`eprintln(msg)`~
 - `read_int()`
 - `read_float()`
 - `read_file(path)`
