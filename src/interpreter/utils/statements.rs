@@ -215,7 +215,11 @@ impl Evaluator {
             }
 
             StatementKind::ImportFile { path } => {
-                let file_path = format!("{}.rl", path.join("/"));
+                let file_path = self
+                    .base_dir
+                    .join(format!("{}.rl", path.join("/")))
+                    .to_string_lossy()
+                    .to_string();
                 let source_text = std::fs::read_to_string(&file_path).map_err(|_| {
                     self.err(
                         format!("could not read file '{}'", file_path),
@@ -248,7 +252,11 @@ impl Evaluator {
             }
 
             StatementKind::ImportFileNamed { path, names } => {
-                let file_path = format!("{}.rl", path.join("/"));
+                let file_path = self
+                    .base_dir
+                    .join(format!("{}.rl", path.join("/")))
+                    .to_string_lossy()
+                    .to_string();
                 let source_text = std::fs::read_to_string(&file_path).map_err(|_| {
                     self.err(
                         format!("could not read file '{}'", file_path),
