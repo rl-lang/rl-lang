@@ -39,7 +39,6 @@ pub struct Evaluator {
     pub is_breaking: bool,
     pub is_continuing: bool,
     pub output_buffer: Option<String>,
-    pub base_dir: std::path::PathBuf,
 }
 
 impl Default for Evaluator {
@@ -58,17 +57,11 @@ impl Evaluator {
             is_breaking: false,
             is_continuing: false,
             output_buffer: None,
-            base_dir: std::path::PathBuf::from("."),
         }
     }
 
     pub fn with_source_file(mut self, file: SourceFile) -> Self {
         self.source_file = Some(file);
-        self
-    }
-
-    pub fn with_base_dir(mut self, dir: std::path::PathBuf) -> Self {
-        self.base_dir = dir;
         self
     }
 
