@@ -77,31 +77,26 @@ fn main() {
             let tokens = lexing_loop(source.clone());
             let statements = parsing_loop(source.clone(), tokens);
             if cfg!(feature = "eval") {
-                let base_dir = file
-                    .parent()
-                    .unwrap_or_else(|| std::path::Path::new("."))
-                    .to_path_buf();
-                eval_loop(source, statements, base_dir);
+                eval_loop(source, statements);
             }
         }
 
         Commands::Dev => {
-            let (config, root) = read_rl_toml();
-            let path = root.join(&config.project.entry);
+            let config = read_rl_toml();
+            let path = std::path::PathBuf::from(&config.project.entry);
             let source_text = std::fs::read_to_string(&path).unwrap_or_else(|_| {
-                eprintln!("error: could not read entry file '{}'", path.display());
+                eprintln!(
+                    "error: could not read entry file '{}'",
+                    config.project.entry
+                );
                 std::process::exit(1);
             });
             println!("[{}] v{}", config.project.name, config.project.version);
-            let source = SourceFile::new(&path.to_string_lossy() as &str, source_text);
+            let source = SourceFile::new(&*config.project.entry, source_text);
             let tokens = lexing_loop(source.clone());
             let statements = parsing_loop(source.clone(), tokens);
             if cfg!(feature = "eval") {
-                let base_dir = path
-                    .parent()
-                    .unwrap_or_else(|| std::path::Path::new("."))
-                    .to_path_buf();
-                eval_loop(source, statements, base_dir);
+                eval_loop(source, statements);
             }
         }
 
