@@ -1,5 +1,6 @@
-use std::collections::HashMap;
+use std::cell::RefCell;
 use std::sync::Arc;
+use std::{collections::HashMap, rc::Rc};
 
 use crate::{
     ast::{
@@ -32,7 +33,7 @@ pub enum EnvironmentItem {
 }
 
 pub struct Evaluator {
-    pub environment: Vec<HashMap<String, EnvironmentItem>>,
+    pub environment: Vec<Rc<RefCell<HashMap<String, EnvironmentItem>>>>,
     pub source_file: Option<SourceFile>,
     pub root_module: Module,
     pub return_value: Option<Value>,
@@ -50,7 +51,7 @@ impl Default for Evaluator {
 impl Evaluator {
     pub fn new() -> Self {
         Self {
-            environment: vec![HashMap::new()],
+            environment: vec![Rc::new(RefCell::new(HashMap::new()))],
             source_file: None,
             root_module: Module::new(""),
             return_value: None,

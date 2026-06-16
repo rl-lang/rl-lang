@@ -62,7 +62,7 @@ impl Evaluator {
         }
 
         for scope in self.environment.iter().rev() {
-            if let Some(env_item) = scope.get(&root) {
+            if let Some(env_item) = scope.borrow().get(&root) {
                 match env_item {
                     EnvironmentItem::PItem(p) => {
                         if p.is_const {
@@ -84,7 +84,7 @@ impl Evaluator {
             )
         };
         for scope in self.environment.iter_mut().rev() {
-            if let Some(env_item) = scope.get_mut(&root) {
+            if let Some(env_item) = scope.borrow_mut().get_mut(&root) {
                 match env_item {
                     EnvironmentItem::PItem(p) => {
                         let mut current = &mut p.value;
