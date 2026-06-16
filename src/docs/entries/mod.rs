@@ -12,6 +12,7 @@ pub fn stdlib_entries() -> Vec<&'static StdEntry> {
         &stdlib::arrays::ARRAY,
         &stdlib::str::STR,
         &stdlib::types::TYPES,
+        &stdlib::path::PATH,
     ]
 }
 
