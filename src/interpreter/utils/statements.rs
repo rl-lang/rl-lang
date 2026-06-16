@@ -217,8 +217,6 @@ impl Evaluator {
 
             StatementKind::ImportFile { path } => {
                 let import_name = format!("{}.rl", path.join("/"));
-
-                // Resolve import path relative to the current source file's directory
                 let file_path = if let Some(ref source_file) = self.source_file {
                     let current_file_dir = Path::new(source_file.name.as_ref())
                         .parent()
