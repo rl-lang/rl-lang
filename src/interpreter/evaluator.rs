@@ -260,7 +260,6 @@ impl Evaluator {
                 let mut evaluated_args = Vec::with_capacity(args.len());
                 for arg in args {
                     let val = self.evaluate(arg)?;
-                    self.check_not_null(&val, arg.span)?;
                     evaluated_args.push(val);
                 }
                 self.call_path(path, evaluated_args, expression.span)?
@@ -271,7 +270,6 @@ impl Evaluator {
                 let mut evaluated_args = Vec::with_capacity(args.len());
                 for arg in args {
                     let val = self.evaluate(arg)?;
-                    self.check_not_null(&val, arg.span)?;
                     evaluated_args.push(val);
                 }
                 self.call_value(func_val, evaluated_args, expression.span)?
