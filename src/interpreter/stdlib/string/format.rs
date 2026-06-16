@@ -4,9 +4,9 @@ use crate::utils::errors::{Error, ErrorReason, Reason};
 
 pub fn std_format(_: &mut Evaluator, args: Vec<Value>) -> Result<Value, Error> {
     // checks for incorrect usage
-    if args.len() <= 1 {
+    if args.is_empty() {
         return Err(Error::init(
-            "expected more arguments, if it was intended then use to_string() to transform the value to string instead".to_string(),
+            "expected arguments".to_string(),
             None,
             Some(ErrorReason::init(Reason::Runtime, None)),
         ));
