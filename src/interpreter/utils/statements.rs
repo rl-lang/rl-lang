@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::sync::Arc;
 
 use crate::{
@@ -215,16 +216,29 @@ impl Evaluator {
             }
 
             StatementKind::ImportFile { path } => {
-                let file_path = format!("{}.rl", path.join("/"));
+                let import_name = format!("{}.rl", path.join("/"));
+                let file_path = if let Some(ref source_file) = self.source_file {
+                    let current_file_dir = Path::new(source_file.name.as_ref())
+                        .parent()
+                        .unwrap_or_else(|| Path::new(""));
+                    current_file_dir.join(&import_name)
+                } else {
+                    import_name.clone().into()
+                };
+
                 let source_text = std::fs::read_to_string(&file_path).map_err(|_| {
                     self.err(
-                        format!("could not read file '{}'", file_path),
+                        format!("could not read file '{}'", import_name),
                         statement.span,
                     )
                 })?;
-                let source_file = SourceFile::new(&*file_path, source_text);
+                let source_file =
+                    SourceFile::new(file_path.to_string_lossy().as_ref(), source_text);
                 let tokens = Tokenizer::lex(source_file.clone())?;
-                let stmts = Parser::parse(tokens, source_file)?;
+                let stmts = Parser::parse(tokens, source_file.clone())?;
+                // Save current source file and set the imported file as current
+                let previous_source = self.source_file.clone();
+                self.source_file = Some(source_file);
                 self.push_scope();
                 for stmt in &stmts {
                     self.evaluate_statement(stmt)?;
@@ -238,6 +252,10 @@ impl Evaluator {
                     .map(|(k, v)| (k.clone(), v.clone()))
                     .collect();
                 self.pop_scope();
+
+                // Restore previous source file
+                self.source_file = previous_source;
+
                 let no_scope_err = self.err("no active scope", statement.span);
                 for (name, item) in exported {
                     self.environment
@@ -248,16 +266,31 @@ impl Evaluator {
             }
 
             StatementKind::ImportFileNamed { path, names } => {
-                let file_path = format!("{}.rl", path.join("/"));
+                let import_name = format!("{}.rl", path.join("/"));
+                let file_path = if let Some(ref source_file) = self.source_file {
+                    let current_file_dir = Path::new(source_file.name.as_ref())
+                        .parent()
+                        .unwrap_or_else(|| Path::new(""));
+                    current_file_dir.join(&import_name)
+                } else {
+                    import_name.clone().into()
+                };
+
                 let source_text = std::fs::read_to_string(&file_path).map_err(|_| {
                     self.err(
-                        format!("could not read file '{}'", file_path),
+                        format!("could not read file '{}'", import_name),
                         statement.span,
                     )
                 })?;
-                let source_file = SourceFile::new(&*file_path, source_text);
+                let source_file =
+                    SourceFile::new(file_path.to_string_lossy().as_ref(), source_text);
                 let tokens = Tokenizer::lex(source_file.clone())?;
-                let stmts = Parser::parse(tokens, source_file)?;
+                let stmts = Parser::parse(tokens, source_file.clone())?;
+
+                // Save current source file and set the imported file as current
+                let previous_source = self.source_file.clone();
+                self.source_file = Some(source_file);
+
                 self.push_scope();
                 for stmt in &stmts {
                     self.evaluate_statement(stmt)?;
@@ -270,12 +303,15 @@ impl Evaluator {
                     .map(|(k, v)| (k.clone(), v.clone()))
                     .collect();
                 self.pop_scope();
+
+                // Restore previous source file
+                self.source_file = previous_source;
                 if let Some(not_found) = names
                     .iter()
                     .find(|n| !exported.iter().any(|(k, _)| k == *n))
                 {
                     return Err(self.err(
-                        format!("'{}' is not defined in '{}'", not_found, file_path),
+                        format!("'{}' is not defined in '{}'", not_found, import_name),
                         statement.span,
                     ));
                 }
