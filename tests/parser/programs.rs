@@ -25,7 +25,7 @@ println(x, y)",
         Statement::new(
             StatementKind::Import {
                 names: vec!["println".to_string()],
-                path: vec!["std".to_string(), "display".to_string()],
+                path: vec!["std".to_string(), "io".to_string()],
             },
             Span::new(0, 29),
         ),
@@ -184,7 +184,7 @@ println(hyp, is_right, prime, big)",
         Statement::new(
             StatementKind::Import {
                 names: vec!["println".to_string()],
-                path: vec!["std".to_string(), "display".to_string()],
+                path: vec!["std".to_string(), "io".to_string()],
             },
             Span::new(0, 29),
         ),
@@ -671,7 +671,7 @@ for [int i = 0, i < 2, i += 1] {
         Statement::new(
             StatementKind::Import {
                 names: vec!["println".to_string()],
-                path: vec!["std".to_string(), "display".to_string()],
+                path: vec!["std".to_string(), "io".to_string()],
             },
             Span::new(0, 29),
         ),
