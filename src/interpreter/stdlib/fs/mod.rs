@@ -5,6 +5,7 @@ mod list_dir;
 mod mkdir;
 mod mkdir_all;
 mod move_file;
+mod rename_file;
 mod rmdir;
 mod rmdir_all;
 mod temp_dir;
@@ -22,6 +23,7 @@ pub const KEYWORDS: &[&str] = &[
     "file_size",
     "file_modified",
     "temp_dir",
+    "rename_file",
 ];
 
 pub fn module() -> Module {
@@ -36,4 +38,5 @@ pub fn module() -> Module {
         .with_function("file_size", file_size::std_file_size)
         .with_function("file_modified", file_modified::std_file_modified)
         .with_raw_function("temp_dir", temp_dir::std_temp_dir)
+        .with_function("rename_file", rename_file::std_rename_file)
 }
