@@ -1,12 +1,3 @@
 # io
-- ~`eprint(msg)`~
-- ~`eprintln(msg)`~
-- `read_int()`
-- `read_float()`
-- `read_file(path)`
-- `write_file(path, content)`
-- `append_file(path, content)`
-- `file_exists(path)`
-- `delete_file(path)`
-- `read_lines(path)`
-- `read_bytes(path)`
+
+- `read_bytes(path)` too expensive to implement with current setup will implement after adding byte type

@@ -10,7 +10,7 @@ RL is a statically-typed interpreted language with a clean syntax, a TUI REPL, a
 ## Quick look
 
 ```rl
-get println, len from std::display
+get println, len from std::io
 get pow, mod, factorial, fibonacci, is_prime from std::math
 get PI from std::math::consts
 

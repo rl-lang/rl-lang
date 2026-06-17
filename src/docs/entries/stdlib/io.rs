@@ -6,16 +6,103 @@ pub static IO: StdEntry = StdEntry {
     functions: FUNCTIONS,
 };
 
-static FUNCTIONS: &[&FnEntry] = &[&INPUT, &INPUT_PROMPT];
+static FUNCTIONS: &[&FnEntry] = &[
+    &READ,
+    &READ_PROMPT,
+    &READ_INT,
+    &READ_INT_PROMPT,
+    &READ_FLOAT,
+    &READ_FLOAT_PROMPT,
+    &APPEND_FILE,
+    &DELETE_FILE,
+    &READ_FILE,
+    &READ_LINES,
+    &WRITE_FILE,
+    &PRINT,
+    &PRINTLN,
+    &EPRINT,
+];
 
-static INPUT: FnEntry = FnEntry {
-    signature: "input()",
+static READ: FnEntry = FnEntry {
+    signature: "read()",
     description: "read a line from stdin",
-    example: "get std::io::input\n\ndec str name = input()",
+    example: "get std::io::read\n\ndec str name = read()",
 };
 
-static INPUT_PROMPT: FnEntry = FnEntry {
-    signature: "input(prompt)",
+static READ_PROMPT: FnEntry = FnEntry {
+    signature: "read(prompt)",
     description: "prints prompt and reads a line from stdin",
-    example: "get std::io::input\n\ndec str name = input(\"enter your name: \")",
+    example: "get std::io::read\n\ndec str name = read(\"enter your name: \")",
+};
+
+static READ_INT: FnEntry = FnEntry {
+    signature: "read_int()",
+    description: "read a line from stdin then parses to integer",
+    example: "get std::io::read_int\n\ndec int age = read()",
+};
+
+static READ_INT_PROMPT: FnEntry = FnEntry {
+    signature: "read_int(prompt)",
+    description: "prints prompt and reads a line from stdin then parses to integer",
+    example: "get std::io::read_int\n\ndec int age = read_float(\"enter your age: \")",
+};
+
+static READ_FLOAT: FnEntry = FnEntry {
+    signature: "read_float()",
+    description: "read a line from stdin then parses to float",
+    example: "get std::io::read_float\n\ndec float pi = read_float()",
+};
+
+static READ_FLOAT_PROMPT: FnEntry = FnEntry {
+    signature: "read_float(prompt)",
+    description: "prints prompt and reads a line from stdin then parses to float",
+    example: "get std::io::read_float\n\ndec float pi = read_float(\"enter your pi: \")",
+};
+
+static APPEND_FILE: FnEntry = FnEntry {
+    signature: "append_file(path, content)",
+    description: "appends content to a file creating it if it does not exist",
+    example: "get std::io::append_file\n\nappend_file(\"info.txt\", \"name: Mohamed\")",
+};
+
+static DELETE_FILE: FnEntry = FnEntry {
+    signature: "delete_file(path)",
+    description: "deletes a file at the given path",
+    example: "get std::io::delete_file\n\ndelete_file(\"info.txt\")",
+};
+
+static READ_FILE: FnEntry = FnEntry {
+    signature: "read_file(path)",
+    description: "reads the entire contents of a file as a string",
+    example: "get std::io::read_file\n\ndec string data = read_file(\"backup_info.txt\")",
+};
+
+static READ_LINES: FnEntry = FnEntry {
+    signature: "read_lines(path)",
+    description: "reads a file and returns its lines as an array of strings",
+    example: "get std::io::read_lines\n\ndec arr[string] data = read_lines(\"index.html\")",
+};
+
+static WRITE_FILE: FnEntry = FnEntry {
+    signature: "write_file(path, contents)",
+    description: "writes content to a file overwriting it if it already exists",
+    example: "get std::io::write_file\n\nwrite_file(\"index.html\", \"<p>hello \\\"Mohamed\\\"</p>\")",
+};
+
+static PRINT: FnEntry = FnEntry {
+    signature: "print(x)",
+    description: "print without newline",
+    example: "get std::io::print\n\nprint(\"hello\")",
+};
+
+static PRINTLN: FnEntry = FnEntry {
+    signature: "println(x)",
+    description: "print with newline",
+    example: "get std::io:println\n\nprintln(\"hello\")",
+};
+
+static EPRINT: FnEntry = FnEntry {
+    signature: "eprint(string)",
+    description: "halts evaluation with an error containing the given message",
+    example: "get std::io::eprint\n\neprint(\"something went wrong\") // x error: something went wrong",
 };

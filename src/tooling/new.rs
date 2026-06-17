@@ -19,7 +19,7 @@ entry = "src/main.rl"
         name,
         env!("CARGO_PKG_VERSION"),
     );
-    let main = r#"get println from std::display
+    let main = r#"get println from std::io
 fn main() {
     println("hello world")
 }
