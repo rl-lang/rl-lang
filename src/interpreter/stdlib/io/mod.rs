@@ -2,6 +2,7 @@ mod delete_file;
 mod input;
 mod read_file;
 mod read_lines;
+mod write_file;
 
 use crate::interpreter::native::Module;
 
@@ -12,6 +13,7 @@ pub const KEYWORDS: &[&str] = &[
     "read_file",
     "read_lines",
     "delete_file",
+    "write_file",
 ];
 
 pub fn module() -> Module {
@@ -22,4 +24,5 @@ pub fn module() -> Module {
         .with_function("read_file", read_file::std_read_file)
         .with_function("read_lines", read_lines::std_read_lines)
         .with_function("delete_file", delete_file::std_delete_file)
+        .with_function("write_file", write_file::std_write_file)
 }
