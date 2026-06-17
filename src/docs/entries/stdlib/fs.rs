@@ -1,0 +1,87 @@
+use crate::docs::entry::{FnEntry, StdEntry};
+
+pub static FS: StdEntry = StdEntry {
+    name: "fs",
+    description: "functions for working with the filesystem",
+    functions: FUNCTIONS,
+};
+
+static FUNCTIONS: &[&FnEntry] = &[
+    &COPY_FILE,
+    &FILE_MODIFIED,
+    &FILE_SIZE,
+    &LIST_DIR,
+    &MKDIR,
+    &MKDIR_ALL,
+    &MOVE_FILE,
+    &RENAME_FILE,
+    &RMDIR,
+    &RMDIR_ALL,
+    &TEMP_DIR,
+];
+
+static COPY_FILE: FnEntry = FnEntry {
+    signature: "copy_file(src, dst)",
+    description: "copies a file from src to dst, returns the number of bytes copied",
+    example: "get std::fs::copy_file\n\ncopy_file(\"a.txt\", \"b.txt\") // 1024",
+};
+
+static FILE_MODIFIED: FnEntry = FnEntry {
+    signature: "file_modified(path)",
+    description: "returns the last modification time of the file as a unix timestamp (seconds since epoch)",
+    example: "get std::fs::file_modified\n\nfile_modified(\"./Cargo.toml\") // 1750000000",
+};
+
+static FILE_SIZE: FnEntry = FnEntry {
+    signature: "file_size(path)",
+    description: "returns the size of the file in bytes",
+    example: "get std::fs::file_size\n\nfile_size(\"./Cargo.toml\") // 215",
+};
+
+static LIST_DIR: FnEntry = FnEntry {
+    signature: "list_dir(path)",
+    description: "returns an array of paths for the entries in the directory",
+    example: "get std::fs::list_dir\n\nlist_dir(\"./src\") // [\"./src/main.rl\", \"./src/html_tags\"]",
+};
+
+static MKDIR: FnEntry = FnEntry {
+    signature: "mkdir(path)",
+    description: "creates a directory, fails if the parent directory does not exist",
+    example: "get std::fs::mkdir\n\nmkdir(\"./build\")",
+};
+
+static MKDIR_ALL: FnEntry = FnEntry {
+    signature: "mkdir_all(path)",
+    description: "creates a directory along with any missing parent directories",
+    example: "get std::fs::mkdir_all\n\nmkdir_all(\"./build/assets/css\")",
+};
+
+static MOVE_FILE: FnEntry = FnEntry {
+    signature: "move_file(src, dst)",
+    description: "moves a file from src to dst",
+    example: "get std::fs::move_file\n\nmove_file(\"/tmp/a.txt\", \"/tmp/b.txt\")",
+};
+
+static RENAME_FILE: FnEntry = FnEntry {
+    signature: "rename_file(path, new_name)",
+    description: "renames a file, keeping it in its current directory, and returns the new path",
+    example: "get std::fs::rename_file\n\nrename_file(\"/usr/bin/rl\", \"rl-old\") // \"/usr/bin/rl-old\"",
+};
+
+static RMDIR: FnEntry = FnEntry {
+    signature: "rmdir(path)",
+    description: "removes an empty directory, fails if it is not empty",
+    example: "get std::fs::rmdir\n\nrmdir(\"./build\")",
+};
+
+static RMDIR_ALL: FnEntry = FnEntry {
+    signature: "rmdir_all(path)",
+    description: "removes a directory and all of its contents recursively",
+    example: "get std::fs::rmdir_all\n\nrmdir_all(\"./build\")",
+};
+
+static TEMP_DIR: FnEntry = FnEntry {
+    signature: "temp_dir()",
+    description: "returns the path of the system's temporary directory",
+    example: "get std::fs::temp_dir\n\ntemp_dir() // \"/tmp\"",
+};
