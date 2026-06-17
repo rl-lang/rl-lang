@@ -6,16 +6,16 @@ pub static IO: StdEntry = StdEntry {
     functions: FUNCTIONS,
 };
 
-static FUNCTIONS: &[&FnEntry] = &[&INPUT, &INPUT_PROMPT];
+static FUNCTIONS: &[&FnEntry] = &[&READ, &READ_PROMPT];
 
-static INPUT: FnEntry = FnEntry {
-    signature: "input()",
+static READ: FnEntry = FnEntry {
+    signature: "read()",
     description: "read a line from stdin",
-    example: "get std::io::input\n\ndec str name = input()",
+    example: "get std::io::read\n\ndec str name = read()",
 };
 
-static INPUT_PROMPT: FnEntry = FnEntry {
-    signature: "input(prompt)",
+static READ_PROMPT: FnEntry = FnEntry {
+    signature: "read(prompt)",
     description: "prints prompt and reads a line from stdin",
-    example: "get std::io::input\n\ndec str name = input(\"enter your name: \")",
+    example: "get std::io::read\n\ndec str name = read(\"enter your name: \")",
 };

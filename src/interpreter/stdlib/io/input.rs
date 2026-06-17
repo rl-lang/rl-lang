@@ -4,7 +4,7 @@ use crate::{
 };
 use std::io::{self, Write};
 
-pub fn std_input(_: &mut Evaluator, args: Vec<Value>) -> Result<Value, Error> {
+pub fn std_read(_: &mut Evaluator, args: Vec<Value>) -> Result<Value, Error> {
     match args.len() {
         0 => read_line(),
         1 => {
@@ -22,7 +22,7 @@ pub fn std_input(_: &mut Evaluator, args: Vec<Value>) -> Result<Value, Error> {
             read_line()
         }
         n => Err(Error::init(
-            format!("input() expects 0 or 1 argument(s), got {}", n),
+            format!("read() expects 0 or 1 argument(s), got {}", n),
             None,
             Some(ErrorReason::init(Reason::Runtime, None)),
         )),
@@ -33,7 +33,7 @@ fn read_line() -> Result<Value, Error> {
     let mut input = String::new();
     io::stdin().read_line(&mut input).map_err(|e| {
         Error::init(
-            format!("input(): failed to read line: {}", e),
+            format!("read(): failed to read line: {}", e),
             None,
             Some(ErrorReason::init(Reason::Runtime, None)),
         )
