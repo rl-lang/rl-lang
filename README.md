@@ -1,10 +1,7 @@
 <div align="center">
-<img src="logo.svg" width="200">
-
-# RL - a simple interpreted language written in Rust
-
-RL is a statically-typed interpreted language with a clean syntax, a TUI REPL, and a growing standard library. It runs `.rl` source files or interactively via a terminal REPL.
-
+  <img src="logo-circle.svg" width="200">
+  <h1>RL</h1>
+  <p>A statically-typed interpreted language written in Rust with a clean syntax, a TUI REPL, and a growing standard library.</p>
 </div>
 
 ## Quick look
