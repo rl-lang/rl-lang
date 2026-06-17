@@ -30,7 +30,7 @@ pub fn module() -> Module {
         .with_function("mkdir_all", mkdir_all::std_mkdir_all)
         .with_function("rmdir", rmdir::std_rmdir)
         .with_function("rmdir_all", rmdir_all::std_rmdir_all)
-        .with_function("list_dir", list_dir::std_lit_dir)
+        .with_function("list_dir", list_dir::std_list_dir)
         .with_function("copy_file", copy_file::std_copy_file)
         .with_function("move_file", move_file::std_move_file)
         .with_function("file_size", file_size::std_file_size)
