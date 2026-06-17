@@ -3,10 +3,10 @@ use crate::{
     utils::errors::{Error, ErrorReason, Reason},
 };
 
-pub fn std_rmdir(_: &mut Evaluator, path: String) -> Result<Value, Error> {
-    std::fs::remove_dir(&path).map_err(|e| {
+pub fn std_rmdir_all(_: &mut Evaluator, path: String) -> Result<Value, Error> {
+    std::fs::remove_dir_all(&path).map_err(|e| {
         Error::init(
-            format!("rmdir(): failed to delete \"{}\": {}", path, e),
+            format!("rmdir_all(): failed to delete \"{}\": {}", path, e),
             None,
             Some(ErrorReason::init(Reason::Runtime, None)),
         )
