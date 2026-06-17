@@ -1,6 +1,9 @@
 mod append_file;
 mod delete_file;
+mod eprint;
 mod input;
+mod print;
+mod println;
 mod read_file;
 mod read_lines;
 mod write_file;
@@ -16,6 +19,9 @@ pub const KEYWORDS: &[&str] = &[
     "delete_file",
     "write_file",
     "append_file",
+    "print",
+    "println",
+    "eprint",
 ];
 
 pub fn module() -> Module {
@@ -28,4 +34,7 @@ pub fn module() -> Module {
         .with_function("delete_file", delete_file::std_delete_file)
         .with_function("write_file", write_file::std_write_file)
         .with_function("append_file", append_file::std_append_file)
+        .with_raw_function("print", print::std_print)
+        .with_raw_function("println", println::std_println)
+        .with_function("eprint", eprint::std_eprint)
 }

@@ -18,6 +18,9 @@ static FUNCTIONS: &[&FnEntry] = &[
     &READ_FILE,
     &READ_LINES,
     &WRITE_FILE,
+    &PRINT,
+    &PRINTLN,
+    &EPRINT,
 ];
 
 static READ: FnEntry = FnEntry {
@@ -84,4 +87,22 @@ static WRITE_FILE: FnEntry = FnEntry {
     signature: "write_file(path, contents)",
     description: "writes content to a file overwriting it if it already exists",
     example: "get std::io::write_file\n\nwrite_file(\"index.html\", \"<p>hello \\\"Mohamed\\\"</p>\")",
+};
+
+static PRINT: FnEntry = FnEntry {
+    signature: "print(x)",
+    description: "print without newline",
+    example: "get std::io::print\n\nprint(\"hello\")",
+};
+
+static PRINTLN: FnEntry = FnEntry {
+    signature: "println(x)",
+    description: "print with newline",
+    example: "get std::io:println\n\nprintln(\"hello\")",
+};
+
+static EPRINT: FnEntry = FnEntry {
+    signature: "eprint(string)",
+    description: "halts evaluation with an error containing the given message",
+    example: "get std::io::eprint\n\neprint(\"something went wrong\") // x error: something went wrong",
 };

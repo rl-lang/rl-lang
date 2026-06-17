@@ -46,7 +46,7 @@ const SRC_FN_FN_PARAM: &str = "fn x (fn x, int y) {return x(y)}";
 const SRC_DEC_FN_LAMBDA: &str = "dec fn x = fn(int x) {return x}";
 
 const SRC_PROGRAM_MATH_PRINT: &str = "\
-get println from std::display
+get println from std::io
 get pow from std::math
 get std::math::consts::PI
 
@@ -56,7 +56,7 @@ dec float x = pow(pi, pi)
 println(x, y)";
 
 const SRC_PROGRAM_GEOMETRY: &str = "\
-get println from std::display
+get println from std::io
 get sin, cos, hypot, is_prime, log2, factorial from std::math
 get PI, TAU, PHI from std::math::consts
 
@@ -82,7 +82,7 @@ dec bool big = lg > TAU()
 println(hyp, is_right, prime, big)";
 
 const SRC_PROGRAM_FN_ARRAY: &str = "\
-get println from std::display
+get println from std::io
 get is_prime, factorial, fibonacci from std::math
 
 dec int n = 10

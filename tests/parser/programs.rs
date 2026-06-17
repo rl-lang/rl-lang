@@ -12,7 +12,7 @@ use crate::common;
 #[test]
 fn integration_math_print() {
     let statements = common::parse(
-        "get println from std::display
+        "get println from std::io
 get pow from std::math
 get std::math::consts::PI
 
@@ -155,7 +155,7 @@ println(x, y)",
 #[test]
 fn integration_geometry() {
     let statements = common::parse(
-        "get println from std::display
+        "get println from std::io
 get sin, cos, hypot, is_prime, log2, factorial from std::math
 get PI, TAU, PHI from std::math::consts
 
@@ -645,7 +645,7 @@ println(hyp, is_right, prime, big)",
 #[test]
 fn integration_fn_array() {
     let statements = common::parse(
-        "get println from std::display
+        "get println from std::io
 get is_prime, factorial, fibonacci from std::math
 
 dec int n = 10

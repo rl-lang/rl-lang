@@ -1,4 +1,4 @@
-get println from std::display
+get println from std::io
 
 fn main() {
     println("hello world")
