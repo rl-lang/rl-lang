@@ -50,3 +50,77 @@ pub fn std_read(_: &mut Evaluator, args: Vec<Value>) -> Result<Value, Error> {
         )),
     }
 }
+
+// reads input then parses to integer if possible otherwise error
+pub fn std_read_int(_: &mut Evaluator, args: Vec<Value>) -> Result<Value, Error> {
+    let len = args.len();
+    let mut args = args.into_iter();
+
+    let value = match len {
+        0 => input(None),
+        1 => input(args.next()),
+        n => Err(Error::init(
+            format!("read_int() expects 0 or 1 argument(s), got {}", n),
+            None,
+            Some(ErrorReason::init(Reason::Runtime, None)),
+        )),
+    }?;
+
+    match value {
+        Value::String(s) => s.parse::<i64>().map(Value::Integer).map_err(|_| {
+            Error::init(
+                format!("read_int(): \"{}\" is not a valid integer", s),
+                None,
+                Some(ErrorReason::init(Reason::Runtime, None)),
+            )
+        }),
+        // those unreachable btw
+        Value::Integer(i) => Ok(Value::Integer(i)),
+        Value::Float(f) => Ok(Value::Integer(f as i64)),
+        other => Err(Error::init(
+            format!(
+                "read_int(): found unsupported type from input, got {}",
+                other.type_name()
+            ),
+            None,
+            Some(ErrorReason::init(Reason::Runtime, None)),
+        )),
+    }
+}
+
+// reads the input then parses the string into float if possible or error
+pub fn std_read_float(_: &mut Evaluator, args: Vec<Value>) -> Result<Value, Error> {
+    let len = args.len();
+    let mut args = args.into_iter();
+
+    let value = match len {
+        0 => input(None),
+        1 => input(args.next()),
+        n => Err(Error::init(
+            format!("read_float() expects 0 or 1 argument(s), got {}", n),
+            None,
+            Some(ErrorReason::init(Reason::Runtime, None)),
+        )),
+    }?;
+
+    match value {
+        Value::String(s) => s.parse::<f64>().map(Value::Float).map_err(|_| {
+            Error::init(
+                format!("read_float(): \"{}\" is not a valid float", s),
+                None,
+                Some(ErrorReason::init(Reason::Runtime, None)),
+            )
+        }),
+        // those are un----reachable!! might change read_line() or remove them
+        Value::Integer(i) => Ok(Value::Float(i as f64)),
+        Value::Float(f) => Ok(Value::Float(f)),
+        other => Err(Error::init(
+            format!(
+                "read_float(): found unsupported type from input, got {}",
+                other.type_name()
+            ),
+            None,
+            Some(ErrorReason::init(Reason::Runtime, None)),
+        )),
+    }
+}
