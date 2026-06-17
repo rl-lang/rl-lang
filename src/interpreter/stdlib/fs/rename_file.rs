@@ -10,7 +10,7 @@ pub fn std_rename_file(_: &mut Evaluator, path: String, new_name: String) -> Res
         None => std::path::PathBuf::from(&new_name),
     };
 
-    std::fs::rename(&old_path, &new_path).map_err(|e| {
+    std::fs::rename(old_path, &new_path).map_err(|e| {
         Error::init(
             format!(
                 "rename_file(): failed to rename \"{}\" to \"{}\": {}",
