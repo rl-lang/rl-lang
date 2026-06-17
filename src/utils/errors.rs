@@ -6,6 +6,7 @@ use crate::utils::source::SourceFile;
 use crate::utils::span::Span;
 
 /// heavy optional fields, heap-allocated so `Error` stays small on the stack
+#[derive(Debug, Clone)]
 struct ErrorDetail {
     /// primary span (anchor of the ariadne report) and its label text
     primary: (Span, String),
@@ -20,6 +21,7 @@ struct ErrorDetail {
 }
 
 /// represents an Interpreter error with optional line number and error category
+#[derive(Debug, Clone)]
 pub struct Error {
     /// readable message
     message: String,
@@ -32,6 +34,7 @@ pub struct Error {
 }
 
 /// provides an error category with optional error context
+#[derive(Debug, Clone)]
 pub struct ErrorReason {
     /// error category
     error_type: Reason,
@@ -40,7 +43,7 @@ pub struct ErrorReason {
 }
 
 /// the error category
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Reason {
     /// error occured during parsing
     Parse,
@@ -200,6 +203,11 @@ impl Error {
                 _ => println!("[{}]", r.get_type_string()),
             }
         }
+    }
+
+    // adds a way to extract bytes from span in Error
+    pub fn span(&self) -> Option<crate::utils::span::Span> {
+        self.detail.as_ref().map(|d| d.primary.0)
     }
 }
 

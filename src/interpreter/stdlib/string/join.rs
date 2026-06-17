@@ -5,7 +5,7 @@ use crate::{
 
 pub fn std_join(_: &mut Evaluator, strings_array: Value, delim: String) -> Result<Value, Error> {
     match strings_array {
-        Value::Values(array) => {
+        Value::Values { items: array, .. } => {
             let mut strings: Vec<String> = vec![];
             for v in array {
                 match v {

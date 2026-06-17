@@ -5,6 +5,7 @@ mod concat;
 mod contains;
 mod count;
 mod ends_with;
+mod format;
 mod index_of;
 mod is_empty;
 mod join;
@@ -47,6 +48,7 @@ pub const KEYWORDS: &[&str] = &[
     "join",
     "count",
     "index_of",
+    "format",
 ];
 
 pub fn module() -> Module {
@@ -74,4 +76,5 @@ pub fn module() -> Module {
         .with_function("replace", replace::std_replace)
         .with_function("count", count::std_count)
         .with_function("index_of", index_of::std_index_of)
+        .with_raw_function("format", format::std_format)
 }

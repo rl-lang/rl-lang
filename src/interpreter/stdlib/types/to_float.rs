@@ -23,7 +23,7 @@ pub fn std_to_float(_: &mut Evaluator, value: Value) -> Result<f64, Error> {
             None,
             None,
         )),
-        Value::Values(_) => Err(Error::init(
+        Value::Values { .. } => Err(Error::init(
             "cannot parse \"array\" as float".to_string(),
             None,
             None,

@@ -1,0 +1,4 @@
+[project]
+name = "my-test-structure"
+version = "v0.0.1"
+entry = "main.rl"

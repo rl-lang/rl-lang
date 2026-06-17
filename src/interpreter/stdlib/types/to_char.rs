@@ -43,7 +43,7 @@ pub fn std_to_char(_: &mut Evaluator, value: Value) -> Result<char, Error> {
             None,
             None,
         )),
-        Value::Values(_) => Err(Error::init(
+        Value::Values { .. } => Err(Error::init(
             "cannot parse \"array\" as character".to_string(),
             None,
             None,

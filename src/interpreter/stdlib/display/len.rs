@@ -2,7 +2,7 @@ use crate::{interpreter::evaluator::Evaluator, interpreter::values::Value, utils
 
 pub fn std_len(_: &mut Evaluator, v: Value) -> Result<i64, Error> {
     match v {
-        Value::Values(items) => Ok(items.len() as i64),
+        Value::Values { items, .. } => Ok(items.len() as i64),
         Value::String(s) => Ok(s.len() as i64),
         other => Err(Error::init(
             format!(

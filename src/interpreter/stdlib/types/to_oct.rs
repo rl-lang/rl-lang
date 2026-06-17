@@ -23,7 +23,7 @@ pub fn std_to_oct(_: &mut Evaluator, value: Value) -> Result<String, Error> {
             None,
             None,
         )),
-        Value::Values(_) => Err(Error::init(
+        Value::Values { .. } => Err(Error::init(
             "cannot parse \"array\" as octal".to_string(),
             None,
             None,

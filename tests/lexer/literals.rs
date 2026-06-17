@@ -87,9 +87,9 @@ fn minus_equal_literal() {
 /// Float literal produces `FloatLiteral` with correct value and lexeme
 #[test]
 fn float_literal() {
-    let tokens = common::lex("3.14");
-    assert_eq!(tokens[0].token, TokenType::FloatLiteral(3.14));
-    assert_eq!(tokens[0].lexeme, "3.14");
+    let tokens = common::lex("3.84");
+    assert_eq!(tokens[0].token, TokenType::FloatLiteral(3.84));
+    assert_eq!(tokens[0].lexeme, "3.84");
 }
 
 /// String literal strips quotes and produces `StringLiteral` with inner content

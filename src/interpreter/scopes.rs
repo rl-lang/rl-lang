@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
     ast::statements::TypeAnnotation,
@@ -11,7 +11,7 @@ use crate::{
 
 impl Evaluator {
     pub fn push_scope(&mut self) {
-        self.environment.push(HashMap::new());
+        self.environment.push(Rc::new(RefCell::new(HashMap::new())));
     }
 
     pub fn pop_scope(&mut self) {
@@ -20,7 +20,7 @@ impl Evaluator {
 
     pub fn get_value(&self, name: &str, span: Span) -> Result<Value, Error> {
         for scope in self.environment.iter().rev() {
-            if let Some(item) = scope.get(name) {
+            if let Some(item) = scope.borrow().get(name) {
                 match item {
                     EnvironmentItem::PItem(p) => {
                         return Ok(p.value.clone());
@@ -28,12 +28,13 @@ impl Evaluator {
                 }
             }
         }
-        let all_keys = self
+        let all_keys: Vec<String> = self
             .environment
             .iter()
-            .flat_map(|s| s.keys().map(|k| k.as_str()));
+            .flat_map(|s| s.borrow().keys().cloned().collect::<Vec<_>>())
+            .collect();
         let mut err = self.err(format!("undefined variable {}", name), span);
-        if let Some(suggestion) = closest_match(name, all_keys) {
+        if let Some(suggestion) = closest_match(name, all_keys.iter().map(|s| s.as_str())) {
             err = err.with_help(format!("did you mean `{}`?", suggestion));
         }
         Err(err)
@@ -47,7 +48,7 @@ impl Evaluator {
         span: Span,
     ) -> Result<(), Error> {
         for scope in self.environment.iter().rev() {
-            if let Some(item) = scope.get(&name) {
+            if let Some(item) = scope.borrow().get(&name) {
                 match item {
                     EnvironmentItem::PItem(p) => {
                         if p.is_const {
@@ -60,7 +61,7 @@ impl Evaluator {
             }
         }
         if let Some(scope) = self.environment.last_mut() {
-            scope.insert(
+            scope.borrow_mut().insert(
                 name,
                 EnvironmentItem::PItem(PItem {
                     value,
@@ -79,11 +80,12 @@ impl Evaluator {
         type_annotation: TypeAnnotation,
         span: Span,
     ) -> Result<(), Error> {
-        let scope = self.environment.last_mut().unwrap();
-        if scope.contains_key(&name) {
+        let no_scope_err = self.err("no active scope", span);
+        let scope = self.environment.last_mut().ok_or(no_scope_err)?;
+        if scope.borrow().contains_key(&name) {
             return Err(self.err(format!("'{}' is already declared", name), span));
         }
-        scope.insert(
+        scope.borrow_mut().insert(
             name,
             EnvironmentItem::PItem(PItem {
                 value,
@@ -101,8 +103,9 @@ impl Evaluator {
         value_type: TypeAnnotation,
         span: Span,
     ) -> Result<(), Error> {
-        for scope in self.environment.iter_mut().rev() {
-            if let Some(entry) = scope.get_mut(&name) {
+        for scope in self.environment.iter().rev() {
+            let mut borrowed_scope = scope.borrow_mut();
+            if let Some(entry) = borrowed_scope.get_mut(&name) {
                 match entry {
                     EnvironmentItem::PItem(p) => {
                         if p.is_const {
@@ -142,5 +145,15 @@ impl Evaluator {
             }
         }
         Err(self.err(format!("undefined variable '{}'", name), span))
+    }
+
+    // tests
+    pub fn get_value_raw(&self, name: &str) -> Option<Value> {
+        for scope in self.environment.iter().rev() {
+            if let Some(EnvironmentItem::PItem(p)) = scope.borrow().get(name) {
+                return Some(p.value.clone());
+            }
+        }
+        None
     }
 }

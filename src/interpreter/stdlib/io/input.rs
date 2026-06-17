@@ -1,12 +1,14 @@
-use std::io;
+use crate::{
+    interpreter::{evaluator::Evaluator, values::Value},
+    utils::errors::{Error, ErrorReason, Reason},
+};
+use std::io::{self, Write};
 
-use crate::{interpreter::evaluator::Evaluator, interpreter::values::Value, utils::errors::Error};
-
-pub fn std_input(_: &mut Evaluator, args: Vec<Value>) -> Result<Value, Error> {
-    match args.len() {
-        0 => Ok(read_line()),
-        1 => {
-            let prompt = match args.into_iter().next().unwrap() {
+fn input(prompt: Option<Value>) -> Result<Value, Error> {
+    match prompt {
+        None => read_line(),
+        Some(p) => {
+            let prompt = match p {
                 Value::Integer(i) => i.to_string(),
                 Value::Float(f) => f.to_string(),
                 Value::String(s) => s,
@@ -15,21 +17,110 @@ pub fn std_input(_: &mut Evaluator, args: Vec<Value>) -> Result<Value, Error> {
                 Value::Null => "null".to_string(),
                 _ => "".to_string(),
             };
-            println!("{}", prompt);
-            Ok(read_line())
+            print!("{}", prompt);
+            io::stdout().flush().ok();
+            read_line()
         }
+    }
+}
+
+fn read_line() -> Result<Value, Error> {
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).map_err(|e| {
+        Error::init(
+            format!("read(): failed to read line: {}", e),
+            None,
+            Some(ErrorReason::init(Reason::Runtime, None)),
+        )
+    })?;
+    Ok(Value::String(input.trim().to_string()))
+}
+
+pub fn std_read(_: &mut Evaluator, args: Vec<Value>) -> Result<Value, Error> {
+    let len = args.len();
+    let mut args = args.into_iter();
+
+    match len {
+        0 => input(None),
+        1 => input(args.next()),
         n => Err(Error::init(
-            format!("input() expects 0 or 1 argument(s), got {}", n),
+            format!("read() expects 0 or 1 argument(s), got {}", n),
             None,
-            None,
+            Some(ErrorReason::init(Reason::Runtime, None)),
         )),
     }
 }
 
-fn read_line() -> Value {
-    let mut input = String::new();
-    io::stdin()
-        .read_line(&mut input)
-        .expect("Failed to read line");
-    Value::String(input.trim().to_string())
+// reads input then parses to integer if possible otherwise error
+pub fn std_read_int(_: &mut Evaluator, args: Vec<Value>) -> Result<Value, Error> {
+    let len = args.len();
+    let mut args = args.into_iter();
+
+    let value = match len {
+        0 => input(None),
+        1 => input(args.next()),
+        n => Err(Error::init(
+            format!("read_int() expects 0 or 1 argument(s), got {}", n),
+            None,
+            Some(ErrorReason::init(Reason::Runtime, None)),
+        )),
+    }?;
+
+    match value {
+        Value::String(s) => s.parse::<i64>().map(Value::Integer).map_err(|_| {
+            Error::init(
+                format!("read_int(): \"{}\" is not a valid integer", s),
+                None,
+                Some(ErrorReason::init(Reason::Runtime, None)),
+            )
+        }),
+        // those unreachable btw
+        Value::Integer(i) => Ok(Value::Integer(i)),
+        Value::Float(f) => Ok(Value::Integer(f as i64)),
+        other => Err(Error::init(
+            format!(
+                "read_int(): found unsupported type from input, got {}",
+                other.type_name()
+            ),
+            None,
+            Some(ErrorReason::init(Reason::Runtime, None)),
+        )),
+    }
+}
+
+// reads the input then parses the string into float if possible or error
+pub fn std_read_float(_: &mut Evaluator, args: Vec<Value>) -> Result<Value, Error> {
+    let len = args.len();
+    let mut args = args.into_iter();
+
+    let value = match len {
+        0 => input(None),
+        1 => input(args.next()),
+        n => Err(Error::init(
+            format!("read_float() expects 0 or 1 argument(s), got {}", n),
+            None,
+            Some(ErrorReason::init(Reason::Runtime, None)),
+        )),
+    }?;
+
+    match value {
+        Value::String(s) => s.parse::<f64>().map(Value::Float).map_err(|_| {
+            Error::init(
+                format!("read_float(): \"{}\" is not a valid float", s),
+                None,
+                Some(ErrorReason::init(Reason::Runtime, None)),
+            )
+        }),
+        // those are un----reachable!! might change read_line() or remove them
+        Value::Integer(i) => Ok(Value::Float(i as f64)),
+        Value::Float(f) => Ok(Value::Float(f)),
+        other => Err(Error::init(
+            format!(
+                "read_float(): found unsupported type from input, got {}",
+                other.type_name()
+            ),
+            None,
+            Some(ErrorReason::init(Reason::Runtime, None)),
+        )),
+    }
 }

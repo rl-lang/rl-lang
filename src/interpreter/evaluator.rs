@@ -1,5 +1,6 @@
-use std::collections::HashMap;
+use std::cell::RefCell;
 use std::sync::Arc;
+use std::{collections::HashMap, rc::Rc};
 
 use crate::{
     ast::{
@@ -19,20 +20,20 @@ use crate::{
     },
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PItem {
     pub value: Value,
     pub type_annotation: TypeAnnotation,
     pub is_const: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum EnvironmentItem {
     PItem(PItem),
 }
 
 pub struct Evaluator {
-    pub environment: Vec<HashMap<String, EnvironmentItem>>,
+    pub environment: Vec<Rc<RefCell<HashMap<String, EnvironmentItem>>>>,
     pub source_file: Option<SourceFile>,
     pub root_module: Module,
     pub return_value: Option<Value>,
@@ -50,7 +51,7 @@ impl Default for Evaluator {
 impl Evaluator {
     pub fn new() -> Self {
         Self {
-            environment: vec![HashMap::new()],
+            environment: vec![Rc::new(RefCell::new(HashMap::new()))],
             source_file: None,
             root_module: Module::new(""),
             return_value: None,
@@ -91,7 +92,10 @@ impl Evaluator {
                 .with_module(stdlib::display::module())
                 .with_module(stdlib::io::module())
                 .with_module(stdlib::string::module())
-                .with_module(stdlib::types::module()),
+                .with_module(stdlib::types::module())
+                .with_module(stdlib::array::module())
+                .with_module(stdlib::path::module())
+                .with_module(stdlib::fs::module()),
         )
     }
 
@@ -105,19 +109,53 @@ impl Evaluator {
     }
 
     /// Infer the [`TypeAnnotation`] of a runtime [`Value`].
-    pub fn infer_type(value: &Value) -> TypeAnnotation {
+    pub fn infer_type(value: &Value, is_const: bool) -> TypeAnnotation {
         match value {
-            Value::Integer(_) => TypeAnnotation::Int,
-            Value::Float(_) => TypeAnnotation::Float,
-            Value::String(_) => TypeAnnotation::String,
-            Value::Bool(_) => TypeAnnotation::Bool,
-            Value::Char(_) => TypeAnnotation::Char,
-            Value::Values(items) => {
+            Value::Integer(_) => {
+                if is_const {
+                    TypeAnnotation::CInt
+                } else {
+                    TypeAnnotation::Int
+                }
+            }
+            Value::Float(_) => {
+                if is_const {
+                    TypeAnnotation::CFloat
+                } else {
+                    TypeAnnotation::Float
+                }
+            }
+            Value::String(_) => {
+                if is_const {
+                    TypeAnnotation::CString
+                } else {
+                    TypeAnnotation::String
+                }
+            }
+            Value::Bool(_) => {
+                if is_const {
+                    TypeAnnotation::CBool
+                } else {
+                    TypeAnnotation::Bool
+                }
+            }
+            Value::Char(_) => {
+                if is_const {
+                    TypeAnnotation::CChar
+                } else {
+                    TypeAnnotation::Char
+                }
+            }
+            Value::Values { items, .. } => {
                 let inner = items
                     .first()
-                    .map(Self::infer_type)
+                    .map(|v| Self::infer_type(v, false))
                     .unwrap_or(TypeAnnotation::Null);
-                TypeAnnotation::Array(Box::new(inner))
+                if is_const {
+                    TypeAnnotation::CArray(Box::new(inner))
+                } else {
+                    TypeAnnotation::Array(Box::new(inner))
+                }
             }
             Value::Null => TypeAnnotation::Null,
             Value::Function { .. } => TypeAnnotation::Fn,
@@ -147,7 +185,7 @@ impl Evaluator {
                 let idx = self.evaluate(index)?;
                 self.check_not_null(&idx, index.span)?;
                 match (&arr, &idx) {
-                    (Value::Values(items), Value::Integer(i)) => {
+                    (Value::Values { items, .. }, Value::Integer(i)) => {
                         let i_usize = *i as usize;
                         if i_usize >= items.len() {
                             return Err(self
@@ -175,8 +213,16 @@ impl Evaluator {
                 for e in items {
                     values.push(self.evaluate(e)?);
                 }
-                Value::Values(values)
+                let items_type = values
+                    .first()
+                    .map(|v| Self::infer_type(v, false))
+                    .unwrap_or(TypeAnnotation::Null);
+                Value::Values {
+                    items_type,
+                    items: values,
+                }
             }
+
             ExpressionKind::IndexAssign {
                 target,
                 index,
@@ -209,7 +255,7 @@ impl Evaluator {
             ExpressionKind::Identifier(name) => self.get_value(name, expression.span)?,
             ExpressionKind::Assign { name, value } => {
                 let val = self.evaluate(value)?;
-                let inferred_type = Self::infer_type(&val);
+                let inferred_type = Self::infer_type(&val, false);
                 self.assign_value(name.clone(), val.clone(), inferred_type, expression.span)?;
                 val
             }
@@ -217,7 +263,6 @@ impl Evaluator {
                 let mut evaluated_args = Vec::with_capacity(args.len());
                 for arg in args {
                     let val = self.evaluate(arg)?;
-                    self.check_not_null(&val, arg.span)?;
                     evaluated_args.push(val);
                 }
                 self.call_path(path, evaluated_args, expression.span)?
@@ -228,7 +273,6 @@ impl Evaluator {
                 let mut evaluated_args = Vec::with_capacity(args.len());
                 for arg in args {
                     let val = self.evaluate(arg)?;
-                    self.check_not_null(&val, arg.span)?;
                     evaluated_args.push(val);
                 }
                 self.call_value(func_val, evaluated_args, expression.span)?
@@ -296,7 +340,7 @@ impl Evaluator {
             self.push_scope();
 
             for (param, arg) in params.iter().zip(args) {
-                let arg_type = Self::infer_type(&arg);
+                let arg_type = Self::infer_type(&arg, false);
                 self.insert_value(param.param_name.clone(), arg, arg_type, span)?;
             }
 
@@ -315,7 +359,7 @@ impl Evaluator {
             if let Some(expected) = &return_type
                 && *expected != TypeAnnotation::Null
             {
-                let actual = Self::infer_type(&result);
+                let actual = Self::infer_type(&result, false);
                 if *expected != actual {
                     return Err(self.err(
                         format!(
@@ -378,7 +422,7 @@ impl Evaluator {
                 self.push_scope();
 
                 for (param, arg) in params.iter().zip(args) {
-                    let arg_type = Self::infer_type(&arg);
+                    let arg_type = Self::infer_type(&arg, false);
                     self.insert_value(param.param_name.clone(), arg, arg_type, span)?;
                 }
 
@@ -401,7 +445,7 @@ impl Evaluator {
                 if let Some(expected) = &return_type
                     && *expected != TypeAnnotation::Null
                 {
-                    let actual = Self::infer_type(&result);
+                    let actual = Self::infer_type(&result, false);
                     if *expected != actual {
                         return Err(self.err(
                             format!(
@@ -427,6 +471,9 @@ impl Evaluator {
                 .chain(stdlib::io::KEYWORDS)
                 .chain(stdlib::string::KEYWORDS)
                 .chain(stdlib::types::KEYWORDS)
+                .chain(stdlib::array::KEYWORDS)
+                .chain(stdlib::path::KEYWORDS)
+                .chain(stdlib::fs::KEYWORDS)
                 .copied();
             if let Some(suggestion) = closest_match(last, candidates) {
                 err = err.with_help(format!("did you mean `{}`?", suggestion));

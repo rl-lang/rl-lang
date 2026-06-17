@@ -24,7 +24,7 @@ pub fn std_to_bool(_: &mut Evaluator, value: Value) -> Result<bool, Error> {
             None,
             None,
         )),
-        Value::Values(_) => Err(Error::init(
+        Value::Values { .. } => Err(Error::init(
             "cannot parse \"array\" as bool".to_string(),
             None,
             None,

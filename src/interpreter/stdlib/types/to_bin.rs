@@ -25,7 +25,7 @@ pub fn std_to_bin(_: &mut Evaluator, value: Value) -> Result<String, Error> {
             None,
             None,
         )),
-        Value::Values(_) => Err(Error::init(
+        Value::Values { .. } => Err(Error::init(
             "cannot parse \"array\" as binary".to_string(),
             None,
             None,

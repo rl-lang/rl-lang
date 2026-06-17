@@ -8,9 +8,10 @@
 // ------------------------------------------------------------
 // 1. imports
 // ------------------------------------------------------------
-get println, len from std::display
+get len from std::display
+get println from std::io
 get sin, cos, tan, pow, mod, is_prime, factorial, fibonacci from std::math
-get PI, TUA, PHI, E from std::math::consts
+get PI, TAU, PHI, E from std::math::consts
 
 
 // ------------------------------------------------------------
@@ -92,7 +93,7 @@ println(my_float_sin, my_float_cos, my_float_tan)
 
 dec float circle_area = PI() * pow(5.0, 2.0) // πr²
 dec float golden      = PHI()                 // ~1.618
-dec float full_turn   = TUA()                 // ~6.283
+dec float full_turn   = TAU()                 // ~6.283
 dec float napier      = E()                   // ~2.718
 println(circle_area, golden, full_turn, napier)
 

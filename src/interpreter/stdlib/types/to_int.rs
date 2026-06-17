@@ -24,7 +24,7 @@ pub fn std_to_int(_: &mut Evaluator, value: Value) -> Result<i64, Error> {
             None,
             None,
         )),
-        Value::Values(_) => Err(Error::init(
+        Value::Values { .. } => Err(Error::init(
             "cannot parse \"array\" as int".to_string(),
             None,
             None,

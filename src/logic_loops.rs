@@ -1,8 +1,6 @@
 #[cfg(feature = "debug")]
 use log::info;
 
-use crate::utils::errors::{Error, ErrorReason, Reason};
-
 #[cfg(feature = "eval")]
 use super::interpreter::evaluator::Evaluator;
 
@@ -13,35 +11,6 @@ use super::{
     utils::source::SourceFile,
 };
 
-pub fn validate_source_arg(arguments: &[String]) -> Result<String, &'static str> {
-    let path = arguments.get(2).ok_or_else(|| {
-        Error::init(
-            "no source file provided".to_string(),
-            None,
-            Some(ErrorReason::init(Reason::Compile, None)),
-        )
-        .print_error();
-        "no source file provided"
-    })?;
-    if !path.ends_with(".rl") {
-        Error::init(
-            "file extension is not .rl".to_string(),
-            None,
-            Some(ErrorReason::init(Reason::Compile, None)),
-        )
-        .print_error();
-        return Err("file extension is not .rl");
-    }
-    std::fs::read_to_string(path).map_err(|_| {
-        Error::init(
-            "failed to read file".to_string(),
-            None,
-            Some(ErrorReason::init(Reason::Compile, None)),
-        )
-        .print_error();
-        "failed to read file"
-    })
-}
 pub fn lexing_loop(source: SourceFile) -> Vec<Token> {
     #[cfg(feature = "debug")]
     info!("lexing the source file...");

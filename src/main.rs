@@ -1,100 +1,178 @@
-#[cfg(feature = "debug")]
-use log::{debug, info};
+use clap::{Parser, Subcommand};
+use rl_lang::docs;
+use rl_lang::tooling::new::create_project;
+use std::path::PathBuf;
 
-use rl_lang::logic_loops::{eval_loop, lexing_loop, parsing_loop, validate_source_arg};
-
-use rl_lang::utils::{
-    errors::{Error, ErrorReason, Reason},
-    source::SourceFile,
-};
-
+#[cfg(feature = "lsp")]
+use rl_lang::lsp::run_lsp;
 #[cfg(feature = "repl_tui")]
 use rl_lang::repl;
+use rl_lang::utils::source::SourceFile;
+use rl_lang::{
+    logic_loops::{eval_loop, lexing_loop, parsing_loop},
+    tooling::dev::read_rl_toml,
+};
 
-#[cfg(feature = "repl_terminal")]
-use rl_lang::repl_terminal;
+#[derive(Parser)]
+#[command(name = "rl", version, about = "The rl programming language")]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
 
-/// entry point for `rl` interpreter
-///
-/// # usage
-/// ```bash
-/// rl run <source.rl>
-/// ```
-///
-/// # phases
-/// 1. **lexing**
-/// 2. **parsing**
-/// 3. **evaluating**
+#[derive(Subcommand)]
+enum Commands {
+    /// Run a .rl source file
+    Run {
+        /// Path to the .rl file
+        file: PathBuf,
+    },
+    /// Start the REPL
+    Repl,
+
+    /// Run the project directory
+    Dev,
+
+    /// Create a new project directory
+    New {
+        /// Name for the project
+        name: String,
+    },
+
+    /// Checks the file for errors
+    Check {
+        /// Path to the .rl file
+        file: PathBuf,
+    },
+
+    /// Print language reference and stdlib documentation
+    // will be useful for multi use hehehe
+    Docs {
+        /// Topic to show (WIP)
+        topic: Option<String>,
+    },
+
+    /// Start the LSP server
+    #[cfg(feature = "lsp")]
+    Lsp,
+}
+
 fn main() {
-    // initializing the logger
-    #[cfg(feature = "debug")]
-    env_logger::Builder::new()
-        .filter_level(log::LevelFilter::Debug)
-        .target(env_logger::Target::Pipe(Box::new(
-            std::fs::File::create("log.txt").unwrap(),
-        )))
-        .init();
-    #[cfg(feature = "debug")]
-    info!("logger initialized");
+    let cli = Cli::parse();
 
-    // arguments
-    #[cfg(feature = "debug")]
-    info!("reading arguments");
-
-    let arguments: Vec<String> = std::env::args().collect();
-
-    #[cfg(feature = "debug")]
-    debug!("used arguments [{:?}]", arguments);
-
-    if cfg!(feature = "run") && arguments.len() == 3 && arguments[1] == "run" {
-        #[cfg(feature = "debug")]
-        log::info!("starting the interpreter");
-    } else if cfg!(feature = "repl") && arguments.len() == 2 && arguments[1] == "repl" {
-        if cfg!(feature = "repl_tui") {
-            #[cfg(feature = "debug")]
-            log::info!("starting repl TUI");
-            repl::start_repl();
-        } else if cfg!(feature = "repl_terminal") {
-            #[cfg(feature = "debug")]
-            log::info!("starting repl terminal shell");
-            println!("[Starting REPL shell]");
-            #[cfg(feature = "repl_terminal")]
-            repl_terminal::start_repl();
+    match cli.command {
+        Commands::Run { file } => {
+            let path = file
+                .to_str()
+                .unwrap_or_else(|| {
+                    eprintln!("error: invalid file path");
+                    std::process::exit(1);
+                })
+                .to_string();
+            let source_text = std::fs::read_to_string(&file).unwrap_or_else(|_| {
+                eprintln!("error: could not read file '{}'", file.display());
+                std::process::exit(1);
+            });
+            let source = SourceFile::new(&*path, source_text);
+            let tokens = lexing_loop(source.clone());
+            let statements = parsing_loop(source.clone(), tokens);
+            if cfg!(feature = "eval") {
+                eval_loop(source, statements);
+            }
         }
-        return;
-    } else {
-        println!("Error: wrong usage");
-        println!("\n[Interpreter Mode]");
-        println!("rl run <source-file.rl>\t\t(rl run test.rl)");
-        println!("\n[REPL Mode]");
-        println!("rl repl");
-        return;
-    }
 
-    // check the source file if it ends with rl extension and then parse it to string
-    if !arguments[2].ends_with(".rl") {
-        Error::init(
-            "file extension is not .rl".to_string(),
-            None,
-            Some(ErrorReason::init(Reason::Compile, None)),
-        )
-        .print_error();
-        return;
-    }
+        Commands::Dev => {
+            let config = read_rl_toml();
+            let path = std::path::PathBuf::from(&config.project.entry);
+            let source_text = std::fs::read_to_string(&path).unwrap_or_else(|_| {
+                eprintln!(
+                    "error: could not read entry file '{}'",
+                    config.project.entry
+                );
+                std::process::exit(1);
+            });
+            println!("[{}] v{}", config.project.name, config.project.version);
+            let source = SourceFile::new(&*config.project.entry, source_text);
+            let tokens = lexing_loop(source.clone());
+            let statements = parsing_loop(source.clone(), tokens);
+            if cfg!(feature = "eval") {
+                eval_loop(source, statements);
+            }
+        }
 
-    let source_file = validate_source_arg(&arguments).unwrap_or_else(|_| std::process::exit(1));
+        Commands::Check { file } => {
+            let path = file
+                .to_str()
+                .unwrap_or_else(|| {
+                    eprintln!("error: invalid file path");
+                    std::process::exit(1);
+                })
+                .to_string();
+            let source_text = std::fs::read_to_string(&file).unwrap_or_else(|_| {
+                eprintln!("error: could not read file '{}'", file.display());
+                std::process::exit(1);
+            });
+            let source = SourceFile::new(&*path, source_text);
+            let tokens = lexing_loop(source.clone());
+            parsing_loop(source.clone(), tokens);
+            println!("ok");
+        }
 
-    println!("[Parsing source file: {}]", arguments[2]);
-    let source = SourceFile::new(arguments[2].as_str(), source_file);
+        Commands::New { name } => {
+            create_project(&name);
+        }
 
-    // phase one: lexing the source file into tokens
-    let tokens = lexing_loop(source.clone());
+        Commands::Docs { topic } => {
+            let std_entries = docs::entries::stdlib_entries();
+            let concept_entries = docs::entries::concept_entries();
 
-    // phase two: parsing the tokens into ast tree
-    let statements = parsing_loop(source.clone(), tokens);
+            match topic.as_deref() {
+                None => {
+                    println!("{}", docs::std_to_markdown(&std_entries));
+                    println!("{}", docs::concept_to_markdown(&concept_entries));
+                }
+                Some(query) => {
+                    // search stdlib entries
+                    let matched_std: Vec<&docs::entry::StdEntry> = std_entries
+                        .iter()
+                        .copied()
+                        .filter(|e| e.name.contains(query))
+                        .collect();
 
-    // phase three: evaluating the ast tree
-    if cfg!(feature = "eval") {
-        eval_loop(source, statements);
+                    // search concept entries
+                    let matched_concepts: Vec<&docs::entry::ConceptEntry> = concept_entries
+                        .iter()
+                        .copied()
+                        .filter(|e| e.name.contains(query))
+                        .collect();
+
+                    if matched_std.is_empty() && matched_concepts.is_empty() {
+                        eprintln!("no docs found for '{}'", query);
+                        std::process::exit(1);
+                    }
+
+                    if !matched_std.is_empty() {
+                        println!("{}", docs::std_to_markdown(&matched_std));
+                    }
+                    if !matched_concepts.is_empty() {
+                        println!("{}", docs::concept_to_markdown(&matched_concepts));
+                    }
+                }
+            }
+        }
+
+        Commands::Repl => {
+            #[cfg(feature = "repl_tui")]
+            repl::start_repl();
+        }
+
+        #[cfg(feature = "lsp")]
+        Commands::Lsp => match tokio::runtime::Runtime::new() {
+            Ok(rt) => rt.block_on(run_lsp()),
+            Err(e) => {
+                eprintln!("error: failed to start LSP runtime: {}", e);
+                std::process::exit(1);
+            }
+        },
     }
 }

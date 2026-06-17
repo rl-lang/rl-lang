@@ -1,7 +1,8 @@
+use std::path::Path;
 use std::sync::Arc;
 
 use crate::{
-    ast::statements::{Statement, StatementKind},
+    ast::statements::{Statement, StatementKind, TypeAnnotation},
     interpreter::{evaluator::Evaluator, values::Value},
     lexer::tokenizer::Tokenizer,
     parser::parser_logic::Parser,
@@ -11,36 +12,104 @@ use crate::{
 impl Evaluator {
     pub fn evaluate_statement(&mut self, statement: &Statement) -> Result<(), Error> {
         match &statement.kind {
-            StatementKind::VariableDeclaration { name, value, .. } => {
+            StatementKind::VariableDeclaration {
+                name,
+                value,
+                type_annotation,
+            } => {
                 let val = self.evaluate(value)?;
-                let inferred_type = Evaluator::infer_type(&val);
-                self.insert_value(name.clone(), val, inferred_type, statement.span)?;
+                let val_type = Self::infer_type(&val, false);
+                if val_type != *type_annotation && val_type != TypeAnnotation::Null {
+                    return Err(self.err(
+                        format!(
+                            "type mismatch: expected {:?}, got {:?}",
+                            type_annotation, val_type
+                        ),
+                        statement.span,
+                    ));
+                }
+                self.insert_value(name.clone(), val, type_annotation.clone(), statement.span)?;
             }
-
-            StatementKind::Array { name, value, .. } => {
+            StatementKind::Array {
+                name,
+                value,
+                type_annotation,
+            } => {
                 let mut items: Vec<Value> = Vec::new();
                 for item in value {
-                    items.push(self.evaluate(item)?);
+                    let val = self.evaluate(item)?;
+                    let val_type = Self::infer_type(&val, false);
+                    if val_type != *type_annotation && val_type != TypeAnnotation::Null {
+                        return Err(self.err(
+                            format!(
+                                "type mismatch: array expects {:?}, got {:?}",
+                                type_annotation, val_type
+                            ),
+                            item.span,
+                        ));
+                    }
+                    items.push(val);
                 }
-                let arr_type = Evaluator::infer_type(&Value::Values(items.clone()));
-                self.insert_value(name.clone(), Value::Values(items), arr_type, statement.span)?;
+                let arr_type = type_annotation.clone();
+                self.insert_value(
+                    name.clone(),
+                    Value::Values {
+                        items_type: arr_type.clone(),
+                        items,
+                    },
+                    arr_type,
+                    statement.span,
+                )?;
             }
-
-            StatementKind::ConstantDeclaration { name, value, .. } => {
+            StatementKind::ConstantDeclaration {
+                name,
+                value,
+                type_annotation,
+            } => {
                 let val = self.evaluate(value)?;
-                let inferred_type = Evaluator::infer_type(&val);
-                self.insert_const(name.clone(), val, inferred_type, statement.span)?;
+                let val_type = Self::infer_type(&val, true);
+                if val_type != *type_annotation && val_type != TypeAnnotation::Null {
+                    return Err(self.err(
+                        format!(
+                            "type mismatch: expected {:?}, got {:?}",
+                            type_annotation, val_type
+                        ),
+                        statement.span,
+                    ));
+                }
+                self.insert_const(name.clone(), val, type_annotation.clone(), statement.span)?;
             }
-
-            StatementKind::ConstantArray { name, value, .. } => {
+            StatementKind::ConstantArray {
+                name,
+                value,
+                type_annotation,
+            } => {
                 let mut items: Vec<Value> = Vec::new();
                 for item in value {
-                    items.push(self.evaluate(item)?);
+                    let val = self.evaluate(item)?;
+                    let val_type = Self::infer_type(&val, false);
+                    if val_type != *type_annotation && val_type != TypeAnnotation::Null {
+                        return Err(self.err(
+                            format!(
+                                "type mismatch: array expects {:?}, got {:?}",
+                                type_annotation, val_type
+                            ),
+                            item.span,
+                        ));
+                    }
+                    items.push(val);
                 }
-                let arr_type = Evaluator::infer_type(&Value::Values(items.clone()));
-                self.insert_const(name.clone(), Value::Values(items), arr_type, statement.span)?;
+                let arr_type = type_annotation.clone();
+                self.insert_const(
+                    name.clone(),
+                    Value::Values {
+                        items_type: arr_type.clone(),
+                        items,
+                    },
+                    arr_type,
+                    statement.span,
+                )?;
             }
-
             StatementKind::Expression(expr) => {
                 self.evaluate(expr)?;
             }
@@ -122,39 +191,54 @@ impl Evaluator {
             }
 
             StatementKind::Import { names, path } => {
-                // imports are resolved at parse time; nothing to evaluate
-                // or thats what i though
-                // forgot that the file is removed after pr ;-;
+                let module_path = path.join("::");
                 let mut module = &self.root_module;
                 for seg in path {
-                    module = module.submodules.get(seg).expect("import: unknown module");
+                    module = module.submodules.get(seg).ok_or_else(|| {
+                        self.err(format!("unknown module '{}'", seg), statement.span)
+                    })?;
                 }
                 let fns: Vec<_> = names
                     .iter()
                     .map(|name| {
-                        let f = module
-                            .functions
-                            .get(name)
-                            .unwrap_or_else(|| panic!("import: unknown function '{}'", name));
-                        (name.clone(), Arc::clone(f))
+                        let f = module.functions.get(name).ok_or_else(|| {
+                            self.err(
+                                format!("'{}' is not defined in 'std::{}'", name, module_path),
+                                statement.span,
+                            )
+                        })?;
+                        Ok((name.clone(), Arc::clone(f)))
                     })
-                    .collect();
+                    .collect::<Result<_, Error>>()?;
                 for (name, f) in fns {
                     self.root_module.functions.insert(name, f);
                 }
             }
 
             StatementKind::ImportFile { path } => {
-                let file_path = format!("{}.rl", path.join("/"));
+                let import_name = format!("{}.rl", path.join("/"));
+                let file_path = if let Some(ref source_file) = self.source_file {
+                    let current_file_dir = Path::new(source_file.name.as_ref())
+                        .parent()
+                        .unwrap_or_else(|| Path::new(""));
+                    current_file_dir.join(&import_name)
+                } else {
+                    import_name.clone().into()
+                };
+
                 let source_text = std::fs::read_to_string(&file_path).map_err(|_| {
                     self.err(
-                        format!("could not read file '{}'", file_path),
+                        format!("could not read file '{}'", import_name),
                         statement.span,
                     )
                 })?;
-                let source_file = SourceFile::new(&*file_path, source_text);
+                let source_file =
+                    SourceFile::new(file_path.to_string_lossy().as_ref(), source_text);
                 let tokens = Tokenizer::lex(source_file.clone())?;
-                let stmts = Parser::parse(tokens, source_file)?;
+                let stmts = Parser::parse(tokens, source_file.clone())?;
+                // Save current source file and set the imported file as current
+                let previous_source = self.source_file.clone();
+                self.source_file = Some(source_file);
                 self.push_scope();
                 for stmt in &stmts {
                     self.evaluate_statement(stmt)?;
@@ -163,27 +247,52 @@ impl Evaluator {
                 let exported: Vec<_> = self
                     .environment
                     .last()
-                    .unwrap()
+                    .ok_or_else(|| self.err("no active scope", statement.span))?
+                    .borrow()
                     .iter()
                     .map(|(k, v)| (k.clone(), v.clone()))
                     .collect();
                 self.pop_scope();
+
+                // Restore previous source file
+                self.source_file = previous_source;
+
+                let no_scope_err = self.err("no active scope", statement.span);
                 for (name, item) in exported {
-                    self.environment.last_mut().unwrap().insert(name, item);
+                    self.environment
+                        .last_mut()
+                        .ok_or_else(|| no_scope_err.clone())?
+                        .borrow_mut()
+                        .insert(name, item);
                 }
             }
 
             StatementKind::ImportFileNamed { path, names } => {
-                let file_path = format!("{}.rl", path.join("/"));
+                let import_name = format!("{}.rl", path.join("/"));
+                let file_path = if let Some(ref source_file) = self.source_file {
+                    let current_file_dir = Path::new(source_file.name.as_ref())
+                        .parent()
+                        .unwrap_or_else(|| Path::new(""));
+                    current_file_dir.join(&import_name)
+                } else {
+                    import_name.clone().into()
+                };
+
                 let source_text = std::fs::read_to_string(&file_path).map_err(|_| {
                     self.err(
-                        format!("could not read file '{}'", file_path),
+                        format!("could not read file '{}'", import_name),
                         statement.span,
                     )
                 })?;
-                let source_file = SourceFile::new(&*file_path, source_text);
+                let source_file =
+                    SourceFile::new(file_path.to_string_lossy().as_ref(), source_text);
                 let tokens = Tokenizer::lex(source_file.clone())?;
-                let stmts = Parser::parse(tokens, source_file)?;
+                let stmts = Parser::parse(tokens, source_file.clone())?;
+
+                // Save current source file and set the imported file as current
+                let previous_source = self.source_file.clone();
+                self.source_file = Some(source_file);
+
                 self.push_scope();
                 for stmt in &stmts {
                     self.evaluate_statement(stmt)?;
@@ -191,23 +300,31 @@ impl Evaluator {
                 let exported: Vec<_> = self
                     .environment
                     .last()
-                    .unwrap()
+                    .ok_or_else(|| self.err("no active scope", statement.span))?
+                    .borrow()
                     .iter()
-                    .filter(|(k, _)| names.contains(k))
                     .map(|(k, v)| (k.clone(), v.clone()))
                     .collect();
                 self.pop_scope();
+
+                // Restore previous source file
+                self.source_file = previous_source;
                 if let Some(not_found) = names
                     .iter()
                     .find(|n| !exported.iter().any(|(k, _)| k == *n))
                 {
                     return Err(self.err(
-                        format!("'{}' is not defined in '{}'", not_found, file_path),
+                        format!("'{}' is not defined in '{}'", not_found, import_name),
                         statement.span,
                     ));
                 }
+                let no_scope_err = self.err("no active scope", statement.span);
                 for (name, item) in exported {
-                    self.environment.last_mut().unwrap().insert(name, item);
+                    self.environment
+                        .last_mut()
+                        .ok_or_else(|| no_scope_err.clone())?
+                        .borrow_mut()
+                        .insert(name, item);
                 }
             }
 
@@ -238,6 +355,7 @@ impl Evaluator {
 
                     if self.is_breaking {
                         self.is_breaking = false;
+                        break;
                     }
 
                     if self.is_continuing {
@@ -257,7 +375,7 @@ impl Evaluator {
             } => {
                 let arr = self.evaluate(iterable)?;
                 let items = match arr {
-                    Value::Values(items) => items,
+                    Value::Values { items, .. } => items,
                     other => {
                         return Err(self
                             .err("for-each: expected an array", statement.span)
@@ -268,7 +386,7 @@ impl Evaluator {
                     }
                 };
                 for item in items {
-                    let item_type = Evaluator::infer_type(&item);
+                    let item_type = Evaluator::infer_type(&item, false);
                     self.push_scope();
                     self.insert_value(variable.clone(), item, item_type, statement.span)?;
 
@@ -356,7 +474,7 @@ impl Evaluator {
                 let snapshot = self.environment.clone();
                 if let Some(scope) = self.environment.last_mut()
                     && let Some(crate::interpreter::evaluator::EnvironmentItem::PItem(p)) =
-                        scope.get_mut(name)
+                        scope.borrow_mut().get_mut(name)
                     && let Value::Function { captured_env, .. } = &mut p.value
                 {
                     *captured_env = snapshot;
