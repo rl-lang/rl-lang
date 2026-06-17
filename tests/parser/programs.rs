@@ -27,49 +27,49 @@ println(x, y)",
                 names: vec!["println".to_string()],
                 path: vec!["std".to_string(), "io".to_string()],
             },
-            Span::new(0, 29),
+            Span::new(0, 24),
         ),
         Statement::new(
             StatementKind::Expression(Expression::new(
                 ExpressionKind::Integer(0),
-                Span::new(29, 30),
+                Span::new(24, 25),
             )),
-            Span::new(29, 30),
+            Span::new(24, 25),
         ),
         Statement::new(
             StatementKind::Import {
                 names: vec!["pow".to_string()],
                 path: vec!["std".to_string(), "math".to_string()],
             },
-            Span::new(30, 52),
+            Span::new(25, 47),
         ),
         Statement::new(
             StatementKind::Expression(Expression::new(
                 ExpressionKind::Integer(0),
-                Span::new(52, 53),
+                Span::new(47, 48),
             )),
-            Span::new(52, 53),
+            Span::new(47, 48),
         ),
         Statement::new(
             StatementKind::Import {
                 names: vec!["PI".to_string()],
                 path: vec!["std".to_string(), "math".to_string(), "consts".to_string()],
             },
-            Span::new(53, 78),
+            Span::new(48, 73),
         ),
         Statement::new(
             StatementKind::Expression(Expression::new(
                 ExpressionKind::Integer(0),
-                Span::new(78, 79),
+                Span::new(73, 74),
             )),
-            Span::new(78, 79),
+            Span::new(73, 74),
         ),
         Statement::new(
             StatementKind::Expression(Expression::new(
                 ExpressionKind::Integer(0),
-                Span::new(79, 80),
+                Span::new(74, 75),
             )),
-            Span::new(79, 80),
+            Span::new(74, 75),
         ),
         Statement::new(
             StatementKind::ConstantDeclaration {
@@ -80,17 +80,17 @@ println(x, y)",
                         path: vec!["PI".to_string()],
                         args: vec![],
                     },
-                    Span::new(97, 101),
+                    Span::new(92, 96),
                 ),
             },
-            Span::new(80, 101),
+            Span::new(75, 96),
         ),
         Statement::new(
             StatementKind::Expression(Expression::new(
                 ExpressionKind::Integer(0),
-                Span::new(101, 102),
+                Span::new(96, 97),
             )),
-            Span::new(101, 102),
+            Span::new(96, 97),
         ),
         Statement::new(
             StatementKind::VariableDeclaration {
@@ -102,32 +102,32 @@ println(x, y)",
                         args: vec![
                             Expression::new(
                                 ExpressionKind::Identifier("pi".to_string()),
-                                Span::new(120, 122),
+                                Span::new(115, 117),
                             ),
                             Expression::new(
                                 ExpressionKind::Identifier("pi".to_string()),
-                                Span::new(124, 126),
+                                Span::new(119, 121),
                             ),
                         ],
                     },
-                    Span::new(116, 127),
+                    Span::new(111, 122),
                 ),
             },
-            Span::new(102, 127),
+            Span::new(97, 122),
         ),
         Statement::new(
             StatementKind::Expression(Expression::new(
                 ExpressionKind::Integer(0),
-                Span::new(127, 128),
+                Span::new(122, 123),
             )),
-            Span::new(127, 128),
+            Span::new(122, 123),
         ),
         Statement::new(
             StatementKind::Expression(Expression::new(
                 ExpressionKind::Integer(0),
-                Span::new(128, 129),
+                Span::new(123, 124),
             )),
-            Span::new(128, 129),
+            Span::new(123, 124),
         ),
         Statement::new(
             StatementKind::Expression(Expression::new(
@@ -136,17 +136,17 @@ println(x, y)",
                     args: vec![
                         Expression::new(
                             ExpressionKind::Identifier("x".to_string()),
-                            Span::new(137, 138),
+                            Span::new(132, 133),
                         ),
                         Expression::new(
                             ExpressionKind::Identifier("y".to_string()),
-                            Span::new(140, 141),
+                            Span::new(135, 136),
                         ),
                     ],
                 },
-                Span::new(129, 142),
+                Span::new(124, 137),
             )),
-            Span::new(129, 142),
+            Span::new(124, 137),
         ),
     ];
     assert_eq!(statements, expected);
