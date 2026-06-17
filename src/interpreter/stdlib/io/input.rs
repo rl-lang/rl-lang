@@ -4,11 +4,11 @@ use crate::{
 };
 use std::io::{self, Write};
 
-pub fn std_read(_: &mut Evaluator, args: Vec<Value>) -> Result<Value, Error> {
-    match args.len() {
-        0 => read_line(),
-        1 => {
-            let prompt = match args.into_iter().next().unwrap_or(Value::Null) {
+fn input(prompt: Option<Value>) -> Result<Value, Error> {
+    match prompt {
+        None => read_line(),
+        Some(p) => {
+            let prompt = match p {
                 Value::Integer(i) => i.to_string(),
                 Value::Float(f) => f.to_string(),
                 Value::String(s) => s,
@@ -21,11 +21,6 @@ pub fn std_read(_: &mut Evaluator, args: Vec<Value>) -> Result<Value, Error> {
             io::stdout().flush().ok();
             read_line()
         }
-        n => Err(Error::init(
-            format!("read() expects 0 or 1 argument(s), got {}", n),
-            None,
-            Some(ErrorReason::init(Reason::Runtime, None)),
-        )),
     }
 }
 
@@ -39,4 +34,19 @@ fn read_line() -> Result<Value, Error> {
         )
     })?;
     Ok(Value::String(input.trim().to_string()))
+}
+
+pub fn std_read(_: &mut Evaluator, args: Vec<Value>) -> Result<Value, Error> {
+    let len = args.len();
+    let mut args = args.into_iter();
+
+    match len {
+        0 => input(None),
+        1 => input(args.next()),
+        n => Err(Error::init(
+            format!("read() expects 0 or 1 argument(s), got {}", n),
+            None,
+            Some(ErrorReason::init(Reason::Runtime, None)),
+        )),
+    }
 }
