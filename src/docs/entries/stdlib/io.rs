@@ -58,30 +58,30 @@ static READ_FLOAT_PROMPT: FnEntry = FnEntry {
 
 static APPEND_FILE: FnEntry = FnEntry {
     signature: "append_file(path, content)",
-    description: "",
+    description: "appends content to a file creating it if it does not exist",
     example: "get std::io::append_file\n\nappend_file(\"info.txt\", \"name: Mohamed\")",
 };
 
 static DELETE_FILE: FnEntry = FnEntry {
     signature: "delete_file(path)",
-    description: "",
+    description: "deletes a file at the given path",
     example: "get std::io::delete_file\n\ndelete_file(\"info.txt\")",
 };
 
 static READ_FILE: FnEntry = FnEntry {
     signature: "read_file(path)",
-    description: "",
+    description: "reads the entire contents of a file as a string",
     example: "get std::io::read_file\n\ndec string data = read_file(\"backup_info.txt\")",
 };
 
 static READ_LINES: FnEntry = FnEntry {
     signature: "read_lines(path)",
-    description: "",
+    description: "reads a file and returns its lines as an array of strings",
     example: "get std::io::read_lines\n\ndec arr[string] data = read_lines(\"index.html\")",
 };
 
 static WRITE_FILE: FnEntry = FnEntry {
     signature: "write_file(path, contents)",
-    description: "",
+    description: "writes content to a file overwriting it if it already exists",
     example: "get std::io::write_file\n\nwrite_file(\"index.html\", \"<p>hello \\\"Mohamed\\\"</p>\")",
 };
