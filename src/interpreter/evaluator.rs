@@ -89,7 +89,6 @@ impl Evaluator {
         self.with_module(
             Module::new("std")
                 .with_module(stdlib::math::module())
-                .with_module(stdlib::display::module())
                 .with_module(stdlib::io::module())
                 .with_module(stdlib::string::module())
                 .with_module(stdlib::types::module())
@@ -464,9 +463,8 @@ impl Evaluator {
         let mut err = self.err(format!("undefined function {}", path.join("::")), span);
         // suggest a stdlib leaf name if the last segment is a close typo
         if let Some(last) = path.last() {
-            let candidates = stdlib::display::KEYWORDS
+            let candidates = stdlib::math::KEYWORDS
                 .iter()
-                .chain(stdlib::math::KEYWORDS)
                 .chain(stdlib::math::constants::KEYWORDS)
                 .chain(stdlib::io::KEYWORDS)
                 .chain(stdlib::string::KEYWORDS)
