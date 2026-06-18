@@ -30,6 +30,16 @@ static FUNCTIONS: &[&FnEntry] = &[
     &ARR_SUM,
     &ARR_UNIQUE,
     &LEN,
+    &ARR_ALL,
+    &ARR_ANY,
+    &ARR_FILTER,
+    &ARR_FIND,
+    &ARR_FIND_INDEX,
+    &ARR_FLAT_MAP,
+    &ARR_FOR_EACH,
+    &ARR_MAP,
+    &ARR_REDUCE,
+    &ARR_SORT_BY,
 ];
 
 static ARR_CONCAT: FnEntry = FnEntry {
@@ -168,4 +178,64 @@ static LEN: FnEntry = FnEntry {
     signature: "len(x)",
     description: "length of string or array",
     example: "get std::display::len\n\nlen(\"hello\") // 5",
+};
+
+static ARR_ALL: FnEntry = FnEntry {
+    signature: "arr_all(arr, fn)",
+    description: "true if every element satisfies the predicate",
+    example: "get std::array::arr_all\n\narr_all([2, 4, 6], fn(int x) -> bool { return mod(x, 2) == 0 }) // true",
+};
+
+static ARR_ANY: FnEntry = FnEntry {
+    signature: "arr_any(arr, fn)",
+    description: "true if at least one element satisfies the predicate",
+    example: "get std::array::arr_any\n\narr_any([1, 2, 3], fn(int x) -> bool { return x > 2 }) // true",
+};
+
+static ARR_FILTER: FnEntry = FnEntry {
+    signature: "arr_filter(arr, fn)",
+    description: "returns a new array containing only elements where the predicate returns true",
+    example: "get std::array::arr_filter\n\narr_filter([1, 2, 3, 4], fn(int x) -> bool { return x > 2 }) // [3, 4]",
+};
+
+static ARR_FIND: FnEntry = FnEntry {
+    signature: "arr_find(arr, fn)",
+    description: "returns the first element where the predicate returns true, or null if none match",
+    example: "get std::array::arr_find\n\narr_find([1, 2, 3, 4], fn(int x) -> bool { return x > 2 }) // 3",
+};
+
+static ARR_FIND_INDEX: FnEntry = FnEntry {
+    signature: "arr_find_index(arr, fn)",
+    description: "returns the index of the first element where the predicate returns true, or -1 if none match",
+    example: "get std::array::arr_find_index\n\narr_find_index([10, 20, 30], fn(int x) -> bool { return x == 20 }) // 1",
+};
+
+static ARR_FLAT_MAP: FnEntry = FnEntry {
+    signature: "arr_flat_map(arr, fn)",
+    description: "maps each element to an array via the callback then flattens the results one level",
+    example: "get std::array::arr_flat_map\n\narr_flat_map([1, 2, 3], fn(int x) -> arr[int] { return [x, x * 10] }) // [1, 10, 2, 20, 3, 30]",
+};
+
+static ARR_FOR_EACH: FnEntry = FnEntry {
+    signature: "arr_for_each(arr, fn)",
+    description: "calls the callback on every element for side effects, returns null",
+    example: "get std::array::arr_for_each\n\narr_for_each([1, 2, 3], fn(int x) { println(x) })",
+};
+
+static ARR_MAP: FnEntry = FnEntry {
+    signature: "arr_map(arr, fn)",
+    description: "returns a new array with each element transformed by the callback",
+    example: "get std::array::arr_map\n\narr_map([1, 2, 3], fn(int x) -> int { return x * 2 }) // [2, 4, 6]",
+};
+
+static ARR_REDUCE: FnEntry = FnEntry {
+    signature: "arr_reduce(arr, fn, initial)",
+    description: "folds the array into a single value using the callback and a starting accumulator",
+    example: "get std::array::arr_reduce\n\narr_reduce([1, 2, 3, 4], fn(int acc, int x) -> int { return acc + x }, 0) // 10",
+};
+
+static ARR_SORT_BY: FnEntry = FnEntry {
+    signature: "arr_sort_by(arr, fn)",
+    description: "sorts the array using a comparator callback that returns -1, 0, or 1",
+    example: "get std::array::arr_sort_by\n\narr_sort_by([3, 1, 2], fn(int a, int b) -> int { return a - b }) // [1, 2, 3]",
 };
