@@ -95,7 +95,8 @@ Feature flags: `run`, `repl`, `repl_tui`, `eval`. All are on by default except `
 
 ## Contributors
 
-- [FlawlessDeveloper](https://github.com/FlawlessDeveloper) — native Rust function binding system (`IntoNativeFn`, `FromValue`, `IntoValue`), module system, and Ariadne-based error reporting
+<!-- ALL-CONTRIBUTORS-LIST:START -->
+<!-- ALL-CONTRIBUTORS-LIST:END -->
 
 ## License
 
