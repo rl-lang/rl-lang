@@ -59,31 +59,42 @@ impl Parser {
                 return Err(self.err("expected `=` after name", self.peek_span()));
             }
 
-            if !self.match_type(&[TokenType::LeftBracket]) {
-                return Err(self.err("expected `[` after `=`", self.peek_span()));
-            }
-            let mut items = Vec::new();
+            if self.peek() == TokenType::LeftBracket {
+                self.advance();
+                let mut items = Vec::new();
 
-            while self.peek() != TokenType::RightBracket {
+                while self.peek() != TokenType::RightBracket {
+                    let value = self.parse_expression()?;
+                    items.push(value);
+                    if self.peek() == TokenType::RightBracket {
+                        break;
+                    }
+                    if !self.match_type(&[TokenType::Comma]) {
+                        return Err(self.err("expected `,` between list items", self.peek_span()));
+                    }
+                }
+                self.match_type(&[TokenType::RightBracket]);
+                let span = start.join(self.previous_span());
+                return Ok(Statement::new(
+                    StatementKind::ConstantArray {
+                        name,
+                        type_annotation: annoation_type,
+                        value: items,
+                    },
+                    span,
+                ));
+            } else {
                 let value = self.parse_expression()?;
-                items.push(value);
-                if self.peek() == TokenType::RightBracket {
-                    break;
-                }
-                if !self.match_type(&[TokenType::Comma]) {
-                    return Err(self.err("expected `,` between list items", self.peek_span()));
-                }
+                let span = start.join(value.span);
+                return Ok(Statement::new(
+                    StatementKind::ConstantDeclaration {
+                        name,
+                        type_annotation: TypeAnnotation::CArray(Box::new(annoation_type)),
+                        value,
+                    },
+                    span,
+                ));
             }
-            self.match_type(&[TokenType::RightBracket]);
-            let span = start.join(self.previous_span());
-            return Ok(Statement::new(
-                StatementKind::ConstantArray {
-                    name,
-                    type_annotation: annoation_type,
-                    value: items,
-                },
-                span,
-            ));
         }
 
         let const_type = self.parse_type(false)?;
