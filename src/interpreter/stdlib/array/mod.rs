@@ -5,6 +5,7 @@ mod arr_concat;
 mod arr_contains;
 mod arr_count;
 mod arr_fill;
+mod arr_filter;
 mod arr_first;
 mod arr_flatten;
 mod arr_index_of;
@@ -50,6 +51,7 @@ pub const KEYWORDS: &[&str] = &[
     "arr_fill",
     "arr_map",
     "len",
+    "arr_filter",
 ];
 
 pub fn module() -> Module {
@@ -78,4 +80,5 @@ pub fn module() -> Module {
         .with_function("arr_slice", arr_slice::std_arr_slice)
         .with_function("arr_map", arr_map::std_arr_map)
         .with_function("len", len::std_len)
+        .with_function("arr_filter", arr_filter::std_arr_filter)
 }
