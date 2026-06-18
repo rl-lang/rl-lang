@@ -10,6 +10,7 @@ mod arr_index_of;
 mod arr_insert;
 mod arr_is_empty;
 mod arr_last;
+mod arr_map;
 mod arr_max;
 mod arr_min;
 mod arr_pop;
@@ -46,6 +47,7 @@ pub const KEYWORDS: &[&str] = &[
     "arr_flatten",
     "arr_range",
     "arr_fill",
+    "arr_map",
 ];
 
 pub fn module() -> Module {
@@ -72,4 +74,5 @@ pub fn module() -> Module {
         .with_function("arr_sort", arr_sort::std_arr_sort)
         .with_function("arr_fill", arr_fill::std_arr_fill)
         .with_function("arr_slice", arr_slice::std_arr_slice)
+        .with_function("arr_map", arr_map::std_arr_map)
 }
