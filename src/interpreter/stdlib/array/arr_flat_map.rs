@@ -35,21 +35,17 @@ pub fn std_arr_flat_map(
         ));
     }
 
-    match function.clone() {
-        Value::Function { return_type, .. } => {
-            if !matches!(return_type, Some(TypeAnnotation::Array(_))) {
-                return Err(Error::init(
-                    format!(
-                        "arr_flat_map() expected function or lambda with Array return type found {:?}",
-                        return_type
-                    ),
-                    None,
-                    None,
-                ));
-            }
+    if let Value::Function { return_type, .. } = function.clone()
+        && !matches!(return_type, Some(TypeAnnotation::Array(_))) {
+            return Err(Error::init(
+                format!(
+                    "arr_flat_map() expected function or lambda with Array return type found {:?}",
+                    return_type
+                ),
+                None,
+                None,
+            ));
         }
-        _ => {}
-    }
 
     let span = Span { start: 0, end: 0 };
 
@@ -57,13 +53,10 @@ pub fn std_arr_flat_map(
 
     for item in items {
         let mapped_item = evaluator.call_value(function.clone(), vec![item.clone()], span)?;
-        match mapped_item {
-            Value::Values { items, .. } => {
-                for item in items {
-                    result.push(item)
-                }
+        if let Value::Values { items, .. } = mapped_item {
+            for item in items {
+                result.push(item)
             }
-            _ => {}
         }
     }
 

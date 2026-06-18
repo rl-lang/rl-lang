@@ -35,21 +35,17 @@ pub fn std_arr_filter(
         ));
     }
 
-    match function.clone() {
-        Value::Function { return_type, .. } => {
-            if !matches!(return_type, Some(TypeAnnotation::Bool)) {
-                return Err(Error::init(
-                    format!(
-                        "arr_filter() expected function or lambda with Bool return type found {:?}",
-                        return_type
-                    ),
-                    None,
-                    None,
-                ));
-            }
+    if let Value::Function { return_type, .. } = function.clone()
+        && !matches!(return_type, Some(TypeAnnotation::Bool)) {
+            return Err(Error::init(
+                format!(
+                    "arr_filter() expected function or lambda with Bool return type found {:?}",
+                    return_type
+                ),
+                None,
+                None,
+            ));
         }
-        _ => {}
-    }
 
     let span = Span { start: 0, end: 0 };
 
@@ -57,10 +53,7 @@ pub fn std_arr_filter(
 
     for item in items {
         let mapped_item = evaluator.call_value(function.clone(), vec![item.clone()], span)?;
-        match mapped_item {
-            Value::Bool(true) => result.push(item),
-            _ => {}
-        }
+        if let Value::Bool(true) = mapped_item { result.push(item) }
     }
 
     Ok(Value::Values {
