@@ -101,8 +101,9 @@ Feature flags: `run`, `repl`, `repl_tui`, `eval`. All are on by default except `
 <table>
   <tbody>
     <tr>
-      <td align="center" valign="top" width="14.28%"><a href="https://yt-dl.flawlessco.de"><img src="https://avatars.githubusercontent.com/u/37778817?v=4?s=100" width="100px;" alt="Flawlesscode"/><br /><sub><b>Flawlesscode</b></sub></a><br /><a href="https://github.com/MohamedGonem/rl-lang/commits?author=FlawlessDeveloper" title="Code">💻</a></td>
-      <td align="center" valign="top" width="14.28%"><a href="https://github.com/kill-ux"><img src="https://avatars.githubusercontent.com/u/185858933?v=4?s=100" width="100px;" alt="Mustapha Boutoub"/><br /><sub><b>Mustapha Boutoub</b></sub></a><br /><a href="https://github.com/MohamedGonem/rl-lang/commits?author=kill-ux" title="Code">💻</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://yt-dl.flawlessco.de"><img src="https://avatars.githubusercontent.com/u/37778817?v=4?s=100" width="100px;" alt="Flawlesscode"/><br /><sub><b>Flawlesscode</b></sub></a><br /><a href="https://github.com/rl-lang/rl-lang/commits?author=FlawlessDeveloper" title="Code">💻</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/kill-ux"><img src="https://avatars.githubusercontent.com/u/185858933?v=4?s=100" width="100px;" alt="Mustapha Boutoub"/><br /><sub><b>Mustapha Boutoub</b></sub></a><br /><a href="https://github.com/rl-lang/rl-lang/commits?author=kill-ux" title="Code">💻</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/MohamedGonem"><img src="https://avatars.githubusercontent.com/u/73464078?v=4?s=100" width="100px;" alt="Mohamed Gonem"/><br /><sub><b>Mohamed Gonem</b></sub></a><br /><a href="https://github.com/rl-lang/rl-lang/commits?author=MohamedGonem" title="Code">💻</a> <a href="https://github.com/rl-lang/rl-lang/commits?author=MohamedGonem" title="Documentation">📖</a> <a href="#ideas-MohamedGonem" title="Ideas, Planning, & Feedback">🤔</a> <a href="https://github.com/rl-lang/rl-lang/commits?author=MohamedGonem" title="Tests">⚠️</a> <a href="#example-MohamedGonem" title="Examples">💡</a> <a href="#infra-MohamedGonem" title="Infrastructure (Hosting, Build-Tools, etc)">🚇</a> <a href="#tool-MohamedGonem" title="Tools">🔧</a></td>
     </tr>
   </tbody>
 </table>
