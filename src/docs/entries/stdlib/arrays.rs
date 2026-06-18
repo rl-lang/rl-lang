@@ -29,6 +29,7 @@ static FUNCTIONS: &[&FnEntry] = &[
     &ARR_SORT,
     &ARR_SUM,
     &ARR_UNIQUE,
+    &LEN,
 ];
 
 static ARR_CONCAT: FnEntry = FnEntry {
@@ -161,4 +162,10 @@ static ARR_UNIQUE: FnEntry = FnEntry {
     signature: "arr_unique(arr)",
     description: "returns the array with duplicate values removed, preserving order",
     example: "get std::array::arr_unique\n\narr_unique([1, 2, 2, 3, 1]) // [1, 2, 3]",
+};
+
+static LEN: FnEntry = FnEntry {
+    signature: "len(x)",
+    description: "length of string or array",
+    example: "get std::display::len\n\nlen(\"hello\") // 5",
 };

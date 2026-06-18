@@ -1,3 +1,4 @@
+use super::len;
 use crate::interpreter::native::Module;
 
 mod arr_concat;
@@ -48,6 +49,7 @@ pub const KEYWORDS: &[&str] = &[
     "arr_range",
     "arr_fill",
     "arr_map",
+    "len",
 ];
 
 pub fn module() -> Module {
@@ -75,4 +77,5 @@ pub fn module() -> Module {
         .with_function("arr_fill", arr_fill::std_arr_fill)
         .with_function("arr_slice", arr_slice::std_arr_slice)
         .with_function("arr_map", arr_map::std_arr_map)
+        .with_function("len", len::std_len)
 }
