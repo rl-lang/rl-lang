@@ -1,10 +1,24 @@
 {
-    "projectName": "rl-lang",
-    "projectOwner": "MohamedGonem",
-    "repoType": "github",
-    "files": ["README.md"],
-    "imageSize": 100,
-    "commit": true,
-    "contributorsPerLine": 7,
-    "contributors": []
+  "projectName": "rl-lang",
+  "projectOwner": "MohamedGonem",
+  "repoType": "github",
+  "files": [
+    "README.md"
+  ],
+  "imageSize": 100,
+  "commit": true,
+  "contributorsPerLine": 7,
+  "contributors": [
+    {
+      "login": "FlawlessDeveloper",
+      "name": "Flawlesscode",
+      "avatar_url": "https://avatars.githubusercontent.com/u/37778817?v=4",
+      "profile": "https://yt-dl.flawlessco.de",
+      "contributions": [
+        "code"
+      ]
+    }
+  ],
+  "commitType": "docs",
+  "commitConvention": "angular"
 }
