@@ -9,7 +9,7 @@ pub fn std_arr_all(
     array: Value,
     function: Value,
 ) -> Result<Value, Error> {
-    let (items_type, items) = match array {
+    let (_, items) = match array {
         Value::Values { items_type, items } => (items_type, items),
 
         other => {

@@ -1,13 +1,19 @@
 use super::len;
 use crate::interpreter::native::Module;
 
+mod arr_all;
+mod arr_any;
 mod arr_concat;
 mod arr_contains;
 mod arr_count;
 mod arr_fill;
 mod arr_filter;
+mod arr_find;
+mod arr_find_index;
 mod arr_first;
+mod arr_flat_map;
 mod arr_flatten;
+mod arr_for_each;
 mod arr_index_of;
 mod arr_insert;
 mod arr_is_empty;
@@ -19,10 +25,12 @@ mod arr_pop;
 mod arr_product;
 mod arr_push;
 mod arr_range;
+mod arr_reduce;
 mod arr_remove;
 mod arr_reverse;
 mod arr_slice;
 mod arr_sort;
+mod arr_sort_by;
 mod arr_sum;
 mod arr_unique;
 
@@ -52,6 +60,14 @@ pub const KEYWORDS: &[&str] = &[
     "arr_map",
     "len",
     "arr_filter",
+    "arr_all",
+    "arr_any",
+    "arr_find",
+    "arr_find_index",
+    "arr_reduce",
+    "arr_sort_by",
+    "arr_flat_map",
+    "arr_for_each",
 ];
 
 pub fn module() -> Module {
@@ -81,4 +97,12 @@ pub fn module() -> Module {
         .with_function("arr_map", arr_map::std_arr_map)
         .with_function("len", len::std_len)
         .with_function("arr_filter", arr_filter::std_arr_filter)
+        .with_function("arr_all", arr_all::std_arr_all)
+        .with_function("arr_any", arr_any::std_arr_any)
+        .with_function("arr_find", arr_find::std_arr_find)
+        .with_function("arr_find_index", arr_find_index::std_arr_find_index)
+        .with_function("arr_reduce", arr_reduce::std_arr_reduce)
+        .with_function("arr_sort_by", arr_sort_by::std_arr_sort_by)
+        .with_function("arr_flat_map", arr_flat_map::std_arr_flat_map)
+        .with_function("arr_for_each", arr_for_each::std_arr_for_each)
 }
