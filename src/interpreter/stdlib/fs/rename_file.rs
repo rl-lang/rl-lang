@@ -1,9 +1,17 @@
 use crate::{
     interpreter::{evaluator::Evaluator, values::Value},
-    utils::errors::{Error, ErrorReason, Reason},
+    utils::{
+        errors::{Error, ErrorReason, Reason},
+        span::Span,
+    },
 };
 
-pub fn std_rename_file(_: &mut Evaluator, path: String, new_name: String) -> Result<Value, Error> {
+pub fn std_rename_file(
+    eval: &mut Evaluator,
+    path: String,
+    new_name: String,
+    span: Span,
+) -> Result<Value, Error> {
     let old_path = std::path::Path::new(&path);
     let new_path = match old_path.parent() {
         Some(parent) => parent.join(&new_name),
@@ -11,15 +19,14 @@ pub fn std_rename_file(_: &mut Evaluator, path: String, new_name: String) -> Res
     };
 
     std::fs::rename(old_path, &new_path).map_err(|e| {
-        Error::init(
+        eval.err(
             format!(
                 "rename_file(): failed to rename \"{}\" to \"{}\": {}",
                 path,
                 new_path.to_string_lossy(),
                 e
             ),
-            None,
-            Some(ErrorReason::init(Reason::Runtime, None)),
+            span,
         )
     })?;
 

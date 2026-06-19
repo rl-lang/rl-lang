@@ -1,17 +1,24 @@
 use crate::{
     interpreter::{evaluator::Evaluator, values::Value},
-    utils::errors::{Error, ErrorReason, Reason},
+    utils::{
+        errors::{Error, ErrorReason, Reason},
+        span::Span,
+    },
 };
 
-pub fn std_copy_file(_: &mut Evaluator, src: String, dst: String) -> Result<Value, Error> {
+pub fn std_copy_file(
+    eval: &mut Evaluator,
+    src: String,
+    dst: String,
+    span: Span,
+) -> Result<Value, Error> {
     let bytes = std::fs::copy(&src, &dst).map_err(|e| {
-        Error::init(
+        eval.err(
             format!(
                 "copy_file(): failed to copy \"{}\" to \"{}\": {}",
                 src, dst, e
             ),
-            None,
-            Some(ErrorReason::init(Reason::Runtime, None)),
+            span,
         )
     })?;
     Ok(Value::Integer(bytes as i64))
