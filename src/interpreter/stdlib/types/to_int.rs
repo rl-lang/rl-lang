@@ -1,9 +1,9 @@
 use crate::{
     interpreter::{evaluator::Evaluator, values::Value},
-    utils::errors::Error,
+    utils::{errors::Error, span::Span},
 };
 
-pub fn std_to_int(_: &mut Evaluator, value: Value) -> Result<i64, Error> {
+pub fn std_to_int(eval: &mut Evaluator, value: Value, span: Span) -> Result<i64, Error> {
     match value {
         Value::Integer(v) => Ok(v),
         Value::Float(v) => Ok(v as i64),
@@ -13,26 +13,16 @@ pub fn std_to_int(_: &mut Evaluator, value: Value) -> Result<i64, Error> {
             let s = s.trim();
             if s.starts_with("0x") || s.starts_with("0X") {
                 i64::from_str_radix(&s[2..], 16)
-                    .map_err(|_| Error::init(format!("cannot parse \"{}\" as int", s), None, None))
+                    .map_err(|_| eval.err(format!("cannot parse \"{}\" as int", s), span))
             } else {
                 s.parse::<i64>()
-                    .map_err(|_| Error::init(format!("cannot parse \"{}\" as int", s), None, None))
+                    .map_err(|_| eval.err(format!("cannot parse \"{}\" as int", s), span))
             }
         }
-        Value::Function { .. } => Err(Error::init(
-            "cannot parse \"function\" as int".to_string(),
-            None,
-            None,
-        )),
-        Value::Values { .. } => Err(Error::init(
-            "cannot parse \"array\" as int".to_string(),
-            None,
-            None,
-        )),
-        Value::Null => Err(Error::init(
-            "cannot parse \"null\" as int".to_string(),
-            None,
-            None,
+
+        other => Err(eval.err(
+            format!("cannot parse \"{}\" as bool", other.type_name()),
+            span,
         )),
     }
 }
