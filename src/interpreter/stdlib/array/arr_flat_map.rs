@@ -36,16 +36,17 @@ pub fn std_arr_flat_map(
     }
 
     if let Value::Function { return_type, .. } = function.clone()
-        && !matches!(return_type, Some(TypeAnnotation::Array(_))) {
-            return Err(Error::init(
-                format!(
-                    "arr_flat_map() expected function or lambda with Array return type found {:?}",
-                    return_type
-                ),
-                None,
-                None,
-            ));
-        }
+        && !matches!(return_type, Some(TypeAnnotation::Array(_)))
+    {
+        return Err(Error::init(
+            format!(
+                "arr_flat_map() expected function or lambda with Array return type found {:?}",
+                return_type
+            ),
+            None,
+            None,
+        ));
+    }
 
     let span = Span { start: 0, end: 0 };
 

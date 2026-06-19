@@ -1,11 +1,17 @@
-use crate::{interpreter::evaluator::Evaluator, interpreter::values::Value, utils::errors::Error};
+use crate::{
+    interpreter::{evaluator::Evaluator, values::Value},
+    utils::{
+        errors::{Error, Reason},
+        span::Span,
+    },
+};
 
-pub fn std_pow(_: &mut Evaluator, args: Vec<Value>) -> Result<Value, Error> {
+pub fn std_pow(_: &mut Evaluator, args: Vec<Value>, span: Span) -> Result<Value, Error> {
     if args.len() != 2 {
-        return Err(Error::init(
+        return Err(Error::at(
+            Reason::Runtime,
             format!("pow() expects 2 arguments, got {}", args.len()),
-            None,
-            None,
+            span,
         ));
     }
     let mut iter = args.into_iter();

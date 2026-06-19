@@ -13,6 +13,9 @@ impl Parser {
         let condition = self.parse_expression()?;
         let body = self.parse_block()?;
         let span = start.join(self.previous_span());
-        Ok(Statement::new(StatementKind::While { condition, body }, span))
+        Ok(Statement::new(
+            StatementKind::While { condition, body },
+            span,
+        ))
     }
 }

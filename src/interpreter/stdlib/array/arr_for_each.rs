@@ -36,16 +36,17 @@ pub fn std_arr_for_each(
     }
 
     if let Value::Function { return_type, .. } = function.clone()
-        && !matches!(return_type, Some(TypeAnnotation::Null)) {
-            return Err(Error::init(
-                format!(
-                    "arr_for_each() expected function or lambda with no (or null) return type found {:?}",
-                    return_type
-                ),
-                None,
-                None,
-            ));
-        }
+        && !matches!(return_type, Some(TypeAnnotation::Null))
+    {
+        return Err(Error::init(
+            format!(
+                "arr_for_each() expected function or lambda with no (or null) return type found {:?}",
+                return_type
+            ),
+            None,
+            None,
+        ));
+    }
 
     let span = Span { start: 0, end: 0 };
 

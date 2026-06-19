@@ -32,22 +32,25 @@ pub fn std_arr_all(
     }
 
     if let Value::Function { return_type, .. } = function.clone()
-        && !matches!(return_type, Some(TypeAnnotation::Bool)) {
-            return Err(Error::init(
-                format!(
-                    "arr_all() expected function or lambda with Bool return type found {:?}",
-                    return_type
-                ),
-                None,
-                None,
-            ));
-        }
+        && !matches!(return_type, Some(TypeAnnotation::Bool))
+    {
+        return Err(Error::init(
+            format!(
+                "arr_all() expected function or lambda with Bool return type found {:?}",
+                return_type
+            ),
+            None,
+            None,
+        ));
+    }
 
     let span = Span { start: 0, end: 0 };
 
     for item in items.clone() {
         let mapped_item = evaluator.call_value(function.clone(), vec![item.clone()], span)?;
-        if let Value::Bool(false) = mapped_item { return Ok(Value::Bool(false)) }
+        if let Value::Bool(false) = mapped_item {
+            return Ok(Value::Bool(false));
+        }
     }
 
     Ok(Value::Bool(true))
