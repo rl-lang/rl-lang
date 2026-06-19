@@ -432,23 +432,12 @@ impl Evaluator {
 
             StatementKind::Conditional {
                 if_branch,
-                elseif_branch,
                 else_branch,
             } => {
-                if !self.evaluate_branch(if_branch)? {
-                    let mut taken = false;
-
-                    if let Some(branches) = elseif_branch {
-                        for branch in branches {
-                            if self.evaluate_branch(branch)? {
-                                taken = true;
-                                break;
-                            };
-                        }
-                    }
-                    if !taken && let Some(branch) = else_branch {
-                        self.evaluate_branch(branch)?;
-                    }
+                if !self.evaluate_branch(if_branch)?
+                    && let Some(branch) = else_branch
+                {
+                    self.evaluate_branch(branch)?;
                 }
             }
 
