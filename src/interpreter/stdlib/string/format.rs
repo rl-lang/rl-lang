@@ -1,6 +1,6 @@
 use crate::interpreter::evaluator::Evaluator;
 use crate::interpreter::values::Value;
-use crate::utils::errors::{Error, Reason};
+use crate::utils::errors::Error;
 use crate::utils::span::Span;
 
 pub fn std_format(eval: &mut Evaluator, args: Vec<Value>, span: Span) -> Result<Value, Error> {
@@ -53,8 +53,7 @@ pub fn std_format(eval: &mut Evaluator, args: Vec<Value>, span: Span) -> Result<
 
     // check for missing value that wasnt replaced
     if missing > 0 {
-        return Err(Error::at(
-            Reason::Runtime,
+        return Err(eval.err(
             format!(
                 "format() has {} placeholder(s) with no matching argument",
                 missing
@@ -65,8 +64,7 @@ pub fn std_format(eval: &mut Evaluator, args: Vec<Value>, span: Span) -> Result<
 
     // check for additional values that is not used
     if used < args.len() - 1 {
-        return Err(Error::at(
-            Reason::Runtime,
+        return Err(eval.err(
             format!(
                 "format() received {} argument(s) but only {} placeholder(s) were used",
                 args.len() - 1,

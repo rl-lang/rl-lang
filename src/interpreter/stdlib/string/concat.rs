@@ -5,6 +5,6 @@ use crate::{
 
 pub fn std_concat(_: &mut Evaluator, args: Vec<Value>, _: Span) -> Result<Value, Error> {
     Ok(Value::String(
-        args.iter().map(|a| format!("{}", a)).collect::<String>(),
+        args.iter().map(|a| a.to_string()).collect::<String>(),
     ))
 }
