@@ -1,13 +1,12 @@
-use std::collections::HashMap;
-use std::sync::Arc;
-
 use crate::ast::statements::TypeAnnotation;
 use crate::interpreter::evaluator::Evaluator;
 use crate::interpreter::values::Value;
-use crate::utils::errors::{Error, ErrorReason, Reason};
-
-pub type NativeFn = Arc<dyn Fn(&mut Evaluator, Vec<Value>) -> Result<Value, Error> + Send + Sync>;
-
+use crate::utils::errors::{Error, Reason};
+use crate::utils::span::Span;
+use std::collections::HashMap;
+use std::sync::Arc;
+pub type NativeFn =
+    Arc<dyn Fn(&mut Evaluator, Vec<Value>, Span) -> Result<Value, Error> + Send + Sync>;
 pub struct Module {
     pub name: String,
     pub functions: HashMap<String, NativeFn>,
@@ -33,7 +32,7 @@ impl Module {
 
     pub fn with_raw_function<F>(mut self, name: impl Into<String>, f: F) -> Self
     where
-        F: Fn(&mut Evaluator, Vec<Value>) -> Result<Value, Error> + Send + Sync + 'static,
+        F: Fn(&mut Evaluator, Vec<Value>, Span) -> Result<Value, Error> + Send + Sync + 'static,
     {
         self.functions.insert(name.into(), Arc::new(f));
         self
@@ -97,88 +96,91 @@ impl<T: ValueType> ValueType for Vec<T> {
 }
 
 pub trait FromValue: Sized {
-    fn from_value(v: Value) -> Result<Self, Error>;
+    fn from_value(v: Value, span: Span) -> Result<Self, Error>;
 }
 
 impl FromValue for Value {
-    fn from_value(v: Value) -> Result<Self, Error> {
+    fn from_value(v: Value, _span: Span) -> Result<Self, Error> {
         Ok(v)
     }
 }
 
 impl FromValue for i64 {
-    fn from_value(v: Value) -> Result<Self, Error> {
+    fn from_value(v: Value, span: Span) -> Result<Self, Error> {
         match v {
             Value::Integer(i) => Ok(i),
-            other => Err(Error::init(
+            other => Err(Error::at(
+                Reason::Runtime,
                 format!("expected integer, got {}", other.type_name()),
-                None,
-                Some(ErrorReason::init(Reason::Runtime, None)),
+                span,
             )),
         }
     }
 }
 
 impl FromValue for f64 {
-    fn from_value(v: Value) -> Result<Self, Error> {
+    fn from_value(v: Value, span: Span) -> Result<Self, Error> {
         match v {
             Value::Float(f) => Ok(f),
-            other => Err(Error::init(
+            other => Err(Error::at(
+                Reason::Runtime,
                 format!("expected float, got {}", other.type_name()),
-                None,
-                Some(ErrorReason::init(Reason::Runtime, None)),
+                span,
             )),
         }
     }
 }
 
 impl FromValue for String {
-    fn from_value(v: Value) -> Result<Self, Error> {
+    fn from_value(v: Value, span: Span) -> Result<Self, Error> {
         match v {
             Value::String(s) => Ok(s),
-            other => Err(Error::init(
+            other => Err(Error::at(
+                Reason::Runtime,
                 format!("expected string, got {}", other.type_name()),
-                None,
-                Some(ErrorReason::init(Reason::Runtime, None)),
+                span,
             )),
         }
     }
 }
 
 impl FromValue for bool {
-    fn from_value(v: Value) -> Result<Self, Error> {
+    fn from_value(v: Value, span: Span) -> Result<Self, Error> {
         match v {
             Value::Bool(b) => Ok(b),
-            other => Err(Error::init(
+            other => Err(Error::at(
+                Reason::Runtime,
                 format!("expected bool, got {}", other.type_name()),
-                None,
-                Some(ErrorReason::init(Reason::Runtime, None)),
+                span,
             )),
         }
     }
 }
 
 impl FromValue for char {
-    fn from_value(v: Value) -> Result<Self, Error> {
+    fn from_value(v: Value, span: Span) -> Result<Self, Error> {
         match v {
             Value::Char(c) => Ok(c),
-            other => Err(Error::init(
+            other => Err(Error::at(
+                Reason::Runtime,
                 format!("expected char, got {}", other.type_name()),
-                None,
-                Some(ErrorReason::init(Reason::Runtime, None)),
+                span,
             )),
         }
     }
 }
 
 impl<T: FromValue> FromValue for Vec<T> {
-    fn from_value(v: Value) -> Result<Self, Error> {
+    fn from_value(v: Value, span: Span) -> Result<Self, Error> {
         match v {
-            Value::Values { items, .. } => items.into_iter().map(T::from_value).collect(),
-            other => Err(Error::init(
+            Value::Values { items, .. } => items
+                .into_iter()
+                .map(|item| T::from_value(item, span))
+                .collect(),
+            other => Err(Error::at(
+                Reason::Runtime,
                 format!("expected array, got {}", other.type_name()),
-                None,
-                Some(ErrorReason::init(Reason::Runtime, None)),
+                span,
             )),
         }
     }
@@ -250,12 +252,12 @@ where
 {
     fn into_native(self) -> NativeFn {
         Arc::new(
-            move |rt: &mut Evaluator, args: Vec<Value>| -> Result<Value, Error> {
+            move |rt: &mut Evaluator, args: Vec<Value>, span: Span| -> Result<Value, Error> {
                 if !args.is_empty() {
-                    return Err(Error::init(
+                    return Err(Error::at(
+                        Reason::Runtime,
                         format!("expected 0 argument(s), got {}", args.len()),
-                        None,
-                        Some(ErrorReason::init(Reason::Runtime, None)),
+                        span,
                     ));
                 }
                 Ok(self(rt).into_value())
@@ -275,15 +277,15 @@ macro_rules! impl_into_native_fn {
             $($ty: FromValue),+
         {
             fn into_native(self) -> NativeFn {
-                Arc::new(move |rt: &mut Evaluator, args: Vec<Value>| -> Result<Value, Error> {
+                Arc::new(move |rt: &mut Evaluator, args: Vec<Value>, span: Span| -> Result<Value, Error> {
                     if args.len() != $count {
-                        return Err(Error::init(
+                        return Err(Error::at(
+                            Reason::Runtime,
                             format!("expected {} argument(s), got {}", $count, args.len()),
-                            None, Some(ErrorReason::init(Reason::Runtime, None)),
-                        ));
+                            span, ));
                     }
                     let mut iter = args.into_iter();
-                    $(let $var = <$ty>::from_value(iter.next().unwrap())?;)+
+                    $(let $var = <$ty>::from_value(iter.next().unwrap(), span)?;)+
                     Ok(self(rt, $($var),+).into_value())
                 })
             }
@@ -296,15 +298,15 @@ macro_rules! impl_into_native_fn {
             $($ty: FromValue),+
         {
             fn into_native(self) -> NativeFn {
-                Arc::new(move |rt: &mut Evaluator, args: Vec<Value>| -> Result<Value, Error> {
+                Arc::new(move |rt: &mut Evaluator, args: Vec<Value>, span: Span| -> Result<Value, Error> {
                     if args.len() != $count {
-                        return Err(Error::init(
+                        return Err(Error::at(
+                            Reason::Runtime,
                             format!("expected {} argument(s), got {}", $count, args.len()),
-                            None, Some(ErrorReason::init(Reason::Runtime, None)),
-                        ));
+                            span, ));
                     }
                     let mut iter = args.into_iter();
-                    $(let $var = <$ty>::from_value(iter.next().unwrap())?;)+
+                    $(let $var = <$ty>::from_value(iter.next().unwrap(), span)?;)+
                     Ok(self(rt, $($var),+)?.into_value())
                 })
             }
