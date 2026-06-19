@@ -373,3 +373,91 @@ impl_into_native_fn!(
     (A9, a9),
     (A10, a10)
 );
+
+pub struct Spanned<T>(std::marker::PhantomData<T>);
+
+macro_rules! impl_into_native_fn_spanned {
+    ($count:literal, $(($ty:ident, $var:ident)),+) => {
+        impl<F, R, $($ty),+> IntoNativeFn<(Spanned<($($ty,)+)>,)> for F
+        where
+            F: Fn(&mut Evaluator, $($ty),+, Span) -> Result<R, Error> + Send + Sync + 'static,
+            R: IntoValue,
+            $($ty: FromValue),+
+        {
+            fn into_native(self) -> NativeFn {
+                Arc::new(move |rt: &mut Evaluator, args: Vec<Value>, span: Span| -> Result<Value, Error> {
+                    if args.len() != $count {
+                        return Err(rt.err(
+                            format!("expected {} argument(s), got {}", $count, args.len()),
+                            span,
+                        ));
+                    }
+                    let mut iter = args.into_iter();
+                    $(let $var = <$ty>::from_value(iter.next().unwrap(), span)?;)+
+                    Ok(self(rt, $($var),+, span)?.into_value())
+                })
+            }
+        }
+    };
+}
+
+impl_into_native_fn_spanned!(1, (A1, a1));
+impl_into_native_fn_spanned!(2, (A1, a1), (A2, a2));
+impl_into_native_fn_spanned!(3, (A1, a1), (A2, a2), (A3, a3));
+impl_into_native_fn_spanned!(4, (A1, a1), (A2, a2), (A3, a3), (A4, a4));
+impl_into_native_fn_spanned!(5, (A1, a1), (A2, a2), (A3, a3), (A4, a4), (A5, a5));
+impl_into_native_fn_spanned!(
+    6,
+    (A1, a1),
+    (A2, a2),
+    (A3, a3),
+    (A4, a4),
+    (A5, a5),
+    (A6, a6)
+);
+impl_into_native_fn_spanned!(
+    7,
+    (A1, a1),
+    (A2, a2),
+    (A3, a3),
+    (A4, a4),
+    (A5, a5),
+    (A6, a6),
+    (A7, a7)
+);
+impl_into_native_fn_spanned!(
+    8,
+    (A1, a1),
+    (A2, a2),
+    (A3, a3),
+    (A4, a4),
+    (A5, a5),
+    (A6, a6),
+    (A7, a7),
+    (A8, a8)
+);
+impl_into_native_fn_spanned!(
+    9,
+    (A1, a1),
+    (A2, a2),
+    (A3, a3),
+    (A4, a4),
+    (A5, a5),
+    (A6, a6),
+    (A7, a7),
+    (A8, a8),
+    (A9, a9)
+);
+impl_into_native_fn_spanned!(
+    10,
+    (A1, a1),
+    (A2, a2),
+    (A3, a3),
+    (A4, a4),
+    (A5, a5),
+    (A6, a6),
+    (A7, a7),
+    (A8, a8),
+    (A9, a9),
+    (A10, a10)
+);
