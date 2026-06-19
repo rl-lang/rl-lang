@@ -1,15 +1,14 @@
 use crate::{
     interpreter::{evaluator::Evaluator, values::Value},
-    utils::errors::{Error, ErrorReason, Reason},
+    utils::{errors::Error, span::Span},
 };
 
-pub fn std_file_size(_: &mut Evaluator, path: String) -> Result<Value, Error> {
+pub fn std_file_size(eval: &mut Evaluator, path: String, span: Span) -> Result<Value, Error> {
     let size = std::fs::metadata(&path)
         .map_err(|e| {
-            Error::init(
+            eval.err(
                 format!("file_size(): failed to read \"{}\": {}", path, e),
-                None,
-                Some(ErrorReason::init(Reason::Runtime, None)),
+                span,
             )
         })?
         .len();

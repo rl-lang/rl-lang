@@ -1,21 +1,25 @@
 use crate::{
     ast::statements::TypeAnnotation,
     interpreter::{evaluator::Evaluator, values::Value},
-    utils::errors::Error,
+    utils::{errors::Error, span::Span},
 };
 
-pub fn std_arr_push(_: &mut Evaluator, array: Value, value: Value) -> Result<Value, Error> {
+pub fn std_arr_push(
+    eval: &mut Evaluator,
+    array: Value,
+    value: Value,
+    span: Span,
+) -> Result<Value, Error> {
     match array {
         Value::Values { items_type, items } => {
             let val_type = Evaluator::infer_type(&value, false);
             if val_type != items_type && val_type != TypeAnnotation::Null {
-                return Err(Error::init(
+                return Err(eval.err(
                     format!(
                         "type mismatch: array expects {:?}, cannot push {:?}",
                         items_type, val_type
                     ),
-                    None,
-                    None,
+                    span,
                 ));
             }
             let mut v = items;
@@ -25,10 +29,6 @@ pub fn std_arr_push(_: &mut Evaluator, array: Value, value: Value) -> Result<Val
                 items: v,
             })
         }
-        _ => Err(Error::init(
-            "arr_push() accepts only arrays".to_string(),
-            None,
-            None,
-        )),
+        _ => Err(eval.err("arr_push() accepts only arrays".to_string(), span)),
     }
 }

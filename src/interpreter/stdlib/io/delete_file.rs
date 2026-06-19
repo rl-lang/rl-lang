@@ -1,14 +1,13 @@
 use crate::{
     interpreter::{evaluator::Evaluator, values::Value},
-    utils::errors::{Error, ErrorReason, Reason},
+    utils::{errors::Error, span::Span},
 };
 
-pub fn std_delete_file(_: &mut Evaluator, file: String) -> Result<Value, Error> {
+pub fn std_delete_file(eval: &mut Evaluator, file: String, span: Span) -> Result<Value, Error> {
     std::fs::remove_file(&file).map_err(|e| {
-        Error::init(
+        eval.err(
             format!("delete_file(): failed to read \"{}\": {}", file, e),
-            None,
-            Some(ErrorReason::init(Reason::Runtime, None)),
+            span,
         )
     })?;
     Ok(Value::Null)

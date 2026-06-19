@@ -1,11 +1,12 @@
 use crate::interpreter::evaluator::Evaluator;
 use crate::interpreter::values::Value;
 use crate::utils::errors::Error;
+use crate::utils::span::Span;
 
-pub fn std_print(evaluator: &mut Evaluator, args: Vec<Value>) -> Result<Value, Error> {
+pub fn std_print(eval: &mut Evaluator, args: Vec<Value>, _: Span) -> Result<Value, Error> {
     let text = args.iter().map(|s| s.to_string()).collect::<String>();
 
-    if let Some(buffer) = &mut evaluator.output_buffer {
+    if let Some(buffer) = &mut eval.output_buffer {
         buffer.push_str(&text);
     } else {
         print!("{}", text);

@@ -1,9 +1,15 @@
 use crate::{
     interpreter::{evaluator::Evaluator, values::Value},
-    utils::errors::Error,
+    utils::{errors::Error, span::Span},
 };
 
-pub fn std_clamp(_: &mut Evaluator, value: Value, min: Value, max: Value) -> Result<Value, Error> {
+pub fn std_clamp(
+    eval: &mut Evaluator,
+    value: Value,
+    min: Value,
+    max: Value,
+    span: Span,
+) -> Result<Value, Error> {
     match (value, min, max) {
         (Value::Integer(value), Value::Integer(low), Value::Integer(high)) => {
             Ok(Value::Integer(value.clamp(low, high)))
@@ -11,15 +17,14 @@ pub fn std_clamp(_: &mut Evaluator, value: Value, min: Value, max: Value) -> Res
         (Value::Float(value), Value::Float(low), Value::Float(high)) => {
             Ok(Value::Float(value.clamp(low, high)))
         }
-        (value, min, max) => Err(Error::init(
+        (value, min, max) => Err(eval.err(
             format!(
                 "clamp() expects a number, got ({}, {}, {})",
                 value.type_name(),
                 min.type_name(),
                 max.type_name()
             ),
-            None,
-            None,
+            span,
         )),
     }
 }

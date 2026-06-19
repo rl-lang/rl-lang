@@ -5,49 +5,48 @@ use crate::{
 };
 
 pub fn std_arr_all(
-    evaluator: &mut Evaluator,
+    eval: &mut Evaluator,
     array: Value,
     function: Value,
+    span: Span,
 ) -> Result<Value, Error> {
     let (_, items) = match array {
         Value::Values { items_type, items } => (items_type, items),
 
         other => {
-            return Err(Error::init(
+            return Err(eval.err(
                 format!("arr_all() accepts only arrays found {}", other.type_name()).to_string(),
-                None,
-                None,
+                span,
             ));
         }
     };
     if !matches!(function, Value::Function { .. }) {
-        return Err(Error::init(
+        return Err(eval.err(
             format!(
                 "arr_all() expected function or lambda found {}",
                 function.type_name()
             ),
-            None,
-            None,
+            span,
         ));
     }
 
     if let Value::Function { return_type, .. } = function.clone()
-        && !matches!(return_type, Some(TypeAnnotation::Bool)) {
-            return Err(Error::init(
-                format!(
-                    "arr_all() expected function or lambda with Bool return type found {:?}",
-                    return_type
-                ),
-                None,
-                None,
-            ));
-        }
-
-    let span = Span { start: 0, end: 0 };
+        && !matches!(return_type, Some(TypeAnnotation::Bool))
+    {
+        return Err(eval.err(
+            format!(
+                "arr_all() expected function or lambda with Bool return type found {:?}",
+                return_type
+            ),
+            span,
+        ));
+    }
 
     for item in items.clone() {
-        let mapped_item = evaluator.call_value(function.clone(), vec![item.clone()], span)?;
-        if let Value::Bool(false) = mapped_item { return Ok(Value::Bool(false)) }
+        let mapped_item = eval.call_value(function.clone(), vec![item.clone()], span)?;
+        if let Value::Bool(false) = mapped_item {
+            return Ok(Value::Bool(false));
+        }
     }
 
     Ok(Value::Bool(true))

@@ -34,72 +34,72 @@ impl Evaluator {
                 (Value::Integer(a), Value::Integer(b)) => Value::Integer(a + b),
                 (Value::Float(a), Value::Float(b)) => Value::Float(a + b),
                 _ => {
-                    return Err(self.type_mismatch_binary(
-                        "+", &left, left_span, &right, right_span, span,
-                    ))
+                    return Err(
+                        self.type_mismatch_binary("+", &left, left_span, &right, right_span, span)
+                    );
                 }
             },
             TokenType::Minus => match (&left, &right) {
                 (Value::Integer(a), Value::Integer(b)) => Value::Integer(a - b),
                 (Value::Float(a), Value::Float(b)) => Value::Float(a - b),
                 _ => {
-                    return Err(self.type_mismatch_binary(
-                        "-", &left, left_span, &right, right_span, span,
-                    ))
+                    return Err(
+                        self.type_mismatch_binary("-", &left, left_span, &right, right_span, span)
+                    );
                 }
             },
             TokenType::Star => match (&left, &right) {
                 (Value::Integer(a), Value::Integer(b)) => Value::Integer(a * b),
                 (Value::Float(a), Value::Float(b)) => Value::Float(a * b),
                 _ => {
-                    return Err(self.type_mismatch_binary(
-                        "*", &left, left_span, &right, right_span, span,
-                    ))
+                    return Err(
+                        self.type_mismatch_binary("*", &left, left_span, &right, right_span, span)
+                    );
                 }
             },
             TokenType::Slash => match (&left, &right) {
                 (Value::Integer(a), Value::Integer(b)) => Value::Integer(a / b),
                 (Value::Float(a), Value::Float(b)) => Value::Float(a / b),
                 _ => {
-                    return Err(self.type_mismatch_binary(
-                        "/", &left, left_span, &right, right_span, span,
-                    ))
+                    return Err(
+                        self.type_mismatch_binary("/", &left, left_span, &right, right_span, span)
+                    );
                 }
             },
             TokenType::Less => match (&left, &right) {
                 (Value::Integer(a), Value::Integer(b)) => Value::Bool(a < b),
                 (Value::Float(a), Value::Float(b)) => Value::Bool(a < b),
                 _ => {
-                    return Err(self.type_mismatch_binary(
-                        "<", &left, left_span, &right, right_span, span,
-                    ))
+                    return Err(
+                        self.type_mismatch_binary("<", &left, left_span, &right, right_span, span)
+                    );
                 }
             },
             TokenType::Greater => match (&left, &right) {
                 (Value::Integer(a), Value::Integer(b)) => Value::Bool(a > b),
                 (Value::Float(a), Value::Float(b)) => Value::Bool(a > b),
                 _ => {
-                    return Err(self.type_mismatch_binary(
-                        ">", &left, left_span, &right, right_span, span,
-                    ))
+                    return Err(
+                        self.type_mismatch_binary(">", &left, left_span, &right, right_span, span)
+                    );
                 }
             },
             TokenType::LessEqual => match (&left, &right) {
                 (Value::Integer(a), Value::Integer(b)) => Value::Bool(a <= b),
                 (Value::Float(a), Value::Float(b)) => Value::Bool(a <= b),
                 _ => {
-                    return Err(self.type_mismatch_binary(
-                        "<=", &left, left_span, &right, right_span, span,
-                    ))
+                    return Err(
+                        self.type_mismatch_binary("<=", &left, left_span, &right, right_span, span)
+                    );
                 }
             },
             TokenType::GreaterEqual => match (&left, &right) {
                 (Value::Integer(a), Value::Integer(b)) => Value::Bool(a >= b),
                 (Value::Float(a), Value::Float(b)) => Value::Bool(a >= b),
                 _ => {
-                    return Err(self.type_mismatch_binary(
-                        ">=", &left, left_span, &right, right_span, span,
-                    ))
+                    return Err(
+                        self.type_mismatch_binary(">=", &left, left_span, &right, right_span, span)
+                    );
                 }
             },
             TokenType::BangEqual => match (&left, &right) {
@@ -109,9 +109,9 @@ impl Evaluator {
                 (Value::Char(a), Value::Char(b)) => Value::Bool(a != b),
                 (Value::Bool(a), Value::Bool(b)) => Value::Bool(a != b),
                 _ => {
-                    return Err(self.type_mismatch_binary(
-                        "!=", &left, left_span, &right, right_span, span,
-                    ))
+                    return Err(
+                        self.type_mismatch_binary("!=", &left, left_span, &right, right_span, span)
+                    );
                 }
             },
             TokenType::Compare => match (&left, &right) {
@@ -121,9 +121,9 @@ impl Evaluator {
                 (Value::Char(a), Value::Char(b)) => Value::Bool(a == b),
                 (Value::Bool(a), Value::Bool(b)) => Value::Bool(a == b),
                 _ => {
-                    return Err(self.type_mismatch_binary(
-                        "==", &left, left_span, &right, right_span, span,
-                    ))
+                    return Err(
+                        self.type_mismatch_binary("==", &left, left_span, &right, right_span, span)
+                    );
                 }
             },
             _ => return Err(self.err("unknown binary operator", span)),

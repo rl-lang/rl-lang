@@ -1,9 +1,9 @@
 use crate::{
     interpreter::{evaluator::Evaluator, values::Value},
-    utils::errors::Error,
+    utils::{errors::Error, span::Span},
 };
 
-pub fn std_to_float(_: &mut Evaluator, value: Value) -> Result<f64, Error> {
+pub fn std_to_float(eval: &mut Evaluator, value: Value, span: Span) -> Result<f64, Error> {
     match value {
         Value::Float(f) => Ok(f),
         Value::Integer(i) => Ok(i as f64),
@@ -11,27 +11,11 @@ pub fn std_to_float(_: &mut Evaluator, value: Value) -> Result<f64, Error> {
         Value::String(s) => s
             .trim()
             .parse::<f64>()
-            .map_err(|_| Error::init(format!("cannot parse \"{}\" as float", s), None, None)),
-        Value::Char(_) => Err(Error::init(
-            "cannot parse \"char\" as float".to_string(),
-            None,
-            None,
-        )),
+            .map_err(|_| eval.err(format!("cannot parse \"{}\" as float", s), span)),
 
-        Value::Function { .. } => Err(Error::init(
-            "cannot parse \"function\" as float".to_string(),
-            None,
-            None,
-        )),
-        Value::Values { .. } => Err(Error::init(
-            "cannot parse \"array\" as float".to_string(),
-            None,
-            None,
-        )),
-        Value::Null => Err(Error::init(
-            "cannot parse \"null\" as float".to_string(),
-            None,
-            None,
+        other => Err(eval.err(
+            format!("cannot parse \"{}\" as bool", other.type_name()),
+            span,
         )),
     }
 }

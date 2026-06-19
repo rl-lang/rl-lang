@@ -1,17 +1,16 @@
 use crate::{
     interpreter::{evaluator::Evaluator, values::Value},
-    utils::errors::Error,
+    utils::{errors::Error, span::Span},
 };
 
 /// returns the absolute value of number
-pub fn std_abs(_: &mut Evaluator, a: Value) -> Result<Value, Error> {
+pub fn std_abs(eval: &mut Evaluator, a: Value, span: Span) -> Result<Value, Error> {
     match a {
         Value::Integer(i) => Ok(Value::Integer(i.abs())),
         Value::Float(f) => Ok(Value::Float(f.abs())),
-        other => Err(Error::init(
+        other => Err(eval.err(
             format!("abs() expects a number, got {}", other.type_name()),
-            None,
-            None,
+            span,
         )),
     }
 }
