@@ -32,7 +32,6 @@ fn if_simple() {
                 },
                 Span::new(0, 13),
             )),
-            elseif_branch: Some(vec![]),
             else_branch: None,
         },
         Span::new(0, 13),
@@ -64,7 +63,6 @@ fn if_else() {
                 },
                 Span::new(0, 13),
             )),
-            elseif_branch: Some(vec![]),
             else_branch: Some(Box::new(Statement::new(
                 StatementKind::ConditionalBranch {
                     condition: None,
@@ -84,6 +82,17 @@ fn if_else() {
     assert_eq!(statements, vec![expected]);
 }
 
+// else if is now a nested Conditional inside else_branch
+//
+// if (true) {1} else if (false) {2}
+// becomes:
+// Conditional {
+//   if_branch:   (true) => {1}
+//   else_branch: Conditional {
+//     if_branch:   (false) => {2}
+//     else_branch: None
+//   }
+// }
 #[test]
 fn if_else_if() {
     let statements = common::parse("if (true) {1} else if (false) {2}");
@@ -108,26 +117,31 @@ fn if_else_if() {
                 },
                 Span::new(0, 13),
             )),
-            elseif_branch: Some(vec![Statement::new(
-                StatementKind::ConditionalBranch {
-                    condition: Some(Expression::new(
-                        ExpressionKind::Grouping(Box::new(Expression::new(
-                            ExpressionKind::Bool(false),
-                            Span::new(23, 28),
-                        ))),
-                        Span::new(22, 29),
+            else_branch: Some(Box::new(Statement::new(
+                StatementKind::Conditional {
+                    if_branch: Box::new(Statement::new(
+                        StatementKind::ConditionalBranch {
+                            condition: Some(Expression::new(
+                                ExpressionKind::Grouping(Box::new(Expression::new(
+                                    ExpressionKind::Bool(false),
+                                    Span::new(23, 28),
+                                ))),
+                                Span::new(22, 29),
+                            )),
+                            body: vec![Statement::new(
+                                StatementKind::Expression(Expression::new(
+                                    ExpressionKind::Integer(2),
+                                    Span::new(31, 32),
+                                )),
+                                Span::new(31, 32),
+                            )],
+                        },
+                        Span::new(19, 33),
                     )),
-                    body: vec![Statement::new(
-                        StatementKind::Expression(Expression::new(
-                            ExpressionKind::Integer(2),
-                            Span::new(31, 32),
-                        )),
-                        Span::new(31, 32),
-                    )],
+                    else_branch: None,
                 },
-                Span::new(14, 33),
-            )]),
-            else_branch: None,
+                Span::new(19, 33),
+            ))),
         },
         Span::new(0, 33),
     );
@@ -158,37 +172,42 @@ fn if_else_if_else() {
                 },
                 Span::new(0, 13),
             )),
-            elseif_branch: Some(vec![Statement::new(
-                StatementKind::ConditionalBranch {
-                    condition: Some(Expression::new(
-                        ExpressionKind::Grouping(Box::new(Expression::new(
-                            ExpressionKind::Bool(false),
-                            Span::new(23, 28),
-                        ))),
-                        Span::new(22, 29),
-                    )),
-                    body: vec![Statement::new(
-                        StatementKind::Expression(Expression::new(
-                            ExpressionKind::Integer(2),
-                            Span::new(31, 32),
-                        )),
-                        Span::new(31, 32),
-                    )],
-                },
-                Span::new(14, 33),
-            )]),
             else_branch: Some(Box::new(Statement::new(
-                StatementKind::ConditionalBranch {
-                    condition: None,
-                    body: vec![Statement::new(
-                        StatementKind::Expression(Expression::new(
-                            ExpressionKind::Integer(0),
-                            Span::new(40, 41),
-                        )),
-                        Span::new(40, 41),
-                    )],
+                StatementKind::Conditional {
+                    if_branch: Box::new(Statement::new(
+                        StatementKind::ConditionalBranch {
+                            condition: Some(Expression::new(
+                                ExpressionKind::Grouping(Box::new(Expression::new(
+                                    ExpressionKind::Bool(false),
+                                    Span::new(23, 28),
+                                ))),
+                                Span::new(22, 29),
+                            )),
+                            body: vec![Statement::new(
+                                StatementKind::Expression(Expression::new(
+                                    ExpressionKind::Integer(2),
+                                    Span::new(31, 32),
+                                )),
+                                Span::new(31, 32),
+                            )],
+                        },
+                        Span::new(19, 33),
+                    )),
+                    else_branch: Some(Box::new(Statement::new(
+                        StatementKind::ConditionalBranch {
+                            condition: None,
+                            body: vec![Statement::new(
+                                StatementKind::Expression(Expression::new(
+                                    ExpressionKind::Integer(0),
+                                    Span::new(40, 41),
+                                )),
+                                Span::new(40, 41),
+                            )],
+                        },
+                        Span::new(34, 42),
+                    ))),
                 },
-                Span::new(34, 42),
+                Span::new(19, 42),
             ))),
         },
         Span::new(0, 42),
@@ -196,6 +215,9 @@ fn if_else_if_else() {
     assert_eq!(statements, vec![expected]);
 }
 
+// "if (true) { if (false) {0} else {1} } else {0}"
+//  0123456789012345678901234567890123456789012345678
+//            1111111111222222222233333333334444444444
 #[test]
 fn if_nested() {
     let statements = common::parse("if (true) { if (false) {0} else {1} } else {0}");
@@ -231,28 +253,38 @@ fn if_nested() {
                                 },
                                 Span::new(12, 26),
                             )),
-                            elseif_branch: Some(vec![]),
                             else_branch: Some(Box::new(Statement::new(
                                 StatementKind::ConditionalBranch {
                                     condition: None,
                                     body: vec![Statement::new(
                                         StatementKind::Expression(Expression::new(
-                                            ExpressionKind::Integer(0),
-                                            Span::new(44, 45),
+                                            ExpressionKind::Integer(1),
+                                            Span::new(33, 34),
                                         )),
-                                        Span::new(44, 45),
+                                        Span::new(33, 34),
                                     )],
                                 },
-                                Span::new(38, 46),
+                                Span::new(27, 35),
                             ))),
                         },
-                        Span::new(12, 46),
+                        Span::new(12, 35),
                     )],
                 },
-                Span::new(0, 46),
+                Span::new(0, 37),
             )),
-            elseif_branch: Some(vec![]),
-            else_branch: None,
+            else_branch: Some(Box::new(Statement::new(
+                StatementKind::ConditionalBranch {
+                    condition: None,
+                    body: vec![Statement::new(
+                        StatementKind::Expression(Expression::new(
+                            ExpressionKind::Integer(0),
+                            Span::new(44, 45),
+                        )),
+                        Span::new(44, 45),
+                    )],
+                },
+                Span::new(38, 46),
+            ))),
         },
         Span::new(0, 46),
     );

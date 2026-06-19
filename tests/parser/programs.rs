@@ -866,7 +866,7 @@ for [int i = 0, i < 2, i += 1] {
                                                 },
                                                 Span::new(280, 360),
                                             )),
-                                            elseif_branch: Some(vec![]),
+
                                             else_branch: Some(Box::new(Statement::new(
                                                 StatementKind::ConditionalBranch {
                                                     condition: None,

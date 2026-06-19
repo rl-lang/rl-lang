@@ -133,7 +133,8 @@ impl Parser {
             }
             statements.push(self.parse_statement_to_ast()?);
         }
-        self.match_type(&[TokenType::RightBrace]);
+        // is it double consuming?
+        // self.match_type(&[TokenType::RightBrace]);
         Ok(statements)
     }
 }
