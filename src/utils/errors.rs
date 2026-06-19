@@ -62,19 +62,6 @@ pub enum Reason {
 }
 
 impl Error {
-    /// legacy constructor: builds an error with just a message, optional line, and reason.
-    /// Used by call sites that haven't been migrated to span-based errors yet.
-    pub fn init(message: String, line: Option<usize>, reason: Option<ErrorReason>) -> Self {
-        #[cfg(feature = "debug")]
-        log::debug!("Error: {}", message);
-        Self {
-            message,
-            line,
-            reason,
-            detail: None,
-        }
-    }
-
     /// builder-style constructor for span-aware errors.
     /// the `span` becomes the primary anchor of the report.
     pub fn at(kind: Reason, message: impl Into<String>, span: Span) -> Self {
