@@ -514,6 +514,18 @@ impl Evaluator {
                     Ok(true)
                 }
             },
+            StatementKind::Conditional {
+                if_branch,
+                else_branch,
+            } => {
+                if !self.evaluate_branch(if_branch)?
+                    && let Some(branch) = else_branch
+                {
+                    self.evaluate_branch(branch)?;
+                }
+
+                Ok(true)
+            }
             _ => Err(self.err("expected conditional branch", statement.span)),
         }
     }
