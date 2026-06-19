@@ -459,11 +459,24 @@ impl Parser {
                 if !self.match_type(&[TokenType::Identifier(String::new())]) {
                     return Err(self.err("expected method name after '.'", self.peek_span()));
                 }
-                let method = if let TokenType::Identifier(name) = self.previous() {
+                let first = if let TokenType::Identifier(name) = self.previous() {
                     name
                 } else {
                     return Err(self.err("expected method name after '.'", self.peek_span()));
                 };
+
+                // construct the path
+                let mut method = vec![first];
+                while self.match_type(&[TokenType::ColonColon]) {
+                    if !self.match_type(&[TokenType::Identifier(String::new())]) {
+                        return Err(
+                            self.err("expected identifier name after '::'", self.peek_span())
+                        );
+                    }
+                    if let TokenType::Identifier(seg) = self.previous() {
+                        method.push(seg);
+                    }
+                }
 
                 // expect (args)
                 if !self.match_type(&[TokenType::LeftParen]) {

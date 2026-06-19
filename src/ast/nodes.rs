@@ -46,7 +46,7 @@ pub enum ExpressionKind {
 
     MethodCall {
         caller: Box<Expression>,
-        method: String,
+        method: Vec<String>,
         args: Vec<Expression>,
     },
     Index {
