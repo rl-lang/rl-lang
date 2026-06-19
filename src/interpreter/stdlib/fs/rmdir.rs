@@ -1,7 +1,7 @@
 use crate::{
     interpreter::{evaluator::Evaluator, values::Value},
     utils::{
-        errors::{Error, ErrorReason, Reason},
+        errors::Error,
         span::Span,
     },
 };

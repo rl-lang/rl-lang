@@ -2,7 +2,7 @@ use crate::{
     ast::statements::TypeAnnotation,
     interpreter::{evaluator::Evaluator, values::Value},
     utils::{
-        errors::{Error, ErrorReason, Reason},
+        errors::Error,
         span::Span,
     },
 };
