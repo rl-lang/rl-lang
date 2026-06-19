@@ -1,15 +1,11 @@
 use crate::{
     interpreter::{evaluator::Evaluator, values::Value},
-    utils::{
-        errors::{Error, Reason},
-        span::Span,
-    },
+    utils::{errors::Error, span::Span},
 };
 
-pub fn std_pow(_: &mut Evaluator, args: Vec<Value>, span: Span) -> Result<Value, Error> {
+pub fn std_pow(eval: &mut Evaluator, args: Vec<Value>, span: Span) -> Result<Value, Error> {
     if args.len() != 2 {
-        return Err(Error::at(
-            Reason::Runtime,
+        return Err(eval.err(
             format!("pow() expects 2 arguments, got {}", args.len()),
             span,
         ));
@@ -26,10 +22,6 @@ pub fn std_pow(_: &mut Evaluator, args: Vec<Value>, span: Span) -> Result<Value,
         (Value::Integer(a), Value::Float(b)) => Ok(Value::Float((a as f64).powf(b))),
         (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a.powf(b))),
         (Value::Float(a), Value::Integer(b)) => Ok(Value::Float(a.powi(b as i32))),
-        _ => Err(Error::init(
-            "pow() expects numeric arguments".to_string(),
-            None,
-            None,
-        )),
+        _ => Err(eval.err("pow() expects numeric arguments".to_string(), span)),
     }
 }
