@@ -1,9 +1,6 @@
 use crate::{
     interpreter::{evaluator::Evaluator, values::Value},
-    utils::{
-        errors::Error,
-        span::Span,
-    },
+    utils::{errors::Error, span::Span},
 };
 
 pub fn std_move_file(

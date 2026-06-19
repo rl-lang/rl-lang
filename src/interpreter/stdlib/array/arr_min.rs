@@ -1,10 +1,7 @@
 use crate::{
     ast::statements::TypeAnnotation,
     interpreter::{evaluator::Evaluator, values::Value},
-    utils::{
-        errors::Error,
-        span::Span,
-    },
+    utils::{errors::Error, span::Span},
 };
 
 pub fn std_arr_min(eval: &mut Evaluator, array: Value, span: Span) -> Result<Value, Error> {

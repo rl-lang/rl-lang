@@ -1,9 +1,6 @@
 use crate::{
     interpreter::{evaluator::Evaluator, values::Value},
-    utils::{
-        errors::Error,
-        span::Span,
-    },
+    utils::{errors::Error, span::Span},
 };
 
 pub fn std_mkdir_all(eval: &mut Evaluator, path: String, span: Span) -> Result<Value, Error> {
