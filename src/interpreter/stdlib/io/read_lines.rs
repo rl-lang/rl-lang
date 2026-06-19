@@ -1,16 +1,15 @@
 use crate::{
     ast::statements::TypeAnnotation,
     interpreter::{evaluator::Evaluator, values::Value},
-    utils::errors::{Error, ErrorReason, Reason},
+    utils::{errors::Error, span::Span},
 };
 
-pub fn std_read_lines(_: &mut Evaluator, file: String) -> Result<Value, Error> {
+pub fn std_read_lines(eval: &mut Evaluator, file: String, span: Span) -> Result<Value, Error> {
     let data = std::fs::read_to_string(&file)
         .map_err(|e| {
-            Error::init(
+            eval.err(
                 format!("read_lines(): failed to read \"{}\": {}", file, e),
-                None,
-                Some(ErrorReason::init(Reason::Runtime, None)),
+                span,
             )
         })?
         .lines()
