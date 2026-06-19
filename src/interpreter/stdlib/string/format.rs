@@ -3,14 +3,10 @@ use crate::interpreter::values::Value;
 use crate::utils::errors::{Error, Reason};
 use crate::utils::span::Span;
 
-pub fn std_format(_: &mut Evaluator, args: Vec<Value>, span: Span) -> Result<Value, Error> {
+pub fn std_format(eval: &mut Evaluator, args: Vec<Value>, span: Span) -> Result<Value, Error> {
     // checks for incorrect usage
     if args.is_empty() {
-        return Err(Error::at(
-            Reason::Runtime,
-            "expected arguments".to_string(),
-            span,
-        ));
+        return Err(eval.err("expected arguments".to_string(), span));
     }
 
     // making mutable empty string for the transformation
