@@ -4,41 +4,39 @@ use crate::{
 };
 
 pub fn std_arr_reduce(
-    evaluator: &mut Evaluator,
+    eval: &mut Evaluator,
     array: Value,
     function: Value,
     initial: Value,
+    span: Span,
 ) -> Result<Value, Error> {
     let items = match array {
         Value::Values { items, .. } => items,
         other => {
-            return Err(Error::init(
+            return Err(eval.err(
                 format!(
                     "arr_reduce() accepts only arrays, found {}",
                     other.type_name()
                 ),
-                None,
-                None,
+                span,
             ));
         }
     };
 
     if !matches!(function, Value::Function { .. }) {
-        return Err(Error::init(
+        return Err(eval.err(
             format!(
                 "arr_reduce() expected function or lambda, found {}",
                 function.type_name()
             ),
-            None,
-            None,
+            span,
         ));
     }
 
-    let span = Span { start: 0, end: 0 };
     let mut result = initial;
 
     for item in items {
-        result = evaluator.call_value(function.clone(), vec![result, item], span)?;
+        result = eval.call_value(function.clone(), vec![result, item], span)?;
     }
 
     Ok(result)

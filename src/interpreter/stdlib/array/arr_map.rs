@@ -4,38 +4,35 @@ use crate::{
 };
 
 pub fn std_arr_map(
-    evaluator: &mut Evaluator,
+    eval: &mut Evaluator,
     array: Value,
     function: Value,
+    span: Span,
 ) -> Result<Value, Error> {
     let (items_type, items) = match array {
         Value::Values { items_type, items } => (items_type, items),
 
         other => {
-            return Err(Error::init(
+            return Err(eval.err(
                 format!("arr_map() accepts only arrays found {}", other.type_name()).to_string(),
-                None,
-                None,
+                span,
             ));
         }
     };
     if !matches!(function, Value::Function { .. }) {
-        return Err(Error::init(
+        return Err(eval.err(
             format!(
                 "arr_map() expected function or lambda found {}",
                 function.type_name()
             ),
-            None,
-            None,
+            span,
         ));
     }
-
-    let span = Span { start: 0, end: 0 };
 
     let mut result = Vec::with_capacity(items.len());
 
     for item in items {
-        let mapped_item = evaluator.call_value(function.clone(), vec![item], span)?;
+        let mapped_item = eval.call_value(function.clone(), vec![item], span)?;
         result.push(mapped_item);
     }
 

@@ -1,10 +1,13 @@
 use crate::{
     ast::statements::TypeAnnotation,
     interpreter::{evaluator::Evaluator, values::Value},
-    utils::errors::{Error, ErrorReason, Reason},
+    utils::{
+        errors::{Error, ErrorReason, Reason},
+        span::Span,
+    },
 };
 
-pub fn std_arr_min(_: &mut Evaluator, array: Value) -> Result<Value, Error> {
+pub fn std_arr_min(eval: &mut Evaluator, array: Value, span: Span) -> Result<Value, Error> {
     match array {
         Value::Values { items, items_type } => match items_type {
             TypeAnnotation::Int => {
@@ -18,13 +21,7 @@ pub fn std_arr_min(_: &mut Evaluator, array: Value) -> Result<Value, Error> {
                         }
                     })
                     .min()
-                    .ok_or_else(|| {
-                        Error::init(
-                            "arr_min() called on empty array".to_string(),
-                            None,
-                            Some(ErrorReason::init(Reason::Runtime, None)),
-                        )
-                    })?;
+                    .ok_or_else(|| eval.err("arr_min() called on empty array".to_string(), span))?;
                 Ok(Value::Integer(min))
             }
             TypeAnnotation::Float => {
@@ -38,25 +35,14 @@ pub fn std_arr_min(_: &mut Evaluator, array: Value) -> Result<Value, Error> {
                         }
                     })
                     .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-                    .ok_or_else(|| {
-                        Error::init(
-                            "arr_min() called on empty array".to_string(),
-                            None,
-                            Some(ErrorReason::init(Reason::Runtime, None)),
-                        )
-                    })?;
+                    .ok_or_else(|| eval.err("arr_min() called on empty array".to_string(), span))?;
                 Ok(Value::Float(min))
             }
-            _ => Err(Error::init(
+            _ => Err(eval.err(
                 "arr_min() accepts only int or float arrays".to_string(),
-                None,
-                Some(ErrorReason::init(Reason::Runtime, None)),
+                span,
             )),
         },
-        _ => Err(Error::init(
-            "arr_min() accepts only arrays".to_string(),
-            None,
-            Some(ErrorReason::init(Reason::Runtime, None)),
-        )),
+        _ => Err(eval.err("arr_min() accepts only arrays".to_string(), span)),
     }
 }

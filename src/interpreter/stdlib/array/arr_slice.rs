@@ -1,35 +1,34 @@
 use crate::{
     interpreter::{evaluator::Evaluator, values::Value},
-    utils::errors::Error,
+    utils::{errors::Error, span::Span},
 };
 
 pub fn std_arr_slice(
-    _: &mut Evaluator,
+    eval: &mut Evaluator,
     array: Value,
     start: i64,
     end: i64,
+    span: Span,
 ) -> Result<Value, Error> {
     match array {
         Value::Values { items_type, items } => {
             let start = start as usize;
             let end = end as usize;
             if start > items.len() || end > items.len() {
-                return Err(Error::init(
+                return Err(eval.err(
                     format!(
                         "slice index out of bounds: {}..{} (len {})",
                         start,
                         end,
                         items.len()
                     ),
-                    None,
-                    None,
+                    span,
                 ));
             }
             if start > end {
-                return Err(Error::init(
+                return Err(eval.err(
                     format!("slice start {} is greater than end {}", start, end),
-                    None,
-                    None,
+                    span,
                 ));
             }
             Ok(Value::Values {
@@ -37,10 +36,6 @@ pub fn std_arr_slice(
                 items: items[start..end].to_vec(),
             })
         }
-        _ => Err(Error::init(
-            "arr_slice() accepts only arrays".to_string(),
-            None,
-            None,
-        )),
+        _ => Err(eval.err("arr_slice() accepts only arrays".to_string(), span)),
     }
 }

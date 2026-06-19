@@ -1,10 +1,13 @@
 use crate::{
     ast::statements::TypeAnnotation,
     interpreter::{evaluator::Evaluator, values::Value},
-    utils::errors::{Error, ErrorReason, Reason},
+    utils::{
+        errors::{Error, ErrorReason, Reason},
+        span::Span,
+    },
 };
 
-pub fn std_arr_max(_: &mut Evaluator, array: Value) -> Result<Value, Error> {
+pub fn std_arr_max(eval: &mut Evaluator, array: Value, span: Span) -> Result<Value, Error> {
     match array {
         Value::Values { items, items_type } => match items_type {
             TypeAnnotation::Int => {
@@ -18,13 +21,7 @@ pub fn std_arr_max(_: &mut Evaluator, array: Value) -> Result<Value, Error> {
                         }
                     })
                     .max()
-                    .ok_or_else(|| {
-                        Error::init(
-                            "arr_max() called on empty array".to_string(),
-                            None,
-                            Some(ErrorReason::init(Reason::Runtime, None)),
-                        )
-                    })?;
+                    .ok_or_else(|| eval.err("arr_max() called on empty array".to_string(), span))?;
                 Ok(Value::Integer(max))
             }
             TypeAnnotation::Float => {
@@ -38,25 +35,14 @@ pub fn std_arr_max(_: &mut Evaluator, array: Value) -> Result<Value, Error> {
                         }
                     })
                     .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-                    .ok_or_else(|| {
-                        Error::init(
-                            "arr_max() called on empty array".to_string(),
-                            None,
-                            Some(ErrorReason::init(Reason::Runtime, None)),
-                        )
-                    })?;
+                    .ok_or_else(|| eval.err("arr_max() called on empty array".to_string(), span))?;
                 Ok(Value::Float(max))
             }
-            _ => Err(Error::init(
+            _ => Err(eval.err(
                 "arr_max() accepts only int or float arrays".to_string(),
-                None,
-                Some(ErrorReason::init(Reason::Runtime, None)),
+                span,
             )),
         },
-        _ => Err(Error::init(
-            "arr_max() accepts only arrays".to_string(),
-            None,
-            Some(ErrorReason::init(Reason::Runtime, None)),
-        )),
+        _ => Err(eval.err("arr_max() accepts only arrays".to_string(), span)),
     }
 }

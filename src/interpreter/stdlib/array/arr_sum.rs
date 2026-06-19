@@ -1,10 +1,10 @@
 use crate::{
     ast::statements::TypeAnnotation,
     interpreter::{evaluator::Evaluator, values::Value},
-    utils::errors::Error,
+    utils::{errors::Error, span::Span},
 };
 
-pub fn std_arr_sum(_: &mut Evaluator, array: Value) -> Result<Value, Error> {
+pub fn std_arr_sum(eval: &mut Evaluator, array: Value, span: Span) -> Result<Value, Error> {
     match array {
         Value::Values { items, items_type } => match items_type {
             TypeAnnotation::Int => {
@@ -33,16 +33,11 @@ pub fn std_arr_sum(_: &mut Evaluator, array: Value) -> Result<Value, Error> {
                     .sum::<f64>();
                 Ok(Value::Float(sum))
             }
-            _ => Err(Error::init(
+            _ => Err(eval.err(
                 "arr_sum() accepts only int or float arrays".to_string(),
-                None,
-                None,
+                span,
             )),
         },
-        _ => Err(Error::init(
-            "arr_sum() accepts only arrays".to_string(),
-            None,
-            None,
-        )),
+        _ => Err(eval.err("arr_sum() accepts only arrays".to_string(), span)),
     }
 }

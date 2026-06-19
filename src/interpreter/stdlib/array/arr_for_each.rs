@@ -5,53 +5,49 @@ use crate::{
 };
 
 pub fn std_arr_for_each(
-    evaluator: &mut Evaluator,
+    eval: &mut Evaluator,
     array: Value,
     function: Value,
+    span: Span,
 ) -> Result<Value, Error> {
     let (_, items) = match array {
         Value::Values { items_type, items } => (items_type, items),
 
         other => {
-            return Err(Error::init(
+            return Err(eval.err(
                 format!(
                     "arr_for_each() accepts only arrays found {}",
                     other.type_name()
                 )
                 .to_string(),
-                None,
-                None,
+                span,
             ));
         }
     };
     if !matches!(function, Value::Function { .. }) {
-        return Err(Error::init(
+        return Err(eval.err(
             format!(
                 "arr_for_each() expected function or lambda found {}",
                 function.type_name()
             ),
-            None,
-            None,
+            span,
         ));
     }
 
     if let Value::Function { return_type, .. } = function.clone()
         && !matches!(return_type, Some(TypeAnnotation::Null))
     {
-        return Err(Error::init(
+        return Err(eval.err(
             format!(
                 "arr_for_each() expected function or lambda with no (or null) return type found {:?}",
                 return_type
             ),
-            None,
-            None,
+            span
         ));
     }
 
-    let span = Span { start: 0, end: 0 };
-
     for item in items {
-        evaluator.call_value(function.clone(), vec![item.clone()], span)?;
+        eval.call_value(function.clone(), vec![item.clone()], span)?;
     }
 
     Ok(Value::Null)
