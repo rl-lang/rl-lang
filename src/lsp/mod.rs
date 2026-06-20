@@ -18,7 +18,10 @@ pub async fn run_lsp() {
     // json-rpc uses methods like didopen and if the method matches
     // the implemented ones it returns a json response to the editor
     // with the diagnostic data
-    let (service, socket) = LspService::new(|client| Backend { client });
+    let (service, socket) = LspService::new(|client| Backend {
+        client,
+        docs: Default::default(),
+    });
 
     // creates a new server and passes the stdin stdout and the socket
     // and serves the lsp services
