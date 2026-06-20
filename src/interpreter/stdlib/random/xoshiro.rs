@@ -60,4 +60,8 @@ impl Xoshiro256 {
     pub fn generate_random_float_range(&mut self, min: f64, max: f64) -> f64 {
         min + self.generate_random_float() * (max - min)
     }
+
+    pub fn generate_random_bool(&mut self, weight: f64) -> bool {
+        self.generate_random_float() < weight.clamp(0.0, 1.0)
+    }
 }
