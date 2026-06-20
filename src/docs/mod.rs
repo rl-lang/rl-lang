@@ -9,11 +9,10 @@ pub fn find_fn_doc(
     fn_name: &str,
 ) -> Option<(&'static StdEntry, &'static FnEntry)> {
     for std_entry in entries::stdlib_entries() {
-        if let Some(m) = module {
-            if std_entry.name != m {
+        if let Some(m) = module
+            && std_entry.name != m {
                 continue;
             }
-        }
         for func in std_entry.functions {
             let bare = func.signature.split('(').next().unwrap_or(func.signature);
             if bare == fn_name {
