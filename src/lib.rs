@@ -1,4 +1,6 @@
 pub mod ast;
+#[cfg(feature = "eval")]
+pub mod checker;
 pub mod docs;
 #[cfg(feature = "eval")]
 pub mod interpreter;
@@ -9,6 +11,5 @@ pub mod lsp;
 pub mod parser;
 #[cfg(feature = "repl_tui")]
 pub mod repl;
-
 pub mod tooling;
 pub mod utils;
