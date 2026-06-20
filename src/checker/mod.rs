@@ -37,6 +37,7 @@ impl TypeChecker {
             return_type_stack: Vec::new(),
             loop_depth: 0,
             stdlib_fn_names,
+            hovers: Vec::new(),
         }
     }
 
@@ -80,6 +81,11 @@ impl TypeChecker {
             err = err.with_help(format!("did you mean `{}`?", h));
         }
         self.errors.push(err);
+    }
+
+    // adds markdown hover text for a source span
+    pub fn push_hover(&mut self, span: Span, text: impl Into<String>) {
+        self.hovers.push((span, text.into()));
     }
 }
 

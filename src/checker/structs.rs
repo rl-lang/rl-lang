@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::{
     ast::statements::TypeAnnotation,
     interpreter::native::Module,
-    utils::{errors::Error, source::SourceFile},
+    utils::{errors::Error, source::SourceFile, span::Span},
 };
 
 pub struct TypeChecker {
@@ -21,6 +21,9 @@ pub struct TypeChecker {
     pub loop_depth: u32,
     // functions name to use in check_call_path
     pub stdlib_fn_names: std::collections::HashSet<String>,
+    // (span, markdown text) pairs collected while checking
+    // one per declaration or usage site
+    pub hovers: Vec<(Span, String)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
