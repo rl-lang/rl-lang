@@ -1,3 +1,5 @@
+pub mod operators;
+pub mod scope;
 pub mod statements;
 pub mod structs;
 pub mod types;
@@ -69,6 +71,14 @@ impl TypeChecker {
     // and pushes the error to the errors field
     pub fn error(&mut self, message: impl Into<String>, span: Span) {
         let err = self.err(message, span);
+        self.errors.push(err);
+    }
+    // same as error() but with helper
+    pub fn error_with_help(&mut self, message: impl Into<String>, span: Span, help: Option<&str>) {
+        let mut err = self.err(message, span);
+        if let Some(h) = help {
+            err = err.with_help(format!("did you mean `{}`?", h));
+        }
         self.errors.push(err);
     }
 }
