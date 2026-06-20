@@ -1,4 +1,5 @@
 mod backend;
+mod hover;
 mod pipeline;
 mod to_diagnostic;
 mod utils;
