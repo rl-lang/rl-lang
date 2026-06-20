@@ -38,7 +38,7 @@ println(PI() * pow(r, 2.0))  // 78.53981633974483
 ### From source
 
 ```bash
-git clone https://github.com/MohamedGonem/rl-lang
+git clone https://github.com/rl-lang/rl-lang
 cd rl-lang
 cargo build --release
 # binary at target/release/rl
@@ -63,17 +63,19 @@ rl docs             # print language reference
 
 ## Documentation
 
-Full language reference and stdlib documentation is available on the [wiki](https://github.com/MohamedGonem/rl-lang/wiki).
+Full language reference and stdlib documentation is available on the [wiki](https://github.com/rl-lang/rl-lang/wiki).
 
 ## Editor support
 
 ### VS Code
 
-Install the [rl-lang extension](https://github.com/MohamedGonem/vscode-rl) for syntax highlighting in `.rl` files.
+- Install the [rl-lang extension](https://github.com/rl-lang/vscode-rl) for syntax highlighting in `.rl` files.
+- Install the [rl-lang runner extension](https://github.com/rl-lang/vscode-rl-lang) to run and check files from the editor.
+- Install the [rl-lang LSP extension](https://github.com/rl-lang/vscode-rl-lsp) for diagnostics and hover.
 
 ### Tree-sitter
 
-A Tree-sitter grammar is available at [MohamedGonem/tree-sitter-rl](https://github.com/MohamedGonem/tree-sitter-rl) for editors that support it (Neovim, Helix, Zed, etc.).
+A Tree-sitter grammar is available at [rl-lang/tree-sitter-rl](https://github.com/rl-lang/tree-sitter-rl) for editors that support it (Neovim, Helix, Zed, etc.).
 
 ## Benchmarks
 
@@ -101,9 +103,9 @@ Feature flags: `run`, `repl`, `repl_tui`, `eval`. All are on by default except `
 <table>
   <tbody>
     <tr>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/MohamedGonem"><img src="https://avatars.githubusercontent.com/u/73464078?v=4?s=100" width="100px;" alt="Mohamed Gonem"/><br /><sub><b>Mohamed Gonem</b></sub></a><br /><a href="https://github.com/rl-lang/rl-lang/commits?author=MohamedGonem" title="Code">💻</a> <a href="https://github.com/rl-lang/rl-lang/commits?author=MohamedGonem" title="Documentation">📖</a> <a href="#ideas-MohamedGonem" title="Ideas, Planning, & Feedback">🤔</a> <a href="https://github.com/rl-lang/rl-lang/commits?author=MohamedGonem" title="Tests">⚠️</a> <a href="#example-MohamedGonem" title="Examples">💡</a> <a href="#infra-MohamedGonem" title="Infrastructure (Hosting, Build-Tools, etc)">🚇</a> <a href="#tool-MohamedGonem" title="Tools">🔧</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://yt-dl.flawlessco.de"><img src="https://avatars.githubusercontent.com/u/37778817?v=4?s=100" width="100px;" alt="Flawlesscode"/><br /><sub><b>Flawlesscode</b></sub></a><br /><a href="https://github.com/rl-lang/rl-lang/commits?author=FlawlessDeveloper" title="Code">💻</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/kill-ux"><img src="https://avatars.githubusercontent.com/u/185858933?v=4?s=100" width="100px;" alt="Mustapha Boutoub"/><br /><sub><b>Mustapha Boutoub</b></sub></a><br /><a href="https://github.com/rl-lang/rl-lang/commits?author=kill-ux" title="Code">💻</a></td>
-      <td align="center" valign="top" width="14.28%"><a href="https://github.com/MohamedGonem"><img src="https://avatars.githubusercontent.com/u/73464078?v=4?s=100" width="100px;" alt="Mohamed Gonem"/><br /><sub><b>Mohamed Gonem</b></sub></a><br /><a href="https://github.com/rl-lang/rl-lang/commits?author=MohamedGonem" title="Code">💻</a> <a href="https://github.com/rl-lang/rl-lang/commits?author=MohamedGonem" title="Documentation">📖</a> <a href="#ideas-MohamedGonem" title="Ideas, Planning, & Feedback">🤔</a> <a href="https://github.com/rl-lang/rl-lang/commits?author=MohamedGonem" title="Tests">⚠️</a> <a href="#example-MohamedGonem" title="Examples">💡</a> <a href="#infra-MohamedGonem" title="Infrastructure (Hosting, Build-Tools, etc)">🚇</a> <a href="#tool-MohamedGonem" title="Tools">🔧</a></td>
     </tr>
   </tbody>
 </table>
