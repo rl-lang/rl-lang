@@ -87,6 +87,34 @@ impl TypeChecker {
     pub fn push_hover(&mut self, span: Span, text: impl Into<String>) {
         self.hovers.push((span, text.into()));
     }
+
+    // using find_fn_doc() in `crate::docs` find the current docs
+    // for the function and add the markdown hover for the span of fn
+    fn push_stdlib_hover(&mut self, path: &[String], span: Span) {
+        let fn_name = match path.last() {
+            Some(n) => n.as_str(),
+            None => return,
+        };
+        // get the module to handle std::io::print()
+        // and get print from std::io
+        let module = if path.len() >= 2 {
+            Some(path[path.len() - 2].as_str())
+        } else {
+            None
+        };
+
+        let text = match crate::docs::find_fn_doc(module, fn_name)
+            .or_else(|| crate::docs::find_fn_doc(None, fn_name))
+        {
+            Some((std_entry, func)) => format!(
+                "```rl\nstd::{}::{}\n```\n{}",
+                std_entry.name, func.signature, func.description
+            ),
+            None => format!("```rl\nfn {}(..)\n```\nstdlib function", fn_name),
+        };
+
+        self.push_hover(span, text);
+    }
 }
 
 // collects the stdlib functions names for recgonizing

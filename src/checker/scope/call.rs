@@ -15,6 +15,7 @@ impl TypeChecker {
     ) -> CheckType {
         // stdlib path (std::io::print)
         if self.root_module.resolve(path).is_some() {
+            self.push_stdlib_hover(path, span);
             return CheckType::Unknown;
         }
 
@@ -25,6 +26,7 @@ impl TypeChecker {
                 let name = &path[0];
 
                 if self.stdlib_fn_names.contains(name.as_str()) {
+                    self.push_stdlib_hover(path, span);
                     return CheckType::Unknown;
                 }
 
