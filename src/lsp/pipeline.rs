@@ -1,14 +1,15 @@
 use crate::{
-    interpreter::evaluator::Evaluator, lexer::tokenizer::Tokenizer,
-    lsp::to_diagnostic::error_to_diagnostic, parser::parser_logic::Parser,
-    utils::source::SourceFile,
+    checker::TypeChecker, lexer::tokenizer::Tokenizer, lsp::to_diagnostic::error_to_diagnostic,
+    parser::parser_logic::Parser, utils::source::SourceFile,
 };
 use tower_lsp::lsp_types::Diagnostic;
 
-/// rereads the entiire source file that is open
-/// by lexing parsing and evaluating
-/// three phases uses error_to_diagnostic to extract any Error and
-/// transform it diagnostic to display
+/// lex -> parse -> type-check the given source string and return LSP diagnostics.
+///
+/// the evaluator is no longer called here: running user code on every keystroke
+/// caused the LSP to hang on infinite loops (e.g. `while true {}`). The
+/// [`TypeChecker`] walks the same AST without executing anything, so it is
+/// always safe to run on in-progress or even non-terminating source.
 pub fn run_pipeline(source: &str) -> Vec<Diagnostic> {
     let file = SourceFile::new("buffer", source.to_string());
 
@@ -22,13 +23,12 @@ pub fn run_pipeline(source: &str) -> Vec<Diagnostic> {
         Err(e) => return vec![error_to_diagnostic(source, &e)],
     };
 
-    let mut evaluator = Evaluator::default().with_stdlib().with_source_file(file);
-    for stmt in &statements {
-        if let Err(e) = evaluator.evaluate_statement(stmt) {
-            return vec![error_to_diagnostic(source, &e)];
-        }
-    }
+    let mut checker = TypeChecker::new().with_source_file(file);
+    checker.check(&statements);
 
-    // no errors to display
-    vec![]
+    checker
+        .errors
+        .iter()
+        .map(|e| error_to_diagnostic(source, e))
+        .collect()
 }
