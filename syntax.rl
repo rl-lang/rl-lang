@@ -8,7 +8,7 @@
 // ------------------------------------------------------------
 // 1. imports
 // ------------------------------------------------------------
-get len from std::display
+get len from std::array
 get println from std::io
 get sin, cos, tan, pow, mod, is_prime, factorial, fibonacci from std::math
 get PI, TAU, PHI, E from std::math::consts
