@@ -72,6 +72,7 @@ pub enum StatementKind {
         params: Vec<Param>,
         return_type: TypeAnnotation,
         body: Vec<Statement>,
+        is_entry: bool,
     },
     Return(Option<Expression>),
 

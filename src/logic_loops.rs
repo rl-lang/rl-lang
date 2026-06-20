@@ -40,11 +40,9 @@ pub fn eval_loop(source: SourceFile, statements: Vec<Statement>) {
     #[cfg(feature = "debug")]
     info!("evaluating the ast tree...");
     let mut evaluator = Evaluator::default().with_stdlib().with_source_file(source);
-    for statement in statements {
-        if let Err(e) = evaluator.evaluate_statement(&statement) {
-            e.report_to_stderr();
-            std::process::exit(1);
-        }
+    if let Err(e) = evaluator.evaluate_program(&statements) {
+        e.report_to_stderr();
+        std::process::exit(1);
     }
 
     #[cfg(feature = "debug")]

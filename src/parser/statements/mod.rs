@@ -77,9 +77,13 @@ impl Parser {
                 self.advance();
                 #[cfg(feature = "debug")]
                 log::info!("found 'fn' while parsing");
-                self.parse_function(start)
+                self.parse_function(start, false)
             }
 
+            TokenType::BangHash => {
+                self.advance();
+                self.parse_entry_attribute(start)
+            }
             TokenType::Return => {
                 self.advance();
                 // if next token can start an expression, parse it
@@ -136,5 +140,30 @@ impl Parser {
         // is it double consuming?
         // self.match_type(&[TokenType::RightBrace]);
         Ok(statements)
+    }
+    fn parse_entry_attribute(
+        &mut self,
+        start: crate::utils::span::Span,
+    ) -> Result<Statement, Error> {
+        if !self.match_type(&[TokenType::LeftBracket]) {
+            return Err(self.err("expected `[` after `!#`", self.peek_span()));
+        }
+        match self.peek() {
+            TokenType::Identifier(name) if name == "entry" => {
+                self.advance();
+            }
+            _ => return Err(self.err("expected `entry` attribute", self.peek_span())),
+        }
+        if !self.match_type(&[TokenType::RightBracket]) {
+            return Err(self.err("expected `]` after entry attribute", self.peek_span()));
+        }
+        while self.match_type(&[TokenType::Newline]) {}
+        if !self.match_type(&[TokenType::Fn]) {
+            return Err(self.err(
+                "expected function declaration after `!#[entry]`",
+                self.peek_span(),
+            ));
+        }
+        self.parse_function(start, true)
     }
 }

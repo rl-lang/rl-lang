@@ -19,6 +19,7 @@ fn fn_simple() {
                 param_type: TypeAnnotation::Int,
             }],
             return_type: TypeAnnotation::Null,
+            is_entry: false,
             body: vec![Statement::new(
                 StatementKind::Return(Some(Expression::new(
                     ExpressionKind::Identifier("x".to_string()),
@@ -49,6 +50,7 @@ fn fn_fn_param() {
                 },
             ],
             return_type: TypeAnnotation::Null,
+            is_entry: false,
             body: vec![Statement::new(
                 StatementKind::Return(Some(Expression::new(
                     ExpressionKind::Call {
@@ -96,4 +98,16 @@ fn dec_fn_lambda() {
         Span::new(0, 31),
     );
     assert_eq!(statements, vec![expected]);
+}
+
+#[test]
+fn entry_attribute_marks_function() {
+    let statements = common::parse("!#[entry]\nfn start () {return 1}");
+    match &statements[0].kind {
+        StatementKind::FunctionDeclaration { name, is_entry, .. } => {
+            assert_eq!(name, "start");
+            assert!(*is_entry);
+        }
+        other => panic!("expected function declaration, got {:?}", other),
+    }
 }

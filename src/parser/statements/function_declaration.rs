@@ -14,7 +14,7 @@ impl Parser {
     //     body
     // }
 
-    pub fn parse_function(&mut self, start: Span) -> Result<Statement, Error> {
+    pub fn parse_function(&mut self, start: Span, is_entry: bool) -> Result<Statement, Error> {
         // function name
         let name = match self.peek() {
             TokenType::Identifier(n) => {
@@ -68,6 +68,7 @@ impl Parser {
                 params,
                 return_type,
                 body,
+                is_entry,
             },
             span,
         ))

@@ -446,6 +446,7 @@ impl Evaluator {
                 params,
                 return_type,
                 body,
+                ..
             } => {
                 let func = Value::Function {
                     params: params.clone(),
@@ -530,6 +531,51 @@ impl Evaluator {
         }
     }
 
+    pub fn evaluate_program(&mut self, statements: &[Statement]) -> Result<(), Error> {
+        let mut explicit_entry: Option<(&str, crate::utils::span::Span)> = None;
+        let mut main_entry: Option<crate::utils::span::Span> = None;
+
+        for statement in statements {
+            if let StatementKind::FunctionDeclaration { name, is_entry, .. } = &statement.kind {
+                if *is_entry {
+                    if explicit_entry.is_some() {
+                        return Err(
+                            self.err("multiple `!#[entry]` functions found", statement.span)
+                        );
+                    }
+                    explicit_entry = Some((name.as_str(), statement.span));
+                }
+                if name == "main" {
+                    main_entry = Some(statement.span);
+                }
+            }
+        }
+
+        let entry = explicit_entry.or_else(|| main_entry.map(|span| ("main", span)));
+        let Some((entry_name, entry_span)) = entry else {
+            for statement in statements {
+                self.evaluate_statement(statement)?;
+            }
+            return Ok(());
+        };
+
+        for statement in statements {
+            match &statement.kind {
+                StatementKind::FunctionDeclaration { .. }
+                | StatementKind::Import { .. }
+                | StatementKind::ImportFile { .. }
+                | StatementKind::ImportFileNamed { .. }
+                | StatementKind::VariableDeclaration { .. }
+                | StatementKind::ConstantDeclaration { .. }
+                | StatementKind::Array { .. }
+                | StatementKind::ConstantArray { .. } => self.evaluate_statement(statement)?,
+                _ => {}
+            }
+        }
+
+        self.call_path(&[entry_name.to_string()], Vec::new(), entry_span)?;
+        Ok(())
+    }
     pub fn evaluate_block(&mut self, statements: &[Statement]) -> Result<(), Error> {
         self.push_scope();
         for statement in statements {

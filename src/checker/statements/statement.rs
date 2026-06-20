@@ -283,6 +283,7 @@ impl TypeChecker {
                 params,
                 return_type,
                 body,
+                ..
             } => {
                 let fn_type = CheckType::Function {
                     params: params.iter().map(|p| p.param_type.clone()).collect(),
