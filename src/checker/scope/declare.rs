@@ -14,7 +14,12 @@ impl TypeChecker {
                     .push(self.err(format!("'{}' is already declared", name), span));
                 return;
             }
+
+            let kind = if is_const { "const" } else { "variable" };
+            let hover_text = format!("```rl\n{} {}: {}\n```", kind, name, item_type.info());
+
             scope.insert(name, ScopeItem::new(item_type, is_const));
+            self.push_hover(span, hover_text);
         }
     }
 }
