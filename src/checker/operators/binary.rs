@@ -77,29 +77,25 @@ impl TypeChecker {
 
             // equality should be between same types
             TokenType::Compare | TokenType::BangEqual => {
-                let ok = match (&left, &right) {
+                let ok = matches!(
+                    (&left, &right),
                     (
                         CheckType::Known(TypeAnnotation::Int | TypeAnnotation::CInt),
                         CheckType::Known(TypeAnnotation::Int | TypeAnnotation::CInt),
-                    )
-                    | (
+                    ) | (
                         CheckType::Known(TypeAnnotation::Float | TypeAnnotation::CFloat),
                         CheckType::Known(TypeAnnotation::Float | TypeAnnotation::CFloat),
-                    )
-                    | (
+                    ) | (
                         CheckType::Known(TypeAnnotation::String | TypeAnnotation::CString),
                         CheckType::Known(TypeAnnotation::String | TypeAnnotation::CString),
-                    )
-                    | (
+                    ) | (
                         CheckType::Known(TypeAnnotation::Char | TypeAnnotation::CChar),
                         CheckType::Known(TypeAnnotation::Char | TypeAnnotation::CChar),
+                    ) | (
+                        CheckType::Known(TypeAnnotation::Bool | TypeAnnotation::CBool),
+                        CheckType::Known(TypeAnnotation::Bool | TypeAnnotation::CBool),
                     )
-                    | (
-                        CheckType::Known(TypeAnnotation::Bool | TypeAnnotation::CBool),
-                        CheckType::Known(TypeAnnotation::Bool | TypeAnnotation::CBool),
-                    ) => true,
-                    _ => false,
-                };
+                );
                 if !ok {
                     self.error(
                         format!(
