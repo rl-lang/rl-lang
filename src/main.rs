@@ -114,7 +114,24 @@ fn main() {
             });
             let source = SourceFile::new(&*path, source_text);
             let tokens = lexing_loop(source.clone());
-            parsing_loop(source.clone(), tokens);
+            let statements = parsing_loop(source.clone(), tokens);
+
+            #[cfg(feature = "eval")]
+            {
+                use rl_lang::checker::TypeChecker;
+                let mut checker = TypeChecker::new().with_source_file(source);
+                let errors = checker.check(&statements);
+                if errors.is_empty() {
+                    println!("ok");
+                } else {
+                    for e in errors {
+                        e.report_to_stderr();
+                    }
+                    std::process::exit(1);
+                }
+            }
+
+            #[cfg(not(feature = "eval"))]
             println!("ok");
         }
 
