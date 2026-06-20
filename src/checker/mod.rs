@@ -1,3 +1,4 @@
+pub mod statements;
 pub mod structs;
 pub mod types;
 
