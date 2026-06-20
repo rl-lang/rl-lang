@@ -1,6 +1,28 @@
 pub mod entries;
 pub mod entry;
-use crate::docs::entry::{ConceptEntry, StdEntry};
+use crate::docs::entry::{ConceptEntry, FnEntry, StdEntry};
+
+// finds the FnEntry whose signature starts with `fn_name(`
+// can accept std::io::print() and print()
+pub fn find_fn_doc(
+    module: Option<&str>,
+    fn_name: &str,
+) -> Option<(&'static StdEntry, &'static FnEntry)> {
+    for std_entry in entries::stdlib_entries() {
+        if let Some(m) = module {
+            if std_entry.name != m {
+                continue;
+            }
+        }
+        for func in std_entry.functions {
+            let bare = func.signature.split('(').next().unwrap_or(func.signature);
+            if bare == fn_name {
+                return Some((std_entry, func));
+            }
+        }
+    }
+    None
+}
 
 // helper functions that transform docs into readable mark down
 pub fn std_to_markdown(entries: &[&StdEntry]) -> String {
