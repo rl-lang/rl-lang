@@ -46,4 +46,10 @@ impl Xoshiro256 {
         self.state[3] = self.state[3].rotate_left(45);
         result
     }
+
+    // primitive functions
+    pub fn generate_random_int(&mut self, min: i64, max: i64) -> i64 {
+        let range = (max - min + 1) as u64;
+        min + (self.next() % range) as i64
+    }
 }
