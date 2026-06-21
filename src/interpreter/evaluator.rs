@@ -185,6 +185,7 @@ impl Evaluator {
         let value = match &expression.kind {
             ExpressionKind::Null => Value::Null,
             ExpressionKind::Integer(i) => Value::Integer(*i),
+            ExpressionKind::Byte(b) => Value::Byte(*b),
             ExpressionKind::String(s) => Value::String(s.clone()),
             ExpressionKind::Bool(b) => Value::Bool(*b),
             ExpressionKind::Float(f) => Value::Float(*f),
