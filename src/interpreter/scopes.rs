@@ -156,4 +156,16 @@ impl Evaluator {
         }
         None
     }
+
+    // helper function to get the type of declared item
+    pub fn get_declared_type(&self, name: &str) -> Option<TypeAnnotation> {
+        for scope in self.environment.iter().rev() {
+            if let Some(item) = scope.borrow().get(name) {
+                match item {
+                    EnvironmentItem::PItem(p) => return Some(p.type_annotation.clone()),
+                }
+            }
+        }
+        None
+    }
 }
