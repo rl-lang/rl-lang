@@ -106,6 +106,10 @@ impl Parser {
                 self.advance();
                 Ok(TypeAnnotation::Int)
             }
+            TokenType::Byte => {
+                self.advance();
+                Ok(TypeAnnotation::Byte)
+            }
             TokenType::Float => {
                 self.advance();
                 Ok(TypeAnnotation::Float)
