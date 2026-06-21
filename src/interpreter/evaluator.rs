@@ -185,6 +185,7 @@ impl Evaluator {
         let value = match &expression.kind {
             ExpressionKind::Null => Value::Null,
             ExpressionKind::Integer(i) => Value::Integer(*i),
+            ExpressionKind::Byte(b) => Value::Byte(*b),
             ExpressionKind::String(s) => Value::String(s.clone()),
             ExpressionKind::Bool(b) => Value::Bool(*b),
             ExpressionKind::Float(f) => Value::Float(*f),
@@ -265,6 +266,12 @@ impl Evaluator {
             ExpressionKind::Identifier(name) => self.get_value(name, expression.span)?,
             ExpressionKind::Assign { name, value } => {
                 let val = self.evaluate(value)?;
+                let val = match (self.get_declared_type(name), &val) {
+                    (Some(TypeAnnotation::Int | TypeAnnotation::CInt), Value::Byte(b)) => {
+                        Value::Integer(*b as i64)
+                    }
+                    _ => val,
+                };
                 let inferred_type = Self::infer_type(&val, false);
                 self.assign_value(name.clone(), val.clone(), inferred_type, expression.span)?;
                 val

@@ -337,6 +337,15 @@ impl Parser {
             }
         }
 
+        // is it byte?
+        if self.match_type(&[TokenType::ByteLiteral(0)]) {
+            let span = self.previous_span();
+            if let TokenType::ByteLiteral(b) = self.previous() {
+                let expr = Expression::new(ExpressionKind::Byte(b), span);
+                return self.parse_postfix(expr, start);
+            }
+        }
+
         // is it String?
         if self.match_type(&[TokenType::StringLiteral(String::new())]) {
             #[cfg(feature = "debug")]

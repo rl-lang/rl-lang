@@ -13,6 +13,7 @@ impl TypeChecker {
             // returns as type
             ExpressionKind::Null => CheckType::Known(TypeAnnotation::Null),
             ExpressionKind::Integer(_) => CheckType::Known(TypeAnnotation::Int),
+            ExpressionKind::Byte(_) => CheckType::Known(TypeAnnotation::Byte),
             ExpressionKind::String(_) => CheckType::Known(TypeAnnotation::String),
             ExpressionKind::Bool(_) => CheckType::Known(TypeAnnotation::Bool),
             ExpressionKind::Float(_) => CheckType::Known(TypeAnnotation::Float),
