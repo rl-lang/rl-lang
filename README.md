@@ -4,6 +4,18 @@
   <p>A statically-typed interpreted language written in Rust with a clean syntax, a TUI REPL, and a growing standard library.</p>
 </div>
 
+[![Discord](https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/9T9mB4VJB)
+[![Rust](https://img.shields.io/badge/Made%20with-Rust-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
+
+[![Website](https://img.shields.io/website?url=https%3A%2F%2Frl-lang.github.io%2Fthe-book%2F&label=Wiki&message=online)](https://rl-lang.github.io/the-book/)
+[![License](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue)](https://github.com/rl-lang/rl-lang/blob/main/LICENSE)
+[![Last Commit](https://img.shields.io/github/last-commit/rl-lang/rl-lang)](https://github.com/rl-lang/rl-lang/commits/main)
+[![Check CI](https://github.com/rl-lang/rl-lang/actions/workflows/check.yaml/badge.svg)](https://github.com/rl-lang/rl-lang/actions/workflows/check.yaml)
+[![Release](https://github.com/rl-lang/rl-lang/actions/workflows/release.yml/badge.svg)](https://github.com/rl-lang/rl-lang/actions/workflows/release.yml)
+[![Crates.io](https://img.shields.io/crates/v/rl-lang)](https://crates.io/crates/rl-lang)
+[![Crates.io Downloads](https://img.shields.io/crates/d/rl-lang)](https://crates.io/crates/rl-lang)
+[![GitHub Repo stars](https://img.shields.io/github/stars/rl-lang/rl-lang?style=social)](https://github.com/rl-lang/rl-lang)
+
 ## Quick look
 
 ```rl
