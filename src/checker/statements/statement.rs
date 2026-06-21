@@ -17,7 +17,15 @@ impl TypeChecker {
                 let value_type = self.check_expression(value);
                 let declared = CheckType::Known(type_annotation.clone());
 
-                if !value_type.matches(&declared) {
+                let widens = matches!(
+                    (type_annotation, &value_type),
+                    (
+                        TypeAnnotation::Int | TypeAnnotation::CInt,
+                        CheckType::Known(TypeAnnotation::Byte | TypeAnnotation::CByte)
+                    )
+                );
+
+                if !widens && !value_type.matches(&declared) {
                     self.error(
                         format!(
                             "type mismatch: expected {}, got {}",

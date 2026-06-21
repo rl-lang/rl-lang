@@ -68,6 +68,7 @@ impl Parser {
         let current = self.peek();
         match (token_type, &current) {
             (TokenType::NumberLiteral(_), TokenType::NumberLiteral(_)) => true,
+            (TokenType::ByteLiteral(_), TokenType::ByteLiteral(_)) => true,
             (TokenType::StringLiteral(_), TokenType::StringLiteral(_)) => true,
             (TokenType::FloatLiteral(_), TokenType::FloatLiteral(_)) => true,
             (TokenType::BoolLiteral(_), TokenType::BoolLiteral(_)) => true,
