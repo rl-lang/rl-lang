@@ -34,6 +34,7 @@ pub fn concept_entries() -> Vec<&'static ConceptEntry> {
         &concepts::variables::VARIABLES,
         &concepts::entry::ENTRY_POINTS,
         &concepts::tooling::TOOLING,
+        &concepts::byte::BYTES,
     ]
 }
 

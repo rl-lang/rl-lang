@@ -1,4 +1,5 @@
 pub mod arrays;
+pub mod byte;
 pub mod constants;
 pub mod entry;
 pub mod flow;
