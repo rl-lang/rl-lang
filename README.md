@@ -61,16 +61,6 @@ rl new <name>       # create a new project
 rl docs             # print language reference
 ```
 
-## Entry points
-
-Source files still work as scripts when no entry function is present. If a file declares `fn main()`, `rl run` registers declarations and runs `main()` instead of evaluating top-level expressions. A different zero-argument function can be selected with `!#[entry]`:
-
-```rl
-!#[entry]
-fn start() {
-    std::io::println("hello")
-}
-```
 ## Documentation
 
 Full language reference and stdlib documentation is available on the [wiki](https://github.com/rl-lang/rl-lang/wiki).
