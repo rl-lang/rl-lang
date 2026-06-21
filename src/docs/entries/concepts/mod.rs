@@ -1,5 +1,6 @@
 pub mod arrays;
 pub mod constants;
+pub mod entry;
 pub mod flow;
 pub mod functions;
 pub mod general;
