@@ -99,7 +99,7 @@ impl Parser {
     pub fn parse_param_type(&mut self) -> Result<TypeAnnotation, Error> {
         if matches!(self.peek(), TokenType::Array) {
             self.advance();
-            return Ok(TypeAnnotation::Array(self.nested_array_type()?));
+            return Ok(*self.nested_array_type()?);
         }
         match self.peek() {
             TokenType::Int => {

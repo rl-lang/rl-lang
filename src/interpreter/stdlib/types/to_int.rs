@@ -6,6 +6,7 @@ use crate::{
 pub fn std_to_int(eval: &mut Evaluator, value: Value, span: Span) -> Result<i64, Error> {
     match value {
         Value::Integer(v) => Ok(v),
+        Value::Byte(v) => Ok(v as i64),
         Value::Float(v) => Ok(v as i64),
         Value::Bool(v) => Ok(if v { 1 } else { 0 }),
         Value::Char(v) => Ok(v as i64),

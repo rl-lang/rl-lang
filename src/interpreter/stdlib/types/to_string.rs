@@ -6,6 +6,7 @@ use crate::{
 pub fn std_to_string(eval: &mut Evaluator, value: Value, span: Span) -> Result<String, Error> {
     match value {
         Value::Integer(v) => Ok(format!("{}", v)),
+        Value::Byte(v) => Ok(format!("{}", v)),
         Value::Float(v) => Ok(format!("{}", v)),
         Value::Bool(v) => Ok(format!("{}", v)),
         Value::Char(v) => Ok(v.to_string()),

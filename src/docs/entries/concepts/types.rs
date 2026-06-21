@@ -33,5 +33,12 @@ pub static TYPES: ConceptEntry = ConceptEntry {
             description: "`char` is a single character enclosed in single quotes",
             examples: &["dec char letter = 'a'\ndec char digit  = '9'"],
         },
+        DescriptionEntry {
+            description: "byte is an unsigned 8-bit integer, integer literals are bytes by default and widen to int when needed",
+            examples: &[
+                "dec byte b = 255",
+                "dec int  x = 10   // byte literal widens to int",
+            ],
+        },
     ],
 };

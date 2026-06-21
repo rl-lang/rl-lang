@@ -1,4 +1,5 @@
 pub mod arrays;
+pub mod byte;
 pub mod constants;
 pub mod entry;
 pub mod flow;
@@ -8,5 +9,6 @@ pub mod imports;
 pub mod lambdas;
 pub mod null;
 pub mod operators;
+pub mod tooling;
 pub mod types;
 pub mod variables;
