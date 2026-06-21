@@ -1,5 +1,3 @@
-use std::ops::Index;
-
 use crate::{
     interpreter::{evaluator::Evaluator, values::Value},
     utils::{errors::Error, span::Span},
@@ -8,17 +6,17 @@ use crate::{
 pub fn std_arr_index_of(
     eval: &mut Evaluator,
     array: Value,
-    index: i64,
+    value: Value,
     span: Span,
 ) -> Result<Value, Error> {
     match array {
-        Value::Values { items, .. } => {
-            if index as usize >= items.len() {
-                return Err(eval.err(format!("index out of bounds: {}", index), span));
+        Value::Values { items_type, items } => {
+            let needle = Evaluator::coerce_array_type(value, &items_type);
+            match items.iter().position(|item| *item == needle) {
+                Some(pos) => Ok(Value::Integer(pos as i64)),
+                None => Ok(Value::Integer(-1)),
             }
-            let item = items.index(index as usize);
-            Ok(item.clone())
         }
-        _ => Err(eval.err("arr_is_empty() accepts only arrays".to_string(), span)),
+        _ => Err(eval.err("arr_index_of() accepts only arrays".to_string(), span)),
     }
 }

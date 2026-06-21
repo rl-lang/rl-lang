@@ -45,13 +45,8 @@ impl Evaluator {
                 for item in value {
                     let val = self.evaluate(item)?;
                     let val_type = Self::infer_type(&val, false);
-                    if val_type != *type_annotation
-                        && val_type != TypeAnnotation::Null
-                        && !((val_type == TypeAnnotation::Byte
-                            || val_type == TypeAnnotation::CByte)
-                            && (*type_annotation == TypeAnnotation::Int
-                                || *type_annotation == TypeAnnotation::CInt))
-                    {
+
+                    if !Self::types_compatible(&val_type, type_annotation) {
                         return Err(self.err(
                             format!(
                                 "type mismatch: array expects {:?}, got {:?}",
@@ -60,16 +55,18 @@ impl Evaluator {
                             item.span,
                         ));
                     }
+
+                    let val = Self::coerce_array_type(val, type_annotation);
                     items.push(val);
                 }
-                let arr_type = type_annotation.clone();
+                let declared_type = TypeAnnotation::Array(Box::new(type_annotation.clone()));
                 self.insert_value(
                     name.clone(),
                     Value::Values {
-                        items_type: arr_type.clone(),
+                        items_type: type_annotation.clone(),
                         items,
                     },
-                    arr_type,
+                    declared_type,
                     statement.span,
                 )?;
             }
@@ -106,13 +103,8 @@ impl Evaluator {
                 for item in value {
                     let val = self.evaluate(item)?;
                     let val_type = Self::infer_type(&val, false);
-                    if val_type != *type_annotation
-                        && val_type != TypeAnnotation::Null
-                        && !((val_type == TypeAnnotation::Byte
-                            || val_type == TypeAnnotation::CByte)
-                            && (*type_annotation == TypeAnnotation::Int
-                                || *type_annotation == TypeAnnotation::CInt))
-                    {
+
+                    if !Self::types_compatible(&val_type, type_annotation) {
                         return Err(self.err(
                             format!(
                                 "type mismatch: array expects {:?}, got {:?}",
@@ -121,16 +113,18 @@ impl Evaluator {
                             item.span,
                         ));
                     }
+
+                    let val = Self::coerce_array_type(val, type_annotation);
                     items.push(val);
                 }
-                let arr_type = type_annotation.clone();
+                let declared_type = TypeAnnotation::CArray(Box::new(type_annotation.clone()));
                 self.insert_const(
                     name.clone(),
                     Value::Values {
-                        items_type: arr_type.clone(),
+                        items_type: type_annotation.clone(),
                         items,
                     },
-                    arr_type,
+                    declared_type,
                     statement.span,
                 )?;
             }

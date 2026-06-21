@@ -1,5 +1,3 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
-
 use crate::{
     ast::statements::TypeAnnotation,
     interpreter::{
@@ -8,6 +6,7 @@ use crate::{
     },
     utils::{errors::Error, span::Span, suggest::closest_match},
 };
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 impl Evaluator {
     pub fn push_scope(&mut self) {
@@ -126,7 +125,7 @@ impl Evaluator {
                                 {
                                     true
                                 }
-                                _ => declared == value_type,
+                                _ => Evaluator::types_compatible(&value_type, &declared),
                             };
                         if !types_match {
                             return Err(self.err(

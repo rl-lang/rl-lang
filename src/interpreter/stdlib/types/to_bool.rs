@@ -7,6 +7,7 @@ pub fn std_to_bool(eval: &mut Evaluator, value: Value, span: Span) -> Result<boo
     match value {
         Value::Bool(b) => Ok(b),
         Value::Integer(i) => Ok(i != 0),
+        Value::Byte(i) => Ok(i != 0),
         Value::Float(f) => Ok(f != 0.0),
         Value::Null => Ok(false),
         Value::String(s) => match s.trim() {
