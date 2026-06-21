@@ -49,8 +49,9 @@ impl Xoshiro256 {
 
     // primitive functions
     pub fn generate_random_int_range(&mut self, min: i64, max: i64) -> i64 {
-        let range = (max - min + 1) as u64;
-        min + (self.next() % range) as i64
+        let range = (max as i128 - min as i128 + 1) as u128;
+        let offset = (self.next() as u128) % range;
+        (min as i128 + offset as i128) as i64
     }
 
     pub fn generate_random_float(&mut self) -> f64 {
