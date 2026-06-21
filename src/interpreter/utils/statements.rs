@@ -45,7 +45,13 @@ impl Evaluator {
                 for item in value {
                     let val = self.evaluate(item)?;
                     let val_type = Self::infer_type(&val, false);
-                    if val_type != *type_annotation && val_type != TypeAnnotation::Null {
+                    if val_type != *type_annotation
+                        && val_type != TypeAnnotation::Null
+                        && !((val_type == TypeAnnotation::Byte
+                            || val_type == TypeAnnotation::CByte)
+                            && (*type_annotation == TypeAnnotation::Int
+                                || *type_annotation == TypeAnnotation::CInt))
+                    {
                         return Err(self.err(
                             format!(
                                 "type mismatch: array expects {:?}, got {:?}",
@@ -100,7 +106,13 @@ impl Evaluator {
                 for item in value {
                     let val = self.evaluate(item)?;
                     let val_type = Self::infer_type(&val, false);
-                    if val_type != *type_annotation && val_type != TypeAnnotation::Null {
+                    if val_type != *type_annotation
+                        && val_type != TypeAnnotation::Null
+                        && !((val_type == TypeAnnotation::Byte
+                            || val_type == TypeAnnotation::CByte)
+                            && (*type_annotation == TypeAnnotation::Int
+                                || *type_annotation == TypeAnnotation::CInt))
+                    {
                         return Err(self.err(
                             format!(
                                 "type mismatch: array expects {:?}, got {:?}",
