@@ -63,7 +63,7 @@ rl docs             # print language reference
 
 ## Documentation
 
-Full language reference and stdlib documentation is available on the [wiki](https://github.com/rl-lang/rl-lang/wiki).
+Full language reference and stdlib documentation is available on the [wiki](https://rl-lang.github.io/the-book/).
 
 ## Editor support
 
