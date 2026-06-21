@@ -1,5 +1,3 @@
-use std::clone;
-
 use crate::{
     ast::statements::TypeAnnotation,
     interpreter::{evaluator::Evaluator, values::Value},
@@ -129,15 +127,15 @@ pub fn sample(eval: &mut Evaluator, array: Value, count: i64, span: Span) -> Res
     }
 }
 
-fn char(eval: &mut Evaluator) -> char {
+pub fn char(eval: &mut Evaluator) -> char {
     eval.rng.generate_random_int_range(32, 126) as u8 as char
 }
 
-fn byte(eval: &mut Evaluator) -> i64 {
+pub fn byte(eval: &mut Evaluator) -> i64 {
     eval.rng.generate_random_int_range(0, 255)
 }
 
-fn string(eval: &mut Evaluator, count: i64, span: Span) -> Result<Value, Error> {
+pub fn string(eval: &mut Evaluator, count: i64, span: Span) -> Result<Value, Error> {
     if count as usize <= 0 {
         return Err(eval.err("count cannot be less than zero", span));
     }
@@ -147,7 +145,7 @@ fn string(eval: &mut Evaluator, count: i64, span: Span) -> Result<Value, Error> 
     Ok(Value::String(result))
 }
 
-fn bytes(eval: &mut Evaluator, count: i64, span: Span) -> Result<Value, Error> {
+pub fn bytes(eval: &mut Evaluator, count: i64, span: Span) -> Result<Value, Error> {
     if count as usize <= 0 {
         return Err(eval.err("count cannot be less than zero", span));
     }
