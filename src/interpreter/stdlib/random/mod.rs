@@ -6,6 +6,7 @@ mod rand_float;
 mod rand_float_range;
 mod rand_int;
 mod rand_int_range;
+mod random_general;
 
 use crate::interpreter::native::Module;
 
