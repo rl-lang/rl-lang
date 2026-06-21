@@ -37,7 +37,7 @@ impl Evaluator {
                 (Value::Byte(a), Value::Integer(b)) => Value::Integer(*a as i64 + b),
                 (Value::Byte(a), Value::Byte(b)) => {
                     let ab = *a as i64 + *b as i64;
-                    if ab > 255 && ab < 0 {
+                    if !(0..=255).contains(&ab) {
                         Value::Integer(ab)
                     } else {
                         Value::Byte(a + b)
@@ -56,7 +56,7 @@ impl Evaluator {
                 (Value::Byte(a), Value::Integer(b)) => Value::Integer(*a as i64 - b),
                 (Value::Byte(a), Value::Byte(b)) => {
                     let ab = *a as i64 - *b as i64;
-                    if ab > 255 && ab < 0 {
+                    if !(0..=255).contains(&ab) {
                         Value::Integer(ab)
                     } else {
                         Value::Byte(a - b)
@@ -75,7 +75,7 @@ impl Evaluator {
                 (Value::Byte(a), Value::Integer(b)) => Value::Integer(*a as i64 * b),
                 (Value::Byte(a), Value::Byte(b)) => {
                     let ab = *a as i64 * *b as i64;
-                    if ab > 255 && ab < 0 {
+                    if !(0..=255).contains(&ab) {
                         Value::Integer(ab)
                     } else {
                         Value::Byte(a * b)
@@ -94,7 +94,7 @@ impl Evaluator {
                 (Value::Byte(a), Value::Integer(b)) => Value::Integer(*a as i64 / b),
                 (Value::Byte(a), Value::Byte(b)) => {
                     let ab = *a as i64 / *b as i64;
-                    if ab > 255 && ab < 0 {
+                    if !(0..=255).contains(&ab) {
                         Value::Integer(ab)
                     } else {
                         Value::Byte(a / b)
