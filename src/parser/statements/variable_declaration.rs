@@ -119,6 +119,10 @@ impl Parser {
                     self.advance();
                     TypeAnnotation::String
                 }
+                TokenType::Byte => {
+                    self.advance();
+                    TypeAnnotation::Byte
+                }
                 TokenType::Char => {
                     self.advance();
                     TypeAnnotation::Char
@@ -152,6 +156,10 @@ impl Parser {
                 TokenType::String => {
                     self.advance();
                     TypeAnnotation::CString
+                }
+                TokenType::Byte => {
+                    self.advance();
+                    TypeAnnotation::CByte
                 }
                 TokenType::Char => {
                     self.advance();

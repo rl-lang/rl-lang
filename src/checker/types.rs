@@ -110,6 +110,7 @@ fn const_variant(ty: TypeAnnotation) -> TypeAnnotation {
         TypeAnnotation::Float => TypeAnnotation::CFloat,
         TypeAnnotation::Bool => TypeAnnotation::CBool,
         TypeAnnotation::String => TypeAnnotation::CString,
+        TypeAnnotation::Byte => TypeAnnotation::CByte,
         TypeAnnotation::Char => TypeAnnotation::CChar,
         TypeAnnotation::Array(inner) => TypeAnnotation::CArray(inner),
         other => other,
