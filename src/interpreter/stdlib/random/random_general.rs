@@ -159,3 +159,26 @@ fn bytes(eval: &mut Evaluator, count: i64, span: Span) -> Result<Value, Error> {
         items: result,
     })
 }
+
+pub fn shuffle(eval: &mut Evaluator, array: Value, span: Span) -> Result<Value, Error> {
+    match array {
+        Value::Values { items, items_type } => {
+            if items.is_empty() {
+                return Err(eval.err("array is empty", span));
+            }
+
+            let mut items = items;
+            for i in (1..items.len()).rev() {
+                let j = eval.rng.generate_random_int_range(0, i as i64) as usize;
+                items.swap(i, j);
+            }
+
+            Ok(Value::Values { items_type, items })
+        }
+
+        other => Err(eval.err(
+            format!("rand_shuffle() expected array found {}", other),
+            span,
+        )),
+    }
+}
