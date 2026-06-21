@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::sync::Arc;
 use std::{collections::HashMap, rc::Rc};
 
+use crate::interpreter::stdlib::random::xoshiro::Xoshiro256;
 use crate::{
     ast::{
         nodes::{Expression, ExpressionKind},
@@ -40,6 +41,7 @@ pub struct Evaluator {
     pub is_breaking: bool,
     pub is_continuing: bool,
     pub output_buffer: Option<String>,
+    pub rng: Xoshiro256,
 }
 
 impl Default for Evaluator {
@@ -58,6 +60,7 @@ impl Evaluator {
             is_breaking: false,
             is_continuing: false,
             output_buffer: None,
+            rng: Xoshiro256::default(),
         }
     }
 
@@ -94,7 +97,8 @@ impl Evaluator {
                 .with_module(stdlib::types::module())
                 .with_module(stdlib::array::module())
                 .with_module(stdlib::path::module())
-                .with_module(stdlib::fs::module()),
+                .with_module(stdlib::fs::module())
+                .with_module(stdlib::random::module()),
         )
     }
 
@@ -475,6 +479,7 @@ impl Evaluator {
                 .chain(stdlib::array::KEYWORDS)
                 .chain(stdlib::path::KEYWORDS)
                 .chain(stdlib::fs::KEYWORDS)
+                .chain(stdlib::random::KEYWORDS)
                 .copied();
             if let Some(suggestion) = closest_match(last, candidates) {
                 err = err.with_help(format!("did you mean `{}`?", suggestion));

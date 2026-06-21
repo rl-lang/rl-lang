@@ -13,6 +13,7 @@ pub fn stdlib_entries() -> Vec<&'static StdEntry> {
         &stdlib::types::TYPES,
         &stdlib::path::PATH,
         &stdlib::fs::FS,
+        &stdlib::random::RANDOM,
     ]
 }
 
