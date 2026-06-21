@@ -1,4 +1,5 @@
 use crate::{
+    ast::statements::TypeAnnotation,
     checker::structs::{CheckType, TypeChecker},
     utils::{span::Span, suggest::closest_match},
 };
@@ -18,9 +19,19 @@ impl TypeChecker {
         for scope in self.scopes.iter_mut().rev() {
             if let Some(item) = scope.get_mut(name) {
                 found = true;
+                let widens = matches!(
+                    (&item.type_annotation, &value_type),
+                    (
+                        CheckType::Known(TypeAnnotation::Int | TypeAnnotation::CInt),
+                        CheckType::Known(TypeAnnotation::Byte | TypeAnnotation::CByte)
+                    )
+                );
                 if item.is_const {
                     const_error = Some(format!("cannot assign to constant '{}'", name));
-                } else if !value_type.matches(&item.type_annotation) && !value_type.is_null() {
+                } else if !widens
+                    && !value_type.matches(&item.type_annotation)
+                    && !value_type.is_null()
+                {
                     type_error = Some(format!(
                         "cannot assign {} to variable '{}' declared as {}",
                         value_type.info(),
