@@ -177,7 +177,7 @@ static ARR_UNIQUE: FnEntry = FnEntry {
 static LEN: FnEntry = FnEntry {
     signature: "len(x)",
     description: "length of string or array",
-    example: "get std::display::len\n\nlen(\"hello\") // 5",
+    example: "get std::array::len\n\nlen(\"hello\") // 5",
 };
 
 static ARR_ALL: FnEntry = FnEntry {
