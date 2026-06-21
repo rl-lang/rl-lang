@@ -63,6 +63,7 @@ pub enum TokenType {
     Float,
     Bool,
     String,
+    Byte,
     Char,
     Array,
 

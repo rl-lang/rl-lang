@@ -11,6 +11,7 @@ pub enum Value {
     Float(f64),
     String(String),
     Bool(bool),
+    Byte(u8),
     Char(char),
     Values {
         items_type: TypeAnnotation,
@@ -33,6 +34,7 @@ impl Value {
             Value::Float(_) => "float",
             Value::String(_) => "string",
             Value::Bool(_) => "bool",
+            Value::Byte(_) => "byte",
             Value::Char(_) => "char",
             Value::Values { .. } => "array",
             Value::Null => "null",
@@ -48,6 +50,7 @@ impl fmt::Display for Value {
             Value::Float(fl) => write!(f, "{}", fl),
             Value::String(s) => write!(f, "{}", s),
             Value::Bool(b) => write!(f, "{}", b),
+            Value::Byte(b) => write!(f, "{}", b),
             Value::Char(c) => write!(f, "'{}'", c),
             Value::Values { items, .. } => {
                 let formatted: Vec<String> = items.iter().map(|v| v.to_string()).collect();

@@ -88,6 +88,9 @@ impl TypeChecker {
                     ) | (
                         CheckType::Known(TypeAnnotation::String | TypeAnnotation::CString),
                         CheckType::Known(TypeAnnotation::String | TypeAnnotation::CString),
+                    ) |(
+                        CheckType::Known(TypeAnnotation::Byte | TypeAnnotation::CByte),
+                        CheckType::Known(TypeAnnotation::Byte | TypeAnnotation::CByte),
                     ) | (
                         CheckType::Known(TypeAnnotation::Char | TypeAnnotation::CChar),
                         CheckType::Known(TypeAnnotation::Char | TypeAnnotation::CChar),

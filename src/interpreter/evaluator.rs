@@ -142,6 +142,13 @@ impl Evaluator {
                     TypeAnnotation::Bool
                 }
             }
+            Value::Byte(_) => {
+                if is_const {
+                    TypeAnnotation::CByte
+                } else {
+                    TypeAnnotation::Byte
+                }
+            }
             Value::Char(_) => {
                 if is_const {
                     TypeAnnotation::CChar

@@ -93,6 +93,34 @@ fn const_string() {
 }
 
 #[test]
+fn dec_byte() {
+    let statements = common::parse("dec byte x = 65");
+    let expected = Statement::new(
+        StatementKind::VariableDeclaration {
+            name: "x".to_string(),
+            type_annotation: TypeAnnotation::Byte,
+            value: Expression::new(ExpressionKind::Integer(65), Span::new(13, 15)),
+        },
+        Span::new(0, 15),
+    );
+    assert_eq!(statements, vec![expected]);
+}
+
+#[test]
+fn const_byte() {
+    let statements = common::parse("CONST byte x = 65");
+    let expected = Statement::new(
+        StatementKind::ConstantDeclaration {
+            name: "x".to_string(),
+            type_annotation: TypeAnnotation::CByte,
+            value: Expression::new(ExpressionKind::Integer(65), Span::new(15, 17)),
+        },
+        Span::new(0, 17),
+    );
+    assert_eq!(statements, vec![expected]);
+}
+
+#[test]
 fn dec_char() {
     let statements = common::parse("dec char x = 'x'");
     let expected = Statement::new(

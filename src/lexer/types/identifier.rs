@@ -31,6 +31,7 @@ impl Tokenizer {
             "float" => self.add_token(TokenType::Float),
             "bool" => self.add_token(TokenType::Bool),
             "string" => self.add_token(TokenType::String),
+            "byte" => self.add_token(TokenType::Byte),
             "char" => self.add_token(TokenType::Char),
             "true" => self.add_token(TokenType::BoolLiteral(true)),
             "false" => self.add_token(TokenType::BoolLiteral(false)),
