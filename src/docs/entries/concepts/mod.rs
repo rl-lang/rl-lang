@@ -8,5 +8,6 @@ pub mod imports;
 pub mod lambdas;
 pub mod null;
 pub mod operators;
+pub mod tooling;
 pub mod types;
 pub mod variables;
