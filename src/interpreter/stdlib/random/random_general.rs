@@ -4,8 +4,29 @@ use crate::{
     utils::{errors::Error, span::Span},
 };
 
-pub fn dice(eval: &mut Evaluator, sides: i64) -> i64 {
-    eval.rng.generate_random_int_range(1, sides)
+pub fn dice(eval: &mut Evaluator, sides: i64, span: Span) -> Result<Value, Error> {
+    if sides <= 0 {
+        return Err(eval.err("sides should be 1 or higher", span));
+    }
+    Ok(Value::Integer(eval.rng.generate_random_int_range(1, sides)))
+}
+
+pub fn dices(eval: &mut Evaluator, count: i64, sides: i64, span: Span) -> Result<Value, Error> {
+    if count <= 0 {
+        return Err(eval.err("count should be 1 or higher", span));
+    }
+    if sides <= 0 {
+        return Err(eval.err("sides should be 1 or higher", span));
+    }
+
+    let result: Vec<Value> = (0..count)
+        .map(|_| Value::Integer(eval.rng.generate_random_int_range(1, sides)))
+        .collect();
+
+    Ok(Value::Values {
+        items_type: TypeAnnotation::Int,
+        items: result,
+    })
 }
 
 pub fn range(eval: &mut Evaluator, stop: i64, span: Span) -> Result<Value, Error> {

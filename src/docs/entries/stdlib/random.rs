@@ -14,6 +14,7 @@ static FUNCTIONS: &[&FnEntry] = &[
     &RAND_BOOL,
     &RAND_BOOL_WEIGHTED,
     &RAND_DICE,
+    &RAND_DICES,
     &RAND_RANGE,
     &RAND_RANGE_STEP,
     &RAND_CHOICE,
@@ -66,6 +67,12 @@ static RAND_DICE: FnEntry = FnEntry {
     signature: "rand_dice(sides)",
     description: "rolls a single die with the given number of sides and returns the result",
     example: "get std::random::rand_dice\n\nrand_dice(6) // 5",
+};
+
+static RAND_DICES: FnEntry = FnEntry {
+    signature: "rand_dices(count, sides)",
+    description: "rolls count dice with the given number of sides and returns the individual results as an array",
+    example: "get std::random::rand_dices\n\nrand_dices(3, 6) // [4, 1, 6]",
 };
 
 static RAND_RANGE: FnEntry = FnEntry {

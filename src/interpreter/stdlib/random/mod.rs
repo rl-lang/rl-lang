@@ -18,6 +18,7 @@ pub const KEYWORDS: &[&str] = &[
     "rand_bool",
     "rand_bool_weighted",
     "rand_dice",
+    "rand_dices",
     "rand_range",
     "rand_range_step",
     "rand_choice",
@@ -49,4 +50,5 @@ pub fn module() -> Module {
         .with_function("rand_bytes", random_general::bytes)
         .with_function("rand_char", random_general::char)
         .with_function("rand_string", random_general::string)
+        .with_function("rand_dices", random_general::dices)
 }
