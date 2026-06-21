@@ -10,9 +10,10 @@ pub fn find_fn_doc(
 ) -> Option<(&'static StdEntry, &'static FnEntry)> {
     for std_entry in entries::stdlib_entries() {
         if let Some(m) = module
-            && std_entry.name != m {
-                continue;
-            }
+            && std_entry.name != m
+        {
+            continue;
+        }
         for func in std_entry.functions {
             let bare = func.signature.split('(').next().unwrap_or(func.signature);
             if bare == fn_name {
@@ -40,9 +41,9 @@ pub fn std_to_markdown(entries: &[&StdEntry]) -> String {
     output
 }
 
-// returns concept with the example provided
-pub fn concept_to_markdown(entries: &[&ConceptEntry]) -> String {
-    let mut output = String::from("# rl concepts reference\n\n");
+// shared renderer for any list of ConceptEntry under a custom header
+fn entries_to_markdown(header: &str, entries: &[&ConceptEntry]) -> String {
+    let mut output = format!("# {}\n\n", header);
     for entry in entries {
         output.push_str(&format!("## {}\n\n", entry.name));
         for description in entry.descriptions {
@@ -53,4 +54,14 @@ pub fn concept_to_markdown(entries: &[&ConceptEntry]) -> String {
         }
     }
     output
+}
+
+// returns concept with the example provided
+pub fn concept_to_markdown(entries: &[&ConceptEntry]) -> String {
+    entries_to_markdown("rl concepts reference", entries)
+}
+
+// returns the tutorial, step by step, same format as concepts
+pub fn tutorial_to_markdown(entries: &[&ConceptEntry]) -> String {
+    entries_to_markdown("rl tutorial", entries)
 }
