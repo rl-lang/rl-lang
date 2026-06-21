@@ -7,9 +7,9 @@ use rl_lang::lexer::tokentypes::TokenType;
 /// Integer literal produces `NumberLiteral` with correct value and lexeme
 #[test]
 fn integer_literal() {
-    let tokens = common::lex("42");
-    assert_eq!(tokens[0].token, TokenType::NumberLiteral(42));
-    assert_eq!(tokens[0].lexeme, "42");
+    let tokens = common::lex("420");
+    assert_eq!(tokens[0].token, TokenType::NumberLiteral(420));
+    assert_eq!(tokens[0].lexeme, "420");
 }
 
 /// Character literal produces `CharacterLiteral` with correct value and lexeme
