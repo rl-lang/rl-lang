@@ -29,9 +29,12 @@ impl TypeChecker {
             },
             // is it correect minus unary?
             TokenType::Minus => match &operand {
-                CheckType::Known(TypeAnnotation::Int | TypeAnnotation::CInt) => {
-                    CheckType::Known(TypeAnnotation::Int)
-                }
+                CheckType::Known(
+                    TypeAnnotation::Int
+                    | TypeAnnotation::CInt
+                    | TypeAnnotation::Byte
+                    | TypeAnnotation::CByte,
+                ) => CheckType::Known(TypeAnnotation::Int),
                 CheckType::Known(TypeAnnotation::Float | TypeAnnotation::CFloat) => {
                     CheckType::Known(TypeAnnotation::Float)
                 }
