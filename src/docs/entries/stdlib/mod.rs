@@ -6,4 +6,5 @@ pub mod math;
 pub mod path;
 pub mod random;
 pub mod str;
+pub mod time;
 pub mod types;
