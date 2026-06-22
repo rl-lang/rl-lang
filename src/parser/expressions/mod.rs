@@ -266,14 +266,18 @@ impl Parser {
                     // is it a call on the result of an index, e.g. fns[0](arg)?
                     if self.match_type(&[TokenType::LeftParen]) {
                         let mut args = Vec::new();
+                        while self.match_type(&[TokenType::Newline]) {}
                         if self.peek() != TokenType::RightParen {
                             loop {
                                 args.push(self.parse_expression()?);
+                                while self.match_type(&[TokenType::Newline]) {}
                                 if !self.match_type(&[TokenType::Comma]) {
                                     break;
                                 }
+                                while self.match_type(&[TokenType::Newline]) {}
                             }
                         }
+                        while self.match_type(&[TokenType::Newline]) {}
                         self.match_type(&[TokenType::RightParen]);
                         let span = start.join(self.previous_span());
                         let expr = Expression::new(
@@ -497,15 +501,19 @@ impl Parser {
                 if !self.match_type(&[TokenType::LeftParen]) {
                     return Err(self.err("expected '(' after method name", self.peek_span()));
                 }
+                while self.match_type(&[TokenType::Newline]) {}
                 let mut args = Vec::new();
                 if self.peek() != TokenType::RightParen {
                     loop {
                         args.push(self.parse_expression()?);
+                        while self.match_type(&[TokenType::Newline]) {}
                         if !self.match_type(&[TokenType::Comma]) {
                             break;
                         }
+                        while self.match_type(&[TokenType::Newline]) {}
                     }
                 }
+                while self.match_type(&[TokenType::Newline]) {}
                 self.match_type(&[TokenType::RightParen]);
                 let span = start.join(self.previous_span());
                 expr = Expression::new(

@@ -34,16 +34,19 @@ impl Parser {
             if self.peek() == TokenType::LeftBracket {
                 self.advance();
                 let mut items = Vec::new();
+                while self.match_type(&[TokenType::Newline]) {}
 
                 while self.peek() != TokenType::RightBracket {
                     let value = self.parse_expression()?;
                     items.push(value);
+                    while self.match_type(&[TokenType::Newline]) {}
                     if self.peek() == TokenType::RightBracket {
                         break;
                     }
                     if !self.match_type(&[TokenType::Comma]) {
-                        return Err(self.err("expected , between list items", self.peek_span()));
+                        return Err(self.err("expected ',' between list items", self.peek_span()));
                     }
+                    while self.match_type(&[TokenType::Newline]) {}
                 }
                 self.match_type(&[TokenType::RightBracket]);
                 let span = start.join(self.previous_span());
