@@ -15,6 +15,7 @@ pub fn stdlib_entries() -> Vec<&'static StdEntry> {
         &stdlib::path::PATH,
         &stdlib::fs::FS,
         &stdlib::random::RANDOM,
+        &stdlib::time::TIME,
     ]
 }
 
