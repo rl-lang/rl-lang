@@ -125,6 +125,11 @@ impl Evaluator {
                                 {
                                     true
                                 }
+                                (TypeAnnotation::Array(a), TypeAnnotation::Array(_))
+                                    if **a == TypeAnnotation::Null =>
+                                {
+                                    true
+                                }
                                 _ => Evaluator::types_compatible(&value_type, &declared),
                             };
                         if !types_match {

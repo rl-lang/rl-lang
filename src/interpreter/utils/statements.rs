@@ -25,7 +25,10 @@ impl Evaluator {
                     _ => val,
                 };
                 let val_type = Self::infer_type(&val, false);
-                if val_type != *type_annotation && val_type != TypeAnnotation::Null {
+                if !Self::types_compatible(&val_type, type_annotation)
+                    && val_type != *type_annotation
+                    && val_type != TypeAnnotation::Null
+                {
                     return Err(self.err(
                         format!(
                             "type mismatch: expected {:?}, got {:?}",
@@ -83,7 +86,10 @@ impl Evaluator {
                     _ => val,
                 };
                 let val_type = Self::infer_type(&val, true);
-                if val_type != *type_annotation && val_type != TypeAnnotation::Null {
+                if !Self::types_compatible(&val_type, type_annotation)
+                    && val_type != *type_annotation
+                    && val_type != TypeAnnotation::Null
+                {
                     return Err(self.err(
                         format!(
                             "type mismatch: expected {:?}, got {:?}",
