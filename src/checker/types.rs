@@ -97,10 +97,10 @@ impl CheckType {
 /// otherwise false
 fn null_array_elision(a: &TypeAnnotation, b: &TypeAnnotation) -> bool {
     match (a, b) {
-        (TypeAnnotation::Array(x), TypeAnnotation::Array(y))
-        | (TypeAnnotation::CArray(x), TypeAnnotation::CArray(y)) => {
-            **x == TypeAnnotation::Null || **y == TypeAnnotation::Null
-        }
+        (
+            TypeAnnotation::Array(x) | TypeAnnotation::CArray(x),
+            TypeAnnotation::Array(y) | TypeAnnotation::CArray(y),
+        ) => **x == TypeAnnotation::Null || **y == TypeAnnotation::Null || null_array_elision(x, y),
         _ => false,
     }
 }

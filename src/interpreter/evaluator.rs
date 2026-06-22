@@ -185,6 +185,9 @@ impl Evaluator {
         if *actual == TypeAnnotation::Null {
             return true;
         }
+        if *expected == TypeAnnotation::Null {
+            return true;
+        }
         match (actual, expected) {
             (TypeAnnotation::Byte, TypeAnnotation::Int)
             | (TypeAnnotation::CByte, TypeAnnotation::CInt)

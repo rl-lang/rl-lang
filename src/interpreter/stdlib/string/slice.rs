@@ -12,7 +12,7 @@ pub fn std_slice(
 ) -> Result<String, Error> {
     let chars = string.chars();
     let chars_count = chars.clone().count();
-    if start as usize >= chars_count || end as usize >= chars_count {
+    if start as usize >= chars_count || end as usize > chars_count {
         return Err(eval.err(
             format!(
                 "index out of bounds string legth: {}, found start: {} and end: {}",
