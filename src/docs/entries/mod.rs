@@ -40,25 +40,18 @@ pub fn concept_entries() -> Vec<&'static ConceptEntry> {
 
 pub fn tutorial_entries() -> Vec<&'static ConceptEntry> {
     vec![
-        &tutorial::STEP_COMMENTS,
+        &tutorial::STEP_FIRST_PROGRAM,
         &tutorial::STEP_VARIABLES,
-        &tutorial::STEP_CONSTANTS,
         &tutorial::STEP_TYPES,
-        &tutorial::STEP_ARRAYS,
-        &tutorial::STEP_OPERATORS,
-        &tutorial::STEP_CONTROL_FLOW,
+        &tutorial::STEP_IO,
+        &tutorial::STEP_OPERATORS_AND_DECISIONS,
         &tutorial::STEP_LOOPS,
+        &tutorial::STEP_FOR_LOOPS,
         &tutorial::STEP_FUNCTIONS,
+        &tutorial::STEP_ARRAYS,
+        &tutorial::STEP_STDLIB,
         &tutorial::STEP_LAMBDAS,
         &tutorial::STEP_NULL,
-        &tutorial::STEP_IMPORTS,
-        &tutorial::STEP_ENTRY_POINTS,
-        &tutorial::STEP_STDLIB_MATH,
-        &tutorial::STEP_STDLIB_ARRAY,
-        &tutorial::STEP_STDLIB_STR,
-        &tutorial::STEP_STDLIB_IO,
-        &tutorial::STEP_STDLIB_PATH,
-        &tutorial::STEP_STDLIB_FS,
-        &tutorial::STEP_STDLIB_RANDOM,
+        &tutorial::STEP_COMPLETE_GAME,
     ]
 }
