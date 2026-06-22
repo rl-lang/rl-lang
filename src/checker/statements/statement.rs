@@ -354,9 +354,16 @@ impl TypeChecker {
                 };
                 // is the actual type same as the expected return one?
                 if let Some(expected) = self.current_return_type().cloned() {
+                    let widens = matches!(
+                        (expected.clone(), actual_type.clone()),
+                        (
+                            TypeAnnotation::Int | TypeAnnotation::CInt,
+                            CheckType::Known(TypeAnnotation::Byte | TypeAnnotation::CByte)
+                        )
+                    );
                     if expected != TypeAnnotation::Null {
                         let expected_type = CheckType::Known(expected.clone());
-                        if !actual_type.matches(&expected_type) {
+                        if !widens && !actual_type.matches(&expected_type) {
                             self.error(
                                 format!(
                                     "return type mismatch: expected {}, got {}",
