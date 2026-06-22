@@ -87,6 +87,9 @@ impl TypeChecker {
                         (
                             TypeAnnotation::Int | TypeAnnotation::CInt,
                             CheckType::Known(TypeAnnotation::Byte | TypeAnnotation::CByte)
+                        ) | (
+                            TypeAnnotation::Array(_) | TypeAnnotation::CArray(_),
+                            CheckType::Known(TypeAnnotation::Array(_) | TypeAnnotation::CArray(_))
                         )
                     );
 
@@ -121,6 +124,9 @@ impl TypeChecker {
                         (
                             TypeAnnotation::Int | TypeAnnotation::CInt,
                             CheckType::Known(TypeAnnotation::Byte | TypeAnnotation::CByte)
+                        ) | (
+                            TypeAnnotation::Array(_) | TypeAnnotation::CArray(_),
+                            CheckType::Known(TypeAnnotation::Array(_) | TypeAnnotation::CArray(_))
                         )
                     );
 

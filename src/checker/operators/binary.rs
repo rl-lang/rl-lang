@@ -82,7 +82,7 @@ impl TypeChecker {
                 (
                     CheckType::Known(TypeAnnotation::Byte | TypeAnnotation::CByte),
                     CheckType::Known(TypeAnnotation::Byte | TypeAnnotation::CByte),
-                ) => CheckType::Known(TypeAnnotation::Byte),
+                ) => CheckType::Known(TypeAnnotation::Bool),
                 (
                     CheckType::Known(
                         TypeAnnotation::Int
@@ -96,7 +96,7 @@ impl TypeChecker {
                         | TypeAnnotation::Byte
                         | TypeAnnotation::CByte,
                     ),
-                ) => CheckType::Known(TypeAnnotation::Int),
+                ) => CheckType::Known(TypeAnnotation::Bool),
                 _ => {
                     self.error(
                         format!(

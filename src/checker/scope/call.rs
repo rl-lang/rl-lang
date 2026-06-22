@@ -92,7 +92,14 @@ impl TypeChecker {
                 for (expected_type, (actual_type, arg_span)) in params.iter().zip(arg_types.iter())
                 {
                     let expected = CheckType::Known(expected_type.clone());
-                    if !actual_type.matches(&expected) {
+                    let widens = matches!(
+                        (expected_type, actual_type),
+                        (
+                            TypeAnnotation::Int | TypeAnnotation::CInt,
+                            CheckType::Known(TypeAnnotation::Byte | TypeAnnotation::CByte)
+                        )
+                    );
+                    if !widens && !actual_type.matches(&expected) {
                         self.error(
                             format!(
                                 "type mismatch: expected {}, got {}",
