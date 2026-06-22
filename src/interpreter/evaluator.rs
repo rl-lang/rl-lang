@@ -98,7 +98,8 @@ impl Evaluator {
                 .with_module(stdlib::array::module())
                 .with_module(stdlib::path::module())
                 .with_module(stdlib::fs::module())
-                .with_module(stdlib::random::module()),
+                .with_module(stdlib::random::module())
+                .with_module(stdlib::time::module()),
         )
     }
 
@@ -559,6 +560,7 @@ impl Evaluator {
                 .chain(stdlib::path::KEYWORDS)
                 .chain(stdlib::fs::KEYWORDS)
                 .chain(stdlib::random::KEYWORDS)
+                .chain(stdlib::time::KEYWORDS)
                 .copied();
             if let Some(suggestion) = closest_match(last, candidates) {
                 err = err.with_help(format!("did you mean `{}`?", suggestion));
