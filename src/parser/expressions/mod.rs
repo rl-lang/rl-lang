@@ -188,14 +188,17 @@ impl Parser {
                     #[cfg(feature = "debug")]
                     log::debug!("found function call");
                     let mut args = Vec::new();
+                    while self.match_type(&[TokenType::Newline]) {}
                     if !(std::mem::discriminant(&self.peek())
                         == std::mem::discriminant(&TokenType::RightParen))
                     {
                         loop {
                             args.push(self.parse_expression()?);
+                            while self.match_type(&[TokenType::Newline]) {}
                             if !self.match_type(&[TokenType::Comma]) {
                                 break;
                             }
+                            while self.match_type(&[TokenType::Newline]) {}
                         }
                     }
                     self.match_type(&[TokenType::RightParen]);
@@ -312,14 +315,17 @@ impl Parser {
         // is it array literal?
         if self.match_type(&[TokenType::LeftBracket]) {
             let mut items = Vec::new();
+            while self.match_type(&[TokenType::Newline]) {}
             while self.peek() != TokenType::RightBracket {
                 items.push(self.parse_expression()?);
+                while self.match_type(&[TokenType::Newline]) {}
                 if self.peek() == TokenType::RightBracket {
                     break;
                 }
                 if !self.match_type(&[TokenType::Comma]) {
                     return Err(self.err("expected `,` between array items", self.peek_span()));
                 }
+                while self.match_type(&[TokenType::Newline]) {}
             }
             self.match_type(&[TokenType::RightBracket]);
             let span = start.join(self.previous_span());
