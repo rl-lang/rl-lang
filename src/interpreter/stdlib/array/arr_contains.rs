@@ -10,11 +10,9 @@ pub fn std_arr_contains(
     span: Span,
 ) -> Result<bool, Error> {
     match array {
-        Value::Values { items, .. } => {
-            if items.contains(&value) {
-                return Ok(true);
-            }
-            Ok(false)
+        Value::Values { items, items_type } => {
+            let needle = Evaluator::coerce_array_type(value, &items_type);
+            Ok(items.contains(&needle))
         }
         _ => Err(eval.err("arr_contains() accepts only arrays".to_string(), span)),
     }

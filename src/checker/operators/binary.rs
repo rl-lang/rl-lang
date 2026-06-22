@@ -79,6 +79,24 @@ impl TypeChecker {
                     CheckType::Known(TypeAnnotation::Float | TypeAnnotation::CFloat),
                     CheckType::Known(TypeAnnotation::Float | TypeAnnotation::CFloat),
                 ) => CheckType::Known(TypeAnnotation::Bool),
+                (
+                    CheckType::Known(TypeAnnotation::Byte | TypeAnnotation::CByte),
+                    CheckType::Known(TypeAnnotation::Byte | TypeAnnotation::CByte),
+                ) => CheckType::Known(TypeAnnotation::Bool),
+                (
+                    CheckType::Known(
+                        TypeAnnotation::Int
+                        | TypeAnnotation::CInt
+                        | TypeAnnotation::Byte
+                        | TypeAnnotation::CByte,
+                    ),
+                    CheckType::Known(
+                        TypeAnnotation::Int
+                        | TypeAnnotation::CInt
+                        | TypeAnnotation::Byte
+                        | TypeAnnotation::CByte,
+                    ),
+                ) => CheckType::Known(TypeAnnotation::Bool),
                 _ => {
                     self.error(
                         format!(
@@ -98,17 +116,24 @@ impl TypeChecker {
                 let ok = matches!(
                     (&left, &right),
                     (
-                        CheckType::Known(TypeAnnotation::Int | TypeAnnotation::CInt),
-                        CheckType::Known(TypeAnnotation::Int | TypeAnnotation::CInt),
+                        CheckType::Known(
+                            TypeAnnotation::Int
+                                | TypeAnnotation::CInt
+                                | TypeAnnotation::Byte
+                                | TypeAnnotation::CByte
+                        ),
+                        CheckType::Known(
+                            TypeAnnotation::Int
+                                | TypeAnnotation::CInt
+                                | TypeAnnotation::Byte
+                                | TypeAnnotation::CByte
+                        ),
                     ) | (
                         CheckType::Known(TypeAnnotation::Float | TypeAnnotation::CFloat),
                         CheckType::Known(TypeAnnotation::Float | TypeAnnotation::CFloat),
                     ) | (
                         CheckType::Known(TypeAnnotation::String | TypeAnnotation::CString),
                         CheckType::Known(TypeAnnotation::String | TypeAnnotation::CString),
-                    ) | (
-                        CheckType::Known(TypeAnnotation::Byte | TypeAnnotation::CByte),
-                        CheckType::Known(TypeAnnotation::Byte | TypeAnnotation::CByte),
                     ) | (
                         CheckType::Known(TypeAnnotation::Char | TypeAnnotation::CChar),
                         CheckType::Known(TypeAnnotation::Char | TypeAnnotation::CChar),

@@ -221,7 +221,7 @@ impl Evaluator {
                     .map(|name| {
                         let f = module.functions.get(name).ok_or_else(|| {
                             self.err(
-                                format!("'{}' is not defined in 'std::{}'", name, module_path),
+                                format!("'{}' is not defined in '{}'", name, module_path),
                                 statement.span,
                             )
                         })?;
