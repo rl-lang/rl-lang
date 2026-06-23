@@ -42,7 +42,7 @@ fn bit_xor_int() {
 }
 
 #[test]
-fn bit_not_int() {
+fn bit_not_byte() {
     let evaluator = eval_program(
         "
         get bit_not from std::bitwise
@@ -51,7 +51,10 @@ fn bit_not_int() {
     )
     .unwrap();
 
-    assert_eq!(evaluator.get_value_raw("x"), Some(Value::Integer(!0)));
+    assert_eq!(
+        evaluator.get_value_raw("x"),
+        Some(Value::Integer(!0u8 as i64))
+    );
 }
 
 #[test]
@@ -105,7 +108,7 @@ fn leading_zeros_int() {
 
     assert_eq!(
         evaluator.get_value_raw("x"),
-        Some(Value::Integer(8i64.leading_zeros() as i64))
+        Some(Value::Integer(8u8.leading_zeros() as i64))
     );
 }
 
@@ -121,6 +124,6 @@ fn trailing_zeros_int() {
 
     assert_eq!(
         evaluator.get_value_raw("x"),
-        Some(Value::Integer(8i64.trailing_zeros() as i64))
+        Some(Value::Integer(8u8.trailing_zeros() as i64))
     );
 }
