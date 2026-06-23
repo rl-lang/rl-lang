@@ -387,16 +387,14 @@ impl TypeChecker {
             }
 
             // checks weather break or continue used outside of loops
-            StatementKind::Break => {
-                if self.loop_depth() == 0 {
+            StatementKind::Break
+                if self.loop_depth() == 0 => {
                     self.error("break outside of loop", statement.span);
                 }
-            }
-            StatementKind::Continue => {
-                if self.loop_depth() == 0 {
+            StatementKind::Continue
+                if self.loop_depth() == 0 => {
                     self.error("continue outside of loop", statement.span);
                 }
-            }
 
             // runtime job maybe revisting later
             StatementKind::Import { .. }

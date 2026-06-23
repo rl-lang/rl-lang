@@ -578,11 +578,10 @@ impl Evaluator {
                         explicit_entry = Some((statement.span, s));
                     }
                 }
-                if name == "main" {
-                    if let Some(s) = slot {
+                if name == "main"
+                    && let Some(s) = slot {
                         main_entry = Some((statement.span, s));
                     }
-                }
             }
         }
 

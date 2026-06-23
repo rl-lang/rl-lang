@@ -90,8 +90,8 @@ impl Resolver {
                     .into_iter()
                     .map(|e| self.resolve_expression(e))
                     .collect();
-                if path.len() == 1 {
-                    if let Some((depth, slot)) = self.resolve_name(&path[0]) {
+                if path.len() == 1
+                    && let Some((depth, slot)) = self.resolve_name(&path[0]) {
                         return Expression::new(
                             ExpressionKind::CallExpr {
                                 callee: Box::new(Expression::new(
@@ -107,7 +107,6 @@ impl Resolver {
                             span,
                         );
                     }
-                }
                 // stdlib path — leave as Call
                 ExpressionKind::Call { path, args }
             }

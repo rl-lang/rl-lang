@@ -67,11 +67,10 @@ impl Evaluator {
     ) -> Result<(), Error> {
         let e = self.err("no active scope", span);
         let frame = self.environment.last_mut().ok_or(e)?;
-        if let Some(EnvironmentItem::PItem(p)) = frame.get(slot) {
-            if p.is_const {
+        if let Some(EnvironmentItem::PItem(p)) = frame.get(slot)
+            && p.is_const {
                 return Err(self.err(format!("slot {} is already a constant", slot), span));
             }
-        }
         Self::ensure_slot(
             frame,
             slot,
