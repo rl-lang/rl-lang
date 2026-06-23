@@ -1,3 +1,8 @@
+//! [`Tokenizer`] struct and the main character-by-character scan loop.
+//!
+//! Holds the source text, the current byte cursor, and the accumulated token
+//! list. The scan loop in here dispatches each character to the appropriate
+//! sub-scanner in `types/` or handles single/double-character operators inline.
 use crate::lexer::tokentypes::{Token, TokenType};
 use crate::utils::errors::Error;
 use crate::utils::source::SourceFile;
