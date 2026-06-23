@@ -6,7 +6,6 @@ use crate::{
     interpreter::{evaluator::Evaluator, values::Value},
     lexer::tokenizer::Tokenizer,
     parser::parser_logic::Parser,
-    resolver::Resolver,
     utils::{errors::Error, source::SourceFile},
 };
 
@@ -256,17 +255,17 @@ impl Evaluator {
                     SourceFile::new(file_path.to_string_lossy().as_ref(), source_text);
                 let tokens = Tokenizer::lex(source_file.clone())?;
                 let stmts = Parser::parse(tokens, source_file.clone())?;
-                let stmts = Resolver::new().resolve_statements(stmts);
+                let stmts = self.resolver.resolve_statements(stmts);
 
                 let previous_source = self.source_file.clone();
                 self.source_file = Some(source_file);
-                self.push_scope();
+
                 for stmt in &stmts {
                     self.evaluate_statement(stmt)?;
                 }
 
                 let exported = self.environment.last().cloned().unwrap_or_default();
-                self.pop_scope();
+
                 self.source_file = previous_source;
 
                 // merge exported slots into parent scope
@@ -296,17 +295,17 @@ impl Evaluator {
                     SourceFile::new(file_path.to_string_lossy().as_ref(), source_text);
                 let tokens = Tokenizer::lex(source_file.clone())?;
                 let stmts = Parser::parse(tokens, source_file.clone())?;
-                let stmts = Resolver::new().resolve_statements(stmts);
+                let stmts = self.resolver.resolve_statements(stmts);
 
                 let previous_source = self.source_file.clone();
                 self.source_file = Some(source_file);
-                self.push_scope();
+
                 for stmt in &stmts {
                     self.evaluate_statement(stmt)?;
                 }
 
                 let exported = self.environment.last().cloned().unwrap_or_default();
-                self.pop_scope();
+
                 self.source_file = previous_source;
 
                 // ImportFileNamed can't filter by name anymore without a name→slot map

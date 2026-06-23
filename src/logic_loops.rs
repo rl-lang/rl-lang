@@ -1,8 +1,6 @@
 #[cfg(feature = "debug")]
 use log::info;
 
-use crate::resolver::Resolver;
-
 #[cfg(feature = "eval")]
 use super::interpreter::evaluator::Evaluator;
 
@@ -29,7 +27,7 @@ pub fn parsing_loop(source: SourceFile, tokens: Vec<Token>) -> Vec<Statement> {
     #[cfg(feature = "debug")]
     info!("parsing the tokens into ast tree...");
     match Parser::parse(tokens, source.clone()) {
-        Ok(s) => Resolver::new().resolve_statements(s),
+        Ok(s) => s,
         Err(e) => {
             e.report_to_stderr();
             std::process::exit(1);
@@ -42,6 +40,7 @@ pub fn eval_loop(source: SourceFile, statements: Vec<Statement>) {
     #[cfg(feature = "debug")]
     info!("evaluating the ast tree...");
     let mut evaluator = Evaluator::default().with_stdlib().with_source_file(source);
+    let statements = evaluator.resolver.resolve_statements(statements);
     if let Err(e) = evaluator.evaluate_program(&statements) {
         e.report_to_stderr();
         std::process::exit(1);
