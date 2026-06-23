@@ -1,3 +1,8 @@
+//! Integer and float literal scanner.
+//!
+//! Consumes a run of digits, checks for a `.` to decide between
+//! [`TokenType::NumberLiteral`] and [`TokenType::FloatLiteral`], and handles
+//! byte literals (`0b` prefix -> [`TokenType::ByteLiteral`]).
 use crate::lexer::{tokenizer::Tokenizer, tokentypes::TokenType};
 
 impl Tokenizer {

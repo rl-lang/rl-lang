@@ -1,3 +1,6 @@
+//! Single-quoted character literal scanner.
+//!
+//! Handles `'x'` and simple escape sequences, emitting [`TokenType::CharacterLiteral`].
 use crate::lexer::{tokenizer::Tokenizer, tokentypes::TokenType};
 use crate::utils::errors::Error;
 

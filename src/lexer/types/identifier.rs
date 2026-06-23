@@ -1,3 +1,7 @@
+//! Identifier and keyword scanner.
+//!
+//! Consumes a run of alphanumeric/underscore characters and maps the result to
+//! the appropriate keyword [`TokenType`] or falls back to [`TokenType::Identifier`].
 use crate::lexer::{tokenizer::Tokenizer, tokentypes::TokenType};
 
 impl Tokenizer {
