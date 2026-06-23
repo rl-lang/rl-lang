@@ -59,7 +59,7 @@ fn import_multi_path() {
 
 #[test]
 fn import_file() {
-    // get x  (no `from`, single segment — treat as file import)
+    // get x  (no `from`, single segment - treat as file import)
     let statements = common::parse("get x");
     let expected = Statement::new(
         StatementKind::ImportFile {

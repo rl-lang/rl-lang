@@ -30,7 +30,7 @@ pub static OPERATORS: ConceptEntry = ConceptEntry {
             examples: &["dec int x = 5\ndec int y = -x  // -5"],
         },
         DescriptionEntry {
-            description: "method-style call with `.` — calls a function with the value as first argument",
+            description: "method-style call with `.` - calls a function with the value as first argument",
             examples: &[
                 "get std::str::to_upper\n\ndec string s = \"hello\"\ns.to_upper()  // \"HELLO\"",
                 "get std::array::arr_push\n\ndec arr[int] nums = [1, 2]\nnums = nums.arr_push(3)  // [1, 2, 3]",

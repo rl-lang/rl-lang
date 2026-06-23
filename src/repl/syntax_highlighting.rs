@@ -10,7 +10,7 @@ use crate::{
 
 fn token_color(tt: &TokenType) -> Style {
     match tt {
-        // control flow — cyan bold
+        // control flow - cyan bold
         TokenType::If
         | TokenType::Else
         | TokenType::While
