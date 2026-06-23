@@ -1,6 +1,8 @@
 #[cfg(feature = "debug")]
 use log::info;
 
+use crate::resolver::Resolver;
+
 #[cfg(feature = "eval")]
 use super::interpreter::evaluator::Evaluator;
 
@@ -27,7 +29,7 @@ pub fn parsing_loop(source: SourceFile, tokens: Vec<Token>) -> Vec<Statement> {
     #[cfg(feature = "debug")]
     info!("parsing the tokens into ast tree...");
     match Parser::parse(tokens, source.clone()) {
-        Ok(s) => s,
+        Ok(s) => Resolver::new().resolve_statements(s),
         Err(e) => {
             e.report_to_stderr();
             std::process::exit(1);
