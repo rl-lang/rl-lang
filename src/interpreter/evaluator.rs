@@ -401,7 +401,10 @@ impl Evaluator {
                 }
             }
 
-            _ => Value::Null,
+            _ => {
+                eprintln!("UNHANDLED: {:#?}", &expression.kind);
+                Value::Null
+            }
         };
         Ok(value)
     }

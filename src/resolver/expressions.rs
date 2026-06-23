@@ -64,6 +64,7 @@ impl Resolver {
             }
 
             ExpressionKind::Assign { name, value } => {
+                let value = Box::new(self.resolve_expression(*value));
                 let (depth, slot) = self
                     .resolve_name(&name)
                     .expect(&format!("undefined variable '{}'", name));
