@@ -159,7 +159,9 @@ impl Resolver {
             }
             StatementKind::While { condition, body } => {
                 let condition = self.resolve_expression(condition);
+                self.push_scope();
                 let body = self.resolve_statements(body);
+                self.pop_scope();
                 StatementKind::While { condition, body }
             }
             StatementKind::Conditional {
@@ -175,7 +177,9 @@ impl Resolver {
             }
             StatementKind::ConditionalBranch { condition, body } => {
                 let condition = condition.map(|e| self.resolve_expression(e));
+                self.push_scope();
                 let body = self.resolve_statements(body);
+                self.pop_scope();
                 StatementKind::ConditionalBranch { condition, body }
             }
             StatementKind::Return(expr) => {
@@ -184,26 +188,54 @@ impl Resolver {
             StatementKind::Expression(expr) => {
                 StatementKind::Expression(self.resolve_expression(expr))
             }
-
             StatementKind::ImportFile { path } => {
                 let import_name = format!("{}.rl", path.join("/"));
                 let Ok(source_text) = std::fs::read_to_string(&import_name) else {
+                    eprintln!("DEBUG import: could not read '{}'", import_name);
                     return Statement::new(StatementKind::ImportFile { path }, span);
                 };
                 let source_file = SourceFile::new(import_name, source_text);
                 let Ok(tokens) = Tokenizer::lex(source_file.clone()) else {
+                    eprintln!("DEBUG import: lex failed");
                     return Statement::new(StatementKind::ImportFile { path }, span);
                 };
                 let Ok(stmts) = Parser::parse(tokens, source_file) else {
+                    eprintln!("DEBUG import: parse failed");
                     return Statement::new(StatementKind::ImportFile { path }, span);
                 };
-                // Resolve in current scope — imported names get slots here
                 let resolved = self.resolve_statements(stmts);
                 StatementKind::ResolvedImportFile {
                     path,
                     body: resolved,
                 }
             }
+            StatementKind::ImportFileNamed { path, names } => {
+                let import_name = format!("{}.rl", path.join("/"));
+                let Ok(source_text) = std::fs::read_to_string(&import_name) else {
+                    return Statement::new(StatementKind::ImportFileNamed { path, names }, span);
+                };
+                let source_file = SourceFile::new(import_name, source_text);
+                let Ok(tokens) = Tokenizer::lex(source_file.clone()) else {
+                    return Statement::new(StatementKind::ImportFileNamed { path, names }, span);
+                };
+                let Ok(stmts) = Parser::parse(tokens, source_file) else {
+                    return Statement::new(StatementKind::ImportFileNamed { path, names }, span);
+                };
+                let stmts: Vec<_> = stmts
+                    .into_iter()
+                    .filter(|s| match &s.kind {
+                        StatementKind::FunctionDeclaration { name, .. }
+                        | StatementKind::VariableDeclaration { name, .. }
+                        | StatementKind::ConstantDeclaration { name, .. } => names.contains(name),
+                        StatementKind::Array { name, .. }
+                        | StatementKind::ConstantArray { name, .. } => names.contains(name),
+                        _ => false,
+                    })
+                    .collect();
+                let body = self.resolve_statements(stmts);
+                StatementKind::ResolvedImportFile { path, body }
+            }
+
             other => other,
         };
         Statement::new(kind, span)

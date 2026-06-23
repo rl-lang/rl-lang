@@ -135,13 +135,14 @@ impl Evaluator {
                             ));
                     }
                 }
+                self.push_scope();
                 for statement in body {
                     self.evaluate_statement(statement)?;
                     if self.return_value.is_some() || self.is_breaking || self.is_continuing {
                         break;
                     }
                 }
-
+                self.pop_scope();
                 if self.is_breaking {
                     self.is_breaking = false;
                     break;
@@ -432,12 +433,14 @@ impl Evaluator {
                                 ));
                         }
                     }
+                    self.push_scope();
                     for statement in body {
                         self.evaluate_statement(statement)?;
                         if self.return_value.is_some() || self.is_breaking || self.is_continuing {
                             break;
                         }
                     }
+                    self.pop_scope();
                 }
                 _ => {
                     for statement in body {
@@ -512,6 +515,7 @@ impl Evaluator {
                     let v = self.evaluate(condition)?;
                     match v {
                         Value::Bool(true) => {
+                            self.push_scope();
                             for statement in body {
                                 self.evaluate_statement(statement)?;
                                 if self.return_value.is_some()
@@ -521,6 +525,7 @@ impl Evaluator {
                                     break;
                                 }
                             }
+                            self.pop_scope();
                             Ok(true)
                         }
                         Value::Bool(false) => Ok(false),
@@ -533,12 +538,14 @@ impl Evaluator {
                     }
                 }
                 None => {
+                    self.push_scope();
                     for statement in body {
                         self.evaluate_statement(statement)?;
                         if self.return_value.is_some() || self.is_breaking || self.is_continuing {
                             break;
                         }
                     }
+                    self.pop_scope();
                     Ok(true)
                 }
             },
@@ -579,9 +586,10 @@ impl Evaluator {
                     }
                 }
                 if name == "main"
-                    && let Some(s) = slot {
-                        main_entry = Some((statement.span, s));
-                    }
+                    && let Some(s) = slot
+                {
+                    main_entry = Some((statement.span, s));
+                }
             }
         }
 

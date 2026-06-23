@@ -466,7 +466,9 @@ impl Evaluator {
 
             let result = self.return_value.take().unwrap_or(Value::Null);
 
+            let updated_global = self.environment[0].clone();
             self.environment = saved_env;
+            self.environment[0] = updated_global;
             self.return_value = saved_return;
 
             if let Some(expected) = &return_type
