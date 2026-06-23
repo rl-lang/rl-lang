@@ -68,9 +68,10 @@ impl Evaluator {
         let e = self.err("no active scope", span);
         let frame = self.environment.last_mut().ok_or(e)?;
         if let Some(EnvironmentItem::PItem(p)) = frame.get(slot)
-            && p.is_const {
-                return Err(self.err(format!("slot {} is already a constant", slot), span));
-            }
+            && p.is_const
+        {
+            return Err(self.err(format!("slot {} is already a constant", slot), span));
+        }
         Self::ensure_slot(
             frame,
             slot,
@@ -132,10 +133,11 @@ impl Evaluator {
     }
 
     // tests only
-    pub fn get_value_raw(&self, depth: usize, slot: usize) -> Option<Value> {
+    pub fn get_value_raw(&self, name: &str) -> Option<Value> {
+        let (depth, slot) = self.resolver.resolve_name(name)?;
         let idx = self.environment.len().saturating_sub(1 + depth);
         match self.environment.get(idx)?.get(slot)? {
-            EnvironmentItem::PItem(p) => Some(p.value.clone()),
+            crate::interpreter::evaluator::EnvironmentItem::PItem(p) => Some(p.value.clone()),
         }
     }
 
