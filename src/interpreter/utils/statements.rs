@@ -12,8 +12,9 @@ use crate::{
 impl Evaluator {
     pub fn evaluate_statement(&mut self, statement: &Statement) -> Result<(), Error> {
         match &statement.kind {
-            StatementKind::VariableDeclaration {
+            StatementKind::ResolvedVariableDeclaration {
                 name,
+                slot,
                 value,
                 type_annotation,
             } => {
@@ -37,44 +38,12 @@ impl Evaluator {
                         statement.span,
                     ));
                 }
-                self.insert_value(name.clone(), val, type_annotation.clone(), statement.span)?;
+                self.insert_value(*slot, val, type_annotation.clone(), statement.span)?;
             }
-            StatementKind::Array {
-                name,
-                value,
-                type_annotation,
-            } => {
-                let mut items: Vec<Value> = Vec::new();
-                for item in value {
-                    let val = self.evaluate(item)?;
-                    let val_type = Self::infer_type(&val, false);
 
-                    if !Self::types_compatible(&val_type, type_annotation) {
-                        return Err(self.err(
-                            format!(
-                                "type mismatch: array expects {:?}, got {:?}",
-                                type_annotation, val_type
-                            ),
-                            item.span,
-                        ));
-                    }
-
-                    let val = Self::coerce_array_type(val, type_annotation);
-                    items.push(val);
-                }
-                let declared_type = TypeAnnotation::Array(Box::new(type_annotation.clone()));
-                self.insert_value(
-                    name.clone(),
-                    Value::Values {
-                        items_type: type_annotation.clone(),
-                        items,
-                    },
-                    declared_type,
-                    statement.span,
-                )?;
-            }
-            StatementKind::ConstantDeclaration {
+            StatementKind::ResolvedConstantDeclaration {
                 name,
+                slot,
                 value,
                 type_annotation,
             } => {
@@ -98,42 +67,9 @@ impl Evaluator {
                         statement.span,
                     ));
                 }
-                self.insert_const(name.clone(), val, type_annotation.clone(), statement.span)?;
+                self.insert_const(*slot, val, type_annotation.clone(), statement.span)?;
             }
-            StatementKind::ConstantArray {
-                name,
-                value,
-                type_annotation,
-            } => {
-                let mut items: Vec<Value> = Vec::new();
-                for item in value {
-                    let val = self.evaluate(item)?;
-                    let val_type = Self::infer_type(&val, false);
 
-                    if !Self::types_compatible(&val_type, type_annotation) {
-                        return Err(self.err(
-                            format!(
-                                "type mismatch: array expects {:?}, got {:?}",
-                                type_annotation, val_type
-                            ),
-                            item.span,
-                        ));
-                    }
-
-                    let val = Self::coerce_array_type(val, type_annotation);
-                    items.push(val);
-                }
-                let declared_type = TypeAnnotation::CArray(Box::new(type_annotation.clone()));
-                self.insert_const(
-                    name.clone(),
-                    Value::Values {
-                        items_type: type_annotation.clone(),
-                        items,
-                    },
-                    declared_type,
-                    statement.span,
-                )?;
-            }
             StatementKind::Expression(expr) => {
                 self.evaluate(expr)?;
             }
@@ -239,6 +175,7 @@ impl Evaluator {
                 }
             }
 
+            // require adding resolved version in resolver
             StatementKind::ImportFile { path } => {
                 let import_name = format!("{}.rl", path.join("/"));
                 let file_path = if let Some(ref source_file) = self.source_file {
@@ -290,7 +227,7 @@ impl Evaluator {
                         .insert(name, item);
                 }
             }
-
+            // require adding resolved version in resolver
             StatementKind::ImportFileNamed { path, names } => {
                 let import_name = format!("{}.rl", path.join("/"));
                 let file_path = if let Some(ref source_file) = self.source_file {
@@ -352,7 +289,8 @@ impl Evaluator {
                 }
             }
 
-            StatementKind::ForRange {
+            StatementKind::ResolvedForRange {
+                slot,
                 variable,
                 range,
                 body,
@@ -369,7 +307,7 @@ impl Evaluator {
                 for item in items {
                     self.push_scope();
                     self.insert_value(
-                        variable.clone(),
+                        *slot,
                         Value::Integer(item),
                         crate::ast::statements::TypeAnnotation::Int,
                         statement.span,
@@ -392,7 +330,8 @@ impl Evaluator {
                 }
             }
 
-            StatementKind::ForEach {
+            StatementKind::ResolvedForEach {
+                slot,
                 variable,
                 iterable,
                 body,
@@ -412,7 +351,7 @@ impl Evaluator {
                 for item in items {
                     let item_type = Evaluator::infer_type(&item, false);
                     self.push_scope();
-                    self.insert_value(variable.clone(), item, item_type, statement.span)?;
+                    self.insert_value(*slot, item, item_type, statement.span)?;
 
                     self.evaluate_block(body)?;
                     self.pop_scope();
@@ -465,34 +404,26 @@ impl Evaluator {
                 }
             }
 
-            StatementKind::FunctionDeclaration {
-                name,
+            StatementKind::ResolvedFunctionDeclaration {
+                slot,
                 params,
                 return_type,
                 body,
                 ..
             } => {
+                let captured_env = self.environment.clone();
                 let func = Value::Function {
                     params: params.clone(),
                     body: body.clone(),
                     return_type: Some(return_type.clone()),
-                    captured_env: vec![],
+                    captured_env,
                 };
                 self.insert_value(
-                    name.clone(),
+                    *slot,
                     func,
                     crate::ast::statements::TypeAnnotation::Fn,
                     statement.span,
                 )?;
-
-                let snapshot = self.environment.clone();
-                if let Some(scope) = self.environment.last_mut()
-                    && let Some(crate::interpreter::evaluator::EnvironmentItem::PItem(p)) =
-                        scope.borrow_mut().get_mut(name)
-                    && let Value::Function { captured_env, .. } = &mut p.value
-                {
-                    *captured_env = snapshot;
-                }
             }
 
             StatementKind::Return(expr) => {
@@ -511,6 +442,8 @@ impl Evaluator {
             StatementKind::Continue => {
                 self.is_continuing = true;
             }
+
+            _ => {}
         }
         Ok(())
     }

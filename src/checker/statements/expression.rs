@@ -205,6 +205,7 @@ impl TypeChecker {
                     return_type: resolved_return,
                 }
             }
+            _ => CheckType::Unknown,
         }
     }
 }

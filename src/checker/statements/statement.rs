@@ -402,6 +402,8 @@ impl TypeChecker {
             StatementKind::Import { .. }
             | StatementKind::ImportFile { .. }
             | StatementKind::ImportFileNamed { .. } => {}
+
+            _ => {}
         }
     }
 }
