@@ -6,7 +6,7 @@ use crate::{
     interpreter::{evaluator::Evaluator, values::Value},
     lexer::tokenizer::Tokenizer,
     parser::parser_logic::Parser,
-    utils::{errors::Error, source::SourceFile},
+    utils::{errors::Error, source::SourceFile, span::Span},
 };
 
 impl Evaluator {
@@ -455,15 +455,22 @@ impl Evaluator {
                 params,
                 return_type,
                 body,
+                name,
                 ..
             } => {
-                let captured_env = self.environment.clone();
+                eprintln!(
+                    "DEBUG: fn decl slot={} env_frames={} frame0_len={}",
+                    slot,
+                    self.environment.len(),
+                    self.environment[0].len()
+                );
                 let func = Value::Function {
                     params: params.clone(),
                     body: body.clone(),
                     return_type: Some(return_type.clone()),
-                    captured_env,
+                    captured_env: vec![],
                 };
+                self.fn_names.insert(name.clone(), *slot);
                 self.insert_value(
                     *slot,
                     func,
@@ -501,7 +508,15 @@ impl Evaluator {
                     let v = self.evaluate(condition)?;
                     match v {
                         Value::Bool(true) => {
-                            self.evaluate_block(body)?;
+                            for statement in body {
+                                self.evaluate_statement(statement)?;
+                                if self.return_value.is_some()
+                                    || self.is_breaking
+                                    || self.is_continuing
+                                {
+                                    break;
+                                }
+                            }
                             Ok(true)
                         }
                         Value::Bool(false) => Ok(false),
@@ -514,7 +529,12 @@ impl Evaluator {
                     }
                 }
                 None => {
-                    self.evaluate_block(body)?;
+                    for statement in body {
+                        self.evaluate_statement(statement)?;
+                        if self.return_value.is_some() || self.is_breaking || self.is_continuing {
+                            break;
+                        }
+                    }
                     Ok(true)
                 }
             },
@@ -535,36 +555,50 @@ impl Evaluator {
     }
 
     pub fn evaluate_program(&mut self, statements: &[Statement]) -> Result<(), Error> {
-        let mut explicit_entry: Option<(&str, crate::utils::span::Span)> = None;
-        let mut main_entry: Option<crate::utils::span::Span> = None;
+        let mut explicit_entry: Option<(Span, usize)> = None;
+        let mut main_entry: Option<(Span, usize)> = None;
 
         for statement in statements {
-            if let StatementKind::FunctionDeclaration { name, is_entry, .. } = &statement.kind {
+            if let StatementKind::FunctionDeclaration { name, is_entry, .. }
+            | StatementKind::ResolvedFunctionDeclaration { name, is_entry, .. } = &statement.kind
+            {
+                let slot = match &statement.kind {
+                    StatementKind::ResolvedFunctionDeclaration { slot, .. } => Some(*slot),
+                    _ => None,
+                };
                 if *is_entry {
                     if explicit_entry.is_some() {
-                        return Err(
-                            self.err("multiple `!#[entry]` functions found", statement.span)
-                        );
+                        return Err(self.err("multiple !#[entry] functions found", statement.span));
                     }
-                    explicit_entry = Some((name.as_str(), statement.span));
+                    if let Some(s) = slot {
+                        explicit_entry = Some((statement.span, s));
+                    }
                 }
                 if name == "main" {
-                    main_entry = Some(statement.span);
+                    if let Some(s) = slot {
+                        main_entry = Some((statement.span, s));
+                    }
                 }
             }
         }
 
-        let entry = explicit_entry.or_else(|| main_entry.map(|span| ("main", span)));
-        let Some((entry_name, entry_span)) = entry else {
+        let entry = explicit_entry.or(main_entry);
+        let Some((entry_span, entry_slot)) = entry else {
             for statement in statements {
                 self.evaluate_statement(statement)?;
             }
             return Ok(());
         };
 
-        for statement in statements {
+        for (i, statement) in statements.iter().enumerate() {
+            eprintln!(
+                "DEBUG prepass: statement {} {:?}",
+                i,
+                std::mem::discriminant(&statement.kind)
+            );
             match &statement.kind {
-                StatementKind::FunctionDeclaration { .. }
+                StatementKind::ResolvedFunctionDeclaration { .. }
+                | StatementKind::FunctionDeclaration { .. }
                 | StatementKind::Import { .. }
                 | StatementKind::ImportFile { .. }
                 | StatementKind::ImportFileNamed { .. }
@@ -577,10 +611,15 @@ impl Evaluator {
                 _ => {}
             }
         }
-
-        self.call_path(&[entry_name.to_string()], Vec::new(), entry_span)?;
+        eprintln!("DEBUG: prepass done");
+        eprintln!("DEBUG: calling entry slot={}", entry_slot);
+        let func = self.get_value(0, entry_slot, entry_span)?;
+        eprintln!("DEBUG: got func, calling...");
+        self.call_value(func, vec![], entry_span)?;
+        eprintln!("DEBUG: call_value returned");
         Ok(())
     }
+
     pub fn evaluate_block(&mut self, statements: &[Statement]) -> Result<(), Error> {
         self.push_scope();
         for statement in statements {

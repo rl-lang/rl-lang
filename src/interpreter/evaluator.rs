@@ -42,6 +42,7 @@ pub struct Evaluator {
     pub output_buffer: Option<String>,
     pub rng: Xoshiro256,
     pub resolver: Resolver,
+    pub fn_names: std::collections::HashMap<String, usize>,
 }
 
 impl Default for Evaluator {
@@ -62,6 +63,7 @@ impl Evaluator {
             output_buffer: None,
             rng: Xoshiro256::default(),
             resolver: Resolver::new(),
+            fn_names: std::collections::HashMap::new(),
         }
     }
 
@@ -445,7 +447,11 @@ impl Evaluator {
             let saved_env = std::mem::take(&mut self.environment);
             let saved_return = self.return_value.take();
 
-            self.environment = captured_env;
+            if captured_env.is_empty() {
+                self.environment = vec![saved_env[0].clone()]
+            } else {
+                self.environment = captured_env;
+            }
             self.push_scope();
 
             for (slot, (_, arg)) in params.iter().zip(args).enumerate() {
@@ -503,7 +509,12 @@ impl Evaluator {
                 Err(e) => Err(self.err(e.message(), span)),
             };
         }
-
+        if path.len() == 1
+            && let Some(&slot) = self.fn_names.get(&path[0])
+        {
+            let func = self.get_value(0, slot, span)?;
+            return self.call_value(func, args, span);
+        }
         let mut err = self.err(format!("undefined function {}", path.join("::")), span);
         // suggest a stdlib leaf name if the last segment is a close typo
         if let Some(last) = path.last() {
