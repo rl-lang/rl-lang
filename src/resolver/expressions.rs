@@ -53,7 +53,7 @@ impl Resolver {
         }
     }
 
-    pub fn reslove_expression(&mut self, expression: Expression) -> Expression {
+    pub fn resolve_expression(&mut self, expression: Expression) -> Expression {
         let span = expression.span;
         let kind = match expression.kind {
             ExpressionKind::Identifier(name) => {
@@ -100,52 +100,52 @@ impl Resolver {
                 operator,
                 right,
             } => ExpressionKind::Binary {
-                left: Box::new(self.reslove_expression(*left)),
+                left: Box::new(self.resolve_expression(*left)),
                 operator,
-                right: Box::new(self.reslove_expression(*right)),
+                right: Box::new(self.resolve_expression(*right)),
             },
             ExpressionKind::Unary { operator, operand } => ExpressionKind::Unary {
                 operator,
-                operand: Box::new(self.reslove_expression(*operand)),
+                operand: Box::new(self.resolve_expression(*operand)),
             },
 
             ExpressionKind::Grouping(inner) => {
-                ExpressionKind::Grouping(Box::new(self.reslove_expression(*inner)))
+                ExpressionKind::Grouping(Box::new(self.resolve_expression(*inner)))
             }
             ExpressionKind::ArrayLiteral(items) => ExpressionKind::ArrayLiteral(
                 items
                     .into_iter()
-                    .map(|item| self.reslove_expression(item))
+                    .map(|item| self.resolve_expression(item))
                     .collect(),
             ),
 
             ExpressionKind::Index { target, index } => ExpressionKind::Index {
-                target: Box::new(self.reslove_expression(*target)),
-                index: Box::new(self.reslove_expression(*index)),
+                target: Box::new(self.resolve_expression(*target)),
+                index: Box::new(self.resolve_expression(*index)),
             },
             ExpressionKind::IndexAssign {
                 target,
                 index,
                 value,
             } => ExpressionKind::IndexAssign {
-                target: Box::new(self.reslove_expression(*target)),
-                index: Box::new(self.reslove_expression(*index)),
-                value: Box::new(self.reslove_expression(*value)),
+                target: Box::new(self.resolve_expression(*target)),
+                index: Box::new(self.resolve_expression(*index)),
+                value: Box::new(self.resolve_expression(*value)),
             },
 
             ExpressionKind::Call { path, args } => ExpressionKind::Call {
                 path,
                 args: args
                     .into_iter()
-                    .map(|arg| self.reslove_expression(arg))
+                    .map(|arg| self.resolve_expression(arg))
                     .collect(),
             },
 
             ExpressionKind::CallExpr { callee, args } => ExpressionKind::CallExpr {
-                callee: Box::new(self.reslove_expression(*callee)),
+                callee: Box::new(self.resolve_expression(*callee)),
                 args: args
                     .into_iter()
-                    .map(|arg| self.reslove_expression(arg))
+                    .map(|arg| self.resolve_expression(arg))
                     .collect(),
             },
 
@@ -154,11 +154,11 @@ impl Resolver {
                 method,
                 args,
             } => ExpressionKind::MethodCall {
-                caller: Box::new(self.reslove_expression(*caller)),
+                caller: Box::new(self.resolve_expression(*caller)),
                 method,
                 args: args
                     .into_iter()
-                    .map(|arg| self.reslove_expression(arg))
+                    .map(|arg| self.resolve_expression(arg))
                     .collect(),
             },
 
