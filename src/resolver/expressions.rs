@@ -109,6 +109,59 @@ impl Resolver {
                 operand: Box::new(self.reslove_expression(*operand)),
             },
 
+            ExpressionKind::Grouping(inner) => {
+                ExpressionKind::Grouping(Box::new(self.reslove_expression(*inner)))
+            }
+            ExpressionKind::ArrayLiteral(items) => ExpressionKind::ArrayLiteral(
+                items
+                    .into_iter()
+                    .map(|item| self.reslove_expression(item))
+                    .collect(),
+            ),
+
+            ExpressionKind::Index { target, index } => ExpressionKind::Index {
+                target: Box::new(self.reslove_expression(*target)),
+                index: Box::new(self.reslove_expression(*index)),
+            },
+            ExpressionKind::IndexAssign {
+                target,
+                index,
+                value,
+            } => ExpressionKind::IndexAssign {
+                target: Box::new(self.reslove_expression(*target)),
+                index: Box::new(self.reslove_expression(*index)),
+                value: Box::new(self.reslove_expression(*value)),
+            },
+
+            ExpressionKind::Call { path, args } => ExpressionKind::Call {
+                path,
+                args: args
+                    .into_iter()
+                    .map(|arg| self.reslove_expression(arg))
+                    .collect(),
+            },
+
+            ExpressionKind::CallExpr { callee, args } => ExpressionKind::CallExpr {
+                callee: Box::new(self.reslove_expression(*callee)),
+                args: args
+                    .into_iter()
+                    .map(|arg| self.reslove_expression(arg))
+                    .collect(),
+            },
+
+            ExpressionKind::MethodCall {
+                caller,
+                method,
+                args,
+            } => ExpressionKind::MethodCall {
+                caller: Box::new(self.reslove_expression(*caller)),
+                method,
+                args: args
+                    .into_iter()
+                    .map(|arg| self.reslove_expression(arg))
+                    .collect(),
+            },
+
             other => other,
         };
 
