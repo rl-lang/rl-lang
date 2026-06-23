@@ -1,3 +1,7 @@
+//! Low-level character cursor primitives used across all sub-scanners.
+//!
+//! Provides `is_at_end`, `peek`, `advance`, and similar helpers that operate
+//! directly on the [`Tokenizer`]'s byte position.
 use super::super::tokenizer::Tokenizer;
 use super::super::tokentypes::{Token, TokenType};
 

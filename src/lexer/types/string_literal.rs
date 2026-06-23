@@ -1,3 +1,7 @@
+//! Double-quoted string literal scanner.
+//!
+//! Consumes everything between `"…"`, handling escape sequences, and emits
+//! [`TokenType::StringLiteral`].
 use crate::lexer::{tokenizer::Tokenizer, tokentypes::TokenType};
 use crate::utils::errors::Error;
 
