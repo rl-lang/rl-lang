@@ -1,6 +1,9 @@
 use crate::{
     ast::statements::{StatementKind, TypeAnnotation},
     checker::structs::{CheckType, TypeChecker},
+    lexer::tokenizer::Tokenizer,
+    parser::parser_logic::Parser,
+    utils::source::SourceFile,
 };
 
 impl TypeChecker {
@@ -317,21 +320,12 @@ impl TypeChecker {
 
             // functions and lambdas
             StatementKind::FunctionDeclaration {
-                name,
                 params,
                 return_type,
                 body,
                 ..
             } => {
-                let fn_type = CheckType::Function {
-                    params: params.iter().map(|p| p.param_type.clone()).collect(),
-                    return_type: return_type.clone(),
-                };
-                // declaring for recusring to work
-                self.declare(name.clone(), fn_type, false, statement.span);
-                // add scope level
                 self.push_scope();
-                // declare the params
                 for param in params {
                     self.declare(
                         param.param_name.clone(),
@@ -340,18 +334,13 @@ impl TypeChecker {
                         statement.span,
                     );
                 }
-                // add return type
                 self.push_return_type(return_type.clone());
-                // is the body correct?
                 for stmt in body {
                     self.check_statement(stmt);
                 }
-                // remove the return type
                 self.pop_return_type();
-                // remove scope level
                 self.pop_scope();
             }
-
             StatementKind::Return(expr) => {
                 // is the expression a valid type? otherwise null
                 let actual_type = match expr {
@@ -387,21 +376,103 @@ impl TypeChecker {
             }
 
             // checks weather break or continue used outside of loops
-            StatementKind::Break => {
-                if self.loop_depth() == 0 {
-                    self.error("break outside of loop", statement.span);
-                }
+            StatementKind::Break if self.loop_depth() == 0 => {
+                self.error("break outside of loop", statement.span);
             }
-            StatementKind::Continue => {
-                if self.loop_depth() == 0 {
-                    self.error("continue outside of loop", statement.span);
-                }
+            StatementKind::Continue if self.loop_depth() == 0 => {
+                self.error("continue outside of loop", statement.span);
             }
 
             // runtime job maybe revisting later
-            StatementKind::Import { .. }
-            | StatementKind::ImportFile { .. }
-            | StatementKind::ImportFileNamed { .. } => {}
+            StatementKind::ImportFile { path } | StatementKind::ImportFileNamed { path, .. } => {
+                let import_name = format!("{}.rl", path.join("/"));
+                let Ok(source_text) = std::fs::read_to_string(&import_name) else {
+                    return;
+                };
+                let source_file = SourceFile::new(import_name, source_text);
+                let Ok(tokens) = Tokenizer::lex(source_file.clone()) else {
+                    return;
+                };
+                let Ok(stmts) = Parser::parse(tokens, source_file) else {
+                    return;
+                };
+                for stmt in &stmts {
+                    match &stmt.kind {
+                        StatementKind::FunctionDeclaration {
+                            name,
+                            params,
+                            return_type,
+                            ..
+                        } => {
+                            self.declare(
+                                name.clone(),
+                                CheckType::Function {
+                                    params: params.iter().map(|p| p.param_type.clone()).collect(),
+                                    return_type: return_type.clone(),
+                                },
+                                false,
+                                stmt.span,
+                            );
+                        }
+                        StatementKind::VariableDeclaration {
+                            name,
+                            type_annotation,
+                            ..
+                        } => {
+                            self.declare(
+                                name.clone(),
+                                CheckType::Known(type_annotation.clone()),
+                                false,
+                                stmt.span,
+                            );
+                        }
+                        StatementKind::ConstantDeclaration {
+                            name,
+                            type_annotation,
+                            ..
+                        } => {
+                            self.declare(
+                                name.clone(),
+                                CheckType::Known(type_annotation.clone()),
+                                true,
+                                stmt.span,
+                            );
+                        }
+                        StatementKind::Array {
+                            name,
+                            type_annotation,
+                            ..
+                        } => {
+                            self.declare(
+                                name.clone(),
+                                CheckType::Known(TypeAnnotation::Array(Box::new(
+                                    type_annotation.clone(),
+                                ))),
+                                false,
+                                stmt.span,
+                            );
+                        }
+                        StatementKind::ConstantArray {
+                            name,
+                            type_annotation,
+                            ..
+                        } => {
+                            self.declare(
+                                name.clone(),
+                                CheckType::Known(TypeAnnotation::CArray(Box::new(
+                                    type_annotation.clone(),
+                                ))),
+                                true,
+                                stmt.span,
+                            );
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            StatementKind::Import { .. } => {}
+
+            _ => {}
         }
     }
 }

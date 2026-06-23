@@ -29,6 +29,9 @@ pub fn std_arr_push(
                 items: v,
             })
         }
-        _ => Err(eval.err("arr_push() accepts only arrays".to_string(), span)),
+        other => Err(eval.err(
+            format!("arr_push() accepts only arrays found {}", other.type_name()).to_string(),
+            span,
+        )),
     }
 }

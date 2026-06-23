@@ -1,8 +1,7 @@
-use std::cell::RefCell;
 use std::sync::Arc;
-use std::{collections::HashMap, rc::Rc};
 
 use crate::interpreter::stdlib::random::xoshiro::Xoshiro256;
+use crate::resolver::Resolver;
 use crate::{
     ast::{
         nodes::{Expression, ExpressionKind},
@@ -34,7 +33,7 @@ pub enum EnvironmentItem {
 }
 
 pub struct Evaluator {
-    pub environment: Vec<Rc<RefCell<HashMap<String, EnvironmentItem>>>>,
+    pub environment: Vec<Vec<EnvironmentItem>>,
     pub source_file: Option<SourceFile>,
     pub root_module: Module,
     pub return_value: Option<Value>,
@@ -42,6 +41,8 @@ pub struct Evaluator {
     pub is_continuing: bool,
     pub output_buffer: Option<String>,
     pub rng: Xoshiro256,
+    pub resolver: Resolver,
+    pub fn_names: std::collections::HashMap<String, usize>,
 }
 
 impl Default for Evaluator {
@@ -53,7 +54,7 @@ impl Default for Evaluator {
 impl Evaluator {
     pub fn new() -> Self {
         Self {
-            environment: vec![Rc::new(RefCell::new(HashMap::new()))],
+            environment: vec![vec![]],
             source_file: None,
             root_module: Module::new(""),
             return_value: None,
@@ -61,6 +62,8 @@ impl Evaluator {
             is_continuing: false,
             output_buffer: None,
             rng: Xoshiro256::default(),
+            resolver: Resolver::new(),
+            fn_names: std::collections::HashMap::new(),
         }
     }
 
@@ -334,17 +337,21 @@ impl Evaluator {
                 self.check_not_null(&operand_val, operand.span)?;
                 self.match_unary_operator(operand_val, operand.span, operator, expression.span)?
             }
-            ExpressionKind::Identifier(name) => self.get_value(name, expression.span)?,
-            ExpressionKind::Assign { name, value } => {
+            ExpressionKind::ResolvedIdentifier { depth, slot, .. } => {
+                self.get_value(*depth, *slot, expression.span)?
+            }
+            ExpressionKind::ResolvedAssign {
+                depth, slot, value, ..
+            } => {
                 let val = self.evaluate(value)?;
-                let val = match (self.get_declared_type(name), &val) {
+                let val = match (self.get_declared_type(*depth, *slot), &val) {
                     (Some(TypeAnnotation::Int | TypeAnnotation::CInt), Value::Byte(b)) => {
                         Value::Integer(*b as i64)
                     }
                     _ => val,
                 };
                 let inferred_type = Self::infer_type(&val, false);
-                self.assign_value(name.clone(), val.clone(), inferred_type, expression.span)?;
+                self.assign_value(*depth, *slot, val.clone(), inferred_type, expression.span)?;
                 val
             }
             ExpressionKind::Call { path, args } => {
@@ -379,16 +386,35 @@ impl Evaluator {
                 }
                 self.call_path(method, evaluated_args, expression.span)?
             }
-            ExpressionKind::Lambda {
+            ExpressionKind::ResolvedLambda {
                 params,
                 return_type,
                 body,
-            } => Value::Function {
-                params: params.clone(),
-                body: body.clone(),
-                return_type: return_type.clone(),
-                captured_env: self.environment.clone(),
-            },
+                capture_depth,
+            } => {
+                let total = self.environment.len();
+                let start = if total > *capture_depth {
+                    total - capture_depth
+                } else {
+                    0
+                };
+                let captured_env: Vec<Vec<EnvironmentItem>> = self.environment[start..].to_vec();
+
+                Value::Function {
+                    params: params.clone(),
+                    body: body.clone(),
+                    return_type: return_type.clone(),
+                    captured_env,
+                }
+            }
+
+            ExpressionKind::Identifier(name) => {
+                return Err(self.err(format!("undefined variable '{}'", name), expression.span));
+            }
+            ExpressionKind::Assign { name, .. } => {
+                return Err(self.err(format!("undefined variable '{}'", name), expression.span));
+            }
+            _ => Value::Null,
         };
         Ok(value)
     }
@@ -420,12 +446,16 @@ impl Evaluator {
             let saved_env = std::mem::take(&mut self.environment);
             let saved_return = self.return_value.take();
 
-            self.environment = captured_env;
+            if captured_env.is_empty() {
+                self.environment = vec![saved_env[0].clone()]
+            } else {
+                self.environment = captured_env;
+            }
             self.push_scope();
 
-            for (param, arg) in params.iter().zip(args) {
+            for (slot, (_, arg)) in params.iter().zip(args).enumerate() {
                 let arg_type = Self::infer_type(&arg, false);
-                self.insert_value(param.param_name.clone(), arg, arg_type, span)?;
+                self.insert_value(slot, arg, arg_type, span)?;
             }
 
             for statement in &body {
@@ -437,7 +467,9 @@ impl Evaluator {
 
             let result = self.return_value.take().unwrap_or(Value::Null);
 
+            let updated_global = self.environment[0].clone();
             self.environment = saved_env;
+            self.environment[0] = updated_global;
             self.return_value = saved_return;
 
             if let Some(expected) = &return_type
@@ -478,80 +510,12 @@ impl Evaluator {
                 Err(e) => Err(self.err(e.message(), span)),
             };
         }
-
-        // detect user defined functions
-        if path.len() == 1 {
-            let func = self.get_value(&path[0], span)?;
-
-            if let Value::Function {
-                params,
-                body,
-                return_type,
-                captured_env,
-            } = func
-            {
-                if params.len() != args.len() {
-                    return Err(self.err(
-                        format!(
-                            "function '{}' expects {} argument(s), got {}",
-                            path[0],
-                            params.len(),
-                            args.len()
-                        ),
-                        span,
-                    ));
-                }
-
-                // Save caller's environment and return slot (Bug 2 + Bug 4 fix).
-                let saved_env = std::mem::take(&mut self.environment);
-                let saved_return = self.return_value.take();
-
-                // Fresh single-frame environment for the callee (Bug 4: push its
-                // own scope so the params live in their own block, consistent
-                // with evaluate_block semantics).
-                self.environment = captured_env;
-                self.push_scope();
-
-                for (param, arg) in params.iter().zip(args) {
-                    let arg_type = Self::infer_type(&arg, false);
-                    self.insert_value(param.param_name.clone(), arg, arg_type, span)?;
-                }
-
-                for statement in &body {
-                    self.evaluate_statement(statement)?;
-                    if self.return_value.is_some() {
-                        break;
-                    }
-                }
-
-                let result = self.return_value.take().unwrap_or(Value::Null);
-
-                // Restore caller state (Bug 2 fix).
-                self.environment = saved_env;
-                self.return_value = saved_return;
-
-                // Return-type check: skip when the annotation is Null (i.e. no
-                // `->` was written) — that means the function is void and the
-                // return value is intentionally ignored (Bug 3 fix).
-                if let Some(expected) = &return_type
-                    && *expected != TypeAnnotation::Null
-                {
-                    let actual = Self::infer_type(&result, false);
-                    if !Self::types_compatible(&actual, expected) {
-                        return Err(self.err(
-                            format!(
-                                "function '{}' declared to return {:?} but returned {:?}",
-                                path[0], expected, actual
-                            ),
-                            span,
-                        ));
-                    }
-                }
-
-                return Ok(result);
-            }
+        if path.len() == 1
+            && let Some(&slot) = self.fn_names.get(&path[0])
+        {
+            let func = self.get_value(0, slot, span)?;
+            return self.call_value(func, args, span);
         }
-
         let mut err = self.err(format!("undefined function {}", path.join("::")), span);
         // suggest a stdlib leaf name if the last segment is a close typo
         if let Some(last) = path.last() {

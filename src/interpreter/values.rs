@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, fmt, rc::Rc};
+use std::fmt;
 
 use crate::{
     ast::statements::{Param, Statement, TypeAnnotation},
@@ -22,7 +22,7 @@ pub enum Value {
         params: Vec<Param>,
         body: Vec<Statement>,
         return_type: Option<TypeAnnotation>,
-        captured_env: Vec<Rc<RefCell<HashMap<String, EnvironmentItem>>>>,
+        captured_env: Vec<Vec<EnvironmentItem>>,
     },
 }
 

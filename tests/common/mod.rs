@@ -18,6 +18,7 @@ pub fn eval_program(source: &str) -> Result<Evaluator, Error> {
     let tokens = rl_lang::lexer::tokenizer::Tokenizer::lex(file.clone())?;
     let stmts = rl_lang::parser::parser_logic::Parser::parse(tokens, file.clone())?;
     let mut evaluator = Evaluator::default().with_stdlib().with_source_file(file);
+    let stmts = evaluator.resolver.resolve_statements(stmts);
     evaluator.evaluate_program(&stmts)?;
     Ok(evaluator)
 }
