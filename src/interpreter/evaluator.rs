@@ -331,17 +331,21 @@ impl Evaluator {
                 self.check_not_null(&operand_val, operand.span)?;
                 self.match_unary_operator(operand_val, operand.span, operator, expression.span)?
             }
-            ExpressionKind::Identifier(name) => self.get_value(name, expression.span)?,
-            ExpressionKind::Assign { name, value } => {
+            ExpressionKind::ResolvedIdentifier { depth, slot, .. } => {
+                self.get_value(*depth, *slot, expression.span)?
+            }
+            ExpressionKind::ResolvedAssign {
+                depth, slot, value, ..
+            } => {
                 let val = self.evaluate(value)?;
-                let val = match (self.get_declared_type(name), &val) {
+                let val = match (self.get_declared_type(*depth, *slot), &val) {
                     (Some(TypeAnnotation::Int | TypeAnnotation::CInt), Value::Byte(b)) => {
                         Value::Integer(*b as i64)
                     }
                     _ => val,
                 };
                 let inferred_type = Self::infer_type(&val, false);
-                self.assign_value(name.clone(), val.clone(), inferred_type, expression.span)?;
+                self.assign_value(*depth, *slot, val.clone(), inferred_type, expression.span)?;
                 val
             }
             ExpressionKind::Call { path, args } => {
@@ -376,16 +380,28 @@ impl Evaluator {
                 }
                 self.call_path(method, evaluated_args, expression.span)?
             }
-            ExpressionKind::Lambda {
+            ExpressionKind::ResolvedLambda {
                 params,
                 return_type,
                 body,
-            } => Value::Function {
-                params: params.clone(),
-                body: body.clone(),
-                return_type: return_type.clone(),
-                captured_env: self.environment.clone(),
-            },
+                captured_slots,
+            } => {
+                let captured_env: Vec<Vec<EnvironmentItem>> = captured_slots
+                    .iter()
+                    .map(|(depth, _)| {
+                        let idx = self.environment.len().saturating_sub(1 + depth);
+                        self.environment.get(idx).cloned().unwrap_or_default()
+                    })
+                    .collect();
+                Value::Function {
+                    params: params.clone(),
+                    body: body.clone(),
+                    return_type: return_type.clone(),
+                    captured_env,
+                }
+            }
+
+            _ => Value::Null,
         };
         Ok(value)
     }
@@ -420,9 +436,9 @@ impl Evaluator {
             self.environment = captured_env;
             self.push_scope();
 
-            for (param, arg) in params.iter().zip(args) {
+            for (slot, (param, arg)) in params.iter().zip(args).enumerate() {
                 let arg_type = Self::infer_type(&arg, false);
-                self.insert_value(param.param_name.clone(), arg, arg_type, span)?;
+                self.insert_value(slot, arg, arg_type, span)?;
             }
 
             for statement in &body {
@@ -509,9 +525,9 @@ impl Evaluator {
                 self.environment = captured_env;
                 self.push_scope();
 
-                for (param, arg) in params.iter().zip(args) {
+                for (slot, (param, arg)) in params.iter().zip(args).enumerate() {
                     let arg_type = Self::infer_type(&arg, false);
-                    self.insert_value(param.param_name.clone(), arg, arg_type, span)?;
+                    self.insert_value(slot, arg, arg_type, span)?;
                 }
 
                 for statement in &body {
