@@ -34,4 +34,15 @@ impl Resolver {
             _ => {}
         }
     }
+
+    pub fn resolve_statements(&mut self, statements: Vec<Statement>) -> Vec<Statement> {
+        statements.into_iter().map(|statement| self.resolve_statement(statement)).collect()
+    }
+
+    fn resolve_statement(&mut self, statement: Statement) -> Statement {
+        let span = statement.span;
+        let kind = match statement.kind {
+            StatementKind::VariableDeclaration { name, type_annotation, value }
+        }
+    }
 }
