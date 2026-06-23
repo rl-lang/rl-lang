@@ -1,6 +1,4 @@
-use std::cell::RefCell;
 use std::sync::Arc;
-use std::{collections::HashMap, rc::Rc};
 
 use crate::interpreter::stdlib::random::xoshiro::Xoshiro256;
 use crate::{
@@ -34,7 +32,7 @@ pub enum EnvironmentItem {
 }
 
 pub struct Evaluator {
-    pub environment: Vec<Rc<RefCell<HashMap<String, EnvironmentItem>>>>,
+    pub environment: Vec<Vec<EnvironmentItem>>,
     pub source_file: Option<SourceFile>,
     pub root_module: Module,
     pub return_value: Option<Value>,
@@ -53,7 +51,7 @@ impl Default for Evaluator {
 impl Evaluator {
     pub fn new() -> Self {
         Self {
-            environment: vec![Rc::new(RefCell::new(HashMap::new()))],
+            environment: vec![vec![]],
             source_file: None,
             root_module: Module::new(""),
             return_value: None,
