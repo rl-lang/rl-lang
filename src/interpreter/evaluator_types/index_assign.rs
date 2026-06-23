@@ -21,11 +21,11 @@ impl Evaluator {
         let idx = self.evaluate(index)?;
         let val = self.evaluate(value)?;
 
-        fn get_root_name(expression: &Expression) -> &str {
+        fn get_root_addr(expression: &Expression) -> (usize, usize) {
             match &expression.kind {
-                ExpressionKind::Identifier(array_name) => array_name,
-                ExpressionKind::Index { target, .. } => get_root_name(target),
-                _ => unreachable!(),
+                ExpressionKind::ResolvedIdentifier { depth, slot, .. } => (*depth, *slot),
+                ExpressionKind::Index { target, .. } => get_root_addr(target),
+                _ => unreachable!("index_assign: unexpected root expression"),
             }
         }
 
@@ -35,19 +35,20 @@ impl Evaluator {
             span: Span,
         ) -> Result<Vec<usize>, Error> {
             match &expression.kind {
-                ExpressionKind::Identifier(_) => Ok(vec![]),
+                ExpressionKind::ResolvedIdentifier { .. } => Ok(vec![]),
                 ExpressionKind::Index { target, index } => {
                     let mut indices = get_indices_as_vec(target, evaluator, span)?;
-                    if let Value::Integer(i) = evaluator.evaluate(index)? {
-                        if i < 0 {
-                            return Err(
-                                evaluator.err(format!("index cannot be negative: {}", i), span)
-                            );
+                    match evaluator.evaluate(index)? {
+                        Value::Integer(i) => {
+                            if i < 0 {
+                                return Err(
+                                    evaluator.err(format!("index cannot be negative: {}", i), span)
+                                );
+                            }
+                            indices.push(i as usize);
                         }
-                        indices.push(i as usize);
-                    }
-                    if let Value::Byte(u) = evaluator.evaluate(index)? {
-                        indices.push(u as usize);
+                        Value::Byte(u) => indices.push(u as usize),
+                        _ => {}
                     }
                     Ok(indices)
                 }
@@ -55,30 +56,17 @@ impl Evaluator {
             }
         }
 
-        let root = get_root_name(target).to_string();
+        let (depth, slot) = get_root_addr(target);
         let mut indices = get_indices_as_vec(target, self, span)?;
-        if let Value::Integer(i) = idx {
-            if i < 0 {
-                return Err(self.err(format!("index cannot be negative: {}", i), span));
-            }
-            indices.push(i as usize);
-        }
-        if let Value::Byte(u) = idx {
-            indices.push(u as usize);
-        }
-
-        for scope in self.environment.iter().rev() {
-            if let Some(env_item) = scope.borrow().get(&root) {
-                match env_item {
-                    EnvironmentItem::PItem(p) => {
-                        if p.is_const {
-                            return Err(
-                                self.err(format!("cannot assign to constant '{}'", root), span)
-                            );
-                        }
-                    }
+        match idx {
+            Value::Integer(i) => {
+                if i < 0 {
+                    return Err(self.err(format!("index cannot be negative: {}", i), span));
                 }
+                indices.push(i as usize);
             }
+            Value::Byte(u) => indices.push(u as usize),
+            _ => {}
         }
 
         let index_error = self.err("index assignment requires at least one index", span);
@@ -89,49 +77,52 @@ impl Evaluator {
                 span,
             )
         };
-        for scope in self.environment.iter_mut().rev() {
-            if let Some(env_item) = scope.borrow_mut().get_mut(&root) {
-                match env_item {
-                    EnvironmentItem::PItem(p) => {
-                        let mut current = &mut p.value;
-                        if !indices.is_empty() {
-                            for i in &indices[..indices.len() - 1] {
-                                if let Value::Values { items, .. } = current {
-                                    current =
-                                        items.get_mut(*i).ok_or_else(|| out_of_bounds_err(*i))?;
-                                }
-                            }
-                        }
-                        if let Value::Values { items_type, items } = current {
-                            let val_type = Self::infer_type(&val, false);
-                            if val_type != *items_type
-                                && val_type != TypeAnnotation::Null
-                                && !((val_type == TypeAnnotation::Byte
-                                    || val_type == TypeAnnotation::CByte)
-                                    && (*items_type == TypeAnnotation::Int
-                                        || *items_type == TypeAnnotation::CInt))
-                            {
-                                return Err(Error::at(
-                                    crate::utils::errors::Reason::Interpreter,
-                                    format!(
-                                        "type mismatch: array is {:?}, cannot assign {:?}",
-                                        items_type, val_type
-                                    ),
-                                    span,
-                                ));
-                            }
 
-                            let last = indices.last().ok_or(index_error)?;
-                            if *last >= items.len() {
-                                return Err(out_of_bounds_err(*last));
-                            }
-                            items[*last] = val.clone();
+        let env_idx = self.environment.len().saturating_sub(1 + depth);
+        let e = self.err(format!("no scope at depth {}", depth), span);
+        let e2 = self.err(format!("undefined slot {} at depth {}", slot, depth), span);
+        let frame = self.environment.get_mut(env_idx).ok_or(e)?;
+        let entry = frame.get_mut(slot).ok_or(e2)?;
+
+        match entry {
+            EnvironmentItem::PItem(p) => {
+                if p.is_const {
+                    return Err(self.err("cannot assign to constant", span));
+                }
+                let mut current = &mut p.value;
+                if !indices.is_empty() {
+                    for i in &indices[..indices.len() - 1] {
+                        if let Value::Values { items, .. } = current {
+                            current = items.get_mut(*i).ok_or_else(|| out_of_bounds_err(*i))?;
                         }
-                        return Ok(val);
                     }
                 }
+                if let Value::Values { items_type, items } = current {
+                    let val_type = Self::infer_type(&val, false);
+                    if val_type != *items_type
+                        && val_type != TypeAnnotation::Null
+                        && !((val_type == TypeAnnotation::Byte
+                            || val_type == TypeAnnotation::CByte)
+                            && (*items_type == TypeAnnotation::Int
+                                || *items_type == TypeAnnotation::CInt))
+                    {
+                        return Err(Error::at(
+                            crate::utils::errors::Reason::Interpreter,
+                            format!(
+                                "type mismatch: array is {:?}, cannot assign {:?}",
+                                items_type, val_type
+                            ),
+                            span,
+                        ));
+                    }
+                    let last = indices.last().ok_or(index_error)?;
+                    if *last >= items.len() {
+                        return Err(out_of_bounds_err(*last));
+                    }
+                    items[*last] = val.clone();
+                }
+                Ok(val)
             }
         }
-        Err(self.err(format!("undefined variable '{}'", root), span))
     }
 }

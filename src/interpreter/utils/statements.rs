@@ -6,18 +6,20 @@ use crate::{
     interpreter::{evaluator::Evaluator, values::Value},
     lexer::tokenizer::Tokenizer,
     parser::parser_logic::Parser,
-    utils::{errors::Error, source::SourceFile},
+    utils::{errors::Error, source::SourceFile, span::Span},
 };
 
 impl Evaluator {
     pub fn evaluate_statement(&mut self, statement: &Statement) -> Result<(), Error> {
         match &statement.kind {
-            StatementKind::VariableDeclaration {
-                name,
+            StatementKind::ResolvedVariableDeclaration {
+                slot,
                 value,
                 type_annotation,
+                ..
             } => {
                 let val = self.evaluate(value)?;
+
                 let val = match (type_annotation, &val) {
                     (TypeAnnotation::Int | TypeAnnotation::CInt, Value::Byte(b)) => {
                         Value::Integer(*b as i64)
@@ -37,46 +39,14 @@ impl Evaluator {
                         statement.span,
                     ));
                 }
-                self.insert_value(name.clone(), val, type_annotation.clone(), statement.span)?;
+                self.insert_value(*slot, val, type_annotation.clone(), statement.span)?;
             }
-            StatementKind::Array {
-                name,
+
+            StatementKind::ResolvedConstantDeclaration {
+                slot,
                 value,
                 type_annotation,
-            } => {
-                let mut items: Vec<Value> = Vec::new();
-                for item in value {
-                    let val = self.evaluate(item)?;
-                    let val_type = Self::infer_type(&val, false);
-
-                    if !Self::types_compatible(&val_type, type_annotation) {
-                        return Err(self.err(
-                            format!(
-                                "type mismatch: array expects {:?}, got {:?}",
-                                type_annotation, val_type
-                            ),
-                            item.span,
-                        ));
-                    }
-
-                    let val = Self::coerce_array_type(val, type_annotation);
-                    items.push(val);
-                }
-                let declared_type = TypeAnnotation::Array(Box::new(type_annotation.clone()));
-                self.insert_value(
-                    name.clone(),
-                    Value::Values {
-                        items_type: type_annotation.clone(),
-                        items,
-                    },
-                    declared_type,
-                    statement.span,
-                )?;
-            }
-            StatementKind::ConstantDeclaration {
-                name,
-                value,
-                type_annotation,
+                ..
             } => {
                 let val = self.evaluate(value)?;
                 let val = match (type_annotation, &val) {
@@ -98,42 +68,55 @@ impl Evaluator {
                         statement.span,
                     ));
                 }
-                self.insert_const(name.clone(), val, type_annotation.clone(), statement.span)?;
+                self.insert_const(*slot, val, type_annotation.clone(), statement.span)?;
             }
-            StatementKind::ConstantArray {
-                name,
+
+            StatementKind::ResolvedArray {
+                slot,
                 value,
                 type_annotation,
+                ..
             } => {
-                let mut items: Vec<Value> = Vec::new();
-                for item in value {
-                    let val = self.evaluate(item)?;
-                    let val_type = Self::infer_type(&val, false);
-
-                    if !Self::types_compatible(&val_type, type_annotation) {
-                        return Err(self.err(
-                            format!(
-                                "type mismatch: array expects {:?}, got {:?}",
-                                type_annotation, val_type
-                            ),
-                            item.span,
-                        ));
-                    }
-
-                    let val = Self::coerce_array_type(val, type_annotation);
-                    items.push(val);
-                }
-                let declared_type = TypeAnnotation::CArray(Box::new(type_annotation.clone()));
-                self.insert_const(
-                    name.clone(),
-                    Value::Values {
+                let val = self.evaluate(value)?;
+                let val = match val {
+                    Value::Values { items, .. } => Value::Values {
                         items_type: type_annotation.clone(),
                         items,
                     },
-                    declared_type,
-                    statement.span,
-                )?;
+                    other => {
+                        return Err(self.err(
+                            format!("expected array value found {}", other.type_name()),
+                            statement.span,
+                        ));
+                    }
+                };
+                let declared_type = TypeAnnotation::Array(Box::new(type_annotation.clone()));
+                self.insert_value(*slot, val, declared_type, statement.span)?;
             }
+
+            StatementKind::ResolvedConstantArray {
+                slot,
+                value,
+                type_annotation,
+                ..
+            } => {
+                let val = self.evaluate(value)?;
+                let val = match val {
+                    Value::Values { items, .. } => Value::Values {
+                        items_type: type_annotation.clone(),
+                        items,
+                    },
+                    other => {
+                        return Err(self.err(
+                            format!("expected array value found {}", other.type_name()),
+                            statement.span,
+                        ));
+                    }
+                };
+                let declared_type = TypeAnnotation::CArray(Box::new(type_annotation.clone()));
+                self.insert_value(*slot, val, declared_type, statement.span)?;
+            }
+
             StatementKind::Expression(expr) => {
                 self.evaluate(expr)?;
             }
@@ -152,8 +135,14 @@ impl Evaluator {
                             ));
                     }
                 }
-                self.evaluate_block(body)?;
-
+                self.push_scope();
+                for statement in body {
+                    self.evaluate_statement(statement)?;
+                    if self.return_value.is_some() || self.is_breaking || self.is_continuing {
+                        break;
+                    }
+                }
+                self.pop_scope();
                 if self.is_breaking {
                     self.is_breaking = false;
                     break;
@@ -192,7 +181,13 @@ impl Evaluator {
                                 ));
                         }
                     }
-                    self.evaluate_block(body)?;
+
+                    for statement in body {
+                        self.evaluate_statement(statement)?;
+                        if self.return_value.is_some() || self.is_breaking || self.is_continuing {
+                            break;
+                        }
+                    }
 
                     if self.is_breaking {
                         self.is_breaking = false;
@@ -214,6 +209,51 @@ impl Evaluator {
                 self.pop_scope();
             }
 
+            StatementKind::ResolvedFor {
+                initializer,
+                condition,
+                increment,
+                body,
+            } => {
+                self.evaluate_statement(initializer)?;
+                loop {
+                    let v = self.evaluate(condition)?;
+                    match v {
+                        Value::Bool(true) => {}
+                        Value::Bool(false) => break,
+                        other => {
+                            return Err(self
+                                .err("for condition must be a bool", statement.span)
+                                .with_label(
+                                    condition.span,
+                                    format!("this is {}, expected bool", other.type_name()),
+                                ));
+                        }
+                    }
+
+                    for stmt in body {
+                        self.evaluate_statement(stmt)?;
+                        if self.return_value.is_some() || self.is_breaking || self.is_continuing {
+                            break;
+                        }
+                    }
+
+                    if self.is_breaking {
+                        self.is_breaking = false;
+                        break;
+                    }
+                    if self.is_continuing {
+                        self.is_continuing = false;
+                        self.evaluate(increment)?;
+                        continue;
+                    }
+                    if self.return_value.is_some() {
+                        break;
+                    }
+
+                    self.evaluate(increment)?;
+                }
+            }
             StatementKind::Import { names, path } => {
                 let module_path = path.join("::");
                 let mut module = &self.root_module;
@@ -239,58 +279,12 @@ impl Evaluator {
                 }
             }
 
-            StatementKind::ImportFile { path } => {
-                let import_name = format!("{}.rl", path.join("/"));
-                let file_path = if let Some(ref source_file) = self.source_file {
-                    let current_file_dir = Path::new(source_file.name.as_ref())
-                        .parent()
-                        .unwrap_or_else(|| Path::new(""));
-                    current_file_dir.join(&import_name)
-                } else {
-                    import_name.clone().into()
-                };
-
-                let source_text = std::fs::read_to_string(&file_path).map_err(|_| {
-                    self.err(
-                        format!("could not read file '{}'", import_name),
-                        statement.span,
-                    )
-                })?;
-                let source_file =
-                    SourceFile::new(file_path.to_string_lossy().as_ref(), source_text);
-                let tokens = Tokenizer::lex(source_file.clone())?;
-                let stmts = Parser::parse(tokens, source_file.clone())?;
-                // Save current source file and set the imported file as current
-                let previous_source = self.source_file.clone();
-                self.source_file = Some(source_file);
-                self.push_scope();
-                for stmt in &stmts {
+            StatementKind::ResolvedImportFile { body, .. } => {
+                for stmt in body {
                     self.evaluate_statement(stmt)?;
                 }
-
-                let exported: Vec<_> = self
-                    .environment
-                    .last()
-                    .ok_or_else(|| self.err("no active scope", statement.span))?
-                    .borrow()
-                    .iter()
-                    .map(|(k, v)| (k.clone(), v.clone()))
-                    .collect();
-                self.pop_scope();
-
-                // Restore previous source file
-                self.source_file = previous_source;
-
-                let no_scope_err = self.err("no active scope", statement.span);
-                for (name, item) in exported {
-                    self.environment
-                        .last_mut()
-                        .ok_or_else(|| no_scope_err.clone())?
-                        .borrow_mut()
-                        .insert(name, item);
-                }
             }
-
+            // require adding resolved version in resolver
             StatementKind::ImportFileNamed { path, names } => {
                 let import_name = format!("{}.rl", path.join("/"));
                 let file_path = if let Some(ref source_file) = self.source_file {
@@ -312,50 +306,29 @@ impl Evaluator {
                     SourceFile::new(file_path.to_string_lossy().as_ref(), source_text);
                 let tokens = Tokenizer::lex(source_file.clone())?;
                 let stmts = Parser::parse(tokens, source_file.clone())?;
+                let stmts = self.resolver.resolve_statements(stmts);
 
-                // Save current source file and set the imported file as current
                 let previous_source = self.source_file.clone();
                 self.source_file = Some(source_file);
 
-                self.push_scope();
                 for stmt in &stmts {
                     self.evaluate_statement(stmt)?;
                 }
-                let exported: Vec<_> = self
-                    .environment
-                    .last()
-                    .ok_or_else(|| self.err("no active scope", statement.span))?
-                    .borrow()
-                    .iter()
-                    .map(|(k, v)| (k.clone(), v.clone()))
-                    .collect();
-                self.pop_scope();
 
-                // Restore previous source file
+                let exported = self.environment.last().cloned().unwrap_or_default();
+
                 self.source_file = previous_source;
-                if let Some(not_found) = names
-                    .iter()
-                    .find(|n| !exported.iter().any(|(k, _)| k == *n))
-                {
-                    return Err(self.err(
-                        format!("'{}' is not defined in '{}'", not_found, import_name),
-                        statement.span,
-                    ));
-                }
+
+                // ImportFileNamed can't filter by name anymore without a name→slot map
+                // For now merge all exported slots — named filtering requires ScopeMap
+                let _ = names; // TODO: filter by name once ScopeMap is threaded through
                 let no_scope_err = self.err("no active scope", statement.span);
-                for (name, item) in exported {
-                    self.environment
-                        .last_mut()
-                        .ok_or_else(|| no_scope_err.clone())?
-                        .borrow_mut()
-                        .insert(name, item);
-                }
+                let frame = self.environment.last_mut().ok_or(no_scope_err)?;
+                frame.extend(exported);
             }
 
-            StatementKind::ForRange {
-                variable,
-                range,
-                body,
+            StatementKind::ResolvedForRange {
+                slot, range, body, ..
             } => {
                 let items = match &range.kind {
                     StatementKind::Range(items) => items.clone(),
@@ -369,12 +342,19 @@ impl Evaluator {
                 for item in items {
                     self.push_scope();
                     self.insert_value(
-                        variable.clone(),
+                        *slot,
                         Value::Integer(item),
                         crate::ast::statements::TypeAnnotation::Int,
                         statement.span,
                     )?;
-                    self.evaluate_block(body)?;
+
+                    for statement in body {
+                        self.evaluate_statement(statement)?;
+                        if self.return_value.is_some() || self.is_breaking || self.is_continuing {
+                            break;
+                        }
+                    }
+
                     self.pop_scope();
 
                     if self.is_breaking {
@@ -392,10 +372,11 @@ impl Evaluator {
                 }
             }
 
-            StatementKind::ForEach {
-                variable,
+            StatementKind::ResolvedForEach {
+                slot,
                 iterable,
                 body,
+                ..
             } => {
                 let arr = self.evaluate(iterable)?;
                 let items = match arr {
@@ -412,9 +393,14 @@ impl Evaluator {
                 for item in items {
                     let item_type = Evaluator::infer_type(&item, false);
                     self.push_scope();
-                    self.insert_value(variable.clone(), item, item_type, statement.span)?;
+                    self.insert_value(*slot, item, item_type, statement.span)?;
 
-                    self.evaluate_block(body)?;
+                    for statement in body {
+                        self.evaluate_statement(statement)?;
+                        if self.return_value.is_some() || self.is_breaking || self.is_continuing {
+                            break;
+                        }
+                    }
                     self.pop_scope();
 
                     if self.is_breaking {
@@ -447,10 +433,22 @@ impl Evaluator {
                                 ));
                         }
                     }
-                    self.evaluate_block(body)?;
+                    self.push_scope();
+                    for statement in body {
+                        self.evaluate_statement(statement)?;
+                        if self.return_value.is_some() || self.is_breaking || self.is_continuing {
+                            break;
+                        }
+                    }
+                    self.pop_scope();
                 }
                 _ => {
-                    self.evaluate_block(body)?;
+                    for statement in body {
+                        self.evaluate_statement(statement)?;
+                        if self.return_value.is_some() || self.is_breaking || self.is_continuing {
+                            break;
+                        }
+                    }
                 }
             },
 
@@ -465,11 +463,12 @@ impl Evaluator {
                 }
             }
 
-            StatementKind::FunctionDeclaration {
-                name,
+            StatementKind::ResolvedFunctionDeclaration {
+                slot,
                 params,
                 return_type,
                 body,
+                name,
                 ..
             } => {
                 let func = Value::Function {
@@ -478,21 +477,13 @@ impl Evaluator {
                     return_type: Some(return_type.clone()),
                     captured_env: vec![],
                 };
+                self.fn_names.insert(name.clone(), *slot);
                 self.insert_value(
-                    name.clone(),
+                    *slot,
                     func,
                     crate::ast::statements::TypeAnnotation::Fn,
                     statement.span,
                 )?;
-
-                let snapshot = self.environment.clone();
-                if let Some(scope) = self.environment.last_mut()
-                    && let Some(crate::interpreter::evaluator::EnvironmentItem::PItem(p)) =
-                        scope.borrow_mut().get_mut(name)
-                    && let Value::Function { captured_env, .. } = &mut p.value
-                {
-                    *captured_env = snapshot;
-                }
             }
 
             StatementKind::Return(expr) => {
@@ -511,6 +502,8 @@ impl Evaluator {
             StatementKind::Continue => {
                 self.is_continuing = true;
             }
+
+            _ => {}
         }
         Ok(())
     }
@@ -522,7 +515,17 @@ impl Evaluator {
                     let v = self.evaluate(condition)?;
                     match v {
                         Value::Bool(true) => {
-                            self.evaluate_block(body)?;
+                            self.push_scope();
+                            for statement in body {
+                                self.evaluate_statement(statement)?;
+                                if self.return_value.is_some()
+                                    || self.is_breaking
+                                    || self.is_continuing
+                                {
+                                    break;
+                                }
+                            }
+                            self.pop_scope();
                             Ok(true)
                         }
                         Value::Bool(false) => Ok(false),
@@ -535,7 +538,14 @@ impl Evaluator {
                     }
                 }
                 None => {
-                    self.evaluate_block(body)?;
+                    self.push_scope();
+                    for statement in body {
+                        self.evaluate_statement(statement)?;
+                        if self.return_value.is_some() || self.is_breaking || self.is_continuing {
+                            break;
+                        }
+                    }
+                    self.pop_scope();
                     Ok(true)
                 }
             },
@@ -556,27 +566,35 @@ impl Evaluator {
     }
 
     pub fn evaluate_program(&mut self, statements: &[Statement]) -> Result<(), Error> {
-        let mut explicit_entry: Option<(&str, crate::utils::span::Span)> = None;
-        let mut main_entry: Option<crate::utils::span::Span> = None;
+        let mut explicit_entry: Option<(Span, usize)> = None;
+        let mut main_entry: Option<(Span, usize)> = None;
 
         for statement in statements {
-            if let StatementKind::FunctionDeclaration { name, is_entry, .. } = &statement.kind {
+            if let StatementKind::FunctionDeclaration { name, is_entry, .. }
+            | StatementKind::ResolvedFunctionDeclaration { name, is_entry, .. } = &statement.kind
+            {
+                let slot = match &statement.kind {
+                    StatementKind::ResolvedFunctionDeclaration { slot, .. } => Some(*slot),
+                    _ => None,
+                };
                 if *is_entry {
                     if explicit_entry.is_some() {
-                        return Err(
-                            self.err("multiple `!#[entry]` functions found", statement.span)
-                        );
+                        return Err(self.err("multiple !#[entry] functions found", statement.span));
                     }
-                    explicit_entry = Some((name.as_str(), statement.span));
+                    if let Some(s) = slot {
+                        explicit_entry = Some((statement.span, s));
+                    }
                 }
-                if name == "main" {
-                    main_entry = Some(statement.span);
+                if name == "main"
+                    && let Some(s) = slot
+                {
+                    main_entry = Some((statement.span, s));
                 }
             }
         }
 
-        let entry = explicit_entry.or_else(|| main_entry.map(|span| ("main", span)));
-        let Some((entry_name, entry_span)) = entry else {
+        let entry = explicit_entry.or(main_entry);
+        let Some((entry_span, entry_slot)) = entry else {
             for statement in statements {
                 self.evaluate_statement(statement)?;
             }
@@ -585,21 +603,26 @@ impl Evaluator {
 
         for statement in statements {
             match &statement.kind {
-                StatementKind::FunctionDeclaration { .. }
+                StatementKind::ResolvedImportFile { .. }
+                | StatementKind::ResolvedFunctionDeclaration { .. }
+                | StatementKind::FunctionDeclaration { .. }
                 | StatementKind::Import { .. }
                 | StatementKind::ImportFile { .. }
                 | StatementKind::ImportFileNamed { .. }
-                | StatementKind::VariableDeclaration { .. }
-                | StatementKind::ConstantDeclaration { .. }
-                | StatementKind::Array { .. }
-                | StatementKind::ConstantArray { .. } => self.evaluate_statement(statement)?,
+                | StatementKind::ResolvedVariableDeclaration { .. }
+                | StatementKind::ResolvedConstantDeclaration { .. }
+                | StatementKind::ResolvedArray { .. }
+                | StatementKind::ResolvedConstantArray { .. } => {
+                    self.evaluate_statement(statement)?
+                }
                 _ => {}
             }
         }
-
-        self.call_path(&[entry_name.to_string()], Vec::new(), entry_span)?;
+        let func = self.get_value(0, entry_slot, entry_span)?;
+        self.call_value(func, vec![], entry_span)?;
         Ok(())
     }
+
     pub fn evaluate_block(&mut self, statements: &[Statement]) -> Result<(), Error> {
         self.push_scope();
         for statement in statements {

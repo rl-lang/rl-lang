@@ -35,9 +35,20 @@ pub enum ExpressionKind {
     Float(f64),
     Character(char),
     Identifier(String),
+    ResolvedIdentifier {
+        name: String,
+        depth: usize,
+        slot: usize,
+    },
     ArrayLiteral(Vec<Expression>),
     Assign {
         name: String,
+        value: Box<Expression>,
+    },
+    ResolvedAssign {
+        name: String,
+        depth: usize,
+        slot: usize,
         value: Box<Expression>,
     },
     Call {
@@ -64,6 +75,12 @@ pub enum ExpressionKind {
         params: Vec<Param>,
         return_type: Option<TypeAnnotation>,
         body: Vec<Statement>,
+    },
+    ResolvedLambda {
+        params: Vec<Param>,
+        return_type: Option<TypeAnnotation>,
+        body: Vec<Statement>,
+        capture_depth: usize,
     },
     CallExpr {
         callee: Box<Expression>,

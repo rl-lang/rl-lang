@@ -21,8 +21,20 @@ pub enum StatementKind {
         type_annotation: TypeAnnotation,
         value: Expression,
     },
+    ResolvedVariableDeclaration {
+        name: String,
+        slot: usize,
+        type_annotation: TypeAnnotation,
+        value: Expression,
+    },
     ConstantDeclaration {
         name: String,
+        type_annotation: TypeAnnotation,
+        value: Expression,
+    },
+    ResolvedConstantDeclaration {
+        name: String,
+        slot: usize,
         type_annotation: TypeAnnotation,
         value: Expression,
     },
@@ -36,6 +48,18 @@ pub enum StatementKind {
         type_annotation: TypeAnnotation,
         value: Vec<Expression>,
     },
+    ResolvedArray {
+        name: String,
+        slot: usize,
+        type_annotation: TypeAnnotation,
+        value: Expression,
+    },
+    ResolvedConstantArray {
+        name: String,
+        slot: usize,
+        type_annotation: TypeAnnotation,
+        value: Expression,
+    },
     Expression(Expression),
     While {
         condition: Expression,
@@ -47,12 +71,30 @@ pub enum StatementKind {
         increment: Expression,
         body: Vec<Statement>,
     },
+    ResolvedFor {
+        initializer: Box<Statement>,
+        condition: Expression,
+        increment: Expression,
+        body: Vec<Statement>,
+    },
     ForRange {
         variable: String,
         range: Box<Statement>,
         body: Vec<Statement>,
     },
+    ResolvedForRange {
+        slot: usize,
+        variable: String,
+        range: Box<Statement>,
+        body: Vec<Statement>,
+    },
     ForEach {
+        variable: String,
+        iterable: Expression,
+        body: Vec<Statement>,
+    },
+    ResolvedForEach {
+        slot: usize,
         variable: String,
         iterable: Expression,
         body: Vec<Statement>,
@@ -74,6 +116,14 @@ pub enum StatementKind {
         body: Vec<Statement>,
         is_entry: bool,
     },
+    ResolvedFunctionDeclaration {
+        name: String,
+        slot: usize,
+        params: Vec<Param>,
+        return_type: TypeAnnotation,
+        body: Vec<Statement>,
+        is_entry: bool,
+    },
     Return(Option<Expression>),
 
     Break,
@@ -89,6 +139,10 @@ pub enum StatementKind {
 
     ImportFile {
         path: Vec<String>,
+    },
+    ResolvedImportFile {
+        path: Vec<String>,
+        body: Vec<Statement>,
     },
 
     ImportFileNamed {
