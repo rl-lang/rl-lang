@@ -36,6 +36,7 @@ pub enum TokenType {
     BangHash,
 
     NumberLiteral(i64),
+    ByteLiteral(u8),
     StringLiteral(String),
     CharacterLiteral(char),
     FloatLiteral(f64),

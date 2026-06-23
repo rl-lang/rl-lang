@@ -188,14 +188,17 @@ impl Parser {
                     #[cfg(feature = "debug")]
                     log::debug!("found function call");
                     let mut args = Vec::new();
+                    while self.match_type(&[TokenType::Newline]) {}
                     if !(std::mem::discriminant(&self.peek())
                         == std::mem::discriminant(&TokenType::RightParen))
                     {
                         loop {
                             args.push(self.parse_expression()?);
+                            while self.match_type(&[TokenType::Newline]) {}
                             if !self.match_type(&[TokenType::Comma]) {
                                 break;
                             }
+                            while self.match_type(&[TokenType::Newline]) {}
                         }
                     }
                     self.match_type(&[TokenType::RightParen]);
@@ -263,14 +266,18 @@ impl Parser {
                     // is it a call on the result of an index, e.g. fns[0](arg)?
                     if self.match_type(&[TokenType::LeftParen]) {
                         let mut args = Vec::new();
+                        while self.match_type(&[TokenType::Newline]) {}
                         if self.peek() != TokenType::RightParen {
                             loop {
                                 args.push(self.parse_expression()?);
+                                while self.match_type(&[TokenType::Newline]) {}
                                 if !self.match_type(&[TokenType::Comma]) {
                                     break;
                                 }
+                                while self.match_type(&[TokenType::Newline]) {}
                             }
                         }
+                        while self.match_type(&[TokenType::Newline]) {}
                         self.match_type(&[TokenType::RightParen]);
                         let span = start.join(self.previous_span());
                         let expr = Expression::new(
@@ -312,14 +319,17 @@ impl Parser {
         // is it array literal?
         if self.match_type(&[TokenType::LeftBracket]) {
             let mut items = Vec::new();
+            while self.match_type(&[TokenType::Newline]) {}
             while self.peek() != TokenType::RightBracket {
                 items.push(self.parse_expression()?);
+                while self.match_type(&[TokenType::Newline]) {}
                 if self.peek() == TokenType::RightBracket {
                     break;
                 }
                 if !self.match_type(&[TokenType::Comma]) {
                     return Err(self.err("expected `,` between array items", self.peek_span()));
                 }
+                while self.match_type(&[TokenType::Newline]) {}
             }
             self.match_type(&[TokenType::RightBracket]);
             let span = start.join(self.previous_span());
@@ -333,6 +343,15 @@ impl Parser {
             let span = self.previous_span();
             if let TokenType::NumberLiteral(n) = self.previous() {
                 let expr = Expression::new(ExpressionKind::Integer(n), span);
+                return self.parse_postfix(expr, start);
+            }
+        }
+
+        // is it byte?
+        if self.match_type(&[TokenType::ByteLiteral(0)]) {
+            let span = self.previous_span();
+            if let TokenType::ByteLiteral(b) = self.previous() {
+                let expr = Expression::new(ExpressionKind::Byte(b), span);
                 return self.parse_postfix(expr, start);
             }
         }
@@ -482,15 +501,19 @@ impl Parser {
                 if !self.match_type(&[TokenType::LeftParen]) {
                     return Err(self.err("expected '(' after method name", self.peek_span()));
                 }
+                while self.match_type(&[TokenType::Newline]) {}
                 let mut args = Vec::new();
                 if self.peek() != TokenType::RightParen {
                     loop {
                         args.push(self.parse_expression()?);
+                        while self.match_type(&[TokenType::Newline]) {}
                         if !self.match_type(&[TokenType::Comma]) {
                             break;
                         }
+                        while self.match_type(&[TokenType::Newline]) {}
                     }
                 }
+                while self.match_type(&[TokenType::Newline]) {}
                 self.match_type(&[TokenType::RightParen]);
                 let span = start.join(self.previous_span());
                 expr = Expression::new(

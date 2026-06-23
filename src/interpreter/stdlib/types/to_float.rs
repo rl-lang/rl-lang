@@ -7,6 +7,7 @@ pub fn std_to_float(eval: &mut Evaluator, value: Value, span: Span) -> Result<f6
     match value {
         Value::Float(f) => Ok(f),
         Value::Integer(i) => Ok(i as f64),
+        Value::Byte(i) => Ok(i as f64),
         Value::Bool(b) => Ok(if b { 1.0 } else { 0.0 }),
         Value::String(s) => s
             .trim()

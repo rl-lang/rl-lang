@@ -19,6 +19,7 @@ impl Expression {
 pub enum ExpressionKind {
     Null,
     Integer(i64),
+    Byte(u8),
     Binary {
         left: Box<Expression>,
         operator: tokentypes::TokenType,

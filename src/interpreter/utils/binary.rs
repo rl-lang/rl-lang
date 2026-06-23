@@ -33,6 +33,16 @@ impl Evaluator {
             TokenType::Plus => match (&left, &right) {
                 (Value::Integer(a), Value::Integer(b)) => Value::Integer(a + b),
                 (Value::Float(a), Value::Float(b)) => Value::Float(a + b),
+                (Value::Integer(a), Value::Byte(b)) => Value::Integer(a + *b as i64),
+                (Value::Byte(a), Value::Integer(b)) => Value::Integer(*a as i64 + b),
+                (Value::Byte(a), Value::Byte(b)) => {
+                    let ab = *a as i64 + *b as i64;
+                    if !(0..=255).contains(&ab) {
+                        Value::Integer(ab)
+                    } else {
+                        Value::Byte(a + b)
+                    }
+                }
                 _ => {
                     return Err(
                         self.type_mismatch_binary("+", &left, left_span, &right, right_span, span)
@@ -42,6 +52,16 @@ impl Evaluator {
             TokenType::Minus => match (&left, &right) {
                 (Value::Integer(a), Value::Integer(b)) => Value::Integer(a - b),
                 (Value::Float(a), Value::Float(b)) => Value::Float(a - b),
+                (Value::Integer(a), Value::Byte(b)) => Value::Integer(a - *b as i64),
+                (Value::Byte(a), Value::Integer(b)) => Value::Integer(*a as i64 - b),
+                (Value::Byte(a), Value::Byte(b)) => {
+                    let ab = *a as i64 - *b as i64;
+                    if !(0..=255).contains(&ab) {
+                        Value::Integer(ab)
+                    } else {
+                        Value::Byte(a - b)
+                    }
+                }
                 _ => {
                     return Err(
                         self.type_mismatch_binary("-", &left, left_span, &right, right_span, span)
@@ -51,6 +71,16 @@ impl Evaluator {
             TokenType::Star => match (&left, &right) {
                 (Value::Integer(a), Value::Integer(b)) => Value::Integer(a * b),
                 (Value::Float(a), Value::Float(b)) => Value::Float(a * b),
+                (Value::Integer(a), Value::Byte(b)) => Value::Integer(a * *b as i64),
+                (Value::Byte(a), Value::Integer(b)) => Value::Integer(*a as i64 * b),
+                (Value::Byte(a), Value::Byte(b)) => {
+                    let ab = *a as i64 * *b as i64;
+                    if !(0..=255).contains(&ab) {
+                        Value::Integer(ab)
+                    } else {
+                        Value::Byte(a * b)
+                    }
+                }
                 _ => {
                     return Err(
                         self.type_mismatch_binary("*", &left, left_span, &right, right_span, span)
@@ -60,6 +90,16 @@ impl Evaluator {
             TokenType::Slash => match (&left, &right) {
                 (Value::Integer(a), Value::Integer(b)) => Value::Integer(a / b),
                 (Value::Float(a), Value::Float(b)) => Value::Float(a / b),
+                (Value::Integer(a), Value::Byte(b)) => Value::Integer(a / *b as i64),
+                (Value::Byte(a), Value::Integer(b)) => Value::Integer(*a as i64 / b),
+                (Value::Byte(a), Value::Byte(b)) => {
+                    let ab = *a as i64 / *b as i64;
+                    if !(0..=255).contains(&ab) {
+                        Value::Integer(ab)
+                    } else {
+                        Value::Byte(a / b)
+                    }
+                }
                 _ => {
                     return Err(
                         self.type_mismatch_binary("/", &left, left_span, &right, right_span, span)
@@ -69,6 +109,9 @@ impl Evaluator {
             TokenType::Less => match (&left, &right) {
                 (Value::Integer(a), Value::Integer(b)) => Value::Bool(a < b),
                 (Value::Float(a), Value::Float(b)) => Value::Bool(a < b),
+                (Value::Integer(a), Value::Byte(b)) => Value::Bool(*a < (*b as i64)),
+                (Value::Byte(a), Value::Integer(b)) => Value::Bool((*a as i64) < *b),
+                (Value::Byte(a), Value::Byte(b)) => Value::Bool(a < b),
                 _ => {
                     return Err(
                         self.type_mismatch_binary("<", &left, left_span, &right, right_span, span)
@@ -78,6 +121,9 @@ impl Evaluator {
             TokenType::Greater => match (&left, &right) {
                 (Value::Integer(a), Value::Integer(b)) => Value::Bool(a > b),
                 (Value::Float(a), Value::Float(b)) => Value::Bool(a > b),
+                (Value::Integer(a), Value::Byte(b)) => Value::Bool(*a > (*b as i64)),
+                (Value::Byte(a), Value::Integer(b)) => Value::Bool((*a as i64) > *b),
+                (Value::Byte(a), Value::Byte(b)) => Value::Bool(a > b),
                 _ => {
                     return Err(
                         self.type_mismatch_binary(">", &left, left_span, &right, right_span, span)
@@ -87,6 +133,9 @@ impl Evaluator {
             TokenType::LessEqual => match (&left, &right) {
                 (Value::Integer(a), Value::Integer(b)) => Value::Bool(a <= b),
                 (Value::Float(a), Value::Float(b)) => Value::Bool(a <= b),
+                (Value::Integer(a), Value::Byte(b)) => Value::Bool(*a <= (*b as i64)),
+                (Value::Byte(a), Value::Integer(b)) => Value::Bool((*a as i64) <= *b),
+                (Value::Byte(a), Value::Byte(b)) => Value::Bool(a <= b),
                 _ => {
                     return Err(
                         self.type_mismatch_binary("<=", &left, left_span, &right, right_span, span)
@@ -96,6 +145,9 @@ impl Evaluator {
             TokenType::GreaterEqual => match (&left, &right) {
                 (Value::Integer(a), Value::Integer(b)) => Value::Bool(a >= b),
                 (Value::Float(a), Value::Float(b)) => Value::Bool(a >= b),
+                (Value::Integer(a), Value::Byte(b)) => Value::Bool(*a >= (*b as i64)),
+                (Value::Byte(a), Value::Integer(b)) => Value::Bool((*a as i64) >= *b),
+                (Value::Byte(a), Value::Byte(b)) => Value::Bool(a >= b),
                 _ => {
                     return Err(
                         self.type_mismatch_binary(">=", &left, left_span, &right, right_span, span)
@@ -108,6 +160,9 @@ impl Evaluator {
                 (Value::String(a), Value::String(b)) => Value::Bool(a != b),
                 (Value::Char(a), Value::Char(b)) => Value::Bool(a != b),
                 (Value::Bool(a), Value::Bool(b)) => Value::Bool(a != b),
+                (Value::Integer(a), Value::Byte(b)) => Value::Bool(*a != (*b as i64)),
+                (Value::Byte(a), Value::Integer(b)) => Value::Bool((*a as i64) != *b),
+                (Value::Byte(a), Value::Byte(b)) => Value::Bool(a != b),
                 _ => {
                     return Err(
                         self.type_mismatch_binary("!=", &left, left_span, &right, right_span, span)
@@ -120,6 +175,9 @@ impl Evaluator {
                 (Value::String(a), Value::String(b)) => Value::Bool(a == b),
                 (Value::Char(a), Value::Char(b)) => Value::Bool(a == b),
                 (Value::Bool(a), Value::Bool(b)) => Value::Bool(a == b),
+                (Value::Integer(a), Value::Byte(b)) => Value::Bool(*a == (*b as i64)),
+                (Value::Byte(a), Value::Integer(b)) => Value::Bool((*a as i64) == *b),
+                (Value::Byte(a), Value::Byte(b)) => Value::Bool(a == b),
                 _ => {
                     return Err(
                         self.type_mismatch_binary("==", &left, left_span, &right, right_span, span)

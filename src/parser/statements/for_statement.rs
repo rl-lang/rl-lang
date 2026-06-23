@@ -38,16 +38,20 @@ impl Parser {
             };
             self.match_type(&[TokenType::In]);
 
-            let range = if matches!(self.peek(), TokenType::NumberLiteral(_)) {
+            let range = if (matches!(self.peek(), TokenType::NumberLiteral(_))
+                || (matches!(self.peek(), TokenType::ByteLiteral(_))))
+            {
                 let start_expr = self.parse_expression()?;
                 let range_start = match start_expr.kind {
                     ExpressionKind::Integer(i) => i,
+                    ExpressionKind::Byte(b) => b as i64,
                     _ => return Err(self.err("range should be integers only", start_expr.span)),
                 };
                 self.match_type(&[TokenType::DotDot]);
                 let end_expr = self.parse_expression()?;
                 let range_end = match end_expr.kind {
                     ExpressionKind::Integer(i) => i,
+                    ExpressionKind::Byte(b) => b as i64,
                     _ => return Err(self.err("range should be integers only", end_expr.span)),
                 };
                 let range_vec: Vec<i64> = (range_start..range_end).collect();
@@ -70,6 +74,7 @@ impl Parser {
                 for item in items {
                     match item.kind {
                         ExpressionKind::Integer(i) => iterable_list.push(i),
+                        ExpressionKind::Byte(b) => iterable_list.push(b as i64),
                         _ => return Err(self.err("list items must be integers", item.span)),
                     }
                 }

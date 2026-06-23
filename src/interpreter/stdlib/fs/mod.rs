@@ -27,7 +27,7 @@ pub const KEYWORDS: &[&str] = &[
 ];
 
 pub fn module() -> Module {
-    Module::new("display")
+    Module::new("fs")
         .with_function("mkdir", mkdir::std_mkdir)
         .with_function("mkdir_all", mkdir_all::std_mkdir_all)
         .with_function("rmdir", rmdir::std_rmdir)

@@ -6,6 +6,7 @@ use crate::{
 pub fn std_to_oct(eval: &mut Evaluator, value: Value, span: Span) -> Result<String, Error> {
     match value {
         Value::Integer(v) => Ok(format!("{:o}", v)),
+        Value::Byte(v) => Ok(format!("{:o}", v)),
         Value::Char(v) => Ok(format!("{:o}", v as u32)),
         Value::String(s) => Ok(s.bytes().map(|b| format!("{:o}", b)).collect::<String>()),
 

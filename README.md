@@ -4,6 +4,18 @@
   <p>A statically-typed interpreted language written in Rust with a clean syntax, a TUI REPL, and a growing standard library.</p>
 </div>
 
+[![Discord](https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/9T9mB4VJB)
+[![Rust](https://img.shields.io/badge/Made%20with-Rust-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
+
+[![Website](https://img.shields.io/website?url=https%3A%2F%2Frl-lang.github.io%2Fthe-book%2F&label=Wiki&message=online)](https://rl-lang.github.io/the-book/)
+[![License](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue)](https://github.com/rl-lang/rl-lang/blob/main/LICENSE)
+[![Last Commit](https://img.shields.io/github/last-commit/rl-lang/rl-lang)](https://github.com/rl-lang/rl-lang/commits/main)
+[![Check CI](https://github.com/rl-lang/rl-lang/actions/workflows/check.yaml/badge.svg)](https://github.com/rl-lang/rl-lang/actions/workflows/check.yaml)
+[![Release](https://github.com/rl-lang/rl-lang/actions/workflows/release.yml/badge.svg)](https://github.com/rl-lang/rl-lang/actions/workflows/release.yml)
+[![Crates.io](https://img.shields.io/crates/v/rl-lang)](https://crates.io/crates/rl-lang)
+[![Crates.io Downloads](https://img.shields.io/crates/d/rl-lang)](https://crates.io/crates/rl-lang)
+[![GitHub Repo stars](https://img.shields.io/github/stars/rl-lang/rl-lang?style=social)](https://github.com/rl-lang/rl-lang)
+
 ## Quick look
 
 ```rl
@@ -63,7 +75,7 @@ rl docs             # print language reference
 
 ## Documentation
 
-Full language reference and stdlib documentation is available on the [wiki](https://github.com/rl-lang/rl-lang/wiki).
+Full language reference and stdlib documentation is available on the [wiki](https://rl-lang.github.io/the-book/).
 
 ## Editor support
 
@@ -107,6 +119,7 @@ Feature flags: `run`, `repl`, `repl_tui`, `eval`. All are on by default except `
       <td align="center" valign="top" width="14.28%"><a href="https://yt-dl.flawlessco.de"><img src="https://avatars.githubusercontent.com/u/37778817?v=4?s=100" width="100px;" alt="Flawlesscode"/><br /><sub><b>Flawlesscode</b></sub></a><br /><a href="https://github.com/rl-lang/rl-lang/commits?author=FlawlessDeveloper" title="Code">💻</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/kill-ux"><img src="https://avatars.githubusercontent.com/u/185858933?v=4?s=100" width="100px;" alt="Mustapha Boutoub"/><br /><sub><b>Mustapha Boutoub</b></sub></a><br /><a href="https://github.com/rl-lang/rl-lang/commits?author=kill-ux" title="Code">💻</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/RubyPaws39"><img src="https://avatars.githubusercontent.com/u/280778337?v=4?s=100" width="100px;" alt="RubyPaws39"/><br /><sub><b>RubyPaws39</b></sub></a><br /><a href="https://github.com/rl-lang/rl-lang/commits?author=RubyPaws39" title="Code">💻</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/CapThunder19"><img src="https://avatars.githubusercontent.com/u/161865581?v=4?s=100" width="100px;" alt="Anirudh Patwal"/><br /><sub><b>Anirudh Patwal</b></sub></a><br /><a href="https://github.com/rl-lang/rl-lang/commits?author=CapThunder19" title="Code">💻</a></td>
     </tr>
   </tbody>
 </table>

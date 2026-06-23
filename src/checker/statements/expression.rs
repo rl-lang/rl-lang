@@ -13,6 +13,7 @@ impl TypeChecker {
             // returns as type
             ExpressionKind::Null => CheckType::Known(TypeAnnotation::Null),
             ExpressionKind::Integer(_) => CheckType::Known(TypeAnnotation::Int),
+            ExpressionKind::Byte(_) => CheckType::Known(TypeAnnotation::Byte),
             ExpressionKind::String(_) => CheckType::Known(TypeAnnotation::String),
             ExpressionKind::Bool(_) => CheckType::Known(TypeAnnotation::Bool),
             ExpressionKind::Float(_) => CheckType::Known(TypeAnnotation::Float),
@@ -68,7 +69,8 @@ impl TypeChecker {
                 // is it integer?
                 if !matches!(
                     index_type,
-                    CheckType::Known(TypeAnnotation::Int) | CheckType::Unknown
+                    CheckType::Known(TypeAnnotation::Int | TypeAnnotation::Byte)
+                        | CheckType::Unknown
                 ) {
                     self.error(
                         format!("invalid index operation: index is {}", index_type.info()),

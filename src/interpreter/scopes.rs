@@ -1,5 +1,3 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
-
 use crate::{
     ast::statements::TypeAnnotation,
     interpreter::{
@@ -8,6 +6,7 @@ use crate::{
     },
     utils::{errors::Error, span::Span, suggest::closest_match},
 };
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 impl Evaluator {
     pub fn push_scope(&mut self) {
@@ -126,7 +125,12 @@ impl Evaluator {
                                 {
                                     true
                                 }
-                                _ => declared == value_type,
+                                (TypeAnnotation::Array(a), TypeAnnotation::Array(_))
+                                    if **a == TypeAnnotation::Null =>
+                                {
+                                    true
+                                }
+                                _ => Evaluator::types_compatible(&value_type, &declared),
                             };
                         if !types_match {
                             return Err(self.err(
@@ -152,6 +156,18 @@ impl Evaluator {
         for scope in self.environment.iter().rev() {
             if let Some(EnvironmentItem::PItem(p)) = scope.borrow().get(name) {
                 return Some(p.value.clone());
+            }
+        }
+        None
+    }
+
+    // helper function to get the type of declared item
+    pub fn get_declared_type(&self, name: &str) -> Option<TypeAnnotation> {
+        for scope in self.environment.iter().rev() {
+            if let Some(item) = scope.borrow().get(name) {
+                match item {
+                    EnvironmentItem::PItem(p) => return Some(p.type_annotation.clone()),
+                }
             }
         }
         None

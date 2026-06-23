@@ -18,8 +18,17 @@ impl Evaluator {
                 type_annotation,
             } => {
                 let val = self.evaluate(value)?;
+                let val = match (type_annotation, &val) {
+                    (TypeAnnotation::Int | TypeAnnotation::CInt, Value::Byte(b)) => {
+                        Value::Integer(*b as i64)
+                    }
+                    _ => val,
+                };
                 let val_type = Self::infer_type(&val, false);
-                if val_type != *type_annotation && val_type != TypeAnnotation::Null {
+                if !Self::types_compatible(&val_type, type_annotation)
+                    && val_type != *type_annotation
+                    && val_type != TypeAnnotation::Null
+                {
                     return Err(self.err(
                         format!(
                             "type mismatch: expected {:?}, got {:?}",
@@ -39,7 +48,8 @@ impl Evaluator {
                 for item in value {
                     let val = self.evaluate(item)?;
                     let val_type = Self::infer_type(&val, false);
-                    if val_type != *type_annotation && val_type != TypeAnnotation::Null {
+
+                    if !Self::types_compatible(&val_type, type_annotation) {
                         return Err(self.err(
                             format!(
                                 "type mismatch: array expects {:?}, got {:?}",
@@ -48,16 +58,18 @@ impl Evaluator {
                             item.span,
                         ));
                     }
+
+                    let val = Self::coerce_array_type(val, type_annotation);
                     items.push(val);
                 }
-                let arr_type = type_annotation.clone();
+                let declared_type = TypeAnnotation::Array(Box::new(type_annotation.clone()));
                 self.insert_value(
                     name.clone(),
                     Value::Values {
-                        items_type: arr_type.clone(),
+                        items_type: type_annotation.clone(),
                         items,
                     },
-                    arr_type,
+                    declared_type,
                     statement.span,
                 )?;
             }
@@ -67,8 +79,17 @@ impl Evaluator {
                 type_annotation,
             } => {
                 let val = self.evaluate(value)?;
+                let val = match (type_annotation, &val) {
+                    (TypeAnnotation::Int | TypeAnnotation::CInt, Value::Byte(b)) => {
+                        Value::Integer(*b as i64)
+                    }
+                    _ => val,
+                };
                 let val_type = Self::infer_type(&val, true);
-                if val_type != *type_annotation && val_type != TypeAnnotation::Null {
+                if !Self::types_compatible(&val_type, type_annotation)
+                    && val_type != *type_annotation
+                    && val_type != TypeAnnotation::Null
+                {
                     return Err(self.err(
                         format!(
                             "type mismatch: expected {:?}, got {:?}",
@@ -88,7 +109,8 @@ impl Evaluator {
                 for item in value {
                     let val = self.evaluate(item)?;
                     let val_type = Self::infer_type(&val, false);
-                    if val_type != *type_annotation && val_type != TypeAnnotation::Null {
+
+                    if !Self::types_compatible(&val_type, type_annotation) {
                         return Err(self.err(
                             format!(
                                 "type mismatch: array expects {:?}, got {:?}",
@@ -97,16 +119,18 @@ impl Evaluator {
                             item.span,
                         ));
                     }
+
+                    let val = Self::coerce_array_type(val, type_annotation);
                     items.push(val);
                 }
-                let arr_type = type_annotation.clone();
+                let declared_type = TypeAnnotation::CArray(Box::new(type_annotation.clone()));
                 self.insert_const(
                     name.clone(),
                     Value::Values {
-                        items_type: arr_type.clone(),
+                        items_type: type_annotation.clone(),
                         items,
                     },
-                    arr_type,
+                    declared_type,
                     statement.span,
                 )?;
             }
@@ -203,7 +227,7 @@ impl Evaluator {
                     .map(|name| {
                         let f = module.functions.get(name).ok_or_else(|| {
                             self.err(
-                                format!("'{}' is not defined in 'std::{}'", name, module_path),
+                                format!("'{}' is not defined in '{}'", name, module_path),
                                 statement.span,
                             )
                         })?;

@@ -17,7 +17,15 @@ impl TypeChecker {
                 let value_type = self.check_expression(value);
                 let declared = CheckType::Known(type_annotation.clone());
 
-                if !value_type.matches(&declared) {
+                let widens = matches!(
+                    (type_annotation, &value_type),
+                    (
+                        TypeAnnotation::Int | TypeAnnotation::CInt,
+                        CheckType::Known(TypeAnnotation::Byte | TypeAnnotation::CByte)
+                    )
+                );
+
+                if !widens && !value_type.matches(&declared) {
                     self.error(
                         format!(
                             "type mismatch: expected {}, got {}",
@@ -41,7 +49,15 @@ impl TypeChecker {
                 let value_type = self.check_expression(value).into_const();
                 let declared = CheckType::Known(type_annotation.clone());
 
-                if !value_type.matches(&declared) {
+                let widens = matches!(
+                    (type_annotation, &value_type),
+                    (
+                        TypeAnnotation::Int | TypeAnnotation::CInt,
+                        CheckType::Known(TypeAnnotation::Byte | TypeAnnotation::CByte)
+                    )
+                );
+
+                if !widens && !value_type.matches(&declared) {
                     self.error(
                         format!(
                             "type mismatch: expected {}, got {}",
@@ -66,7 +82,18 @@ impl TypeChecker {
                     let item_type = self.check_expression(item);
                     let expected = CheckType::Known(type_annotation.clone());
 
-                    if !item_type.matches(&expected) {
+                    let widens = matches!(
+                        (type_annotation, &item_type),
+                        (
+                            TypeAnnotation::Int | TypeAnnotation::CInt,
+                            CheckType::Known(TypeAnnotation::Byte | TypeAnnotation::CByte)
+                        ) | (
+                            TypeAnnotation::Array(_) | TypeAnnotation::CArray(_),
+                            CheckType::Known(TypeAnnotation::Array(_) | TypeAnnotation::CArray(_))
+                        )
+                    );
+
+                    if !widens && !item_type.matches(&expected) {
                         self.error(
                             format!(
                                 "type mismatch: array expects {}, got {}",
@@ -92,7 +119,18 @@ impl TypeChecker {
                     let item_type = self.check_expression(item);
                     let expected = CheckType::Known(type_annotation.clone());
 
-                    if !item_type.matches(&expected) {
+                    let widens = matches!(
+                        (type_annotation, &item_type),
+                        (
+                            TypeAnnotation::Int | TypeAnnotation::CInt,
+                            CheckType::Known(TypeAnnotation::Byte | TypeAnnotation::CByte)
+                        ) | (
+                            TypeAnnotation::Array(_) | TypeAnnotation::CArray(_),
+                            CheckType::Known(TypeAnnotation::Array(_) | TypeAnnotation::CArray(_))
+                        )
+                    );
+
+                    if !widens && !item_type.matches(&expected) {
                         self.error(
                             format!(
                                 "type mismatch: array expects {}, got {}",
@@ -322,9 +360,16 @@ impl TypeChecker {
                 };
                 // is the actual type same as the expected return one?
                 if let Some(expected) = self.current_return_type().cloned() {
+                    let widens = matches!(
+                        (expected.clone(), actual_type.clone()),
+                        (
+                            TypeAnnotation::Int | TypeAnnotation::CInt,
+                            CheckType::Known(TypeAnnotation::Byte | TypeAnnotation::CByte)
+                        )
+                    );
                     if expected != TypeAnnotation::Null {
                         let expected_type = CheckType::Known(expected.clone());
-                        if !actual_type.matches(&expected_type) {
+                        if !widens && !actual_type.matches(&expected_type) {
                             self.error(
                                 format!(
                                     "return type mismatch: expected {}, got {}",

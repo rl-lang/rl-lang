@@ -99,7 +99,9 @@ impl Evaluator {
                 .with_module(stdlib::array::module())
                 .with_module(stdlib::path::module())
                 .with_module(stdlib::fs::module())
-                .with_module(stdlib::random::module()),
+                .with_module(stdlib::random::module())
+                .with_module(stdlib::time::module())
+                .with_module(stdlib::process::module()),
         )
     }
 
@@ -173,6 +175,59 @@ impl Evaluator {
         }
     }
 
+    pub fn value_compatible(value: &Value, expected: &TypeAnnotation) -> bool {
+        let actual = Self::infer_type(value, false);
+        Self::types_compatible(&actual, expected)
+    }
+
+    pub fn types_compatible(actual: &TypeAnnotation, expected: &TypeAnnotation) -> bool {
+        if actual == expected {
+            return true;
+        }
+        if *actual == TypeAnnotation::Null {
+            return true;
+        }
+        if *expected == TypeAnnotation::Null {
+            return true;
+        }
+        match (actual, expected) {
+            (TypeAnnotation::Byte, TypeAnnotation::Int)
+            | (TypeAnnotation::CByte, TypeAnnotation::CInt)
+            | (TypeAnnotation::Byte, TypeAnnotation::CInt)
+            | (TypeAnnotation::CByte, TypeAnnotation::Int) => true,
+            (
+                TypeAnnotation::Array(a) | TypeAnnotation::CArray(a),
+                TypeAnnotation::Array(b) | TypeAnnotation::CArray(b),
+            ) => Self::types_compatible(a, b),
+            _ => false,
+        }
+    }
+
+    pub fn coerce_array_type(value: Value, expected: &TypeAnnotation) -> Value {
+        match (value, expected) {
+            (Value::Values { items, .. }, expected) => {
+                let inner_expected = match expected {
+                    TypeAnnotation::Array(inner) | TypeAnnotation::CArray(inner) => {
+                        inner.as_ref().clone()
+                    }
+                    other => other.clone(),
+                };
+                let coerced_items = items
+                    .into_iter()
+                    .map(|v| Self::coerce_array_type(v, &inner_expected))
+                    .collect();
+                Value::Values {
+                    items_type: inner_expected,
+                    items: coerced_items,
+                }
+            }
+            (Value::Byte(b), TypeAnnotation::Int | TypeAnnotation::CInt) => {
+                Value::Integer(b as i64)
+            }
+            (other, _) => other,
+        }
+    }
+
     /// Return an error if `value` is [`Value::Null`], pointing at `span`.
     pub fn check_not_null(&self, value: &Value, span: Span) -> Result<(), Error> {
         if matches!(value, Value::Null) {
@@ -186,6 +241,7 @@ impl Evaluator {
         let value = match &expression.kind {
             ExpressionKind::Null => Value::Null,
             ExpressionKind::Integer(i) => Value::Integer(*i),
+            ExpressionKind::Byte(b) => Value::Byte(*b),
             ExpressionKind::String(s) => Value::String(s.clone()),
             ExpressionKind::Bool(b) => Value::Bool(*b),
             ExpressionKind::Float(f) => Value::Float(*f),
@@ -210,6 +266,21 @@ impl Evaluator {
                                 ));
                         }
                         items[i_usize].clone()
+                    }
+                    (Value::Values { items, .. }, Value::Byte(b)) => {
+                        let b_usize = *b as usize;
+                        if b_usize >= items.len() {
+                            return Err(self
+                                .err(
+                                    format!("index {} out of bounds (len {})", b, items.len()),
+                                    expression.span,
+                                )
+                                .with_label(
+                                    target.span,
+                                    format!("this array has length {}", items.len()),
+                                ));
+                        }
+                        items[b_usize].clone()
                     }
                     _ => {
                         return Err(self
@@ -266,6 +337,12 @@ impl Evaluator {
             ExpressionKind::Identifier(name) => self.get_value(name, expression.span)?,
             ExpressionKind::Assign { name, value } => {
                 let val = self.evaluate(value)?;
+                let val = match (self.get_declared_type(name), &val) {
+                    (Some(TypeAnnotation::Int | TypeAnnotation::CInt), Value::Byte(b)) => {
+                        Value::Integer(*b as i64)
+                    }
+                    _ => val,
+                };
                 let inferred_type = Self::infer_type(&val, false);
                 self.assign_value(name.clone(), val.clone(), inferred_type, expression.span)?;
                 val
@@ -367,7 +444,7 @@ impl Evaluator {
                 && *expected != TypeAnnotation::Null
             {
                 let actual = Self::infer_type(&result, false);
-                if *expected != actual {
+                if !Self::types_compatible(&actual, expected) {
                     return Err(self.err(
                         format!(
                             "function '' declared to return {:?} but returned {:?}",
@@ -460,7 +537,7 @@ impl Evaluator {
                     && *expected != TypeAnnotation::Null
                 {
                     let actual = Self::infer_type(&result, false);
-                    if *expected != actual {
+                    if !Self::types_compatible(&actual, expected) {
                         return Err(self.err(
                             format!(
                                 "function '{}' declared to return {:?} but returned {:?}",
@@ -489,6 +566,8 @@ impl Evaluator {
                 .chain(stdlib::path::KEYWORDS)
                 .chain(stdlib::fs::KEYWORDS)
                 .chain(stdlib::random::KEYWORDS)
+                .chain(stdlib::time::KEYWORDS)
+                .chain(stdlib::process::KEYWORDS)
                 .copied();
             if let Some(suggestion) = closest_match(last, candidates) {
                 err = err.with_help(format!("did you mean `{}`?", suggestion));

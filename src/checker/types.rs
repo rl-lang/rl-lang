@@ -65,7 +65,9 @@ impl CheckType {
             ) => p1 == p2 && r1 == r2,
 
             // checks the TypeAnnotation and compare then returns [`bool`]
-            (CheckType::Known(a), CheckType::Known(b)) => a == b || null_array_elision(a, b),
+            (CheckType::Known(a), CheckType::Known(b)) => {
+                a == b || null_array_elision(a, b) || const_matches(a, b)
+            }
             _ => false,
         }
     }
@@ -95,10 +97,10 @@ impl CheckType {
 /// otherwise false
 fn null_array_elision(a: &TypeAnnotation, b: &TypeAnnotation) -> bool {
     match (a, b) {
-        (TypeAnnotation::Array(x), TypeAnnotation::Array(y))
-        | (TypeAnnotation::CArray(x), TypeAnnotation::CArray(y)) => {
-            **x == TypeAnnotation::Null || **y == TypeAnnotation::Null
-        }
+        (
+            TypeAnnotation::Array(x) | TypeAnnotation::CArray(x),
+            TypeAnnotation::Array(y) | TypeAnnotation::CArray(y),
+        ) => **x == TypeAnnotation::Null || **y == TypeAnnotation::Null || null_array_elision(x, y),
         _ => false,
     }
 }
@@ -115,4 +117,17 @@ fn const_variant(ty: TypeAnnotation) -> TypeAnnotation {
         TypeAnnotation::Array(inner) => TypeAnnotation::CArray(inner),
         other => other,
     }
+}
+
+/// compares two values (the immutable TypeAnnotation to its mutable value)
+fn const_matches(a: &TypeAnnotation, b: &TypeAnnotation) -> bool {
+    matches!(
+        (a, b),
+        (TypeAnnotation::CString, TypeAnnotation::String)
+            | (TypeAnnotation::CInt, TypeAnnotation::Int)
+            | (TypeAnnotation::CFloat, TypeAnnotation::Float)
+            | (TypeAnnotation::CBool, TypeAnnotation::Bool)
+            | (TypeAnnotation::CByte, TypeAnnotation::Byte)
+            | (TypeAnnotation::CChar, TypeAnnotation::Char)
+    )
 }

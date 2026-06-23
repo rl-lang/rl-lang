@@ -24,7 +24,7 @@ fn if_simple() {
                     )),
                     body: vec![Statement::new(
                         StatementKind::Expression(Expression::new(
-                            ExpressionKind::Integer(0),
+                            ExpressionKind::Byte(0),
                             Span::new(11, 12),
                         )),
                         Span::new(11, 12),
@@ -55,7 +55,7 @@ fn if_else() {
                     )),
                     body: vec![Statement::new(
                         StatementKind::Expression(Expression::new(
-                            ExpressionKind::Integer(1),
+                            ExpressionKind::Byte(1),
                             Span::new(11, 12),
                         )),
                         Span::new(11, 12),
@@ -68,7 +68,7 @@ fn if_else() {
                     condition: None,
                     body: vec![Statement::new(
                         StatementKind::Expression(Expression::new(
-                            ExpressionKind::Integer(0),
+                            ExpressionKind::Byte(0),
                             Span::new(20, 21),
                         )),
                         Span::new(20, 21),
@@ -109,7 +109,7 @@ fn if_else_if() {
                     )),
                     body: vec![Statement::new(
                         StatementKind::Expression(Expression::new(
-                            ExpressionKind::Integer(1),
+                            ExpressionKind::Byte(1),
                             Span::new(11, 12),
                         )),
                         Span::new(11, 12),
@@ -130,7 +130,7 @@ fn if_else_if() {
                             )),
                             body: vec![Statement::new(
                                 StatementKind::Expression(Expression::new(
-                                    ExpressionKind::Integer(2),
+                                    ExpressionKind::Byte(2),
                                     Span::new(31, 32),
                                 )),
                                 Span::new(31, 32),
@@ -164,7 +164,7 @@ fn if_else_if_else() {
                     )),
                     body: vec![Statement::new(
                         StatementKind::Expression(Expression::new(
-                            ExpressionKind::Integer(1),
+                            ExpressionKind::Byte(1),
                             Span::new(11, 12),
                         )),
                         Span::new(11, 12),
@@ -185,7 +185,7 @@ fn if_else_if_else() {
                             )),
                             body: vec![Statement::new(
                                 StatementKind::Expression(Expression::new(
-                                    ExpressionKind::Integer(2),
+                                    ExpressionKind::Byte(2),
                                     Span::new(31, 32),
                                 )),
                                 Span::new(31, 32),
@@ -198,7 +198,7 @@ fn if_else_if_else() {
                             condition: None,
                             body: vec![Statement::new(
                                 StatementKind::Expression(Expression::new(
-                                    ExpressionKind::Integer(0),
+                                    ExpressionKind::Byte(0),
                                     Span::new(40, 41),
                                 )),
                                 Span::new(40, 41),
@@ -245,7 +245,7 @@ fn if_nested() {
                                     )),
                                     body: vec![Statement::new(
                                         StatementKind::Expression(Expression::new(
-                                            ExpressionKind::Integer(0),
+                                            ExpressionKind::Byte(0),
                                             Span::new(24, 25),
                                         )),
                                         Span::new(24, 25),
@@ -258,7 +258,7 @@ fn if_nested() {
                                     condition: None,
                                     body: vec![Statement::new(
                                         StatementKind::Expression(Expression::new(
-                                            ExpressionKind::Integer(1),
+                                            ExpressionKind::Byte(1),
                                             Span::new(33, 34),
                                         )),
                                         Span::new(33, 34),
@@ -277,7 +277,7 @@ fn if_nested() {
                     condition: None,
                     body: vec![Statement::new(
                         StatementKind::Expression(Expression::new(
-                            ExpressionKind::Integer(0),
+                            ExpressionKind::Byte(0),
                             Span::new(44, 45),
                         )),
                         Span::new(44, 45),

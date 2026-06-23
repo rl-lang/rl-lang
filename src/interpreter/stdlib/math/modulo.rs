@@ -4,6 +4,9 @@ use crate::{
 };
 
 pub fn std_mod(eval: &mut Evaluator, a: Value, b: Value, span: Span) -> Result<Value, Error> {
+    let a = normalize_numeric(a);
+    let b = normalize_numeric(b);
+
     match (a, b) {
         (Value::Integer(a), Value::Integer(b)) => Ok(Value::Integer(a % b)),
         (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a % b)),
@@ -17,5 +20,12 @@ pub fn std_mod(eval: &mut Evaluator, a: Value, b: Value, span: Span) -> Result<V
             ),
             span,
         )),
+    }
+}
+
+fn normalize_numeric(v: Value) -> Value {
+    match v {
+        Value::Byte(b) => Value::Integer(b as i64),
+        other => other,
     }
 }

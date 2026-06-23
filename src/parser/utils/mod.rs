@@ -68,6 +68,7 @@ impl Parser {
         let current = self.peek();
         match (token_type, &current) {
             (TokenType::NumberLiteral(_), TokenType::NumberLiteral(_)) => true,
+            (TokenType::ByteLiteral(_), TokenType::ByteLiteral(_)) => true,
             (TokenType::StringLiteral(_), TokenType::StringLiteral(_)) => true,
             (TokenType::FloatLiteral(_), TokenType::FloatLiteral(_)) => true,
             (TokenType::BoolLiteral(_), TokenType::BoolLiteral(_)) => true,
@@ -98,12 +99,16 @@ impl Parser {
     pub fn parse_param_type(&mut self) -> Result<TypeAnnotation, Error> {
         if matches!(self.peek(), TokenType::Array) {
             self.advance();
-            return Ok(TypeAnnotation::Array(self.nested_array_type()?));
+            return Ok(*self.nested_array_type()?);
         }
         match self.peek() {
             TokenType::Int => {
                 self.advance();
                 Ok(TypeAnnotation::Int)
+            }
+            TokenType::Byte => {
+                self.advance();
+                Ok(TypeAnnotation::Byte)
             }
             TokenType::Float => {
                 self.advance();

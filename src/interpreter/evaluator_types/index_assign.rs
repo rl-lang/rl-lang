@@ -46,6 +46,9 @@ impl Evaluator {
                         }
                         indices.push(i as usize);
                     }
+                    if let Value::Byte(u) = evaluator.evaluate(index)? {
+                        indices.push(u as usize);
+                    }
                     Ok(indices)
                 }
                 _ => unreachable!(),
@@ -59,6 +62,9 @@ impl Evaluator {
                 return Err(self.err(format!("index cannot be negative: {}", i), span));
             }
             indices.push(i as usize);
+        }
+        if let Value::Byte(u) = idx {
+            indices.push(u as usize);
         }
 
         for scope in self.environment.iter().rev() {
@@ -98,7 +104,13 @@ impl Evaluator {
                         }
                         if let Value::Values { items_type, items } = current {
                             let val_type = Self::infer_type(&val, false);
-                            if val_type != *items_type && val_type != TypeAnnotation::Null {
+                            if val_type != *items_type
+                                && val_type != TypeAnnotation::Null
+                                && !((val_type == TypeAnnotation::Byte
+                                    || val_type == TypeAnnotation::CByte)
+                                    && (*items_type == TypeAnnotation::Int
+                                        || *items_type == TypeAnnotation::CInt))
+                            {
                                 return Err(Error::at(
                                     crate::utils::errors::Reason::Interpreter,
                                     format!(

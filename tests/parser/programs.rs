@@ -446,7 +446,7 @@ println(hyp, is_right, prime, big)",
             StatementKind::VariableDeclaration {
                 name: "n".to_string(),
                 type_annotation: TypeAnnotation::Int,
-                value: Expression::new(ExpressionKind::Integer(7), Span::new(329, 330)),
+                value: Expression::new(ExpressionKind::Byte(7), Span::new(329, 330)),
             },
             Span::new(317, 330),
         ),
@@ -698,7 +698,7 @@ for [int i = 0, i < 2, i += 1] {
                 StatementKind::VariableDeclaration {
                     name: "n".to_string(),
                     type_annotation: TypeAnnotation::Int,
-                    value: Expression::new(ExpressionKind::Integer(10), Span::new(88, 90)),
+                    value: Expression::new(ExpressionKind::Byte(10), Span::new(88, 90)),
                 },
                 Span::new(76, 90),
             ),
@@ -729,7 +729,7 @@ for [int i = 0, i < 2, i += 1] {
                 StatementKind::VariableDeclaration {
                     name: "i".to_string(),
                     type_annotation: TypeAnnotation::Int,
-                    value: Expression::new(ExpressionKind::Integer(0), Span::new(145, 146)),
+                    value: Expression::new(ExpressionKind::Byte(0), Span::new(145, 146)),
                 },
                 Span::new(133, 146),
             ),
@@ -743,7 +743,7 @@ for [int i = 0, i < 2, i += 1] {
                         StatementKind::VariableDeclaration {
                             name: "i".to_string(),
                             type_annotation: TypeAnnotation::Int,
-                            value: Expression::new(ExpressionKind::Integer(0), Span::new(160, 161)),
+                            value: Expression::new(ExpressionKind::Byte(0), Span::new(160, 161)),
                         },
                         Span::new(152, 161),
                     )),
@@ -751,7 +751,7 @@ for [int i = 0, i < 2, i += 1] {
                         ExpressionKind::Binary {
                             left: Box::new(Expression::new(ExpressionKind::Identifier("i".to_string()), Span::new(163, 164))),
                             operator: TokenType::Less,
-                            right: Box::new(Expression::new(ExpressionKind::Integer(2), Span::new(167, 168))),
+                            right: Box::new(Expression::new(ExpressionKind::Byte(2), Span::new(167, 168))),
                         },
                         Span::new(163, 168),
                     ),
@@ -762,7 +762,7 @@ for [int i = 0, i < 2, i += 1] {
                                 ExpressionKind::Binary {
                                     left: Box::new(Expression::new(ExpressionKind::Identifier("i".to_string()), Span::new(170, 171))),
                                     operator: TokenType::Plus,
-                                    right: Box::new(Expression::new(ExpressionKind::Integer(1), Span::new(175, 176))),
+                                    right: Box::new(Expression::new(ExpressionKind::Byte(1), Span::new(175, 176))),
                                 },
                                 Span::new(170, 176),
                             )),
@@ -788,7 +788,7 @@ for [int i = 0, i < 2, i += 1] {
                             StatementKind::VariableDeclaration {
                                 name: "j".to_string(),
                                 type_annotation: TypeAnnotation::Int,
-                                value: Expression::new(ExpressionKind::Integer(1), Span::new(219, 220)),
+                                value: Expression::new(ExpressionKind::Byte(1), Span::new(219, 220)),
                             },
                             Span::new(207, 220),
                         ),
@@ -853,7 +853,7 @@ for [int i = 0, i < 2, i += 1] {
                                                                         ExpressionKind::Binary {
                                                                             left: Box::new(Expression::new(ExpressionKind::Identifier("j".to_string()), Span::new(344, 345))),
                                                                             operator: TokenType::Plus,
-                                                                            right: Box::new(Expression::new(ExpressionKind::Integer(1), Span::new(349, 350))),
+                                                                            right: Box::new(Expression::new(ExpressionKind::Byte(1), Span::new(349, 350))),
                                                                         },
                                                                         Span::new(344, 350),
                                                                     )),
@@ -892,7 +892,7 @@ for [int i = 0, i < 2, i += 1] {
                                         ExpressionKind::Binary {
                                             left: Box::new(Expression::new(ExpressionKind::Identifier("i".to_string()), Span::new(406, 407))),
                                             operator: TokenType::Plus,
-                                            right: Box::new(Expression::new(ExpressionKind::Integer(1), Span::new(411, 412))),
+                                            right: Box::new(Expression::new(ExpressionKind::Byte(1), Span::new(411, 412))),
                                         },
                                         Span::new(406, 412),
                                     )),

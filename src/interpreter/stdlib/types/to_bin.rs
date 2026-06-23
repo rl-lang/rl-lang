@@ -5,6 +5,7 @@ use crate::{
 
 pub fn std_to_bin(eval: &mut Evaluator, value: Value, span: Span) -> Result<String, Error> {
     match value {
+        Value::Byte(v) => Ok(format!("{:b}", v)),
         Value::Integer(v) => Ok(format!("{:b}", v)),
         Value::Bool(v) => {
             if v {
