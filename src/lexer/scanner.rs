@@ -2,10 +2,60 @@ use crate::lexer::{tokenizer::Tokenizer, tokentypes::TokenType};
 use crate::utils::errors::Error;
 
 impl Tokenizer {
-    /// scans the current character and returns the correct token
+    /// Scans the source file and return token stream
     ///
-    /// for multi character tokens (e.g. '==') it peeks ahead
-    /// and decide which token to return
+    /// Iterates over every character in the source file, identifies lexemes,
+    /// and returns a flat list of [`Token`]s terminated by [`TokenType::EOF`].
+    ///
+    /// For multi-character tokens (e.g. `==`, `!=`, `<=`) the scanner peeks
+    /// ahead one character to decide which token to emit.
+    ///
+    /// # Tokens
+    ///
+    /// | category       | examples                                      |
+    /// |----------------|-----------------------------------------------|
+    /// | literals       | `1`, `3.14`, `'a'`, `"hello"`                 |
+    /// | identifiers    | `foo`, `my_var`, `_private`                   |
+    /// | arithmetic     | `+`, `-`, `*`, `/`                            |
+    /// | comparison     | `==`, `!=`, `<`, `>`, `<=`, `>=`              |
+    /// | assignment     | `=`, `+=`, `-=`, `*=`, `/=`                   |
+    /// | delimiters     | `(`, `)`, `{`, `}`, `[`, `]`                  |
+    /// | punctuation    | `,`, `;`, `.`, `..`, `:`, `::`                |
+    /// | special        | `#`, `!#`, `->`, `//` (comment)               |
+    /// | whitespace     | newlines (emitted), spaces/tabs (skipped)     |
+    ///
+    ///
+    /// # Errors
+    ///
+    /// - unterminated character literal
+    /// - unknown escape sequence
+    /// - unterminated string
+    /// - unexpected character
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use rl_lang::{
+    ///     lexer::{
+    ///         tokenizer::Tokenizer,
+    ///         tokentypes::TokenType,
+    ///     },
+    ///     utils::source::SourceFile,
+    /// };
+    ///
+    /// let tokens = match Tokenizer::lex(SourceFile::new("source", "1 == 1".to_string())) {
+    ///     Ok(tokens) => tokens,
+    ///     Err(error) => {
+    ///         error.report_to_stderr();
+    ///         std::process::exit(1);
+    ///     },
+    /// };
+    ///
+    /// assert_eq!(tokens[0].token, TokenType::ByteLiteral(1));
+    /// assert_eq!(tokens[1].token, TokenType::EqualEqual);
+    /// assert_eq!(tokens[2].token, TokenType::ByteLiteral(1));
+    /// assert_eq!(tokens[3].token, TokenType::Eof);
+    /// ```
     pub fn scan_tokens(&mut self) -> Result<(), Error> {
         let current_character = self.advance();
         match current_character {
@@ -132,6 +182,7 @@ impl Tokenizer {
             '0'..='9' => self.number_literal(),
 
             '_' | 'a'..='z' | 'A'..='Z' => self.identifier(),
+
             other => {
                 return Err(self.err(
                     format!("unexpected character `{}`", other),
