@@ -3,7 +3,10 @@ use crate::{
         nodes::{Expression, ExpressionKind},
         statements::{Statement, StatementKind},
     },
+    lexer::tokenizer::Tokenizer,
+    parser::parser_logic::Parser,
     resolver::Resolver,
+    utils::source::SourceFile,
 };
 
 impl Resolver {
@@ -143,12 +146,10 @@ impl Resolver {
                 increment,
                 body,
             } => {
-                self.push_scope();
                 let initializer = Box::new(self.resolve_statement(*initializer));
                 let condition = self.resolve_expression(condition);
                 let increment = self.resolve_expression(increment);
                 let body = self.resolve_statements(body);
-                self.pop_scope();
                 StatementKind::ResolvedFor {
                     initializer,
                     condition,
@@ -174,9 +175,7 @@ impl Resolver {
             }
             StatementKind::ConditionalBranch { condition, body } => {
                 let condition = condition.map(|e| self.resolve_expression(e));
-                self.push_scope();
                 let body = self.resolve_statements(body);
-                self.pop_scope();
                 StatementKind::ConditionalBranch { condition, body }
             }
             StatementKind::Return(expr) => {
@@ -186,6 +185,25 @@ impl Resolver {
                 StatementKind::Expression(self.resolve_expression(expr))
             }
 
+            StatementKind::ImportFile { path } => {
+                let import_name = format!("{}.rl", path.join("/"));
+                let Ok(source_text) = std::fs::read_to_string(&import_name) else {
+                    return Statement::new(StatementKind::ImportFile { path }, span);
+                };
+                let source_file = SourceFile::new(import_name, source_text);
+                let Ok(tokens) = Tokenizer::lex(source_file.clone()) else {
+                    return Statement::new(StatementKind::ImportFile { path }, span);
+                };
+                let Ok(stmts) = Parser::parse(tokens, source_file) else {
+                    return Statement::new(StatementKind::ImportFile { path }, span);
+                };
+                // Resolve in current scope — imported names get slots here
+                let resolved = self.resolve_statements(stmts);
+                StatementKind::ResolvedImportFile {
+                    path,
+                    body: resolved,
+                }
+            }
             other => other,
         };
         Statement::new(kind, span)

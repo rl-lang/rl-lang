@@ -413,10 +413,7 @@ impl Evaluator {
             ExpressionKind::Assign { name, .. } => {
                 return Err(self.err(format!("undefined variable '{}'", name), expression.span));
             }
-            _ => {
-                eprintln!("UNHANDLED: {:#?}", &expression.kind);
-                Value::Null
-            }
+            _ => Value::Null,
         };
         Ok(value)
     }

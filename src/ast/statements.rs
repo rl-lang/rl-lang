@@ -140,6 +140,10 @@ pub enum StatementKind {
     ImportFile {
         path: Vec<String>,
     },
+    ResolvedImportFile {
+        path: Vec<String>,
+        body: Vec<Statement>,
+    },
 
     ImportFileNamed {
         path: Vec<String>,

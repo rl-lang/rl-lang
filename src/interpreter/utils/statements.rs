@@ -278,45 +278,10 @@ impl Evaluator {
                 }
             }
 
-            // require adding resolved version in resolver
-            StatementKind::ImportFile { path } => {
-                let import_name = format!("{}.rl", path.join("/"));
-                let file_path = if let Some(ref source_file) = self.source_file {
-                    let current_file_dir = Path::new(source_file.name.as_ref())
-                        .parent()
-                        .unwrap_or_else(|| Path::new(""));
-                    current_file_dir.join(&import_name)
-                } else {
-                    import_name.clone().into()
-                };
-
-                let source_text = std::fs::read_to_string(&file_path).map_err(|_| {
-                    self.err(
-                        format!("could not read file '{}'", import_name),
-                        statement.span,
-                    )
-                })?;
-                let source_file =
-                    SourceFile::new(file_path.to_string_lossy().as_ref(), source_text);
-                let tokens = Tokenizer::lex(source_file.clone())?;
-                let stmts = Parser::parse(tokens, source_file.clone())?;
-                let stmts = self.resolver.resolve_statements(stmts);
-
-                let previous_source = self.source_file.clone();
-                self.source_file = Some(source_file);
-
-                for stmt in &stmts {
+            StatementKind::ResolvedImportFile { body, .. } => {
+                for stmt in body {
                     self.evaluate_statement(stmt)?;
                 }
-
-                let exported = self.environment.last().cloned().unwrap_or_default();
-
-                self.source_file = previous_source;
-
-                // merge exported slots into parent scope
-                let no_scope_err = self.err("no active scope", statement.span);
-                let frame = self.environment.last_mut().ok_or(no_scope_err)?;
-                frame.extend(exported);
             }
             // require adding resolved version in resolver
             StatementKind::ImportFileNamed { path, names } => {
@@ -503,12 +468,6 @@ impl Evaluator {
                 name,
                 ..
             } => {
-                eprintln!(
-                    "DEBUG: fn decl slot={} env_frames={} frame0_len={}",
-                    slot,
-                    self.environment.len(),
-                    self.environment[0].len()
-                );
                 let func = Value::Function {
                     params: params.clone(),
                     body: body.clone(),
@@ -635,14 +594,10 @@ impl Evaluator {
             return Ok(());
         };
 
-        for (i, statement) in statements.iter().enumerate() {
-            eprintln!(
-                "DEBUG prepass: statement {} {:?}",
-                i,
-                std::mem::discriminant(&statement.kind)
-            );
+        for statement in statements {
             match &statement.kind {
-                StatementKind::ResolvedFunctionDeclaration { .. }
+                StatementKind::ResolvedImportFile { .. }
+                | StatementKind::ResolvedFunctionDeclaration { .. }
                 | StatementKind::FunctionDeclaration { .. }
                 | StatementKind::Import { .. }
                 | StatementKind::ImportFile { .. }
@@ -656,12 +611,8 @@ impl Evaluator {
                 _ => {}
             }
         }
-        eprintln!("DEBUG: prepass done");
-        eprintln!("DEBUG: calling entry slot={}", entry_slot);
         let func = self.get_value(0, entry_slot, entry_span)?;
-        eprintln!("DEBUG: got func, calling...");
         self.call_value(func, vec![], entry_span)?;
-        eprintln!("DEBUG: call_value returned");
         Ok(())
     }
 
