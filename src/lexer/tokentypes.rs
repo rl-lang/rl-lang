@@ -1,3 +1,8 @@
+//! [`Token`] and [`TokenType`] - the complete vocabulary of the lexer.
+//!
+//! Every variant the lexer can produce is defined here. Literal-carrying
+//! variants (`NumberLiteral`, `StringLiteral`, etc.) embed their parsed value
+//! directly so downstream passes never need to re-parse raw text.
 use crate::utils::span::Span;
 
 /// Represents every token type the lexer can produce.
