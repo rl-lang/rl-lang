@@ -59,6 +59,7 @@ impl Tokenizer {
     pub fn scan_tokens(&mut self) -> Result<(), Error> {
         let current_character = self.advance();
         match current_character {
+            // single character
             '{' => self.add_token(TokenType::LeftBrace),
             '}' => self.add_token(TokenType::RightBrace),
             '[' => self.add_token(TokenType::LeftBracket),
@@ -69,6 +70,7 @@ impl Tokenizer {
             ',' => self.add_token(TokenType::Comma),
             ';' => self.add_token(TokenType::Semicolon),
 
+            // multi character
             ':' => {
                 if self.peek() == ':' {
                     self.advance();
@@ -169,6 +171,7 @@ impl Tokenizer {
                 }
             }
 
+            // whitespaces
             ' ' | '\t' | '\r' => {}
 
             '\n' => {
@@ -176,6 +179,7 @@ impl Tokenizer {
                 self.add_token(TokenType::Newline)
             }
 
+            // literals
             '\'' => self.character_literal()?,
             '"' => self.string_literal()?,
 
