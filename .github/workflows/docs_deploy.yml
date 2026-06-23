@@ -1,0 +1,244 @@
+name: Deploy Docs
+
+on:
+  push:
+    branches: [main, dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Cargo Docs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Generate docs
+        env:
+          RUSTDOCFLAGS: >-
+            --html-in-header /tmp/custom-theme.html
+            --extend-css /tmp/custom-theme.css
+            --default-theme ayu
+        run: |
+          # --- Blue theme ---
+
+          cat > /tmp/custom-theme.html << 'HTML'
+          <link rel="preconnect" href="https://fonts.googleapis.com">
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+          <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+          HTML
+
+          cat > /tmp/custom-theme.css << 'CSS'
+          /* --- rl-lang docs · Blue theme --- */
+
+          :root {
+            --brand-50:  #eff6ff;
+            --brand-100: #dbeafe;
+            --brand-300: #93c5fd;
+            --brand-400: #60a5fa;
+            --brand-500: #3b82f6;
+            --brand-600: #2563eb;
+            --brand-700: #1d4ed8;
+            --brand-900: #1e3a8a;
+
+            --bg-primary:   #0f172a;   /* slate-900 */
+            --bg-secondary: #1e293b;   /* slate-800 */
+            --bg-sidebar:   #0d1526;
+            --bg-code:      #1a2744;
+
+            --text-primary:  #e2e8f0;
+            --text-muted:    #94a3b8;
+            --text-heading:  #f0f6ff;
+
+            --border:        #2d3f5f;
+            --accent:        var(--brand-400);
+            --accent-hover:  var(--brand-300);
+          }
+
+          /* --- Base --- */
+          body {
+            font-family: 'Inter', system-ui, sans-serif !important;
+            background: var(--bg-primary) !important;
+            color: var(--text-primary) !important;
+          }
+
+          /* --- Sidebar --- */
+          nav.sidebar,
+          .sidebar,
+          #sidebar {
+            background: var(--bg-sidebar) !important;
+            border-right: 1px solid var(--border) !important;
+          }
+
+          .sidebar .sidebar-elems,
+          .sidebar-title {
+            color: var(--text-primary) !important;
+          }
+
+          .sidebar a,
+          .sidebar-elems a {
+            color: var(--brand-300) !important;
+            transition: color 0.15s;
+          }
+
+          .sidebar a:hover {
+            color: var(--accent-hover) !important;
+            text-decoration: none;
+          }
+
+          /* --- Top bar --- */
+          .rustdoc.source nav.sub,
+          nav.sub {
+            background: var(--bg-secondary) !important;
+            border-bottom: 1px solid var(--border) !important;
+          }
+
+          /* --- Content area --- */
+          .main-heading h1,
+          .main-heading h2,
+          h1, h2, h3, h4 {
+            color: var(--text-heading) !important;
+            font-weight: 600 !important;
+          }
+
+          .item-info,
+          .docblock,
+          p {
+            color: var(--text-primary) !important;
+          }
+
+          /* --- Links --- */
+          a {
+            color: var(--accent) !important;
+          }
+
+          a:hover {
+            color: var(--accent-hover) !important;
+          }
+
+          /* --- Code blocks --- */
+          pre, code, .code-header {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace !important;
+            background: var(--bg-code) !important;
+            border: 1px solid var(--border) !important;
+            border-radius: 6px !important;
+          }
+
+          pre {
+            padding: 1rem !important;
+          }
+
+          code {
+            padding: 0.15em 0.4em !important;
+            font-size: 0.875em !important;
+          }
+
+          /* --- Item tables --- */
+          .item-table .item-name a {
+            color: var(--brand-300) !important;
+            font-weight: 500 !important;
+          }
+
+          .item-table .item-name a:hover {
+            color: var(--accent-hover) !important;
+          }
+
+          /* --- Section separators --- */
+          .section-header {
+            border-bottom: 1px solid var(--border) !important;
+            color: var(--brand-400) !important;
+          }
+
+          /* --- Stability / feature badges --- */
+          .stab {
+            background: var(--bg-code) !important;
+            border-color: var(--border) !important;
+            color: var(--text-primary) !important;
+          }
+
+          /* --- Search bar --- */
+          #crate-search,
+          #search-input {
+            background: var(--bg-secondary) !important;
+            border: 1px solid var(--border) !important;
+            color: var(--text-primary) !important;
+            border-radius: 6px !important;
+          }
+
+          #search-input:focus {
+            border-color: var(--brand-500) !important;
+            outline: none !important;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25) !important;
+          }
+
+          /* --- Search results --- */
+          #search-results .result-name span.alias,
+          #search-results .result-name span.grey {
+            color: var(--text-muted) !important;
+          }
+
+          /* --- Scrollbar --- */
+          ::-webkit-scrollbar { width: 6px; }
+          ::-webkit-scrollbar-track { background: var(--bg-primary); }
+          ::-webkit-scrollbar-thumb {
+            background: var(--brand-700);
+            border-radius: 3px;
+          }
+          ::-webkit-scrollbar-thumb:hover { background: var(--brand-600); }
+          CSS
+
+          # Build docs for the workspace, including dependencies docs
+          cargo doc \
+            --workspace \
+            --no-deps \
+            --document-private-items
+
+          # Add an index redirect so GitHub Pages lands on the right crate
+          CRATE_NAME=$(cargo metadata --no-deps --format-version 1 \
+            | python3 -c "import sys,json; pkgs=json.load(sys.stdin)['packages']; print(pkgs[0]['name'].replace('-','_'))")
+
+          cat > target/doc/index.html << REDIRECT
+          <!doctype html>
+          <meta charset="utf-8">
+          <meta http-equiv="refresh" content="0; url=./${CRATE_NAME}/index.html">
+          <link rel="canonical" href="./${CRATE_NAME}/index.html">
+          REDIRECT
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: target/doc
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
