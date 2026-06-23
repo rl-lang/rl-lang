@@ -130,7 +130,8 @@ impl Tokenizer {
             '"' => self.string_literal()?,
 
             '0'..='9' => self.number_literal(),
-            'a'..='z' | 'A'..='Z' => self.identifier(),
+
+            '_' | 'a'..='z' | 'A'..='Z' => self.identifier(),
             other => {
                 return Err(self.err(
                     format!("unexpected character `{}`", other),
