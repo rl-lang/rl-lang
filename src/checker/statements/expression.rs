@@ -69,8 +69,12 @@ impl TypeChecker {
                 // is it integer?
                 if !matches!(
                     index_type,
-                    CheckType::Known(TypeAnnotation::Int | TypeAnnotation::Byte)
-                        | CheckType::Unknown
+                    CheckType::Known(
+                        TypeAnnotation::Int
+                            | TypeAnnotation::CInt
+                            | TypeAnnotation::Byte
+                            | TypeAnnotation::CByte
+                    ) | CheckType::Unknown
                 ) {
                     self.error(
                         format!("invalid index operation: index is {}", index_type.info()),

@@ -22,19 +22,10 @@ impl TypeChecker {
         if path.len() == 1 {
             let name = &path[0];
 
-            if path.len() == 1 {
-                let name = &path[0];
-
-                if self.stdlib_fn_names.contains(name.as_str()) {
-                    self.push_stdlib_hover(path, span);
-                    return CheckType::Unknown;
-                }
-
-                let item_type = self.lookup(name, span);
-                return self.check_call_value(item_type, arg_types, span);
+            if self.stdlib_fn_names.contains(name.as_str()) {
+                self.push_stdlib_hover(path, span);
+                return CheckType::Unknown;
             }
-
-            // user defined function in scope
             let item_type = self.lookup(name, span);
             return self.check_call_value(item_type, arg_types, span);
         }

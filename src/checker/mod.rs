@@ -5,7 +5,8 @@ pub mod structs;
 pub mod types;
 
 use crate::{
-    ast::statements::Statement,
+    ast::statements::{Statement, StatementKind},
+    checker::structs::CheckType,
     interpreter::evaluator::Evaluator,
     utils::{
         errors::{Error, Reason},
@@ -52,6 +53,21 @@ impl TypeChecker {
 
     // runs check on every ast statement in the list and returns errors as list
     pub fn check(&mut self, statements: &[Statement]) -> &[Error] {
+        for statement in statements {
+            if let StatementKind::FunctionDeclaration {
+                name,
+                params,
+                return_type,
+                ..
+            } = &statement.kind
+            {
+                let fn_type = CheckType::Function {
+                    params: params.iter().map(|p| p.param_type.clone()).collect(),
+                    return_type: return_type.clone(),
+                };
+                self.declare(name.clone(), fn_type, false, statement.span);
+            }
+        }
         for statement in statements {
             self.check_statement(statement);
         }
