@@ -3,28 +3,60 @@ use crate::utils::errors::Error;
 use crate::utils::source::SourceFile;
 use crate::utils::span::Span;
 
-/// converts raw text from source file into tokens
+/// Converts raw source text into a flat list of [`Token`]s.
 ///
-/// it operates character by character and groups them into tokens
+/// Operates character by character, grouping lexemes into tokens.
+/// The main entry point is [`Tokenizer::lex`].
 pub struct Tokenizer {
-    /// the source file (text + name) for error reports
+    /// The source file (text + name) used for error reporting.
     pub source_file: SourceFile,
-    // the source if characters sequence
+    /// The source text as a sequence of characters.
     pub source: Vec<char>,
-    // the accumlated token list
+    /// The accumulated token list built during lexing.
     pub tokens: Vec<super::tokentypes::Token>,
-    /// the index of current character
+    /// Index of the current character being examined.
     pub current: usize,
-    /// the index of current token
+    /// Index of the first character of the current token.
     pub start: usize,
-    /// current line number and is incremented every \n
+    /// Current line number, incremented on every `\n`.
     pub line: usize,
 }
 
 impl Tokenizer {
-    /// lexes a [`SourceFile`] into [`Vec<Token>`]
+    /// The main entry point: lexes a [`SourceFile`] into a [`Vec<Token>`].
     ///
-    /// appends a TokenType::Eof so the parser works with a clean list of tokens.
+    /// Drives [`Tokenizer::scan_tokens`] in a loop until the source is exhausted,
+    /// then appends a [`TokenType::Eof`] so the parser always has a clean terminator.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error`] if the source contains an unrecognized character,
+    /// unterminated string, or invalid literal.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use rl_lang::{
+    ///     lexer::{
+    ///         tokenizer::Tokenizer,
+    ///         tokentypes::TokenType,
+    ///     },
+    ///     utils::source::SourceFile,
+    /// };
+    ///
+    /// let tokens = match Tokenizer::lex(SourceFile::new("source", "1 == 1".to_string())) {
+    ///     Ok(tokens) => tokens,
+    ///     Err(error) => {
+    ///         error.report_to_stderr();
+    ///         std::process::exit(1);
+    ///     },
+    /// };
+    ///
+    /// assert_eq!(tokens[0].token, TokenType::ByteLiteral(1));
+    /// assert_eq!(tokens[1].token, TokenType::Compare);
+    /// assert_eq!(tokens[2].token, TokenType::ByteLiteral(1));
+    /// assert_eq!(tokens[3].token, TokenType::Eof);
+    /// ```
     pub fn lex(source_file: SourceFile) -> Result<Vec<Token>, Error> {
         let chars: Vec<char> = source_file.text.chars().collect();
         let eof_char_index = chars.len();
@@ -55,16 +87,18 @@ impl Tokenizer {
         Ok(lexer.tokens)
     }
 
-    /// Span covering the current token, in character indices into the source.
+    /// Returns a [`Span`] covering the current token in character indices.
     ///
     /// Ariadne's `Source::from(&str)` indexes by character, so spans must be
-    /// char-indexed too — passing byte offsets misaligns reports whenever
-    /// multi-byte characters precede the span.
+    /// char-indexed — passing byte offsets misaligns reports for multi-byte characters.
     pub fn current_span(&self) -> Span {
         Span::new(self.start, self.current)
     }
 
-    /// build a [`Reason::Lexer`] error anchored at `span`, with the source attached.
+    /// Builds a [`Reason::Lexer`] error anchored at `span`.
+    ///
+    /// Attaches the source file so Ariadne can render the relevant source line
+    /// alongside the error message.
     pub fn err(&self, message: impl Into<String>, span: Span) -> Error {
         Error::at(crate::utils::errors::Reason::Lexer, message, span)
             .with_source_file(&self.source_file)

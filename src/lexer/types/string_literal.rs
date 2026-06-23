@@ -2,11 +2,24 @@ use crate::lexer::{tokenizer::Tokenizer, tokentypes::TokenType};
 use crate::utils::errors::Error;
 
 impl Tokenizer {
-    /// scans a double quoted literal
+    /// Scans a double-quoted string literal and emits [`TokenType::StringLiteral`].
     ///
-    /// supports multi-line strings by incrementing the line counter
-    /// when hitting \n and now it supports escape sequences
-    /// returns TokenType::StringLiteral
+    /// Supports multi-line strings and the following escape sequences:
+    ///
+    /// | Sequence | Meaning        |
+    /// |----------|----------------|
+    /// | `\n`     | newline        |
+    /// | `\t`     | tab            |
+    /// | `\r`     | carriage return|
+    /// | `\0`     | null           |
+    /// | `\\`     | backslash      |
+    /// | `\"`     | double quote   |
+    /// | `\'`     | single quote   |
+    ///
+    /// # Errors
+    ///
+    /// - `unterminated string` -> if EOF is reached before the closing `"`
+    /// - `unknown escape sequence` -> if `\` is followed by an unrecognized character
     pub fn string_literal(&mut self) -> Result<(), Error> {
         // construct new string
         let mut value = String::new();
