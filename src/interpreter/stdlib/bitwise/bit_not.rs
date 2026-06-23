@@ -11,9 +11,9 @@ pub fn std_bit_not(eval: &mut Evaluator, args: Vec<Value>, span: Span) -> Result
         ));
     }
 
-    match args.into_iter().next().unwrap() {
+    match args.into_iter().next().unwrap_or(Value::Null) {
         Value::Byte(x) => Ok(Value::Byte(!x)),
         Value::Integer(x) => Ok(Value::Integer(!x)),
-        _ => Err(eval.err("bit_not() expects a byte or integer".to_string(), span)),
+        _ => Err(eval.err("bit_not() expects a byte or an int".to_string(), span)),
     }
 }
