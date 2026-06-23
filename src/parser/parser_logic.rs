@@ -1,3 +1,8 @@
+//! Core [`Parser`] struct and its cursor primitives.
+//!
+//! Every other parser sub-module is an `impl Parser` block that depends on
+//! the methods defined here. Nothing in this file produces AST nodes directly;
+//! it only provides the machinery for navigating the token stream.
 use crate::{
     ast::statements::Statement,
     lexer::tokentypes::Token,
@@ -8,18 +13,37 @@ use crate::{
     },
 };
 
-/// parses list of tokens and produce [`Vec<Statement>`]
+/// Parses a flat list of tokens and produces a [`Vec<Statement>`].
+///
+/// The parser owns the token stream and advances through it with a single
+/// `current` index cursor. All sub-parsers borrow `self` mutably and call
+/// the cursor primitives ([`peek`], [`advance`], [`match_type`], etc.) defined
+/// in this module.
+///
+/// Construct via [`Parser::parse`] - there is no public `new`.
+///
+/// [`peek`]: Parser::peek
+/// [`advance`]: Parser::advance
+/// [`match_type`]: Parser::match_type
 pub struct Parser {
-    /// the source file (text + name) for error reports
+    /// the source file (text + name) carried for error reports
     pub source_file: SourceFile,
-    /// the full tokens list from the lexer
+    /// the full token list produced by the lexer, including the terminal [`TokenType::Eof`]
     pub tokens: Vec<Token>,
-    /// index of current token that being parsed
+    /// index of the token currently being examined (the "read head")
     pub current: usize,
 }
 
 impl Parser {
-    /// consumes tokens to return a list of [`Statement`]s
+    /// Entry point: consumes `tokens` and returns a fully-parsed statement list.
+    ///
+    /// Drives the top-level parse loop, calling [`parse_statement_to_ast`] until
+    /// [`TokenType::Eof`] is reached.
+    ///
+    /// # Errors
+    /// Returns the first [`Error`] encountered; parsing stops immediately.
+    ///
+    /// [`parse_statement_to_ast`]: Parser::parse_statement_to_ast
     pub fn parse(tokens: Vec<Token>, source_file: SourceFile) -> Result<Vec<Statement>, Error> {
         let mut parser = Parser {
             source_file,
@@ -40,7 +64,8 @@ impl Parser {
         Ok(statements)
     }
 
-    /// build a [`Reason::Parse`] error anchored at `span`, with the source attached.
+    /// Constructs a [`Reason::Parse`] error anchored at `span` with the source
+    /// file already attached, ready to be returned from any parse method.
     pub fn err(&self, message: impl Into<String>, span: Span) -> Error {
         Error::at(Reason::Parse, message, span).with_source_file(&self.source_file)
     }

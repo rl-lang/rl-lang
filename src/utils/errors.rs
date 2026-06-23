@@ -201,7 +201,8 @@ impl Error {
 impl ErrorReason {
     /// creates a new [`ErrorReason`] with category type and optional data
     ///
-    /// # example
+    /// # Example
+    ///
     /// ```rust
     /// use rl_lang::utils::errors::{ErrorReason, Reason};
     /// ErrorReason::init(Reason::Lexer, Some(vec!["unknown token `$`".to_string()]));

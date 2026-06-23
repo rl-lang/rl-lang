@@ -53,7 +53,7 @@ pub fn handle_command(
                 let used = 2 + command.len() + argument.map(|a| a.len()).unwrap_or(0);
                 let pad = " ".repeat(24_usize.saturating_sub(used));
                 parts.push((pad, sep));
-                parts.push(("— ".to_string(), sep));
+                parts.push(("- ".to_string(), sep));
                 parts.push((description.to_string(), desc));
                 output.push(OutputLine::Styled(parts));
             }

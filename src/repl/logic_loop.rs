@@ -19,7 +19,7 @@ pub fn run_repl(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
     let mut evaluator = Evaluator::default().with_stdlib();
     let mut output: Vec<OutputLine> = vec![
         OutputLine::Info(format!(
-            "rl-lang v{} — type :help for commands",
+            "rl-lang v{} - type :help for commands",
             env!("CARGO_PKG_VERSION")
         )),
         OutputLine::Separator,
@@ -276,7 +276,7 @@ pub fn run_repl(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
                     }
                 },
 
-                // escape — cancel multiline accumulation
+                // escape - cancel multiline accumulation
                 (_, KeyCode::Esc) => {
                     if !accumulated.is_empty() {
                         accumulated.clear();

@@ -3,12 +3,12 @@ use crate::utils::span::Span;
 /// Represents every token type the lexer can produce.
 ///
 /// Variants are grouped into:
-/// - **Delimiters** — brackets, braces, parens
-/// - **Punctuation** — dots, colons, commas, semicolons
-/// - **Operators** — arithmetic, comparison, assignment, logical
-/// - **Literals** — carry their parsed value directly
-/// - **Keywords** — reserved words of the language
-/// - **Special** — [`TokenType::Newline`], [`TokenType::Eof`]
+/// - **Delimiters** - brackets, braces, parens
+/// - **Punctuation** - dots, colons, commas, semicolons
+/// - **Operators** - arithmetic, comparison, assignment, logical
+/// - **Literals** - carry their parsed value directly
+/// - **Keywords** - reserved words of the language
+/// - **Special** - [`TokenType::Newline`], [`TokenType::Eof`]
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenType {
     // -- delimiters --

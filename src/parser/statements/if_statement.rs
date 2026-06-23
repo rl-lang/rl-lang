@@ -1,3 +1,23 @@
+//! Conditional statement parser (`if` / `else if` / `else`).
+//!
+//! Parses the full if-chain into a tree of nested [`StatementKind::Conditional`]
+//! nodes. Each `else if` branch is represented by recursion, so the AST mirrors
+//! the source nesting naturally:
+//!
+//! ```text
+//! if (a) { … } else if (b) { … } else { … }
+//! ```
+//! becomes:
+//! ```text
+//! Conditional {
+//!     if_branch:   ConditionalBranch { condition: Some(a), body: […] }
+//!     else_branch: Some(Conditional {
+//!         if_branch:   ConditionalBranch { condition: Some(b), body: […] }
+//!         else_branch: Some(ConditionalBranch { condition: None, body: […] })
+//!     })
+//! }
+//! ```
+
 use crate::{
     ast::statements::{Statement, StatementKind},
     lexer::tokentypes::TokenType,
@@ -6,7 +26,21 @@ use crate::{
 };
 
 impl Parser {
-    /// caled after hitting [`TokenType::If`] returing [`Statement::Conditional`]
+    /// Parses an `if` statement, including any `else if` / `else` tail.
+    ///
+    /// Called after `if` has been consumed. Reads:
+    ///
+    /// 1. The condition expression.
+    /// 2. The `{`-delimited if-body via [`parse_block`].
+    /// 3. An optional `else` tail - either another `if` (recursed) or a plain
+    ///    `else { … }` block (condition is `None`).
+    ///
+    /// Blank lines between the closing `}` and `else` are skipped.
+    ///
+    /// Produces [`StatementKind::Conditional`] with one or two
+    /// [`StatementKind::ConditionalBranch`] children.
+    ///
+    /// [`parse_block`]: Parser::parse_block
     pub fn parse_if(&mut self, start: Span) -> Result<Statement, Error> {
         let if_condition = self.parse_expression()?;
         let if_body = self.parse_block()?;
@@ -19,6 +53,7 @@ impl Parser {
             if_branch_span,
         );
 
+        // skip any blank lines between `}` and `else`
         while matches!(self.peek(), TokenType::Newline) {
             self.advance();
         }
@@ -27,11 +62,12 @@ impl Parser {
             let branch_start = self.peek_span();
             self.advance();
             if self.peek() == TokenType::If {
+                // `else if` - recurse to produce a nested Conditional
                 let elif_start = self.peek_span();
                 self.advance();
-                // Recurse and produces a nested Conditional
                 Some(Box::new(self.parse_if(elif_start)?))
             } else {
+                // plain `else { … }` - condition is None
                 let else_body = self.parse_block()?;
                 let span = branch_start.join(self.previous_span());
                 Some(Box::new(Statement::new(

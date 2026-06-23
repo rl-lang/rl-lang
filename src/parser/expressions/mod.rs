@@ -1,3 +1,22 @@
+//! Precedence-climbing expression parser.
+//!
+//! Expressions are parsed via a hand-written recursive-descent chain that
+//! encodes operator precedence through the call stack. From lowest to highest:
+//!
+//! ```text
+//! parse_expression        (entry point, delegates to equality)
+//!   |- parse_equality     (== !=)
+//!        |- parse_comparison  (< <= > >= += -= *= /=)
+//!             |- parse_term   (+ -)
+//!                  |- parse_factor  (* /)
+//!                       |- parse_unary   (! -)
+//!                            |- parse_primary  (literals, identifiers, calls, lambdas, …)
+//!                                 |- parse_postfix  (. method chains)
+//! ```
+//!
+//! Every function returns an [`Expression`] node with its source [`Span`] set
+//! to the full extent of the sub-expression it consumed.
+
 use crate::{
     ast::nodes::{Expression, ExpressionKind},
     lexer::tokentypes::TokenType,
@@ -6,11 +25,16 @@ use crate::{
 };
 
 impl Parser {
+    /// Entry point for expression parsing. Delegates to [`parse_equality`].
+    ///
+    /// [`parse_equality`]: Parser::parse_equality
     pub fn parse_expression(&mut self) -> Result<Expression, Error> {
-        // offloads to term for now
         self.parse_equality()
     }
 
+    /// Parses `==` and `!=` binary expressions (lowest precedence).
+    ///
+    /// Left-associative: `a == b != c` is `(a == b) != c`.
     pub fn parse_equality(&mut self) -> Result<Expression, Error> {
         let mut left = self.parse_comparsion()?;
         while self.match_type(&[TokenType::BangEqual, TokenType::Compare]) {
@@ -29,6 +53,15 @@ impl Parser {
         Ok(left)
     }
 
+    /// Parses comparison and compound-assignment operators:
+    /// `<`, `<=`, `>`, `>=`, `+=`, `-=`, `*=`, `/=`.
+    ///
+    /// Compound-assignment operators (`+=` etc.) are desugared in-place: when
+    /// the left-hand side is a plain [`ExpressionKind::Identifier`], they expand
+    /// to an [`ExpressionKind::Assign`] whose value is the corresponding
+    /// [`ExpressionKind::Binary`]. If the LHS is not a simple identifier the
+    /// operator is treated as a plain binary expression (the checker will reject
+    /// it later if needed).
     pub fn parse_comparsion(&mut self) -> Result<Expression, Error> {
         let mut left = self.parse_term()?;
         while self.match_type(&[
@@ -104,6 +137,9 @@ impl Parser {
         Ok(left)
     }
 
+    /// Parses additive expressions: `+` and `-`.
+    ///
+    /// Left-associative: `a + b - c` is `(a + b) - c`.
     pub fn parse_term(&mut self) -> Result<Expression, Error> {
         let mut left = self.parse_factor()?;
         while self.match_type(&[TokenType::Plus, TokenType::Minus]) {
@@ -122,6 +158,9 @@ impl Parser {
         Ok(left)
     }
 
+    /// Parses multiplicative expressions: `*` and `/`.
+    ///
+    /// Left-associative: `a * b / c` is `(a * b) / c`.
     pub fn parse_factor(&mut self) -> Result<Expression, Error> {
         let mut left = self.parse_unary()?;
         while self.match_type(&[TokenType::Star, TokenType::Slash]) {
@@ -140,6 +179,12 @@ impl Parser {
         Ok(left)
     }
 
+    /// Parses unary prefix expressions: `!` (logical not) and `-` (negation).
+    ///
+    /// Right-associative by recursion: `--x` parses as `-(-(x))`.
+    /// Falls through to [`parse_primary`] when no prefix operator is present.
+    ///
+    /// [`parse_primary`]: Parser::parse_primary
     pub fn parse_unary(&mut self) -> Result<Expression, Error> {
         let start = self.peek_span();
         if self.match_type(&[TokenType::Bang, TokenType::Minus]) {
@@ -157,6 +202,32 @@ impl Parser {
         self.parse_primary()
     }
 
+    /// Parses a primary expression - the highest-precedence, non-recursive forms.
+    ///
+    /// Handles (in order):
+    /// - **Identifiers** - plain names, module paths (`a::b::c`), function calls
+    ///   (`f(args)`), variable assignments (`x = expr`), index access (`arr[i]`),
+    ///   chained index access (`arr[i][j]`), index-assign (`arr[i] = expr`), and
+    ///   call-on-index (`fns[0](args)`).
+    /// - **Array literals** - `[a, b, c]`
+    /// - **Integer literals** - `42`
+    /// - **Byte literals** - `0b` style byte values
+    /// - **String literals** - `"hello"`
+    /// - **Character literals** - `'x'`
+    /// - **Boolean literals** - `true` / `false`
+    /// - **Float literals** - `3.14`
+    /// - **Null** - the `null` keyword
+    /// - **Grouped expressions** - `(expr)`
+    /// - **Lambda expressions** - `fn(params) -> T { body }`
+    ///
+    /// Every matched form is then passed through [`parse_postfix`] to handle
+    /// any trailing method-call chains.
+    ///
+    /// # Errors
+    /// Returns an error with the message `"expected expression"` if none of the
+    /// above forms match the current token.
+    ///
+    /// [`parse_postfix`]: Parser::parse_postfix
     pub fn parse_primary(&mut self) -> Result<Expression, Error> {
         #[cfg(feature = "debug")]
         log::debug!("current index: {:?}", self.current);
@@ -165,7 +236,6 @@ impl Parser {
 
         let start = self.peek_span();
 
-        // is it identifier
         if self.match_type(&[TokenType::Identifier(String::new())]) {
             #[cfg(feature = "debug")]
             log::debug!("found identifier");
@@ -183,7 +253,6 @@ impl Parser {
                 }
                 let path_span = start.join(self.previous_span());
 
-                // is it function call?
                 if self.match_type(&[TokenType::LeftParen]) {
                     #[cfg(feature = "debug")]
                     log::debug!("found function call");
@@ -207,17 +276,15 @@ impl Parser {
                     return self.parse_postfix(expr, start);
                 }
 
-                // not a call: module paths aren't first-class values
+                // module paths are not first-class values
                 if path.len() > 1 {
                     return Err(self.err(
                         format!("module path `{}` used as value", path.join("::")),
                         path_span,
                     ));
                 }
-                // safe unwrap
                 let name = path.pop().unwrap();
 
-                // is it assignment?
                 if self.match_type(&[TokenType::Assign]) {
                     #[cfg(feature = "debug")]
                     log::debug!("found variable assignment");
@@ -248,7 +315,7 @@ impl Parser {
                         start.join(after_index_span),
                     );
 
-                    // consume chained indices for nested arrays: arr[0][1][2]
+                    // consume chained indices: arr[0][1][2]
                     while self.peek() == TokenType::LeftBracket {
                         self.advance();
                         let next_index = self.parse_expression()?;
@@ -263,7 +330,7 @@ impl Parser {
                         );
                     }
 
-                    // is it a call on the result of an index, e.g. fns[0](arg)?
+                    // call on the result of an index: fns[0](arg)
                     if self.match_type(&[TokenType::LeftParen]) {
                         let mut args = Vec::new();
                         while self.match_type(&[TokenType::Newline]) {}
@@ -290,7 +357,6 @@ impl Parser {
                         return self.parse_postfix(expr, start);
                     }
 
-                    // is it index-assign?
                     if self.match_type(&[TokenType::Assign]) {
                         #[cfg(feature = "debug")]
                         log::debug!("found array item assignment");
@@ -316,7 +382,6 @@ impl Parser {
             }
         }
 
-        // is it array literal?
         if self.match_type(&[TokenType::LeftBracket]) {
             let mut items = Vec::new();
             while self.match_type(&[TokenType::Newline]) {}
@@ -336,7 +401,7 @@ impl Parser {
             let expr = Expression::new(ExpressionKind::ArrayLiteral(items), span);
             return self.parse_postfix(expr, start);
         }
-        // is it integer?
+
         if self.match_type(&[TokenType::NumberLiteral(0)]) {
             #[cfg(feature = "debug")]
             log::debug!("found number");
@@ -347,7 +412,6 @@ impl Parser {
             }
         }
 
-        // is it byte?
         if self.match_type(&[TokenType::ByteLiteral(0)]) {
             let span = self.previous_span();
             if let TokenType::ByteLiteral(b) = self.previous() {
@@ -356,7 +420,6 @@ impl Parser {
             }
         }
 
-        // is it String?
         if self.match_type(&[TokenType::StringLiteral(String::new())]) {
             #[cfg(feature = "debug")]
             log::debug!("found string");
@@ -367,14 +430,13 @@ impl Parser {
             }
         }
 
-        // is it character?
         if matches!(
             self.tokens[self.current].token,
             TokenType::CharacterLiteral(_)
         ) {
             self.advance();
             #[cfg(feature = "debug")]
-            log::debug!("found characher");
+            log::debug!("found character");
             let span = self.previous_span();
             if let TokenType::CharacterLiteral(c) = self.previous() {
                 let expr = Expression::new(ExpressionKind::Character(c), span);
@@ -382,7 +444,6 @@ impl Parser {
             }
         }
 
-        // is it bool?
         if self.match_type(&[TokenType::BoolLiteral(false)]) {
             let span = self.previous_span();
             if let TokenType::BoolLiteral(b) = self.previous() {
@@ -391,7 +452,6 @@ impl Parser {
             }
         }
 
-        // is it float??
         if self.match_type(&[TokenType::FloatLiteral(0.0)]) {
             #[cfg(feature = "debug")]
             log::debug!("oh no found float");
@@ -402,14 +462,12 @@ impl Parser {
             }
         }
 
-        // is it null?
         if self.match_type(&[TokenType::Null]) {
             let span = self.previous_span();
             let expr = Expression::new(ExpressionKind::Null, span);
             return self.parse_postfix(expr, start);
         }
 
-        // is it (Expression)?
         if self.match_type(&[TokenType::LeftParen]) {
             #[cfg(feature = "debug")]
             log::debug!("found group start");
@@ -420,7 +478,6 @@ impl Parser {
             return self.parse_postfix(expr, start);
         }
 
-        // is it lambda?
         if self.match_type(&[TokenType::Fn]) {
             let lambda_start = self.previous_span();
             self.match_type(&[TokenType::LeftParen]);
@@ -467,6 +524,18 @@ impl Parser {
         Err(self.err("expected expression", self.peek_span()))
     }
 
+    /// Parses zero or more postfix method-call chains on `expr`.
+    ///
+    /// After any primary or sub-expression is built, this function consumes
+    /// repeated `.method(args)` suffixes, producing a left-associative chain of
+    /// [`ExpressionKind::MethodCall`] nodes. Method names may themselves be
+    /// namespaced (`obj.module::method()`).
+    ///
+    /// Returns `expr` unchanged when the next token is not `.`.
+    ///
+    /// # Errors
+    /// Returns an error if `.` is not followed by a valid identifier, or if the
+    /// argument list is not opened with `(`.
     pub fn parse_postfix(
         &mut self,
         mut expr: Expression,
@@ -474,7 +543,6 @@ impl Parser {
     ) -> Result<Expression, Error> {
         loop {
             if self.match_type(&[TokenType::Dot]) {
-                // expect method name
                 if !self.match_type(&[TokenType::Identifier(String::new())]) {
                     return Err(self.err("expected method name after '.'", self.peek_span()));
                 }
@@ -484,7 +552,6 @@ impl Parser {
                     return Err(self.err("expected method name after '.'", self.peek_span()));
                 };
 
-                // construct the path
                 let mut method = vec![first];
                 while self.match_type(&[TokenType::ColonColon]) {
                     if !self.match_type(&[TokenType::Identifier(String::new())]) {
@@ -497,7 +564,6 @@ impl Parser {
                     }
                 }
 
-                // expect (args)
                 if !self.match_type(&[TokenType::LeftParen]) {
                     return Err(self.err("expected '(' after method name", self.peek_span()));
                 }

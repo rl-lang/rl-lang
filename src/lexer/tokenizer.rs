@@ -90,7 +90,7 @@ impl Tokenizer {
     /// Returns a [`Span`] covering the current token in character indices.
     ///
     /// Ariadne's `Source::from(&str)` indexes by character, so spans must be
-    /// char-indexed — passing byte offsets misaligns reports for multi-byte characters.
+    /// char-indexed - passing byte offsets misaligns reports for multi-byte characters.
     pub fn current_span(&self) -> Span {
         Span::new(self.start, self.current)
     }

@@ -91,23 +91,24 @@ impl Resolver {
                     .map(|e| self.resolve_expression(e))
                     .collect();
                 if path.len() == 1
-                    && let Some((depth, slot)) = self.resolve_name(&path[0]) {
-                        return Expression::new(
-                            ExpressionKind::CallExpr {
-                                callee: Box::new(Expression::new(
-                                    ExpressionKind::ResolvedIdentifier {
-                                        name: path[0].clone(),
-                                        depth,
-                                        slot,
-                                    },
-                                    span,
-                                )),
-                                args,
-                            },
-                            span,
-                        );
-                    }
-                // stdlib path — leave as Call
+                    && let Some((depth, slot)) = self.resolve_name(&path[0])
+                {
+                    return Expression::new(
+                        ExpressionKind::CallExpr {
+                            callee: Box::new(Expression::new(
+                                ExpressionKind::ResolvedIdentifier {
+                                    name: path[0].clone(),
+                                    depth,
+                                    slot,
+                                },
+                                span,
+                            )),
+                            args,
+                        },
+                        span,
+                    );
+                }
+                // stdlib path - leave as Call
                 ExpressionKind::Call { path, args }
             }
             ExpressionKind::CallExpr { callee, args } => ExpressionKind::CallExpr {

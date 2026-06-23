@@ -1,3 +1,23 @@
+//! `for` loop parser - three distinct syntaxes.
+//!
+//! rl-lang supports three `for` forms:
+//!
+//! ```text
+//! // 1. C-style: initializer, condition, increment inside brackets
+//! for [int i = 0, i < 10, i += 1] { … }
+//!
+//! // 2. Range iteration: integer variable over a literal range
+//! for x in 0..10 { … }
+//!
+//! // 3. Foreach: variable over an array variable or expression
+//! for item in my_array { … }
+//! ```
+//!
+//! The leading token after `for` disambiguates the form:
+//! - `[` -> C-style ([`StatementKind::For`])
+//! - `identifier` -> range or foreach ([`StatementKind::ForRange`] / [`StatementKind::ForEach`])
+//! - anything else -> error
+
 use crate::{
     ast::{
         nodes::ExpressionKind,
@@ -9,8 +29,25 @@ use crate::{
 };
 
 impl Parser {
+    /// Parses a `for` statement in one of its three forms.
+    ///
+    /// Called after `for` has been consumed. Dispatches on the next token:
+    ///
+    /// - **`[`** - C-style loop. Reads `[T i = init, condition, increment]`
+    ///   then a body block. Produces [`StatementKind::For`].
+    ///
+    /// - **identifier** - inspects the token after the identifier name:
+    ///   - followed by `in N..M` or `in [items]` -> [`StatementKind::ForRange`]
+    ///     with a pre-evaluated [`StatementKind::Range`] of `i64` values.
+    ///   - followed by `in <identifier>` -> [`StatementKind::ForEach`], iterating
+    ///     over an array expression at runtime.
+    ///
+    /// # Errors
+    /// Returns an error for invalid range elements (non-integer), missing
+    /// commas in C-style headers, or unrecognised `for` syntax.
     pub fn parse_for(&mut self, start: crate::utils::span::Span) -> Result<Statement, Error> {
         if matches!(self.peek(), TokenType::LeftBracket) {
+            // C-style: for [T i = init, cond, incr] { … }
             self.advance();
             let init_start = self.peek_span();
             let initializer = Box::new(self.parse_variable_declartion(init_start)?);
@@ -31,6 +68,7 @@ impl Parser {
                 span,
             ))
         } else if matches!(self.peek(), TokenType::Identifier(_)) {
+            // range or foreach: for <ident> in …
             let ident_expr = self.parse_expression()?;
             let variable_name = match ident_expr.kind {
                 ExpressionKind::Identifier(name) => name,
@@ -41,6 +79,7 @@ impl Parser {
             let range = if (matches!(self.peek(), TokenType::NumberLiteral(_))
                 || (matches!(self.peek(), TokenType::ByteLiteral(_))))
             {
+                // literal range: N..M  (integers or bytes, evaluated at parse time)
                 let start_expr = self.parse_expression()?;
                 let range_start = match start_expr.kind {
                     ExpressionKind::Integer(i) => i,
@@ -58,6 +97,7 @@ impl Parser {
                 let span = start.join(self.previous_span());
                 Box::new(Statement::new(StatementKind::Range(range_vec), span))
             } else if self.match_type(&[TokenType::LeftBracket]) {
+                // inline array literal: [1, 2, 3] (integers only, evaluated at parse time)
                 let mut items = Vec::new();
                 while self.peek() != TokenType::RightBracket {
                     let value = self.parse_expression()?;
@@ -82,6 +122,7 @@ impl Parser {
                 Box::new(Statement::new(StatementKind::Range(iterable_list), span))
             } else {
                 if matches!(self.peek(), TokenType::Identifier(_)) {
+                    // foreach: for item in some_array_var_or_expr
                     let iterable_expression = self.parse_expression()?;
                     let body = self.parse_block()?;
                     let span = start.join(self.previous_span());
