@@ -52,4 +52,66 @@ impl Resolver {
             _ => {}
         }
     }
+
+    pub fn reslove_expression(&mut self, expression: Expression) -> Expression {
+        let span = expression.span;
+        let kind = match expression.kind {
+            ExpressionKind::Identifier(name) => {
+                let (depth, slot) = self
+                    .resolve_name(&name)
+                    .expect(&format!("undefined variable '{}'", name));
+                ExpressionKind::ResolvedIdentifier { name, depth, slot }
+            }
+
+            ExpressionKind::Assign { name, value } => {
+                let (depth, slot) = self
+                    .resolve_name(&name)
+                    .expect(&format!("undefined variable '{}'", name));
+                ExpressionKind::ResolvedAssign {
+                    name,
+                    depth,
+                    slot,
+                    value,
+                }
+            }
+
+            ExpressionKind::Lambda {
+                params,
+                return_type,
+                body,
+            } => {
+                let captured_slots = self.collect_captures(&params, &body);
+                self.push_scope();
+                for p in &params {
+                    self.declare(p.param_name.clone());
+                }
+                let body = self.resolve_statements(body);
+                self.pop_scope();
+                ExpressionKind::ResolvedLambda {
+                    params,
+                    return_type,
+                    body,
+                    captured_slots,
+                }
+            }
+
+            ExpressionKind::Binary {
+                left,
+                operator,
+                right,
+            } => ExpressionKind::Binary {
+                left: Box::new(self.reslove_expression(*left)),
+                operator,
+                right: Box::new(self.reslove_expression(*right)),
+            },
+            ExpressionKind::Unary { operator, operand } => ExpressionKind::Unary {
+                operator,
+                operand: Box::new(self.reslove_expression(*operand)),
+            },
+
+            other => other,
+        };
+
+        Expression::new(kind, span)
+    }
 }
