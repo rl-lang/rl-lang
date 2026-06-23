@@ -1,3 +1,17 @@
+//! CLI entry point for the `rl` command.
+//!
+//! Parses subcommands via [`clap`] and dispatches to the appropriate pipeline
+//! functions or subsystems.
+//!
+//! | Subcommand | Action |
+//! |---|---|
+//! | `run <file>` | lex -> parse -> eval a `.rl` file |
+//! | `dev` | read `rl.toml`, lex -> parse -> eval the project entry |
+//! | `check <file>` | lex -> parse -> type-check, report errors |
+//! | `new <name>` | scaffold a new project directory |
+//! | `docs [topic]` | print stdlib / concept / tutorial reference |
+//! | `repl` | start the interactive TUI REPL (`repl_tui` feature) |
+//! | `lsp` | start the LSP server over stdio (`lsp` feature) |
 use clap::{Parser, Subcommand};
 use rl_lang::docs;
 use rl_lang::tooling::new::create_project;
