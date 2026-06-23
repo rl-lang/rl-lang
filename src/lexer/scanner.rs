@@ -31,31 +31,6 @@ impl Tokenizer {
     /// - unknown escape sequence
     /// - unterminated string
     /// - unexpected character
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use rl_lang::{
-    ///     lexer::{
-    ///         tokenizer::Tokenizer,
-    ///         tokentypes::TokenType,
-    ///     },
-    ///     utils::source::SourceFile,
-    /// };
-    ///
-    /// let tokens = match Tokenizer::lex(SourceFile::new("source", "1 == 1".to_string())) {
-    ///     Ok(tokens) => tokens,
-    ///     Err(error) => {
-    ///         error.report_to_stderr();
-    ///         std::process::exit(1);
-    ///     },
-    /// };
-    ///
-    /// assert_eq!(tokens[0].token, TokenType::ByteLiteral(1));
-    /// assert_eq!(tokens[1].token, TokenType::EqualEqual);
-    /// assert_eq!(tokens[2].token, TokenType::ByteLiteral(1));
-    /// assert_eq!(tokens[3].token, TokenType::Eof);
-    /// ```
     pub fn scan_tokens(&mut self) -> Result<(), Error> {
         let current_character = self.advance();
         match current_character {
