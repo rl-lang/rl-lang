@@ -319,7 +319,7 @@ impl Evaluator {
 
                 self.source_file = previous_source;
 
-                // ImportFileNamed can't filter by name anymore without a name→slot map
+                // ImportFileNamed can't filter by name anymore without a name->slot map
                 // For now merge all exported slots - named filtering requires ScopeMap
                 let _ = names; // TODO: filter by name once ScopeMap is threaded through
                 let no_scope_err = self.err("no active scope", statement.span);
