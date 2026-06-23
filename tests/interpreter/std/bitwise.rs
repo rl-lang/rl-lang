@@ -53,3 +53,74 @@ fn bit_not_int() {
 
     assert_eq!(evaluator.get_value_raw("x"), Some(Value::Integer(!0)));
 }
+
+#[test]
+fn bit_shift_left_int() {
+    let evaluator = eval_program(
+        "
+        get bit_shift_left from std::bitwise
+        dec int x = bit_shift_left(5, 1)
+        ",
+    )
+    .unwrap();
+
+    assert_eq!(evaluator.get_value_raw("x"), Some(Value::Integer(10)));
+}
+
+#[test]
+fn bit_shift_right_int() {
+    let evaluator = eval_program(
+        "
+        get bit_shift_right from std::bitwise
+        dec int x = bit_shift_right(10, 1)
+        ",
+    )
+    .unwrap();
+
+    assert_eq!(evaluator.get_value_raw("x"), Some(Value::Integer(5)));
+}
+
+#[test]
+fn count_bits_int() {
+    let evaluator = eval_program(
+        "
+        get count_bits from std::bitwise
+        dec int x = count_bits(7)
+        ",
+    )
+    .unwrap();
+
+    assert_eq!(evaluator.get_value_raw("x"), Some(Value::Integer(3)));
+}
+
+#[test]
+fn leading_zeros_int() {
+    let evaluator = eval_program(
+        "
+        get leading_zeros from std::bitwise
+        dec int x = leading_zeros(8)
+        ",
+    )
+    .unwrap();
+
+    assert_eq!(
+        evaluator.get_value_raw("x"),
+        Some(Value::Integer(8i64.leading_zeros() as i64))
+    );
+}
+
+#[test]
+fn trailing_zeros_int() {
+    let evaluator = eval_program(
+        "
+        get trailing_zeros from std::bitwise
+        dec int x = trailing_zeros(8)
+        ",
+    )
+    .unwrap();
+
+    assert_eq!(
+        evaluator.get_value_raw("x"),
+        Some(Value::Integer(8i64.trailing_zeros() as i64))
+    );
+}
