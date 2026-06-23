@@ -71,6 +71,12 @@ pub enum StatementKind {
         increment: Expression,
         body: Vec<Statement>,
     },
+    ResolvedFor {
+        initializer: Box<Statement>,
+        condition: Expression,
+        increment: Expression,
+        body: Vec<Statement>,
+    },
     ForRange {
         variable: String,
         range: Box<Statement>,

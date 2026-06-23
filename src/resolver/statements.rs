@@ -202,7 +202,7 @@ impl Resolver {
                 let increment = self.resolve_expression(increment);
                 let body = self.resolve_statements(body);
                 self.pop_scope();
-                StatementKind::For {
+                StatementKind::ResolvedFor {
                     initializer,
                     condition,
                     increment,
@@ -211,9 +211,7 @@ impl Resolver {
             }
             StatementKind::While { condition, body } => {
                 let condition = self.resolve_expression(condition);
-                self.push_scope();
                 let body = self.resolve_statements(body);
-                self.pop_scope();
                 StatementKind::While { condition, body }
             }
             StatementKind::Conditional {

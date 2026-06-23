@@ -208,6 +208,51 @@ impl Evaluator {
                 self.pop_scope();
             }
 
+            StatementKind::ResolvedFor {
+                initializer,
+                condition,
+                increment,
+                body,
+            } => {
+                self.evaluate_statement(initializer)?;
+                loop {
+                    let v = self.evaluate(condition)?;
+                    match v {
+                        Value::Bool(true) => {}
+                        Value::Bool(false) => break,
+                        other => {
+                            return Err(self
+                                .err("for condition must be a bool", statement.span)
+                                .with_label(
+                                    condition.span,
+                                    format!("this is {}, expected bool", other.type_name()),
+                                ));
+                        }
+                    }
+
+                    for stmt in body {
+                        self.evaluate_statement(stmt)?;
+                        if self.return_value.is_some() || self.is_breaking || self.is_continuing {
+                            break;
+                        }
+                    }
+
+                    if self.is_breaking {
+                        self.is_breaking = false;
+                        break;
+                    }
+                    if self.is_continuing {
+                        self.is_continuing = false;
+                        self.evaluate(increment)?;
+                        continue;
+                    }
+                    if self.return_value.is_some() {
+                        break;
+                    }
+
+                    self.evaluate(increment)?;
+                }
+            }
             StatementKind::Import { names, path } => {
                 let module_path = path.join("::");
                 let mut module = &self.root_module;
