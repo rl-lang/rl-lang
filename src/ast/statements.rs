@@ -21,8 +21,20 @@ pub enum StatementKind {
         type_annotation: TypeAnnotation,
         value: Expression,
     },
+    ResolvedVariableDeclaration {
+        name: String,
+        slot: usize,
+        type_annotation: TypeAnnotation,
+        value: Expression,
+    },
     ConstantDeclaration {
         name: String,
+        type_annotation: TypeAnnotation,
+        value: Expression,
+    },
+    ResolvedConstantDeclaration {
+        name: String,
+        slot: usize,
         type_annotation: TypeAnnotation,
         value: Expression,
     },
@@ -52,7 +64,19 @@ pub enum StatementKind {
         range: Box<Statement>,
         body: Vec<Statement>,
     },
+    ResolvedForRange {
+        slot: usize,
+        variable: String,
+        range: Box<Statement>,
+        body: Vec<Statement>,
+    },
     ForEach {
+        variable: String,
+        iterable: Expression,
+        body: Vec<Statement>,
+    },
+    ResolvedForEach {
+        slot: usize,
         variable: String,
         iterable: Expression,
         body: Vec<Statement>,
@@ -69,6 +93,14 @@ pub enum StatementKind {
 
     FunctionDeclaration {
         name: String,
+        params: Vec<Param>,
+        return_type: TypeAnnotation,
+        body: Vec<Statement>,
+        is_entry: bool,
+    },
+    ResolvedFunctionDeclaration {
+        name: String,
+        slot: usize,
         params: Vec<Param>,
         return_type: TypeAnnotation,
         body: Vec<Statement>,
