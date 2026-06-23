@@ -15,9 +15,9 @@ pub fn std_leading_zeros(
         ));
     }
 
-    match args.into_iter().next().unwrap() {
-        Value::Integer(x) => Ok(Value::Integer(x.leading_zeros() as i64)),
-        Value::Byte(x) => Ok(Value::Integer(x.leading_zeros() as i64)),
-        _ => Err(eval.err("leading_zeros() expects an int or byte".to_string(), span)),
+    match args.into_iter().next().unwrap_or(Value::Null) {
+        Value::Byte(x) => Ok(Value::Byte(u8::leading_zeros(x) as u8)),
+        Value::Integer(x) => Ok(Value::Integer(i64::leading_zeros(x) as i64)),
+        _ => Err(eval.err("leading_zeros() expects a byte or an int".to_string(), span)),
     }
 }

@@ -12,12 +12,14 @@ pub fn std_bit_or(eval: &mut Evaluator, args: Vec<Value>, span: Span) -> Result<
     }
 
     let mut iter = args.into_iter();
-    let a = iter.next().unwrap();
-    let b = iter.next().unwrap();
+    let a = iter.next().unwrap_or(Value::Null);
+    let b = iter.next().unwrap_or(Value::Null);
 
     match (a, b) {
         (Value::Byte(x), Value::Byte(y)) => Ok(Value::Byte(x | y)),
         (Value::Integer(x), Value::Integer(y)) => Ok(Value::Integer(x | y)),
+        (Value::Byte(x), Value::Integer(y)) => Ok(Value::Integer(x as i64 | y)),
+        (Value::Integer(x), Value::Byte(y)) => Ok(Value::Integer(x | y as i64)),
         _ => Err(eval.err(
             "bit_or() expects byte or integer arguments".to_string(),
             span,
