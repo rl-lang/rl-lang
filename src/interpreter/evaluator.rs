@@ -96,6 +96,7 @@ impl Evaluator {
             Module::new("std")
                 .with_module(stdlib::math::module())
                 .with_module(stdlib::io::module())
+                .with_module(stdlib::bitwise::module())
                 .with_module(stdlib::string::module())
                 .with_module(stdlib::types::module())
                 .with_module(stdlib::array::module())
@@ -521,6 +522,7 @@ impl Evaluator {
             let candidates = stdlib::math::KEYWORDS
                 .iter()
                 .chain(stdlib::math::constants::KEYWORDS)
+                .chain(stdlib::bitwise::KEYWORDS)
                 .chain(stdlib::io::KEYWORDS)
                 .chain(stdlib::string::KEYWORDS)
                 .chain(stdlib::types::KEYWORDS)

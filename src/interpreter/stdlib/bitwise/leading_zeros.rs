@@ -1,0 +1,23 @@
+use crate::{
+    interpreter::{evaluator::Evaluator, values::Value},
+    utils::{errors::Error, span::Span},
+};
+
+pub fn std_leading_zeros(
+    eval: &mut Evaluator,
+    args: Vec<Value>,
+    span: Span,
+) -> Result<Value, Error> {
+    if args.len() != 1 {
+        return Err(eval.err(
+            format!("leading_zeros() expects 1 argument, got {}", args.len()),
+            span,
+        ));
+    }
+
+    match args.into_iter().next().unwrap() {
+        Value::Integer(x) => Ok(Value::Integer(x.leading_zeros() as i64)),
+        Value::Byte(x) => Ok(Value::Integer(x.leading_zeros() as i64)),
+        _ => Err(eval.err("leading_zeros() expects an int or byte".to_string(), span)),
+    }
+}

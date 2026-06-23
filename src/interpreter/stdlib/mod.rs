@@ -1,4 +1,6 @@
 pub mod array;
+
+pub mod bitwise;
 pub mod fs;
 pub mod io;
 pub mod len;
