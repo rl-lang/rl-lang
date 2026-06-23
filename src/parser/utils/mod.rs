@@ -1,3 +1,4 @@
+mod parse_type;
 use crate::{
     ast::statements::TypeAnnotation,
     lexer::tokentypes::TokenType,
@@ -6,12 +7,16 @@ use crate::{
 };
 
 impl Parser {
-    /// span of the token currently being looked at (peek position).
+    /// Returns the [`Span`] of the token at the current read head without consuming it.
     pub fn peek_span(&self) -> Span {
         self.tokens[self.current].span
     }
 
-    /// span of the most recently consumed token.
+    /// Returns the [`Span`] of the most recently consumed token.
+    ///
+    /// Returns the span of `tokens[0]` when called before any [`advance`].
+    ///
+    /// [`advance`]: Parser::advance
     pub fn previous_span(&self) -> Span {
         if self.current == 0 {
             self.tokens[0].span
@@ -20,9 +25,8 @@ impl Parser {
         }
     }
 
-    /// checks the current token if it is end of file ([`TokenType::Eof`]) or not
-    ///
-    /// if Eof -> true which indicates the last token
+    /// Returns `true` when the read head sits on [`TokenType::Eof`], indicating
+    /// the end of the token stream.
     pub fn is_at_end(&self) -> bool {
         #[cfg(feature = "debug")]
         if matches!(self.peek(), TokenType::Eof) {
@@ -31,7 +35,7 @@ impl Parser {
         matches!(self.peek(), TokenType::Eof)
     }
 
-    /// increases the current token been parsed counter
+    /// Advances the read head by one token, unless already at [`TokenType::Eof`].
     pub fn advance(&mut self) {
         if !self.is_at_end() {
             self.current += 1;
@@ -40,7 +44,7 @@ impl Parser {
         }
     }
 
-    /// returns [`TokenType`] of current token without consuming it
+    /// Returns the [`TokenType`] at the current read head without consuming it.
     pub fn peek(&self) -> TokenType {
         #[cfg(feature = "debug")]
         log::debug!(
@@ -50,7 +54,10 @@ impl Parser {
         self.tokens[self.current].token.clone()
     }
 
-    /// returns the previous [`TokenType`] that got consumed
+    /// Returns the [`TokenType`] of the most recently consumed token.
+    ///
+    /// # Panics
+    /// Panics if called before any token has been consumed (`current == 0`).
     pub fn previous(&self) -> TokenType {
         #[cfg(feature = "debug")]
         log::debug!(
@@ -60,10 +67,11 @@ impl Parser {
         self.tokens[self.current - 1].token.clone()
     }
 
-    /// checks given [`TokenType`] aginst the current token via `self.peek()`
+    /// Returns `true` if the token at the read head matches `token_type`.
     ///
-    /// if matches returns true else false
-    /// doesn't consume the token
+    /// Literal-carrying variants (`NumberLiteral`, `StringLiteral`, etc.) are
+    /// matched by variant tag only - the inner value is ignored. Does **not**
+    /// consume the token.
     pub fn check(&self, token_type: &TokenType) -> bool {
         let current = self.peek();
         match (token_type, &current) {
@@ -78,10 +86,13 @@ impl Parser {
         }
     }
 
-    /// given a list of [`TokenType`] it match the current token aginst it
+    /// Tries each variant in `types` against the current token via [`check`].
     ///
-    /// if the token matches the one of the [`TokenType`]s in the list it returns
-    /// true while consuming the token
+    /// On the first match the token is consumed via [`advance`] and `true` is
+    /// returned. Returns `false` without advancing if nothing matches.
+    ///
+    /// [`check`]: Parser::check
+    /// [`advance`]: Parser::advance
     pub fn match_type(&mut self, types: &[TokenType]) -> bool {
         for token_type in types {
             if self.check(token_type) {
@@ -96,6 +107,17 @@ impl Parser {
         false
     }
 
+    /// Parses a single type keyword (or `array[T]`) as a function/lambda parameter
+    /// type annotation.
+    ///
+    /// Called when a type is expected in a parameter list position. For the
+    /// `array` keyword the inner element type is parsed recursively via
+    /// [`nested_array_type`].
+    ///
+    /// # Errors
+    /// Returns an error if the current token is not a recognised type keyword.
+    ///
+    /// [`nested_array_type`]: Parser::nested_array_type
     pub fn parse_param_type(&mut self) -> Result<TypeAnnotation, Error> {
         if matches!(self.peek(), TokenType::Array) {
             self.advance();
@@ -134,6 +156,16 @@ impl Parser {
         }
     }
 
+    /// Parses the `[T]` suffix of an `array[T]` type annotation, returning a
+    /// boxed [`TypeAnnotation::Array`].
+    ///
+    /// Expects the `array` keyword to have already been consumed. Reads
+    /// `[`, the inner element type (via [`parse_param_type`]), then `]`.
+    ///
+    /// # Errors
+    /// Returns an error if `[` or `]` are missing, or if the inner type is invalid.
+    ///
+    /// [`parse_param_type`]: Parser::parse_param_type
     pub fn nested_array_type(&mut self) -> Result<Box<TypeAnnotation>, Error> {
         match self.peek() {
             TokenType::LeftBracket => {
