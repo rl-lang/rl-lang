@@ -1,3 +1,18 @@
+//! Pipeline driver functions.
+//!
+//! Thin wrappers around each pipeline stage that handle errors uniformly:
+//! print to stderr and exit with code 1. Used by both `main.rs` and any
+//! other binary entry points that need to run the full pipeline without
+//! boilerplate error handling at the call site.
+//!
+//! | Function | Stage |
+//! |---|---|
+//! | [`lexing_loop`] | source -> [`Vec<Token>`] |
+//! | [`parsing_loop`] | tokens -> [`Vec<Statement>`] |
+//! | [`eval_loop`] | statements -> execution (`eval` feature only) |
+//!
+//! [`Vec<Token>`]: crate::lexer::tokentypes::Token
+//! [`Vec<Statement>`]: crate::ast::statements::Statement
 #[cfg(feature = "debug")]
 use log::info;
 
@@ -11,6 +26,7 @@ use super::{
     utils::source::SourceFile,
 };
 
+/// Lexes `source` into a token stream, or prints the error and exits.
 pub fn lexing_loop(source: SourceFile) -> Vec<Token> {
     #[cfg(feature = "debug")]
     info!("lexing the source file...");
@@ -23,6 +39,7 @@ pub fn lexing_loop(source: SourceFile) -> Vec<Token> {
     }
 }
 
+/// Parses `tokens` into an AST statement list, or prints the error and exits.
 pub fn parsing_loop(source: SourceFile, tokens: Vec<Token>) -> Vec<Statement> {
     #[cfg(feature = "debug")]
     info!("parsing the tokens into ast tree...");
@@ -35,6 +52,12 @@ pub fn parsing_loop(source: SourceFile, tokens: Vec<Token>) -> Vec<Statement> {
     }
 }
 
+/// Resolves and evaluates `statements`, or prints the error and exits.
+///
+/// Only available with the `eval` feature. Constructs a fresh [`Evaluator`]
+/// with the stdlib loaded, runs the [`Resolver`] pass, then evaluates the program.
+///
+/// [`Resolver`]: crate::resolver
 #[cfg(feature = "eval")]
 pub fn eval_loop(source: SourceFile, statements: Vec<Statement>) {
     #[cfg(feature = "debug")]
