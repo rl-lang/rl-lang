@@ -1,3 +1,14 @@
+//! Constant declaration parser (`CONST`).
+//!
+//! Handles the `CONST` keyword, which introduces an immutable binding. Mirrors
+//! the variable declaration syntax but produces `C*` type annotation variants
+//! and [`StatementKind::ConstantDeclaration`] / [`StatementKind::ConstantArray`].
+//!
+//! ```text
+//! CONST int X = 42
+//! CONST array[int] XS = [1, 2, 3]
+//! ```
+
 use crate::{
     ast::statements::{Statement, StatementKind, TypeAnnotation},
     lexer::tokentypes::TokenType,
@@ -6,6 +17,25 @@ use crate::{
 };
 
 impl Parser {
+    /// Parses a `CONST` constant declaration.
+    ///
+    /// Called after `CONST` has been consumed. Handles two forms:
+    ///
+    /// - **Constant array** - `CONST array[T] NAME = [items]` or
+    ///   `CONST array[T] NAME = expr` - detected by the `array` keyword followed
+    ///   by `[`. Produces [`StatementKind::ConstantArray`] for inline literals or
+    ///   [`StatementKind::ConstantDeclaration`] with `TypeAnnotation::CArray` for
+    ///   expression initialisers.
+    ///
+    /// - **Scalar constant** - `const T NAME = expr` - produces
+    ///   [`StatementKind::ConstantDeclaration`] with the corresponding `C*`
+    ///   annotation via [`parse_type`]`(false)`.
+    ///
+    /// # Errors
+    /// Returns an error if the type, name, `=`, or initialiser expression is
+    /// missing or malformed.
+    ///
+    /// [`parse_type`]: Parser::parse_type
     pub fn parse_const_declartion(&mut self, start: Span) -> Result<Statement, Error> {
         #[cfg(feature = "debug")]
         log::debug!("{:?}", self.peek());

@@ -1,3 +1,14 @@
+//! Variable declaration parser (`dec`).
+//!
+//! Handles the `dec` keyword, which introduces a mutable binding. Both scalar
+//! and array forms are supported:
+//!
+//! ```text
+//! dec int x = 42
+//! dec array[int] xs = [1, 2, 3]
+//! dec array[int] xs = some_array_expr
+//! ```
+
 use crate::{
     ast::statements::{Statement, StatementKind, TypeAnnotation},
     lexer::tokentypes::TokenType,
@@ -6,6 +17,22 @@ use crate::{
 };
 
 impl Parser {
+    /// Parses a `dec` variable declaration.
+    ///
+    /// Called after `dec` has been consumed. Handles two forms:
+    ///
+    /// - **Array declaration** - `dec array[T] name = [items]` or
+    ///   `dec array[T] name = expr` - detected by the `array` keyword followed
+    ///   by `[`. Produces [`StatementKind::Array`] for inline literals or
+    ///   [`StatementKind::VariableDeclaration`] with `TypeAnnotation::Array` for
+    ///   expression initialisers.
+    ///
+    /// - **Scalar declaration** - `dec T name = expr` - produces
+    ///   [`StatementKind::VariableDeclaration`].
+    ///
+    /// # Errors
+    /// Returns an error if the type, name, `=`, or initialiser expression is
+    /// missing or malformed.
     pub fn parse_variable_declartion(&mut self, start: Span) -> Result<Statement, Error> {
         #[cfg(feature = "debug")]
         log::debug!("{:?}", self.peek());
@@ -97,90 +124,5 @@ impl Parser {
             },
             span,
         ))
-    }
-}
-
-// should separate later
-impl Parser {
-    pub fn parse_type(&mut self, is_mut: bool) -> Result<TypeAnnotation, Error> {
-        let span = self.peek_span();
-        Ok(match is_mut {
-            true => match self.peek() {
-                TokenType::Int => {
-                    self.advance();
-                    TypeAnnotation::Int
-                }
-                TokenType::Float => {
-                    self.advance();
-                    TypeAnnotation::Float
-                }
-                TokenType::Bool => {
-                    self.advance();
-                    TypeAnnotation::Bool
-                }
-                TokenType::String => {
-                    self.advance();
-                    TypeAnnotation::String
-                }
-                TokenType::Byte => {
-                    self.advance();
-                    TypeAnnotation::Byte
-                }
-                TokenType::Char => {
-                    self.advance();
-                    TypeAnnotation::Char
-                }
-                TokenType::Fn => {
-                    self.advance();
-                    TypeAnnotation::Fn
-                }
-                TokenType::Array => {
-                    self.advance();
-                    self.match_type(&[TokenType::LeftBracket]);
-                    let inner = self.parse_type(true)?;
-                    self.match_type(&[TokenType::RightBracket]);
-                    TypeAnnotation::Array(Box::new(inner))
-                }
-                _ => return Err(self.err("expected a type", span)),
-            },
-            false => match self.peek() {
-                TokenType::Int => {
-                    self.advance();
-                    TypeAnnotation::CInt
-                }
-                TokenType::Float => {
-                    self.advance();
-                    TypeAnnotation::CFloat
-                }
-                TokenType::Bool => {
-                    self.advance();
-                    TypeAnnotation::CBool
-                }
-                TokenType::String => {
-                    self.advance();
-                    TypeAnnotation::CString
-                }
-                TokenType::Byte => {
-                    self.advance();
-                    TypeAnnotation::CByte
-                }
-                TokenType::Char => {
-                    self.advance();
-                    TypeAnnotation::CChar
-                }
-                TokenType::Fn => {
-                    self.advance();
-                    TypeAnnotation::Fn
-                }
-                TokenType::Array => {
-                    self.advance();
-                    self.match_type(&[TokenType::LeftBracket]);
-                    let inner = self.parse_type(false)?;
-                    self.match_type(&[TokenType::RightBracket]);
-                    TypeAnnotation::CArray(Box::new(inner))
-                }
-                _ => return Err(self.err("expected a type", span)),
-            },
-        })
     }
 }
