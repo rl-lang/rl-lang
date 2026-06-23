@@ -436,7 +436,7 @@ impl Evaluator {
             self.environment = captured_env;
             self.push_scope();
 
-            for (slot, (param, arg)) in params.iter().zip(args).enumerate() {
+            for (slot, (_, arg)) in params.iter().zip(args).enumerate() {
                 let arg_type = Self::infer_type(&arg, false);
                 self.insert_value(slot, arg, arg_type, span)?;
             }

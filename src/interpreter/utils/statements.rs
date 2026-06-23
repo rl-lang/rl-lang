@@ -6,6 +6,7 @@ use crate::{
     interpreter::{evaluator::Evaluator, values::Value},
     lexer::tokenizer::Tokenizer,
     parser::parser_logic::Parser,
+    resolver::Resolver,
     utils::{errors::Error, source::SourceFile},
 };
 
@@ -13,12 +14,13 @@ impl Evaluator {
     pub fn evaluate_statement(&mut self, statement: &Statement) -> Result<(), Error> {
         match &statement.kind {
             StatementKind::ResolvedVariableDeclaration {
-                name,
                 slot,
                 value,
                 type_annotation,
+                ..
             } => {
                 let val = self.evaluate(value)?;
+
                 let val = match (type_annotation, &val) {
                     (TypeAnnotation::Int | TypeAnnotation::CInt, Value::Byte(b)) => {
                         Value::Integer(*b as i64)
@@ -42,10 +44,10 @@ impl Evaluator {
             }
 
             StatementKind::ResolvedConstantDeclaration {
-                name,
                 slot,
                 value,
                 type_annotation,
+                ..
             } => {
                 let val = self.evaluate(value)?;
                 let val = match (type_annotation, &val) {
@@ -68,6 +70,52 @@ impl Evaluator {
                     ));
                 }
                 self.insert_const(*slot, val, type_annotation.clone(), statement.span)?;
+            }
+
+            StatementKind::ResolvedArray {
+                slot,
+                value,
+                type_annotation,
+                ..
+            } => {
+                let val = self.evaluate(value)?;
+                let val = match val {
+                    Value::Values { items, .. } => Value::Values {
+                        items_type: type_annotation.clone(),
+                        items,
+                    },
+                    other => {
+                        return Err(self.err(
+                            format!("expected array value found {}", other.type_name()),
+                            statement.span,
+                        ));
+                    }
+                };
+                let declared_type = TypeAnnotation::Array(Box::new(type_annotation.clone()));
+                self.insert_value(*slot, val, declared_type, statement.span)?;
+            }
+
+            StatementKind::ResolvedConstantArray {
+                slot,
+                value,
+                type_annotation,
+                ..
+            } => {
+                let val = self.evaluate(value)?;
+                let val = match val {
+                    Value::Values { items, .. } => Value::Values {
+                        items_type: type_annotation.clone(),
+                        items,
+                    },
+                    other => {
+                        return Err(self.err(
+                            format!("expected array value found {}", other.type_name()),
+                            statement.span,
+                        ));
+                    }
+                };
+                let declared_type = TypeAnnotation::CArray(Box::new(type_annotation.clone()));
+                self.insert_value(*slot, val, declared_type, statement.span)?;
             }
 
             StatementKind::Expression(expr) => {
@@ -197,7 +245,8 @@ impl Evaluator {
                     SourceFile::new(file_path.to_string_lossy().as_ref(), source_text);
                 let tokens = Tokenizer::lex(source_file.clone())?;
                 let stmts = Parser::parse(tokens, source_file.clone())?;
-                // Save current source file and set the imported file as current
+                let stmts = Resolver::new().resolve_statements(stmts);
+
                 let previous_source = self.source_file.clone();
                 self.source_file = Some(source_file);
                 self.push_scope();
@@ -205,27 +254,14 @@ impl Evaluator {
                     self.evaluate_statement(stmt)?;
                 }
 
-                let exported: Vec<_> = self
-                    .environment
-                    .last()
-                    .ok_or_else(|| self.err("no active scope", statement.span))?
-                    .borrow()
-                    .iter()
-                    .map(|(k, v)| (k.clone(), v.clone()))
-                    .collect();
+                let exported = self.environment.last().cloned().unwrap_or_default();
                 self.pop_scope();
-
-                // Restore previous source file
                 self.source_file = previous_source;
 
+                // merge exported slots into parent scope
                 let no_scope_err = self.err("no active scope", statement.span);
-                for (name, item) in exported {
-                    self.environment
-                        .last_mut()
-                        .ok_or_else(|| no_scope_err.clone())?
-                        .borrow_mut()
-                        .insert(name, item);
-                }
+                let frame = self.environment.last_mut().ok_or(no_scope_err)?;
+                frame.extend(exported);
             }
             // require adding resolved version in resolver
             StatementKind::ImportFileNamed { path, names } => {
@@ -249,51 +285,29 @@ impl Evaluator {
                     SourceFile::new(file_path.to_string_lossy().as_ref(), source_text);
                 let tokens = Tokenizer::lex(source_file.clone())?;
                 let stmts = Parser::parse(tokens, source_file.clone())?;
+                let stmts = Resolver::new().resolve_statements(stmts);
 
-                // Save current source file and set the imported file as current
                 let previous_source = self.source_file.clone();
                 self.source_file = Some(source_file);
-
                 self.push_scope();
                 for stmt in &stmts {
                     self.evaluate_statement(stmt)?;
                 }
-                let exported: Vec<_> = self
-                    .environment
-                    .last()
-                    .ok_or_else(|| self.err("no active scope", statement.span))?
-                    .borrow()
-                    .iter()
-                    .map(|(k, v)| (k.clone(), v.clone()))
-                    .collect();
-                self.pop_scope();
 
-                // Restore previous source file
+                let exported = self.environment.last().cloned().unwrap_or_default();
+                self.pop_scope();
                 self.source_file = previous_source;
-                if let Some(not_found) = names
-                    .iter()
-                    .find(|n| !exported.iter().any(|(k, _)| k == *n))
-                {
-                    return Err(self.err(
-                        format!("'{}' is not defined in '{}'", not_found, import_name),
-                        statement.span,
-                    ));
-                }
+
+                // ImportFileNamed can't filter by name anymore without a name→slot map
+                // For now merge all exported slots — named filtering requires ScopeMap
+                let _ = names; // TODO: filter by name once ScopeMap is threaded through
                 let no_scope_err = self.err("no active scope", statement.span);
-                for (name, item) in exported {
-                    self.environment
-                        .last_mut()
-                        .ok_or_else(|| no_scope_err.clone())?
-                        .borrow_mut()
-                        .insert(name, item);
-                }
+                let frame = self.environment.last_mut().ok_or(no_scope_err)?;
+                frame.extend(exported);
             }
 
             StatementKind::ResolvedForRange {
-                slot,
-                variable,
-                range,
-                body,
+                slot, range, body, ..
             } => {
                 let items = match &range.kind {
                     StatementKind::Range(items) => items.clone(),
@@ -312,7 +326,14 @@ impl Evaluator {
                         crate::ast::statements::TypeAnnotation::Int,
                         statement.span,
                     )?;
-                    self.evaluate_block(body)?;
+
+                    for statement in body {
+                        self.evaluate_statement(statement)?;
+                        if self.return_value.is_some() || self.is_breaking || self.is_continuing {
+                            break;
+                        }
+                    }
+
                     self.pop_scope();
 
                     if self.is_breaking {
@@ -332,9 +353,9 @@ impl Evaluator {
 
             StatementKind::ResolvedForEach {
                 slot,
-                variable,
                 iterable,
                 body,
+                ..
             } => {
                 let arr = self.evaluate(iterable)?;
                 let items = match arr {
@@ -386,10 +407,20 @@ impl Evaluator {
                                 ));
                         }
                     }
-                    self.evaluate_block(body)?;
+                    for statement in body {
+                        self.evaluate_statement(statement)?;
+                        if self.return_value.is_some() || self.is_breaking || self.is_continuing {
+                            break;
+                        }
+                    }
                 }
                 _ => {
-                    self.evaluate_block(body)?;
+                    for statement in body {
+                        self.evaluate_statement(statement)?;
+                        if self.return_value.is_some() || self.is_breaking || self.is_continuing {
+                            break;
+                        }
+                    }
                 }
             },
 
@@ -522,10 +553,12 @@ impl Evaluator {
                 | StatementKind::Import { .. }
                 | StatementKind::ImportFile { .. }
                 | StatementKind::ImportFileNamed { .. }
-                | StatementKind::VariableDeclaration { .. }
-                | StatementKind::ConstantDeclaration { .. }
-                | StatementKind::Array { .. }
-                | StatementKind::ConstantArray { .. } => self.evaluate_statement(statement)?,
+                | StatementKind::ResolvedVariableDeclaration { .. }
+                | StatementKind::ResolvedConstantDeclaration { .. }
+                | StatementKind::ResolvedArray { .. }
+                | StatementKind::ResolvedConstantArray { .. } => {
+                    self.evaluate_statement(statement)?
+                }
                 _ => {}
             }
         }

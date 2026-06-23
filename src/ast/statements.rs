@@ -48,6 +48,18 @@ pub enum StatementKind {
         type_annotation: TypeAnnotation,
         value: Vec<Expression>,
     },
+    ResolvedArray {
+        name: String,
+        slot: usize,
+        type_annotation: TypeAnnotation,
+        value: Expression,
+    },
+    ResolvedConstantArray {
+        name: String,
+        slot: usize,
+        type_annotation: TypeAnnotation,
+        value: Expression,
+    },
     Expression(Expression),
     While {
         condition: Expression,

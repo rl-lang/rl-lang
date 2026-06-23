@@ -98,6 +98,7 @@ impl Resolver {
                     value,
                 }
             }
+            // new arrays variant
             StatementKind::Array {
                 name,
                 type_annotation,
@@ -108,7 +109,7 @@ impl Resolver {
                     .map(|e| self.resolve_expression(e))
                     .collect();
                 let slot = self.declare(name.clone());
-                StatementKind::ResolvedVariableDeclaration {
+                StatementKind::ResolvedArray {
                     name,
                     slot,
                     type_annotation,
@@ -125,7 +126,7 @@ impl Resolver {
                     .map(|e| self.resolve_expression(e))
                     .collect();
                 let slot = self.declare(name.clone());
-                StatementKind::ResolvedConstantDeclaration {
+                StatementKind::ResolvedConstantArray {
                     name,
                     slot,
                     type_annotation,
