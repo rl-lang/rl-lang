@@ -1,11 +1,24 @@
 use crate::lexer::{tokenizer::Tokenizer, tokentypes::TokenType};
 
 impl Tokenizer {
-    /// scans an identifier or keyword starting at the current position
+    /// Scans an identifier or keyword starting at the current position.
     ///
-    /// it consumes underscore and alphanumeric characters
-    /// then checks if the result is reserverd word if not
-    /// it returns TokenType::Identifier instead
+    /// Consumes alphanumeric characters and underscores, then checks if the
+    /// result is a reserved word. If not, emits [`TokenType::Identifier`].
+    ///
+    /// # Reserved Words
+    ///
+    /// | Category       | Keywords                                              |
+    /// |----------------|-------------------------------------------------------|
+    /// | Control flow   | `if`, `else`, `for`, `while`, `return`, `break`, `continue` |
+    /// | Functions      | `fn`                                                  |
+    /// | Imports        | `get`, `from`, `in`                                   |
+    /// | Logical        | `and`, `or`                                           |
+    /// | Types          | `int`, `float`, `bool`, `string`, `byte`, `char`, `arr` |
+    /// | Declarations   | `dec`, `CONST`                                        |
+    /// | Literals       | `true`, `false`, `null`                               |
+    ///
+    /// `CONST` in uppercase in intentional
     pub fn identifier(&mut self) {
         while self.peek().is_alphanumeric() || self.peek() == '_' {
             self.advance();
