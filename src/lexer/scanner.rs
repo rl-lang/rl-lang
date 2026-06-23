@@ -1,3 +1,7 @@
+//! Top-level scan driver.
+//!
+//! Exposes the single entry point that the pipeline calls to turn a source
+//! string into a token stream. Delegates all real work to [`Tokenizer`].
 use crate::lexer::{tokenizer::Tokenizer, tokentypes::TokenType};
 use crate::utils::errors::Error;
 
