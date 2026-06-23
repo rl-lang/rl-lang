@@ -56,23 +56,21 @@ impl Resolver {
     pub fn resolve_expression(&mut self, expression: Expression) -> Expression {
         let span = expression.span;
         let kind = match expression.kind {
-            ExpressionKind::Identifier(name) => {
-                let (depth, slot) = self
-                    .resolve_name(&name)
-                    .expect(&format!("undefined variable '{}'", name));
-                ExpressionKind::ResolvedIdentifier { name, depth, slot }
-            }
+            ExpressionKind::Identifier(name) => match self.resolve_name(&name) {
+                Some((depth, slot)) => ExpressionKind::ResolvedIdentifier { name, depth, slot },
+                None => ExpressionKind::Identifier(name),
+            },
 
             ExpressionKind::Assign { name, value } => {
                 let value = Box::new(self.resolve_expression(*value));
-                let (depth, slot) = self
-                    .resolve_name(&name)
-                    .expect(&format!("undefined variable '{}'", name));
-                ExpressionKind::ResolvedAssign {
-                    name,
-                    depth,
-                    slot,
-                    value,
+                match self.resolve_name(&name) {
+                    Some((depth, slot)) => ExpressionKind::ResolvedAssign {
+                        name,
+                        depth,
+                        slot,
+                        value,
+                    },
+                    None => ExpressionKind::Assign { name, value },
                 }
             }
 
