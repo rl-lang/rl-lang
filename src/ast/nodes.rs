@@ -80,7 +80,7 @@ pub enum ExpressionKind {
         params: Vec<Param>,
         return_type: Option<TypeAnnotation>,
         body: Vec<Statement>,
-        captured_slots: Vec<(usize, usize)>,
+        capture_depth: usize,
     },
     CallExpr {
         callee: Box<Expression>,

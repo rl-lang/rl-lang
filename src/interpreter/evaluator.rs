@@ -389,15 +389,16 @@ impl Evaluator {
                 params,
                 return_type,
                 body,
-                captured_slots,
+                capture_depth,
             } => {
-                let captured_env: Vec<Vec<EnvironmentItem>> = captured_slots
-                    .iter()
-                    .map(|(depth, _)| {
-                        let idx = self.environment.len().saturating_sub(1 + depth);
-                        self.environment.get(idx).cloned().unwrap_or_default()
-                    })
-                    .collect();
+                let total = self.environment.len();
+                let start = if total > *capture_depth {
+                    total - capture_depth
+                } else {
+                    0
+                };
+                let captured_env: Vec<Vec<EnvironmentItem>> = self.environment[start..].to_vec();
+
                 Value::Function {
                     params: params.clone(),
                     body: body.clone(),

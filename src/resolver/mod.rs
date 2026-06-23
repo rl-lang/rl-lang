@@ -1,5 +1,3 @@
-use crate::ast::statements::{Param, Statement};
-
 mod expressions;
 mod statements;
 
@@ -35,14 +33,5 @@ impl Resolver {
             }
         }
         None
-    }
-
-    pub fn collect_captures(&self, params: &[Param], body: &[Statement]) -> Vec<(usize, usize)> {
-        let mut captures = vec![];
-        let param_names: Vec<&str> = params.iter().map(|p| p.param_name.as_str()).collect();
-        self.collect_captures_statements(body, &param_names, &mut captures);
-        captures.sort();
-        captures.dedup();
-        captures
     }
 }
