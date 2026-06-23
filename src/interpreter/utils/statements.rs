@@ -136,7 +136,12 @@ impl Evaluator {
                             ));
                     }
                 }
-                self.evaluate_block(body)?;
+                for statement in body {
+                    self.evaluate_statement(statement)?;
+                    if self.return_value.is_some() || self.is_breaking || self.is_continuing {
+                        break;
+                    }
+                }
 
                 if self.is_breaking {
                     self.is_breaking = false;
@@ -176,7 +181,13 @@ impl Evaluator {
                                 ));
                         }
                     }
-                    self.evaluate_block(body)?;
+
+                    for statement in body {
+                        self.evaluate_statement(statement)?;
+                        if self.return_value.is_some() || self.is_breaking || self.is_continuing {
+                            break;
+                        }
+                    }
 
                     if self.is_breaking {
                         self.is_breaking = false;
@@ -374,7 +385,12 @@ impl Evaluator {
                     self.push_scope();
                     self.insert_value(*slot, item, item_type, statement.span)?;
 
-                    self.evaluate_block(body)?;
+                    for statement in body {
+                        self.evaluate_statement(statement)?;
+                        if self.return_value.is_some() || self.is_breaking || self.is_continuing {
+                            break;
+                        }
+                    }
                     self.pop_scope();
 
                     if self.is_breaking {

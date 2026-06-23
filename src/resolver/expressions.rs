@@ -134,14 +134,32 @@ impl Resolver {
                 value: Box::new(self.resolve_expression(*value)),
             },
 
-            ExpressionKind::Call { path, args } => ExpressionKind::Call {
-                path,
-                args: args
+            ExpressionKind::Call { path, args } => {
+                let args = args
                     .into_iter()
-                    .map(|arg| self.resolve_expression(arg))
-                    .collect(),
-            },
-
+                    .map(|e| self.resolve_expression(e))
+                    .collect();
+                if path.len() == 1 {
+                    if let Some((depth, slot)) = self.resolve_name(&path[0]) {
+                        return Expression::new(
+                            ExpressionKind::CallExpr {
+                                callee: Box::new(Expression::new(
+                                    ExpressionKind::ResolvedIdentifier {
+                                        name: path[0].clone(),
+                                        depth,
+                                        slot,
+                                    },
+                                    span,
+                                )),
+                                args,
+                            },
+                            span,
+                        );
+                    }
+                }
+                // stdlib path — leave as Call
+                ExpressionKind::Call { path, args }
+            }
             ExpressionKind::CallExpr { callee, args } => ExpressionKind::CallExpr {
                 callee: Box::new(self.resolve_expression(*callee)),
                 args: args
