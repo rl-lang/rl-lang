@@ -475,6 +475,63 @@ impl TypeChecker {
             }
             StatementKind::Import { .. } => {}
 
+            StatementKind::DestructureDeclaration { bindings, value } => {
+                let value_type = self.check_expression(value);
+                let tuple_types = match &value_type {
+                    CheckType::Known(
+                        TypeAnnotation::Tuple(types) | TypeAnnotation::CTuple(types),
+                    ) => Some(types.clone()),
+                    CheckType::Unknown => None,
+                    other => {
+                        self.error(
+                            format!(
+                                "expected tuple on right side of destructure, got {}",
+                                other.info()
+                            ),
+                            statement.span,
+                        );
+                        None
+                    }
+                };
+                if let Some(types) = tuple_types {
+                    if types.len() != bindings.len() {
+                        self.error(
+                            format!(
+                                "destructure mismatch: {} bindings but tuple has {} elements",
+                                bindings.len(),
+                                types.len()
+                            ),
+                            statement.span,
+                        );
+                    } else {
+                        for ((type_annotation, name), actual) in bindings.iter().zip(types.iter()) {
+                            let declared = CheckType::Known(type_annotation.clone());
+                            let actual = CheckType::Known(actual.clone());
+                            if !actual.matches(&declared) {
+                                self.error(
+                                    format!(
+                                        "destructure type mismatch: expected {}, got {}",
+                                        declared.info(),
+                                        actual.info()
+                                    ),
+                                    statement.span,
+                                );
+                            }
+                            self.declare(name.clone(), declared, false, statement.span);
+                        }
+                    }
+                } else {
+                    for (type_annotation, name) in bindings {
+                        self.declare(
+                            name.clone(),
+                            CheckType::Known(type_annotation.clone()),
+                            false,
+                            statement.span,
+                        );
+                    }
+                }
+            }
+
             _ => {}
         }
     }

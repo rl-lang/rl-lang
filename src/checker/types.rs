@@ -110,6 +110,13 @@ fn null_array_elision(a: &TypeAnnotation, b: &TypeAnnotation) -> bool {
             TypeAnnotation::Array(x) | TypeAnnotation::CArray(x),
             TypeAnnotation::Array(y) | TypeAnnotation::CArray(y),
         ) => **x == TypeAnnotation::Null || **y == TypeAnnotation::Null || null_array_elision(x, y),
+
+        (
+            TypeAnnotation::Tuple(a) | TypeAnnotation::CTuple(a),
+            TypeAnnotation::Tuple(b) | TypeAnnotation::CTuple(b),
+        ) => a.iter().zip(b.iter()).all(|(x, y)| {
+            *x == TypeAnnotation::Null || *y == TypeAnnotation::Null || null_array_elision(x, y)
+        }),
         _ => false,
     }
 }
@@ -124,6 +131,8 @@ fn const_variant(ty: TypeAnnotation) -> TypeAnnotation {
         TypeAnnotation::Byte => TypeAnnotation::CByte,
         TypeAnnotation::Char => TypeAnnotation::CChar,
         TypeAnnotation::Array(inner) => TypeAnnotation::CArray(inner),
+        TypeAnnotation::Tuple(inner) => TypeAnnotation::CTuple(inner),
+        TypeAnnotation::Error => TypeAnnotation::CError,
         other => other,
     }
 }
@@ -138,5 +147,9 @@ fn const_matches(a: &TypeAnnotation, b: &TypeAnnotation) -> bool {
             | (TypeAnnotation::CBool, TypeAnnotation::Bool)
             | (TypeAnnotation::CByte, TypeAnnotation::Byte)
             | (TypeAnnotation::CChar, TypeAnnotation::Char)
+            | (TypeAnnotation::CTuple(_), TypeAnnotation::Tuple(_))
+            | (TypeAnnotation::Tuple(_), TypeAnnotation::CTuple(_))
+            | (TypeAnnotation::CError, TypeAnnotation::Error)
+            | (TypeAnnotation::Error, TypeAnnotation::CError)
     )
 }
