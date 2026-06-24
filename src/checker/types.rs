@@ -1,3 +1,5 @@
+//! Helper methods on [`CheckType`] and [`ScopeItem`], plus private type-matching utilities.
+
 use crate::{
     ast::statements::TypeAnnotation,
     checker::structs::{CheckType, ScopeItem},
@@ -14,22 +16,22 @@ impl ScopeItem {
 
 // helper functions for CheckType
 impl CheckType {
-    /// returns [`CheckType::Known(type)`] if the item type can be determinated while being checked
+    /// Constructs a [`CheckType::Known`] from a [`TypeAnnotation`].
     pub fn known(ty: TypeAnnotation) -> Self {
         CheckType::Known(ty)
     }
 
-    /// returns true if the item type is [`TypeAnnotation::null`]
+    /// Returns `true` if this type is [`TypeAnnotation::Null`].
     pub fn is_null(&self) -> bool {
         matches!(self, CheckType::Known(TypeAnnotation::Null))
     }
 
-    /// returns [`CheckType::Unknown`] for items type that cannot be determinated while being checked
+    /// Returns `true` if this type is [`CheckType::Unknown`].
     pub fn is_unknown(&self) -> bool {
         matches!(self, CheckType::Unknown)
     }
 
-    /// converts the [`CheckType::Known`] variable variant to constant variant
+    /// Converts a mutable `Known` type to its `const` variant (e.g. `Int` -> `CInt`).
     pub fn into_const(self) -> Self {
         match self {
             CheckType::Known(ty) => CheckType::Known(const_variant(ty)),
@@ -37,7 +39,14 @@ impl CheckType {
         }
     }
 
-    /// returns [`bool`] weather true or false if the conditions for matching met
+    /// Returns `true` if `self` is compatible with `expected`.
+    ///
+    /// Compatibility rules:
+    /// - Either side being `Unknown` always matches (avoids cascading errors)
+    /// - `Null` matches anything (represents the absence of a value)
+    /// - `Function { .. }` matches `Known(Fn)` and vice versa
+    /// - Two `Function` types match only if params and return type are identical
+    /// - Two `Known` types match if equal, or via [`null_array_elision`] or [`const_matches`]
     pub fn matches(&self, expected: &CheckType) -> bool {
         match (self, expected) {
             // if any side is [`CheckType::Unknown`] returns true
@@ -72,7 +81,7 @@ impl CheckType {
         }
     }
 
-    /// returns string value of the current item descriptions
+    /// Returns a human-readable description of this type for error messages.
     pub fn info(&self) -> String {
         match self {
             CheckType::Known(ty) => format!("{:?}", ty),
@@ -93,8 +102,8 @@ impl CheckType {
     }
 }
 
-/// matches mutable arrays and immmutables arrays both sides should match to return true
-/// otherwise false
+/// Returns `true` if two array types are compatible when either inner type is `Null`
+/// (i.e. an empty array `[]` is compatible with any typed array).
 fn null_array_elision(a: &TypeAnnotation, b: &TypeAnnotation) -> bool {
     match (a, b) {
         (
@@ -105,7 +114,7 @@ fn null_array_elision(a: &TypeAnnotation, b: &TypeAnnotation) -> bool {
     }
 }
 
-/// transforms the mutable [`TypeAnnotation`] to its immutable version
+/// Converts a mutable [`TypeAnnotation`] to its immutable (`C`-prefixed) variant.
 fn const_variant(ty: TypeAnnotation) -> TypeAnnotation {
     match ty {
         TypeAnnotation::Int => TypeAnnotation::CInt,
@@ -119,7 +128,7 @@ fn const_variant(ty: TypeAnnotation) -> TypeAnnotation {
     }
 }
 
-/// compares two values (the immutable TypeAnnotation to its mutable value)
+/// Returns `true` if `a` is the const variant of `b` or vice versa (e.g. `CInt` <-> `Int`).
 fn const_matches(a: &TypeAnnotation, b: &TypeAnnotation) -> bool {
     matches!(
         (a, b),

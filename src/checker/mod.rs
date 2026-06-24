@@ -1,3 +1,23 @@
+//! Static type checker for rl - runs after parsing, before evaluation.
+//!
+//! The checker walks the AST and verifies:
+//! - Variable and constant declarations match their declared types
+//! - Binary/unary operators receive compatible operand types
+//! - Function calls receive the correct number and types of arguments
+//! - `return` types match the enclosing function's declared return type
+//! - `break` and `continue` only appear inside loops
+//! - Array elements are all the same type
+//!
+//! It also populates [`TypeChecker::hovers`] - a side-table of
+//! `(Span, markdown)` pairs used by the LSP hover provider.
+//!
+//! # Two-pass function checking
+//!
+//! [`TypeChecker::check`] does two passes over the statement list:
+//! first it pre-declares all top-level `FunctionDeclaration`s so they
+//! are visible to each other regardless of order, then it checks every
+//! statement body. This allows mutual recursion at the top level.
+
 pub mod operators;
 pub mod scope;
 pub mod statements;
@@ -133,8 +153,7 @@ impl TypeChecker {
     }
 }
 
-// collects the stdlib functions names for recgonizing
-// the functions
+/// Collects all function names from a stdlib [`Module`] tree into `out`.
 fn collect_fn_names(
     module: &crate::interpreter::native::Module,
     out: &mut std::collections::HashSet<String>,

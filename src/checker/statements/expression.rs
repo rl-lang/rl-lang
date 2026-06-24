@@ -1,3 +1,6 @@
+//! Expression type checking - walks every [`ExpressionKind`] variant and
+//! returns the static [`CheckType`] of the expression.
+
 use crate::{
     ast::{
         nodes::{Expression, ExpressionKind},

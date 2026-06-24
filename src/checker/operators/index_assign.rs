@@ -1,3 +1,11 @@
+//! Index-assign type checking (`arr[i] = value`).
+//!
+//! Validates:
+//! - The index is an `int` or `byte`
+//! - The value type matches the array's element type
+//! - `byte` widens to `int` when the array element type is `int`
+//! - Assigning `null` is always allowed (absence of value)
+
 use crate::{
     ast::{nodes::Expression, statements::TypeAnnotation},
     checker::structs::{CheckType, TypeChecker},

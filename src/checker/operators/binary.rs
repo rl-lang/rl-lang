@@ -1,3 +1,19 @@
+//! Binary operator type checking.
+//!
+//! # Rules
+//!
+//! | Operator          | Left / Right                    | Result  |
+//! |-------------------|---------------------------------|---------|
+//! | `+` `-` `*` `/`  | int + int                       | int     |
+//! | `+` `-` `*` `/`  | float + float                   | float   |
+//! | `+` `-` `*` `/`  | byte + byte                     | byte    |
+//! | `+` `-` `*` `/`  | byte + int (or int + byte)      | int     |
+//! | `<` `>` `<=` `>=`| int/byte pairs                  | bool    |
+//! | `<` `>` `<=` `>=`| float + float                   | bool    |
+//! | `==` `!=`         | matching primitive types        | bool    |
+//!
+//! Any side being `Unknown` short-circuits to `Unknown` to suppress cascading errors.
+
 use crate::{
     ast::statements::TypeAnnotation,
     checker::{
