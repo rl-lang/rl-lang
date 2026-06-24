@@ -253,6 +253,19 @@ impl Evaluator {
                 TypeAnnotation::Array(a) | TypeAnnotation::CArray(a),
                 TypeAnnotation::Array(b) | TypeAnnotation::CArray(b),
             ) => Self::types_compatible(a, b),
+            (
+                TypeAnnotation::Tuple(a) | TypeAnnotation::CTuple(a),
+                TypeAnnotation::Tuple(b) | TypeAnnotation::CTuple(b),
+            ) => {
+                a.len() == b.len()
+                    && a.iter()
+                        .zip(b.iter())
+                        .all(|(x, y)| Self::types_compatible(x, y))
+            }
+            (
+                TypeAnnotation::Error | TypeAnnotation::CError,
+                TypeAnnotation::Error | TypeAnnotation::CError,
+            ) => true,
             _ => false,
         }
     }
