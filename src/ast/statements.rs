@@ -237,6 +237,12 @@ pub enum TypeAnnotation {
     Fn,
     /// Absence of a type - used as the default return type when none is annotated.
     Null,
+
+    Tuple(Vec<TypeAnnotation>),
+    CTuple(Vec<TypeAnnotation>),
+
+    Error(Box<TypeAnnotation>),
+    CError(Box<TypeAnnotation>),
 }
 
 /// A single function or lambda parameter: a name and its type annotation.
