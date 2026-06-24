@@ -196,6 +196,16 @@ pub enum StatementKind {
         path: Vec<String>,
         names: Vec<String>,
     },
+
+    DestructureDeclaration {
+        bindings: Vec<(TypeAnnotation, String)>,
+        value: Expression,
+    },
+    ResolvedDestructureDeclaration {
+        bindings: Vec<(TypeAnnotation, String)>,
+        slots: Vec<usize>,
+        value: Expression,
+    },
 }
 
 /// The type of a variable, constant, or parameter binding.
