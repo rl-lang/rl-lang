@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use crate::interpreter::stdlib::random::xoshiro::Xoshiro256;
+use crate::lexer::tokentypes::TokenType;
 use crate::resolver::Resolver;
 use crate::{
     ast::{
@@ -356,8 +357,18 @@ impl Evaluator {
                 right,
             } => {
                 let left_val = self.evaluate(left)?;
-                self.check_not_null(&left_val, left.span)?;
                 let right_val = self.evaluate(right)?;
+                if matches!(operator, TokenType::Compare | TokenType::BangEqual) {
+                    if matches!(left_val, Value::Null) || matches!(right_val, Value::Null) {
+                        let result = matches!((&left_val, &right_val), (Value::Null, Value::Null));
+                        return Ok(if matches!(operator, TokenType::Compare) {
+                            Value::Bool(result)
+                        } else {
+                            Value::Bool(!result)
+                        });
+                    }
+                }
+                self.check_not_null(&left_val, left.span)?;
                 self.check_not_null(&right_val, right.span)?;
                 self.match_binary_operator(
                     left_val,
