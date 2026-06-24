@@ -1,4 +1,8 @@
-mod numbers;
-
+mod arrays;
+mod booleans;
+mod characters;
+mod control_flow;
 mod functions;
+mod general;
+mod numbers;
 mod std;
