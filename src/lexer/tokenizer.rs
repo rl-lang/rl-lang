@@ -57,9 +57,9 @@ impl Tokenizer {
     ///     },
     /// };
     ///
-    /// assert_eq!(tokens[0].token, TokenType::ByteLiteral(1));
+    /// assert_eq!(tokens[0].token, TokenType::NumberLiteral(1));
     /// assert_eq!(tokens[1].token, TokenType::Compare);
-    /// assert_eq!(tokens[2].token, TokenType::ByteLiteral(1));
+    /// assert_eq!(tokens[2].token, TokenType::NumberLiteral(1));
     /// assert_eq!(tokens[3].token, TokenType::Eof);
     /// ```
     pub fn lex(source_file: SourceFile) -> Result<Vec<Token>, Error> {
