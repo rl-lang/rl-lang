@@ -56,7 +56,7 @@ dec int x = t[5]
 fn tuple_three_elements() {
     let ev = eval_program(
         r#"
-dec (int, float, bool) t = (1, 3.14, true)
+dec (int, float, bool) t = (1, 4.14, true)
 dec int a = t[0]
 dec float b = t[1]
 dec bool c = t[2]
@@ -64,7 +64,7 @@ dec bool c = t[2]
     )
     .unwrap();
     assert_eq!(ev.get_value_raw("a"), Some(Value::Integer(1)));
-    assert_eq!(ev.get_value_raw("b"), Some(Value::Float(3.14)));
+    assert_eq!(ev.get_value_raw("b"), Some(Value::Float(4.14)));
     assert_eq!(ev.get_value_raw("c"), Some(Value::Bool(true)));
 }
 

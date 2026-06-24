@@ -566,7 +566,7 @@ impl Evaluator {
                     ));
                 }
                 for ((type_annotation, _name), (slot, val)) in
-                    bindings.iter().zip(slots.iter().zip(items.into_iter()))
+                    bindings.iter().zip(slots.iter().zip(items))
                 {
                     let val = match (type_annotation, &val) {
                         (TypeAnnotation::Int | TypeAnnotation::CInt, Value::Byte(b)) => {
