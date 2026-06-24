@@ -196,6 +196,16 @@ pub enum StatementKind {
         path: Vec<String>,
         names: Vec<String>,
     },
+
+    DestructureDeclaration {
+        bindings: Vec<(TypeAnnotation, String)>,
+        value: Expression,
+    },
+    ResolvedDestructureDeclaration {
+        bindings: Vec<(TypeAnnotation, String)>,
+        slots: Vec<usize>,
+        value: Expression,
+    },
 }
 
 /// The type of a variable, constant, or parameter binding.
@@ -237,6 +247,12 @@ pub enum TypeAnnotation {
     Fn,
     /// Absence of a type - used as the default return type when none is annotated.
     Null,
+
+    Tuple(Vec<TypeAnnotation>),
+    CTuple(Vec<TypeAnnotation>),
+
+    Error,
+    CError,
 }
 
 /// A single function or lambda parameter: a name and its type annotation.

@@ -18,7 +18,7 @@ impl Tokenizer {
     /// | Functions      | `fn`                                                  |
     /// | Imports        | `get`, `from`, `in`                                   |
     /// | Logical        | `and`, `or`                                           |
-    /// | Types          | `int`, `float`, `bool`, `string`, `byte`, `char`, `arr` |
+    /// | Types          | `int`, `float`, `bool`, `string`, `byte`, `char`, `arr`, `error` |
     /// | Declarations   | `dec`, `CONST`                                        |
     /// | Literals       | `true`, `false`, `null`                               |
     /// | Special        | `as`                                                  |
@@ -58,6 +58,7 @@ impl Tokenizer {
             "else" => self.add_token(TokenType::Else),
             "arr" => self.add_token(TokenType::Array),
             "as" => self.add_token(TokenType::As),
+            "error" => self.add_token(TokenType::Error),
 
             &_ => self.add_token(TokenType::Identifier(value)),
         }

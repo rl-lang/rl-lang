@@ -577,6 +577,20 @@ impl Parser {
             }
         }
 
+        if self.match_type(&[TokenType::Error]) {
+            let error_start = self.previous_span();
+            if !self.match_type(&[TokenType::LeftParen]) {
+                return Err(self.err("expected `(` after `error`", self.peek_span()));
+            }
+            let inner = self.parse_expression()?;
+            if !self.match_type(&[TokenType::RightParen]) {
+                return Err(self.err("expected `)` after error value", self.peek_span()));
+            }
+            let span = error_start.join(self.previous_span());
+            let expr = Expression::new(ExpressionKind::ErrorLiteral(Box::new(inner)), span);
+            return self.parse_postfix(expr, start);
+        }
+
         if self.match_type(&[TokenType::Null]) {
             let span = self.previous_span();
             let expr = Expression::new(ExpressionKind::Null, span);
@@ -586,10 +600,31 @@ impl Parser {
         if self.match_type(&[TokenType::LeftParen]) {
             #[cfg(feature = "debug")]
             log::debug!("found group start");
-            let inner = self.parse_expression()?;
+            let first = self.parse_expression()?;
+            if self.match_type(&[TokenType::Comma]) {
+                // tuple literal: (expr, expr, ...)
+                let mut items = vec![first];
+                while self.peek() != TokenType::RightParen && self.peek() != TokenType::Eof {
+                    while self.match_type(&[TokenType::Newline]) {}
+                    items.push(self.parse_expression()?);
+                    while self.match_type(&[TokenType::Newline]) {}
+                    if self.peek() == TokenType::RightParen {
+                        break;
+                    }
+                    if !self.match_type(&[TokenType::Comma]) {
+                        return Err(self.err("expected , between tuple elements", self.peek_span()));
+                    }
+                }
+                if !self.match_type(&[TokenType::RightParen]) {
+                    return Err(self.err("expected ) after tuple elements", self.peek_span()));
+                }
+                let span = start.join(self.previous_span());
+                let expr = Expression::new(ExpressionKind::TupleLiteral(items), span);
+                return self.parse_postfix(expr, start);
+            }
             self.match_type(&[TokenType::RightParen]);
             let span = start.join(self.previous_span());
-            let expr = Expression::new(ExpressionKind::Grouping(Box::new(inner)), span);
+            let expr = Expression::new(ExpressionKind::Grouping(Box::new(first)), span);
             return self.parse_postfix(expr, start);
         }
 

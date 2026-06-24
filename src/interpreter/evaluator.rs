@@ -203,6 +203,22 @@ impl Evaluator {
             }
             Value::Null => TypeAnnotation::Null,
             Value::Function { .. } => TypeAnnotation::Fn,
+            Value::Tuple(items) => {
+                let inner: Vec<TypeAnnotation> =
+                    items.iter().map(|v| Self::infer_type(v, false)).collect();
+                if is_const {
+                    TypeAnnotation::CTuple(inner)
+                } else {
+                    TypeAnnotation::Tuple(inner)
+                }
+            }
+            Value::Error(_) => {
+                if is_const {
+                    TypeAnnotation::CError
+                } else {
+                    TypeAnnotation::Error
+                }
+            }
         }
     }
 
@@ -237,6 +253,19 @@ impl Evaluator {
                 TypeAnnotation::Array(a) | TypeAnnotation::CArray(a),
                 TypeAnnotation::Array(b) | TypeAnnotation::CArray(b),
             ) => Self::types_compatible(a, b),
+            (
+                TypeAnnotation::Tuple(a) | TypeAnnotation::CTuple(a),
+                TypeAnnotation::Tuple(b) | TypeAnnotation::CTuple(b),
+            ) => {
+                a.len() == b.len()
+                    && a.iter()
+                        .zip(b.iter())
+                        .all(|(x, y)| Self::types_compatible(x, y))
+            }
+            (
+                TypeAnnotation::Error | TypeAnnotation::CError,
+                TypeAnnotation::Error | TypeAnnotation::CError,
+            ) => true,
             _ => false,
         }
     }
@@ -318,6 +347,45 @@ impl Evaluator {
                                 .with_label(
                                     target.span,
                                     format!("this array has length {}", items.len()),
+                                ));
+                        }
+                        items[b_usize].clone()
+                    }
+
+                    (Value::Tuple(items), Value::Integer(i)) => {
+                        let i_usize = *i as usize;
+                        if i_usize >= items.len() {
+                            return Err(self
+                                .err(
+                                    format!(
+                                        "tuple index {} out of bounds (len {})",
+                                        i,
+                                        items.len()
+                                    ),
+                                    expression.span,
+                                )
+                                .with_label(
+                                    target.span,
+                                    format!("this tuple has {} elements", items.len()),
+                                ));
+                        }
+                        items[i_usize].clone()
+                    }
+                    (Value::Tuple(items), Value::Byte(b)) => {
+                        let b_usize = *b as usize;
+                        if b_usize >= items.len() {
+                            return Err(self
+                                .err(
+                                    format!(
+                                        "tuple index {} out of bounds (len {})",
+                                        b,
+                                        items.len()
+                                    ),
+                                    expression.span,
+                                )
+                                .with_label(
+                                    target.span,
+                                    format!("this tuple has {} elements", items.len()),
                                 ));
                         }
                         items[b_usize].clone()
@@ -512,6 +580,21 @@ impl Evaluator {
                         ));
                     }
                 }
+            }
+
+            ExpressionKind::TupleLiteral(items) => {
+                let mut values = Vec::with_capacity(items.len());
+                for e in items {
+                    values.push(self.evaluate(e)?);
+                }
+                Value::Tuple(values)
+            }
+            ExpressionKind::ErrorLiteral(inner) => {
+                let val = self.evaluate(inner)?;
+                if matches!(val, Value::Error(_)) {
+                    return Err(self.err("error cannot wrap another error", expression.span));
+                }
+                Value::Error(Box::new(val))
             }
 
             _ => Value::Null,

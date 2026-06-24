@@ -3,8 +3,10 @@
 //! `is_*` functions check the runtime type of a value without conversion.
 //! `to_int` accepts hex strings prefixed with `0x`/`0X`.
 
+mod error_unwrap;
 mod is_bool;
 mod is_char;
+mod is_error;
 mod is_float;
 mod is_int;
 mod is_null;
@@ -35,6 +37,8 @@ pub const KEYWORDS: &[&str] = &[
     "is_int",
     "is_string",
     "is_float",
+    "is_error",
+    "error_unwrap",
 ];
 
 pub fn module() -> Module {
@@ -53,4 +57,6 @@ pub fn module() -> Module {
         .with_function("is_int", is_int::std_is_int)
         .with_function("is_float", is_float::std_is_float)
         .with_function("is_string", is_string::std_is_string)
+        .with_function("is_error", is_error::std_is_error)
+        .with_function("error_unwrap", error_unwrap::std_error_unwrap)
 }

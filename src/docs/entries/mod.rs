@@ -41,6 +41,8 @@ pub fn concept_entries() -> Vec<&'static ConceptEntry> {
         &concepts::entry::ENTRY_POINTS,
         &concepts::tooling::TOOLING,
         &concepts::byte::BYTES,
+        &concepts::tuples::TUPLES,
+        &concepts::errors::ERROR_TYPE,
     ]
 }
 

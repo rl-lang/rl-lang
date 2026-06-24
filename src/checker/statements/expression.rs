@@ -95,6 +95,9 @@ impl TypeChecker {
                     CheckType::Unknown | CheckType::Known(TypeAnnotation::Null) => {
                         CheckType::Unknown
                     }
+                    CheckType::Known(TypeAnnotation::Tuple(_) | TypeAnnotation::CTuple(_)) => {
+                        CheckType::Unknown
+                    }
                     other => {
                         self.error(
                             format!("invalid index operation: this is {}", other.info()),
@@ -246,6 +249,28 @@ impl TypeChecker {
                 }
                 CheckType::Unknown
             }
+
+            ExpressionKind::TupleLiteral(items) => {
+                let types: Vec<TypeAnnotation> = items
+                    .iter()
+                    .map(|item| {
+                        let t = self.check_expression(item);
+                        Self::to_type_annotation(&t)
+                    })
+                    .collect();
+                CheckType::Known(TypeAnnotation::Tuple(types))
+            }
+            ExpressionKind::ErrorLiteral(inner) => {
+                let inner_type = self.check_expression(inner);
+                if matches!(
+                    inner_type,
+                    CheckType::Known(TypeAnnotation::Error | TypeAnnotation::CError)
+                ) {
+                    self.error("error cannot wrap another error", expression.span);
+                }
+                CheckType::Known(TypeAnnotation::Error)
+            }
+
             _ => CheckType::Unknown,
         }
     }

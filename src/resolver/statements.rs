@@ -250,6 +250,19 @@ impl Resolver {
                 StatementKind::ResolvedImportFile { path, body }
             }
 
+            StatementKind::DestructureDeclaration { bindings, value } => {
+                let value = self.resolve_expression(value);
+                let slots = bindings
+                    .iter()
+                    .map(|(_, name)| self.declare(name.clone()))
+                    .collect();
+                StatementKind::ResolvedDestructureDeclaration {
+                    bindings,
+                    slots,
+                    value,
+                }
+            }
+
             other => other,
         };
         Statement::new(kind, span)

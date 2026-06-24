@@ -62,7 +62,9 @@ fn token_color(tt: &TokenType) -> Style {
         | TokenType::Float
         | TokenType::Bool
         | TokenType::String
-        | TokenType::Char => Style::default()
+        | TokenType::Char
+        | TokenType::Byte
+        | TokenType::Error => Style::default()
             .fg(Color::LightBlue)
             .add_modifier(Modifier::ITALIC),
 

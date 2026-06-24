@@ -1,12 +1,12 @@
 //! Variable declaration parser (`dec`).
 //!
-//! Handles the `dec` keyword, which introduces a mutable binding. Both scalar
-//! and array forms are supported:
+//! Handles the `dec` keyword, which introduces a mutable binding.
 //!
 //! ```text
 //! dec int x = 42
 //! dec array[int] xs = [1, 2, 3]
-//! dec array[int] xs = some_array_expr
+//! dec (int, string) p = (1, "hi")
+//! dec int x, string y = (1, "hi")
 //! ```
 
 use crate::{
@@ -38,6 +38,118 @@ impl Parser {
         log::debug!("{:?}", self.peek());
         #[cfg(feature = "debug")]
         log::debug!("parsing type");
+
+        // -- tuple: dec (T, T, ...) name = (...) --
+        if self.peek() == TokenType::LeftParen {
+            self.advance();
+            let first_type = self.parse_type(true)?;
+
+            if self.peek() == TokenType::Comma || self.peek() == TokenType::RightParen {
+                let mut types = vec![first_type];
+                while self.match_type(&[TokenType::Comma]) {
+                    if self.peek() == TokenType::RightParen {
+                        break;
+                    }
+                    types.push(self.parse_type(true)?);
+                }
+                if !self.match_type(&[TokenType::RightParen]) {
+                    return Err(self.err("expected `)` after tuple types", self.peek_span()));
+                }
+                let name = match self.peek() {
+                    TokenType::Identifier(n) => {
+                        self.advance();
+                        n
+                    }
+                    _ => return Err(self.err("expected name after tuple type", self.peek_span())),
+                };
+                if !self.match_type(&[TokenType::Assign]) {
+                    return Err(self.err("expected `=` after name", self.peek_span()));
+                }
+                let value = self.parse_expression()?;
+                let span = start.join(value.span);
+                return Ok(Statement::new(
+                    StatementKind::VariableDeclaration {
+                        name,
+                        type_annotation: TypeAnnotation::Tuple(types),
+                        value,
+                    },
+                    span,
+                ));
+            } else {
+                return Err(self.err("invalid tuple type syntax", self.peek_span()));
+            }
+        }
+
+        // -- destructure: dec T x, T y = (...) --
+        if matches!(
+            self.peek(),
+            TokenType::Int
+                | TokenType::Float
+                | TokenType::Bool
+                | TokenType::String
+                | TokenType::Byte
+                | TokenType::Char
+                | TokenType::Fn
+                | TokenType::Error
+        ) {
+            let saved = self.current;
+            let first_type = self.parse_type(true)?;
+            let first_name = match self.peek() {
+                TokenType::Identifier(n) => {
+                    self.advance();
+                    n
+                }
+                _ => {
+                    self.current = saved;
+                    return self.parse_variable_declartion_scalar(start);
+                }
+            };
+            if self.peek() == TokenType::Comma {
+                let mut bindings = vec![(first_type, first_name)];
+                while self.match_type(&[TokenType::Comma]) {
+                    let t = self.parse_type(true)?;
+                    let n = match self.peek() {
+                        TokenType::Identifier(n) => {
+                            self.advance();
+                            n
+                        }
+                        _ => {
+                            return Err(
+                                self.err("expected name in destructure binding", self.peek_span())
+                            );
+                        }
+                    };
+                    bindings.push((t, n));
+                }
+                if !self.match_type(&[TokenType::Assign]) {
+                    return Err(
+                        self.err("expected `=` after destructure bindings", self.peek_span())
+                    );
+                }
+                let value = self.parse_expression()?;
+                let span = start.join(value.span);
+                return Ok(Statement::new(
+                    StatementKind::DestructureDeclaration { bindings, value },
+                    span,
+                ));
+            } else {
+                if !self.match_type(&[TokenType::Assign]) {
+                    return Err(self.err("expected `=` after name", self.peek_span()));
+                }
+                let value = self.parse_expression()?;
+                let span = start.join(value.span);
+                return Ok(Statement::new(
+                    StatementKind::VariableDeclaration {
+                        name: first_name,
+                        type_annotation: first_type,
+                        value,
+                    },
+                    span,
+                ));
+            }
+        }
+
+        // -- array: dec array[T] name = [...] --
         if self.match_type(&[TokenType::Array]) && self.peek() == TokenType::LeftBracket {
             self.advance();
             let annoation_type = self.parse_param_type()?;
@@ -99,8 +211,11 @@ impl Parser {
             }
         }
 
-        let var_type = self.parse_type(true)?;
+        self.parse_variable_declartion_scalar(start)
+    }
 
+    fn parse_variable_declartion_scalar(&mut self, start: Span) -> Result<Statement, Error> {
+        let var_type = self.parse_type(true)?;
         let name = match self.peek() {
             TokenType::Identifier(n) => {
                 self.advance();
