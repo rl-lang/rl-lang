@@ -94,11 +94,29 @@ impl Evaluator {
                 }
             },
             TokenType::Slash => match (&left, &right) {
-                (Value::Integer(a), Value::Integer(b)) => Value::Integer(a / b),
+                (Value::Integer(a), Value::Integer(b)) => {
+                    if *b == 0 {
+                        return Err(self.err("division by zero", span));
+                    }
+                    Value::Integer(a / b)
+                }
                 (Value::Float(a), Value::Float(b)) => Value::Float(a / b),
-                (Value::Integer(a), Value::Byte(b)) => Value::Integer(a / *b as i64),
-                (Value::Byte(a), Value::Integer(b)) => Value::Integer(*a as i64 / b),
+                (Value::Integer(a), Value::Byte(b)) => {
+                    if *b == 0 {
+                        return Err(self.err("division by zero", span));
+                    }
+                    Value::Integer(a / *b as i64)
+                }
+                (Value::Byte(a), Value::Integer(b)) => {
+                    if *b == 0 {
+                        return Err(self.err("division by zero", span));
+                    }
+                    Value::Integer(*a as i64 / b)
+                }
                 (Value::Byte(a), Value::Byte(b)) => {
+                    if *b == 0 {
+                        return Err(self.err("division by zero", span));
+                    }
                     let ab = *a as i64 / *b as i64;
                     if !(0..=255).contains(&ab) {
                         Value::Integer(ab)
