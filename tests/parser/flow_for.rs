@@ -18,7 +18,7 @@ fn for_c() {
                 StatementKind::VariableDeclaration {
                     name: "i".to_string(),
                     type_annotation: TypeAnnotation::Int,
-                    value: Expression::new(ExpressionKind::Byte(1), Span::new(13, 14)),
+                    value: Expression::new(ExpressionKind::Integer(1), Span::new(13, 14)),
                 },
                 Span::new(5, 14),
             )),
@@ -29,7 +29,10 @@ fn for_c() {
                         Span::new(16, 17),
                     )),
                     operator: TokenType::Less,
-                    right: Box::new(Expression::new(ExpressionKind::Byte(10), Span::new(20, 22))),
+                    right: Box::new(Expression::new(
+                        ExpressionKind::Integer(10),
+                        Span::new(20, 22),
+                    )),
                 },
                 Span::new(16, 22),
             ),
@@ -44,7 +47,7 @@ fn for_c() {
                             )),
                             operator: TokenType::Plus,
                             right: Box::new(Expression::new(
-                                ExpressionKind::Byte(1),
+                                ExpressionKind::Integer(1),
                                 Span::new(29, 30),
                             )),
                         },
@@ -55,7 +58,7 @@ fn for_c() {
             ),
             body: vec![Statement::new(
                 StatementKind::Expression(Expression::new(
-                    ExpressionKind::Byte(0),
+                    ExpressionKind::Integer(0),
                     Span::new(33, 34),
                 )),
                 Span::new(33, 34),
@@ -78,7 +81,7 @@ fn for_range() {
             )),
             body: vec![Statement::new(
                 StatementKind::Expression(Expression::new(
-                    ExpressionKind::Byte(0),
+                    ExpressionKind::Integer(0),
                     Span::new(16, 17),
                 )),
                 Span::new(16, 17),
@@ -101,7 +104,7 @@ fn for_iterable() {
             )),
             body: vec![Statement::new(
                 StatementKind::Expression(Expression::new(
-                    ExpressionKind::Byte(0),
+                    ExpressionKind::Integer(0),
                     Span::new(30, 31),
                 )),
                 Span::new(30, 31),
