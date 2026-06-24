@@ -132,4 +132,7 @@ pub enum ExpressionKind {
         value: Box<Expression>,
         target_type: TypeAnnotation,
     },
+
+    TupleLiteral(Vec<Expression>),
+    ErrorLiteral(Box<Expression>),
 }
