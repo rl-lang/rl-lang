@@ -1,3 +1,26 @@
+//! The native function binding system - [`Module`], [`NativeFn`], and the
+//! [`IntoNativeFn`] / [`FromValue`] / [`IntoValue`] trait machinery.
+//!
+//! # How it works
+//!
+//! Stdlib functions are plain Rust functions. The [`IntoNativeFn`] trait
+//! (implemented by a macro for up to 10 arguments) wraps them into [`NativeFn`]
+//! closures that handle arity checking and argument extraction automatically.
+//!
+//! Two variants exist:
+//! - **Infallible** (`IntoNativeFn<(A1, A2, ...)>`) - for functions that return `R: IntoValue`
+//! - **Fallible** (`IntoNativeFn<(Fallible<(A1, A2, ...)>,)>`) - for functions returning `Result<R, Error>`
+//! - **Spanned** (`IntoNativeFn<(Spanned<(A1, A2, ...)>,)>`) - fallible functions that also receive the call [`Span`]
+//!
+//! # Example
+//!
+//! ```rust
+//! use rl_lang::interpreter::{evaluator::Evaluator, native::Module};
+//!
+//! fn my_fn(_: &mut Evaluator, x: i64, y: i64) -> i64 { x + y }
+//! Module::new("math").with_function("add", my_fn);
+//! ```
+
 use crate::ast::statements::TypeAnnotation;
 use crate::interpreter::evaluator::Evaluator;
 use crate::interpreter::values::Value;
@@ -5,11 +28,18 @@ use crate::utils::errors::{Error, Reason};
 use crate::utils::span::Span;
 use std::collections::HashMap;
 use std::sync::Arc;
+
+/// A thread-safe, heap-allocated native function callable from rl.
 pub type NativeFn =
     Arc<dyn Fn(&mut Evaluator, Vec<Value>, Span) -> Result<Value, Error> + Send + Sync>;
+
+/// A named collection of [`NativeFn`]s, optionally containing sub-[`Module`]s.
 pub struct Module {
+    /// The module name as used in import paths (e.g. `"io"`, `"math"`).
     pub name: String,
+    /// Named functions registered in this module.
     pub functions: HashMap<String, NativeFn>,
+    /// Named submodules (e.g. `math::consts`).
     pub submodules: HashMap<String, Module>,
 }
 
@@ -22,6 +52,7 @@ impl Module {
         }
     }
 
+    /// Registers a typed Rust function using the [`IntoNativeFn`] trait.
     pub fn with_function<F, A>(mut self, name: impl Into<String>, f: F) -> Self
     where
         F: IntoNativeFn<A>,
@@ -30,6 +61,8 @@ impl Module {
         self
     }
 
+    /// Registers a raw `fn(&mut Evaluator, Vec<Value>, Span) -> Result<Value, Error>` directly,
+    /// bypassing the [`IntoNativeFn`] machinery (used for variadic functions like `print`).
     pub fn with_raw_function<F>(mut self, name: impl Into<String>, f: F) -> Self
     where
         F: Fn(&mut Evaluator, Vec<Value>, Span) -> Result<Value, Error> + Send + Sync + 'static,
@@ -38,11 +71,14 @@ impl Module {
         self
     }
 
+    /// Registers a submodule.
     pub fn with_module(mut self, m: Module) -> Self {
         self.submodules.insert(m.name.clone(), m);
         self
     }
 
+    /// Walks the module tree along `path`, returning the [`NativeFn`] at the leaf,
+    /// or `None` if any segment is missing.
     pub fn resolve(&self, path: &[String]) -> Option<&NativeFn> {
         if path.is_empty() {
             return None;
@@ -55,6 +91,8 @@ impl Module {
     }
 }
 
+/// Extracts the static [`TypeAnnotation`] for a Rust type.
+/// Used by [`IntoValue`] for `Vec<T>` to set the array's `items_type`.
 pub trait ValueType {
     fn type_annotation() -> TypeAnnotation;
 }
@@ -95,6 +133,8 @@ impl<T: ValueType> ValueType for Vec<T> {
     }
 }
 
+/// Converts a [`Value`] into a typed Rust value, or returns a runtime error.
+/// Implemented for `i64`, `f64`, `String`, `bool`, `char`, `Vec<T>`, and `Value` itself.
 pub trait FromValue: Sized {
     fn from_value(v: Value, span: Span) -> Result<Self, Error>;
 }
@@ -187,6 +227,8 @@ impl<T: FromValue> FromValue for Vec<T> {
     }
 }
 
+/// Converts a typed Rust value into a [`Value`].
+/// Implemented for `()` (→ `Null`), `i64`, `f64`, `String`, `bool`, `char`, `Vec<T>`, and `Value`.
 pub trait IntoValue {
     fn into_value(self) -> Value;
 }
@@ -242,6 +284,8 @@ impl<T: IntoValue + ValueType> IntoValue for Vec<T> {
     }
 }
 
+/// Wraps a typed Rust function into a [`NativeFn`] with automatic arity checking
+/// and argument extraction. Implemented by macro for 0–10 arguments.
 pub trait IntoNativeFn<Args> {
     fn into_native(self) -> NativeFn;
 }
@@ -267,6 +311,7 @@ where
     }
 }
 
+/// Marker type for fallible native functions (returning `Result<R, Error>`).
 pub struct Fallible<T>(std::marker::PhantomData<T>);
 
 macro_rules! impl_into_native_fn {
@@ -375,6 +420,7 @@ impl_into_native_fn!(
     (A10, a10)
 );
 
+/// Marker type for spanned fallible native functions (also receiving the call [`Span`]).
 pub struct Spanned<T>(std::marker::PhantomData<T>);
 
 macro_rules! impl_into_native_fn_spanned {

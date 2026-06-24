@@ -1,3 +1,9 @@
+//! `std::array` - array manipulation functions.
+//!
+//! All functions operate on [`Value::Values`] and return errors for non-array inputs.
+//! Higher-order functions (`map`, `filter`, `reduce`, etc.) require a [`Value::Function`]
+//! with the correct return type annotation.
+
 use super::len;
 use crate::interpreter::native::Module;
 

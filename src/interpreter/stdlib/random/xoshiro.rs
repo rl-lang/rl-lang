@@ -1,4 +1,11 @@
+//! Xoshiro256** pseudo-random number generator.
+//!
+//! A fast, high-quality 256-bit state PRNG. Seeded from [`SystemTime`] at construction.
+//! The seed is spread across 4 `u64` state words using the finalizer from
+//! `splitmix64` (golden ratio + two mixing steps).
+
 pub struct Xoshiro256 {
+    /// The 256-bit PRNG state as four `u64` words.
     state: [u64; 4],
 }
 
@@ -30,6 +37,7 @@ impl Xoshiro256 {
         Self { state }
     }
 
+    /// Advances the state and returns the next raw `u64` output.
     fn next(&mut self) -> u64 {
         // compute result before scrambling the state
         let result = (self.state[0].wrapping_add(self.state[3]))
@@ -47,21 +55,24 @@ impl Xoshiro256 {
         result
     }
 
-    // primitive functions
+    /// Returns a random `i64` in `[min, max]` inclusive.
     pub fn generate_random_int_range(&mut self, min: i64, max: i64) -> i64 {
         let range = (max as i128 - min as i128 + 1) as u128;
         let offset = (self.next() as u128) % range;
         (min as i128 + offset as i128) as i64
     }
 
+    /// Returns a random `f64` in `[0.0, 1.0)`.
     pub fn generate_random_float(&mut self) -> f64 {
         self.next() as f64 / u64::MAX as f64
     }
 
+    /// Returns a random `f64` in `[min, max)`.
     pub fn generate_random_float_range(&mut self, min: f64, max: f64) -> f64 {
         min + self.generate_random_float() * (max - min)
     }
 
+    /// Returns `true` with probability `weight` (clamped to `[0.0, 1.0]`).
     pub fn generate_random_bool(&mut self, weight: f64) -> bool {
         self.generate_random_float() < weight.clamp(0.0, 1.0)
     }

@@ -21,7 +21,7 @@ pub fn std_to_char(eval: &mut Evaluator, value: Value, span: Span) -> Result<cha
         }
 
         other => Err(eval.err(
-            format!("cannot parse \"{}\" as bool", other.type_name()),
+            format!("cannot parse \"{}\" as character", other.type_name()),
             span,
         )),
     }

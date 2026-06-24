@@ -22,7 +22,7 @@ pub fn std_to_int(eval: &mut Evaluator, value: Value, span: Span) -> Result<i64,
         }
 
         other => Err(eval.err(
-            format!("cannot parse \"{}\" as bool", other.type_name()),
+            format!("cannot parse \"{}\" as int", other.type_name()),
             span,
         )),
     }

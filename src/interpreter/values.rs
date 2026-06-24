@@ -1,27 +1,41 @@
-use std::fmt;
+//! Runtime value types for the rl interpreter.
 
 use crate::{
     ast::statements::{Param, Statement, TypeAnnotation},
     interpreter::evaluator::EnvironmentItem,
 };
+use std::fmt;
 
+/// A runtime value produced by evaluating an rl expression.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
+    /// A 64-bit signed integer.
     Integer(i64),
+    /// A 64-bit float.
     Float(f64),
+    /// A UTF-8 string.
     String(String),
+    /// A boolean.
     Bool(bool),
+    /// A single unsigned byte (`u8`).
     Byte(u8),
+    /// A single Unicode character.
     Char(char),
+    /// A homogeneous array of values with a tracked element type.
     Values {
+        /// The declared element type of this array.
         items_type: TypeAnnotation,
         items: Vec<Value>,
     },
+    /// The absence of a value - equivalent to `null` in rl source.
     Null,
+    /// A first-class function or lambda value, carrying its closure environment.
     Function {
         params: Vec<Param>,
         body: Vec<Statement>,
+        /// Declared return type; `None` for lambdas without an annotation.
         return_type: Option<TypeAnnotation>,
+        /// The captured environment frames at the point of lambda definition.
         captured_env: Vec<Vec<EnvironmentItem>>,
     },
 }

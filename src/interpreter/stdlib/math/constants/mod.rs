@@ -1,28 +1,33 @@
-pub mod e;
-pub mod euler_gamma;
-pub mod frac_1_pi;
-pub mod frac_1_sqrt_2;
-pub mod frac_2_pi;
-pub mod frac_2_sqrt_pi;
-pub mod frac_pi_2;
-pub mod frac_pi_3;
-pub mod frac_pi_4;
-pub mod frac_pi_6;
-pub mod frac_pi_8;
-pub mod inf;
-pub mod is_inf;
-pub mod is_nan;
-pub mod ln_10;
-pub mod ln_2;
-pub mod log10_2;
-pub mod log10_e;
-pub mod log2_10;
-pub mod log2_e;
-pub mod nan;
-pub mod phi;
-pub mod pi;
-pub mod sqrt_2;
-pub mod tau;
+//! `std::math::consts` - mathematical constants from [`std::f64::consts`].
+//!
+//! All constants are zero-argument functions returning `f64`.
+//! Accessed as `std::math::consts::PI()` in rl.
+
+mod e;
+mod euler_gamma;
+mod frac_1_pi;
+mod frac_1_sqrt_2;
+mod frac_2_pi;
+mod frac_2_sqrt_pi;
+mod frac_pi_2;
+mod frac_pi_3;
+mod frac_pi_4;
+mod frac_pi_6;
+mod frac_pi_8;
+mod inf;
+mod is_inf;
+mod is_nan;
+mod ln_10;
+mod ln_2;
+mod log10_2;
+mod log10_e;
+mod log2_10;
+mod log2_e;
+mod nan;
+mod phi;
+mod pi;
+mod sqrt_2;
+mod tau;
 
 use crate::interpreter::native::Module;
 

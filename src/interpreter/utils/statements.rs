@@ -1,5 +1,4 @@
-use std::path::Path;
-use std::sync::Arc;
+//! Statement evaluation - the main dispatch loop and control flow primitives.
 
 use crate::{
     ast::statements::{Statement, StatementKind, TypeAnnotation},
@@ -8,8 +7,15 @@ use crate::{
     parser::parser_logic::Parser,
     utils::{errors::Error, source::SourceFile, span::Span},
 };
+use std::path::Path;
+use std::sync::Arc;
 
 impl Evaluator {
+    /// Evaluates a single statement, mutating the environment and control-flow flags.
+    ///
+    /// Loop control (`break`, `continue`) and function return (`return`) are signalled
+    /// via `is_breaking`, `is_continuing`, and `return_value` flags on [`Evaluator`]
+    /// rather than exceptions, so callers must check these flags after each statement.
     pub fn evaluate_statement(&mut self, statement: &Statement) -> Result<(), Error> {
         match &statement.kind {
             StatementKind::ResolvedVariableDeclaration {
@@ -508,6 +514,8 @@ impl Evaluator {
         Ok(())
     }
 
+    /// Evaluates a [`ConditionalBranch`] or [`Conditional`] and returns `true` if the
+    /// branch was taken (condition was true or it was an `else`).
     fn evaluate_branch(&mut self, statement: &Statement) -> Result<bool, Error> {
         match &statement.kind {
             StatementKind::ConditionalBranch { condition, body } => match condition {
@@ -565,6 +573,13 @@ impl Evaluator {
         }
     }
 
+    /// The top-level entry point for a full rl program.
+    ///
+    /// If a function is annotated `!#[entry]` or named `main`, only declarations
+    /// and imports are evaluated first, then that function is called with no arguments.
+    /// If no entry point exists, all statements are evaluated top-to-bottom (script mode).
+    ///
+    /// Returns an error if multiple `!#[entry]` functions are found.
     pub fn evaluate_program(&mut self, statements: &[Statement]) -> Result<(), Error> {
         let mut explicit_entry: Option<(Span, usize)> = None;
         let mut main_entry: Option<(Span, usize)> = None;
@@ -623,6 +638,7 @@ impl Evaluator {
         Ok(())
     }
 
+    /// Evaluates a list of statements inside a fresh scope, used for inline blocks.
     pub fn evaluate_block(&mut self, statements: &[Statement]) -> Result<(), Error> {
         self.push_scope();
         for statement in statements {

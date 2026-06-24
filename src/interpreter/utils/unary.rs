@@ -1,3 +1,11 @@
+//! Unary operator evaluation.
+//!
+//! | Operator | Operand       | Result                  |
+//! |----------|---------------|-------------------------|
+//! | `!`      | `bool`        | `bool`                  |
+//! | `-`      | `int` / `byte`| `int` (byte is widened) |
+//! | `-`      | `float`       | `float`                 |
+
 use crate::{
     interpreter::evaluator::Evaluator,
     interpreter::values::Value,

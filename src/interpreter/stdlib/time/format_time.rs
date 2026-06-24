@@ -1,3 +1,11 @@
+//! Unix timestamp -> formatted string conversion.
+//!
+//! `unix_to_parts` decomposes a Unix timestamp into `(year, month, day, hour, minute, second)`
+//! using the Gregorian calendar algorithm (proleptic calendar, UTC only, no DST).
+//!
+//! `apply_pattern` performs simple string substitution on strftime-like tokens:
+//! `%Y` (4-digit year), `%m` (month), `%d` (day), `%H` (hour), `%M` (minute), `%S` (second).
+
 use crate::{
     interpreter::{evaluator::Evaluator, values::Value},
     utils::{errors::Error, span::Span},

@@ -1,3 +1,12 @@
+//! Index-assign evaluation (`arr[i] = value`, including nested `arr[i][j] = value`).
+//!
+//! Uses two recursive helpers:
+//! - `get_root_addr` - walks the chain of `Index` nodes to find the root `ResolvedIdentifier`
+//! - `get_indices_as_vec` - evaluates all intermediate indices into a `Vec<usize>`
+//!
+//! The final index is appended, then the function traverses into the nested `Value::Values`
+//! structure mutably to perform the assignment, enforcing type compatibility and bounds.
+
 use crate::{
     ast::{
         nodes::{Expression, ExpressionKind},

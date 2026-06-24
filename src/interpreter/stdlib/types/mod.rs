@@ -1,3 +1,8 @@
+//! `std::types` - type inspection and conversion functions.
+//!
+//! `is_*` functions check the runtime type of a value without conversion.
+//! `to_int` accepts hex strings prefixed with `0x`/`0X`.
+
 mod is_bool;
 mod is_char;
 mod is_float;

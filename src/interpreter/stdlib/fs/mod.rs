@@ -1,3 +1,8 @@
+//! `std::fs` - filesystem operations: create, remove, list, copy, move, and metadata.
+//!
+//! All errors include the path and the underlying OS error message.
+//! `temp_dir` uses `with_raw_function` since it takes no arguments.
+
 mod copy_file;
 mod file_modified;
 mod file_size;

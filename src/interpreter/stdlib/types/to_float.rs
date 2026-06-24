@@ -15,7 +15,7 @@ pub fn std_to_float(eval: &mut Evaluator, value: Value, span: Span) -> Result<f6
             .map_err(|_| eval.err(format!("cannot parse \"{}\" as float", s), span)),
 
         other => Err(eval.err(
-            format!("cannot parse \"{}\" as bool", other.type_name()),
+            format!("cannot parse \"{}\" as float", other.type_name()),
             span,
         )),
     }

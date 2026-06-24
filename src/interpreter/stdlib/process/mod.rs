@@ -1,3 +1,11 @@
+//! `std::process` - process management: args, env, cwd, exec, exit, pid, sleep.
+//!
+//! `exec` captures stdout and returns it as a string (trailing newline stripped).
+//! `exec_code` returns only the exit code as `int`.
+//! `exec_lines` returns stdout split into lines as `arr[string]`.
+//! Both `args` and `cwd` use `with_raw_function` since they take no rl arguments.
+//! `env` returns `null` (not an error) when the variable is not set.
+
 mod args;
 mod cwd;
 mod env;

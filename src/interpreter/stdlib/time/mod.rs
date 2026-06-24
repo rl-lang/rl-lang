@@ -1,3 +1,10 @@
+//! `std::time` - Unix timestamp functions and time formatting.
+//!
+//! All timestamps are Unix seconds as `i64`.
+//! `format_time` uses a minimal strftime-like pattern (`%Y`, `%m`, `%d`, `%H`, `%M`, `%S`).
+//! `time_parts` returns `[year, month, day, hour, minute, second]` as an `arr[int]`.
+//! `time_add` and `time_diff` are trivial arithmetic helpers - a proper time type is planned.
+
 mod format_time;
 mod now;
 mod time_arith;
