@@ -6,3 +6,4 @@ mod functions;
 mod general;
 mod numbers;
 mod std;
+mod tuple_errors;
