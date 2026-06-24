@@ -53,7 +53,7 @@ dec int x = bit_not(0)
 
     assert_eq!(
         evaluator.get_value_raw("x"),
-        Some(Value::Integer(!0i64 as i64))
+        Some(Value::Integer(!0i64 ))
     );
 }
 

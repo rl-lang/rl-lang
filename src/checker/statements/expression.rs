@@ -244,7 +244,7 @@ impl TypeChecker {
                         expression.span,
                     );
                 }
-                return CheckType::Unknown;
+                CheckType::Unknown
             }
             _ => CheckType::Unknown,
         }
