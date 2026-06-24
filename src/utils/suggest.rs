@@ -20,6 +20,7 @@ where
     best.map(|(s, _)| s)
 }
 
+/// Computes the Levenshtein edit distance between two strings.
 fn levenshtein(a: &str, b: &str) -> usize {
     let a: Vec<char> = a.chars().collect();
     let b: Vec<char> = b.chars().collect();

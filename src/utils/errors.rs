@@ -192,7 +192,7 @@ impl Error {
         }
     }
 
-    // adds a way to extract bytes from span in Error
+    /// Extracts the primary [`Span`] of this error, if one was set.
     pub fn span(&self) -> Option<crate::utils::span::Span> {
         self.detail.as_ref().map(|d| d.primary.0)
     }
@@ -227,6 +227,7 @@ impl ErrorReason {
 }
 
 impl Error {
+    /// Returns the raw error message string.
     pub fn message(&self) -> &str {
         &self.message
     }
