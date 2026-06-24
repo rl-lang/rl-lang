@@ -351,6 +351,45 @@ impl Evaluator {
                         }
                         items[b_usize].clone()
                     }
+
+                    (Value::Tuple(items), Value::Integer(i)) => {
+                        let i_usize = *i as usize;
+                        if i_usize >= items.len() {
+                            return Err(self
+                                .err(
+                                    format!(
+                                        "tuple index {} out of bounds (len {})",
+                                        i,
+                                        items.len()
+                                    ),
+                                    expression.span,
+                                )
+                                .with_label(
+                                    target.span,
+                                    format!("this tuple has {} elements", items.len()),
+                                ));
+                        }
+                        items[i_usize].clone()
+                    }
+                    (Value::Tuple(items), Value::Byte(b)) => {
+                        let b_usize = *b as usize;
+                        if b_usize >= items.len() {
+                            return Err(self
+                                .err(
+                                    format!(
+                                        "tuple index {} out of bounds (len {})",
+                                        b,
+                                        items.len()
+                                    ),
+                                    expression.span,
+                                )
+                                .with_label(
+                                    target.span,
+                                    format!("this tuple has {} elements", items.len()),
+                                ));
+                        }
+                        items[b_usize].clone()
+                    }
                     _ => {
                         return Err(self
                             .err("invalid index operation", expression.span)
@@ -541,6 +580,21 @@ impl Evaluator {
                         ));
                     }
                 }
+            }
+
+            ExpressionKind::TupleLiteral(items) => {
+                let mut values = Vec::with_capacity(items.len());
+                for e in items {
+                    values.push(self.evaluate(e)?);
+                }
+                Value::Tuple(values)
+            }
+            ExpressionKind::ErrorLiteral(inner) => {
+                let val = self.evaluate(inner)?;
+                if matches!(val, Value::Error(_)) {
+                    return Err(self.err("error cannot wrap another error", expression.span));
+                }
+                Value::Error(Box::new(val))
             }
 
             _ => Value::Null,

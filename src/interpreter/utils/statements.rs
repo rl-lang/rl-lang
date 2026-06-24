@@ -537,6 +537,60 @@ impl Evaluator {
                 self.is_continuing = true;
             }
 
+            StatementKind::ResolvedDestructureDeclaration {
+                bindings,
+                slots,
+                value,
+            } => {
+                let val = self.evaluate(value)?;
+                let items = match val {
+                    Value::Tuple(items) => items,
+                    other => {
+                        return Err(self.err(
+                            format!(
+                                "expected tuple on right side of destructure, got {}",
+                                other.type_name()
+                            ),
+                            statement.span,
+                        ));
+                    }
+                };
+                if items.len() != bindings.len() {
+                    return Err(self.err(
+                        format!(
+                            "destructure mismatch: {} bindings but tuple has {} elements",
+                            bindings.len(),
+                            items.len()
+                        ),
+                        statement.span,
+                    ));
+                }
+                for ((type_annotation, _name), (slot, val)) in
+                    bindings.iter().zip(slots.iter().zip(items.into_iter()))
+                {
+                    let val = match (type_annotation, &val) {
+                        (TypeAnnotation::Int | TypeAnnotation::CInt, Value::Byte(b)) => {
+                            Value::Integer(*b as i64)
+                        }
+                        _ => val,
+                    };
+                    let val_type = Self::infer_type(&val, false);
+                    if !Self::types_compatible(&val_type, type_annotation)
+                        && val_type != *type_annotation
+                        && val_type != TypeAnnotation::Null
+                    {
+                        return Err(self.err(
+                            format!(
+                                "tuple element type mismatch: expected {:?}, got {:?}",
+                                type_annotation, val_type
+                            ),
+                            statement.span,
+                        ));
+                    }
+                    self.insert_value(*slot, val, type_annotation.clone(), statement.span)?;
+                }
+            }
+
             _ => {}
         }
         Ok(())

@@ -577,6 +577,20 @@ impl Parser {
             }
         }
 
+        if self.match_type(&[TokenType::Error]) {
+            let error_start = self.previous_span();
+            if !self.match_type(&[TokenType::LeftParen]) {
+                return Err(self.err("expected `(` after `error`", self.peek_span()));
+            }
+            let inner = self.parse_expression()?;
+            if !self.match_type(&[TokenType::RightParen]) {
+                return Err(self.err("expected `)` after error value", self.peek_span()));
+            }
+            let span = error_start.join(self.previous_span());
+            let expr = Expression::new(ExpressionKind::ErrorLiteral(Box::new(inner)), span);
+            return self.parse_postfix(expr, start);
+        }
+
         if self.match_type(&[TokenType::Null]) {
             let span = self.previous_span();
             let expr = Expression::new(ExpressionKind::Null, span);
