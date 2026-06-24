@@ -94,7 +94,7 @@ fn const_string() {
 
 #[test]
 fn dec_byte() {
-    let statements = common::parse("dec byte x = 65");
+    let statements = common::parse("dec byte x = 65 as byte");
     let expected = Statement::new(
         StatementKind::VariableDeclaration {
             name: "x".to_string(),
@@ -108,7 +108,7 @@ fn dec_byte() {
 
 #[test]
 fn const_byte() {
-    let statements = common::parse("CONST byte x = 65");
+    let statements = common::parse("CONST byte x = 65 as byte");
     let expected = Statement::new(
         StatementKind::ConstantDeclaration {
             name: "x".to_string(),
@@ -183,7 +183,10 @@ fn dec_array() {
         StatementKind::Array {
             name: "x".to_string(),
             type_annotation: TypeAnnotation::Int,
-            value: vec![Expression::new(ExpressionKind::Byte(1), Span::new(18, 19))],
+            value: vec![Expression::new(
+                ExpressionKind::Integer(1),
+                Span::new(18, 19),
+            )],
         },
         Span::new(0, 20),
     );
@@ -197,7 +200,10 @@ fn const_array() {
         StatementKind::ConstantArray {
             name: "x".to_string(),
             type_annotation: TypeAnnotation::Int,
-            value: vec![Expression::new(ExpressionKind::Byte(1), Span::new(20, 21))],
+            value: vec![Expression::new(
+                ExpressionKind::Integer(1),
+                Span::new(20, 21),
+            )],
         },
         Span::new(0, 22),
     );
