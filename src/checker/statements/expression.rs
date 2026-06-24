@@ -212,6 +212,40 @@ impl TypeChecker {
                     return_type: resolved_return,
                 }
             }
+
+            ExpressionKind::Cast { value, target_type } => {
+                let value_type = self.check_expression(value);
+                self.check_is_null(&value_type, value.span);
+
+                let castable = matches!(
+                    &value_type,
+                    CheckType::Known(
+                        TypeAnnotation::CInt
+                            | TypeAnnotation::CByte
+                            | TypeAnnotation::CFloat
+                            | TypeAnnotation::Float
+                            | TypeAnnotation::Int
+                            | TypeAnnotation::Byte
+                    ) | CheckType::Unknown
+                );
+
+                let valid_target = matches!(
+                    target_type,
+                    TypeAnnotation::Int | TypeAnnotation::Float | TypeAnnotation::Byte
+                );
+
+                if !castable || !valid_target {
+                    self.error(
+                        format!(
+                            "invalid cast: cannot cast {} to {:?}",
+                            value_type.info(),
+                            target_type
+                        ),
+                        expression.span,
+                    );
+                }
+                CheckType::Unknown
+            }
             _ => CheckType::Unknown,
         }
     }

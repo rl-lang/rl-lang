@@ -145,6 +145,11 @@ impl Resolver {
                     .collect(),
             },
 
+            ExpressionKind::Cast { value, target_type } => ExpressionKind::Cast {
+                value: Box::new(self.resolve_expression(*value)),
+                target_type,
+            },
+
             other => other,
         };
 

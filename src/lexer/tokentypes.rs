@@ -98,6 +98,7 @@ pub enum TokenType {
     Else,
     Const,
     Dec,
+    As,
 
     // -- type keywords --
     Int,

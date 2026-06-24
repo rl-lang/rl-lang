@@ -450,6 +450,34 @@ impl Evaluator {
             ExpressionKind::Assign { name, .. } => {
                 return Err(self.err(format!("undefined variable '{}'", name), expression.span));
             }
+
+            ExpressionKind::Cast { value, target_type } => {
+                let val = self.evaluate(value)?;
+                self.check_not_null(&val, value.span)?;
+                match (&val, target_type) {
+                    (Value::Integer(n), TypeAnnotation::Float) => Value::Float(*n as f64),
+                    (Value::Integer(n), TypeAnnotation::Byte) => Value::Byte(*n as u8),
+                    (Value::Integer(_), TypeAnnotation::Int) => val,
+                    (Value::Float(f), TypeAnnotation::Int) => Value::Integer(*f as i64),
+                    (Value::Float(f), TypeAnnotation::Byte) => Value::Byte(*f as u8),
+                    (Value::Float(_), TypeAnnotation::Float) => val,
+                    (Value::Byte(b), TypeAnnotation::Float) => Value::Float(*b as f64),
+                    (Value::Byte(b), TypeAnnotation::Int) => Value::Integer(*b as i64),
+                    (Value::Byte(_), TypeAnnotation::Byte) => val,
+
+                    _ => {
+                        return Err(self.err(
+                            format!(
+                                "invalid cast: cannot cast {} to {:?}",
+                                val.type_name(),
+                                target_type
+                            ),
+                            expression.span,
+                        ));
+                    }
+                }
+            }
+
             _ => Value::Null,
         };
         Ok(value)

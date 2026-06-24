@@ -407,6 +407,45 @@ impl Parser {
             log::debug!("found number");
             let span = self.previous_span();
             if let TokenType::NumberLiteral(n) = self.previous() {
+                if self.match_type(&[TokenType::As]) {
+                    if self.match_type(&[TokenType::Int, TokenType::Byte, TokenType::Float]) {
+                        match self.previous() {
+                            TokenType::Int => {
+                                return self.parse_postfix(
+                                    Expression::new(ExpressionKind::Integer(n), span),
+                                    start,
+                                );
+                            }
+
+                            TokenType::Float => {
+                                return self.parse_postfix(
+                                    Expression::new(ExpressionKind::Float(n as f64), span),
+                                    start,
+                                );
+                            }
+
+                            TokenType::Byte => {
+                                if !(0..=255).contains(&n) {
+                                    return Err(self
+                                        .err(format!("value {} is too large for byte", n), span));
+                                }
+                                return self.parse_postfix(
+                                    Expression::new(ExpressionKind::Byte(n as u8), span),
+                                    start,
+                                );
+                            }
+
+                            other => {
+                                return Err(self.err(
+                                    format!("expected int/byte/float types found {:?}", other),
+                                    span,
+                                ));
+                            }
+                        }
+                    }
+                    return Err(self.err("expected type after `as`", self.previous_span()));
+                }
+
                 let expr = Expression::new(ExpressionKind::Integer(n), span);
                 return self.parse_postfix(expr, start);
             }
@@ -415,6 +454,44 @@ impl Parser {
         if self.match_type(&[TokenType::ByteLiteral(0)]) {
             let span = self.previous_span();
             if let TokenType::ByteLiteral(b) = self.previous() {
+                if self.match_type(&[TokenType::As]) {
+                    if self.match_type(&[TokenType::Int, TokenType::Byte, TokenType::Float]) {
+                        match self.previous() {
+                            TokenType::Int => {
+                                return self.parse_postfix(
+                                    Expression::new(ExpressionKind::Integer(b as i64), span),
+                                    start,
+                                );
+                            }
+
+                            TokenType::Float => {
+                                return self.parse_postfix(
+                                    Expression::new(ExpressionKind::Float(b as f64), span),
+                                    start,
+                                );
+                            }
+
+                            TokenType::Byte => {
+                                if !(0..=255).contains(&b) {
+                                    return Err(self
+                                        .err(format!("value {} is too large for byte", b), span));
+                                }
+                                return self.parse_postfix(
+                                    Expression::new(ExpressionKind::Byte(b), span),
+                                    start,
+                                );
+                            }
+
+                            other => {
+                                return Err(self.err(
+                                    format!("expected int/byte/float types found {:?}", other),
+                                    span,
+                                ));
+                            }
+                        }
+                    }
+                    return Err(self.err("expected type after `as`", self.previous_span()));
+                }
                 let expr = Expression::new(ExpressionKind::Byte(b), span);
                 return self.parse_postfix(expr, start);
             }
@@ -457,7 +534,45 @@ impl Parser {
             log::debug!("oh no found float");
             let span = self.previous_span();
             if let TokenType::FloatLiteral(f) = self.previous() {
-                let expr = Expression::new(ExpressionKind::Float(f), span);
+                if self.match_type(&[TokenType::As]) {
+                    if self.match_type(&[TokenType::Int, TokenType::Byte, TokenType::Float]) {
+                        match self.previous() {
+                            TokenType::Int => {
+                                return self.parse_postfix(
+                                    Expression::new(ExpressionKind::Integer(f as i64), span),
+                                    start,
+                                );
+                            }
+
+                            TokenType::Float => {
+                                return self.parse_postfix(
+                                    Expression::new(ExpressionKind::Float(f), span),
+                                    start,
+                                );
+                            }
+
+                            TokenType::Byte => {
+                                if !(0.0..=255.0).contains(&f) {
+                                    return Err(self
+                                        .err(format!("value {} is too large for byte", f), span));
+                                }
+                                return self.parse_postfix(
+                                    Expression::new(ExpressionKind::Byte(f as u8), span),
+                                    start,
+                                );
+                            }
+
+                            other => {
+                                return Err(self.err(
+                                    format!("expected int/byte/float types found {:?}", other),
+                                    span,
+                                ));
+                            }
+                        }
+                    }
+                    return Err(self.err("expected type after `as`", span));
+                }
+                let expr = Expression::new(ExpressionKind::Float(f), self.previous_span());
                 return self.parse_postfix(expr, start);
             }
         }
@@ -590,6 +705,19 @@ impl Parser {
                     },
                     span,
                 );
+            } else if self.match_type(&[TokenType::As]) {
+                let span = self.previous_span();
+                let target_type = self
+                    .parse_type(true)
+                    .map_err(|_| self.err("expected type after `as`", span))?;
+                let span = start.join(self.previous_span());
+                expr = Expression::new(
+                    ExpressionKind::Cast {
+                        value: Box::new(expr),
+                        target_type,
+                    },
+                    span,
+                )
             } else {
                 break;
             }

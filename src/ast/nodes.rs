@@ -125,4 +125,11 @@ pub enum ExpressionKind {
         callee: Box<Expression>,
         args: Vec<Expression>,
     },
+
+    /// A type cast expression ` value as type `.
+    /// Used for non-literal casts; literal casts are constant-folded in the parser.
+    Cast {
+        value: Box<Expression>,
+        target_type: TypeAnnotation,
+    },
 }

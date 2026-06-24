@@ -53,7 +53,7 @@ dec int x = bit_not(0)
 
     assert_eq!(
         evaluator.get_value_raw("x"),
-        Some(Value::Integer(!0u8 as i64))
+        Some(Value::Integer(!0i64 ))
     );
 }
 
@@ -108,7 +108,7 @@ dec int x = leading_zeros(8)
 
     assert_eq!(
         evaluator.get_value_raw("x"),
-        Some(Value::Integer(8u8.leading_zeros() as i64))
+        Some(Value::Integer(8i64.leading_zeros() as i64))
     );
 }
 
@@ -124,6 +124,6 @@ dec int x = trailing_zeros(8)
 
     assert_eq!(
         evaluator.get_value_raw("x"),
-        Some(Value::Integer(8u8.trailing_zeros() as i64))
+        Some(Value::Integer(8i64.trailing_zeros() as i64))
     );
 }
