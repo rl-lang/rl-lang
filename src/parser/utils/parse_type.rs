@@ -59,6 +59,22 @@ impl Parser {
                     self.match_type(&[TokenType::RightBracket]);
                     TypeAnnotation::Array(Box::new(inner))
                 }
+                TokenType::RightParen => {
+                    self.advance();
+                    let mut inner = vec![];
+                    while !self.match_type(&[TokenType::LeftParen]) {
+                        let item_type = self.parse_type(true)?;
+                        inner.push(item_type);
+                        if !self.match_type(&[TokenType::Comma]) {
+                            break;
+                        }
+                    }
+                    TypeAnnotation::Tuple(inner)
+                }
+                TokenType::Error => {
+                    self.advance();
+                    TypeAnnotation::Error
+                }
                 _ => return Err(self.err("expected a type", span)),
             },
             false => match self.peek() {
@@ -96,6 +112,22 @@ impl Parser {
                     let inner = self.parse_type(false)?;
                     self.match_type(&[TokenType::RightBracket]);
                     TypeAnnotation::CArray(Box::new(inner))
+                }
+                TokenType::RightParen => {
+                    self.advance();
+                    let mut inner = vec![];
+                    while !self.match_type(&[TokenType::LeftParen]) {
+                        let item_type = self.parse_type(false)?;
+                        inner.push(item_type);
+                        if !self.match_type(&[TokenType::Comma]) {
+                            break;
+                        }
+                    }
+                    TypeAnnotation::Tuple(inner)
+                }
+                TokenType::Error => {
+                    self.advance();
+                    TypeAnnotation::CError
                 }
                 _ => return Err(self.err("expected a type", span)),
             },

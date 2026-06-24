@@ -241,8 +241,8 @@ pub enum TypeAnnotation {
     Tuple(Vec<TypeAnnotation>),
     CTuple(Vec<TypeAnnotation>),
 
-    Error(Box<TypeAnnotation>),
-    CError(Box<TypeAnnotation>),
+    Error,
+    CError,
 }
 
 /// A single function or lambda parameter: a name and its type annotation.
