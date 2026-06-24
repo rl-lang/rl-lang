@@ -705,6 +705,19 @@ impl Parser {
                     },
                     span,
                 );
+            } else if self.match_type(&[TokenType::As]) {
+                let span = self.previous_span();
+                let target_type = self
+                    .parse_type(true)
+                    .map_err(|_| self.err("expected type after `as`", span))?;
+                let span = start.join(self.previous_span());
+                expr = Expression::new(
+                    ExpressionKind::Cast {
+                        value: Box::new(expr),
+                        target_type,
+                    },
+                    span,
+                )
             } else {
                 break;
             }
