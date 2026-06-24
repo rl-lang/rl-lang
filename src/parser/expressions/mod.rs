@@ -407,6 +407,44 @@ impl Parser {
             log::debug!("found number");
             let span = self.previous_span();
             if let TokenType::NumberLiteral(n) = self.previous() {
+                if self.match_type(&[TokenType::As])
+                    && self.match_type(&[TokenType::Int, TokenType::Byte, TokenType::Float])
+                {
+                    match self.previous() {
+                        TokenType::Int => {
+                            return self.parse_postfix(
+                                Expression::new(ExpressionKind::Integer(n), span),
+                                start,
+                            );
+                        }
+
+                        TokenType::Float => {
+                            return self.parse_postfix(
+                                Expression::new(ExpressionKind::Float(n as f64), span),
+                                start,
+                            );
+                        }
+
+                        TokenType::Byte => {
+                            if !(0..=255).contains(&n) {
+                                return Err(
+                                    self.err(format!("value {} is too large for byte", n), span)
+                                );
+                            }
+                            return self.parse_postfix(
+                                Expression::new(ExpressionKind::Byte(n as u8), span),
+                                start,
+                            );
+                        }
+
+                        other => {
+                            return Err(self.err(
+                                format!("expected int/byte/float types found {:?}", other),
+                                span,
+                            ));
+                        }
+                    }
+                }
                 let expr = Expression::new(ExpressionKind::Integer(n), span);
                 return self.parse_postfix(expr, start);
             }

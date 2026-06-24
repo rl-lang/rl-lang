@@ -38,10 +38,6 @@ impl Tokenizer {
             self.add_token(TokenType::FloatLiteral(parsed_value));
         } else {
             let parsed_value: i64 = value.parse().unwrap();
-            if (0..=255).contains(&parsed_value) {
-                self.add_token(TokenType::ByteLiteral(parsed_value as u8));
-                return;
-            }
             self.add_token(TokenType::NumberLiteral(parsed_value));
         }
     }
