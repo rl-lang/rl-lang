@@ -477,7 +477,7 @@ impl Parser {
                                         .err(format!("value {} is too large for byte", b), span));
                                 }
                                 return self.parse_postfix(
-                                    Expression::new(ExpressionKind::Byte(b as u8), span),
+                                    Expression::new(ExpressionKind::Byte(b), span),
                                     start,
                                 );
                             }
@@ -546,7 +546,7 @@ impl Parser {
 
                             TokenType::Float => {
                                 return self.parse_postfix(
-                                    Expression::new(ExpressionKind::Float(f as f64), span),
+                                    Expression::new(ExpressionKind::Float(f), span),
                                     start,
                                 );
                             }
