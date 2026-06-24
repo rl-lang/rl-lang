@@ -7,6 +7,8 @@
 //! ```text
 //! CONST int X = 42
 //! CONST array[int] XS = [1, 2, 3]
+//! CONST (int, string) P = (1, "hi")
+//! CONST int X, string Y = (1, "hi")
 //! ```
 
 use crate::{
@@ -41,6 +43,116 @@ impl Parser {
         log::debug!("{:?}", self.peek());
         #[cfg(feature = "debug")]
         log::debug!("parsing type");
+
+        // -- tuple: CONST (T, T, ...) NAME = (...) --
+        if self.peek() == TokenType::LeftParen {
+            self.advance();
+            let first_type = self.parse_type(false)?;
+
+            if self.peek() == TokenType::Comma || self.peek() == TokenType::RightParen {
+                let mut types = vec![first_type];
+                while self.match_type(&[TokenType::Comma]) {
+                    if self.peek() == TokenType::RightParen {
+                        break;
+                    }
+                    types.push(self.parse_type(false)?);
+                }
+                if !self.match_type(&[TokenType::RightParen]) {
+                    return Err(self.err("expected ) after tuple types", self.peek_span()));
+                }
+                let name = match self.peek() {
+                    TokenType::Identifier(n) => {
+                        self.advance();
+                        n
+                    }
+                    _ => return Err(self.err("expected name after tuple type", self.peek_span())),
+                };
+                if !self.match_type(&[TokenType::Assign]) {
+                    return Err(self.err("expected = after name", self.peek_span()));
+                }
+                let value = self.parse_expression()?;
+                let span = start.join(value.span);
+                return Ok(Statement::new(
+                    StatementKind::ConstantDeclaration {
+                        name,
+                        type_annotation: TypeAnnotation::CTuple(types),
+                        value,
+                    },
+                    span,
+                ));
+            } else {
+                return Err(self.err("invalid tuple type syntax", self.peek_span()));
+            }
+        }
+
+        // -- destructure: CONST T X, T Y = (...) --
+        if matches!(
+            self.peek(),
+            TokenType::Int
+                | TokenType::Float
+                | TokenType::Bool
+                | TokenType::String
+                | TokenType::Byte
+                | TokenType::Char
+                | TokenType::Fn
+                | TokenType::Error
+        ) {
+            let saved = self.current;
+            let first_type = self.parse_type(false)?;
+            let first_name = match self.peek() {
+                TokenType::Identifier(n) => {
+                    self.advance();
+                    n
+                }
+                _ => {
+                    self.current = saved;
+                    return self.parse_const_declartion_scalar(start);
+                }
+            };
+            if self.peek() == TokenType::Comma {
+                let mut bindings = vec![(first_type, first_name)];
+                while self.match_type(&[TokenType::Comma]) {
+                    let t = self.parse_type(false)?;
+                    let n = match self.peek() {
+                        TokenType::Identifier(n) => {
+                            self.advance();
+                            n
+                        }
+                        _ => {
+                            return Err(
+                                self.err("expected name in destructure binding", self.peek_span())
+                            );
+                        }
+                    };
+                    bindings.push((t, n));
+                }
+                if !self.match_type(&[TokenType::Assign]) {
+                    return Err(self.err("expected = after destructure bindings", self.peek_span()));
+                }
+                let value = self.parse_expression()?;
+                let span = start.join(value.span);
+                return Ok(Statement::new(
+                    StatementKind::DestructureDeclaration { bindings, value },
+                    span,
+                ));
+            } else {
+                if !self.match_type(&[TokenType::Assign]) {
+                    return Err(self.err("expected = after name", self.peek_span()));
+                }
+                let value = self.parse_expression()?;
+                let span = start.join(value.span);
+                return Ok(Statement::new(
+                    StatementKind::ConstantDeclaration {
+                        name: first_name,
+                        type_annotation: first_type,
+                        value,
+                    },
+                    span,
+                ));
+            }
+        }
+
+        // -- array: CONST array[T] NAME = [...] --
         if self.match_type(&[TokenType::Array]) && self.peek() == TokenType::LeftBracket {
             self.advance();
             let annoation_type = match self.peek() {
@@ -134,6 +246,10 @@ impl Parser {
             }
         }
 
+        self.parse_const_declartion_scalar(start)
+    }
+
+    fn parse_const_declartion_scalar(&mut self, start: Span) -> Result<Statement, Error> {
         let const_type = self.parse_type(false)?;
         let name = match self.peek() {
             TokenType::Identifier(n) => {
