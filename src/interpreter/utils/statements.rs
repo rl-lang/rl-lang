@@ -85,10 +85,24 @@ impl Evaluator {
             } => {
                 let val = self.evaluate(value)?;
                 let val = match val {
-                    Value::Values { items, .. } => Value::Values {
-                        items_type: type_annotation.clone(),
-                        items,
-                    },
+                    Value::Values { items, .. } => {
+                        for item in &items {
+                            let actual = Self::infer_type(item, false);
+                            if !Self::types_compatible(&actual, &type_annotation) {
+                                return Err(self.err(
+                                    format!(
+                                        "array element type mismatch: expected {:?}, found {:?}",
+                                        type_annotation, actual
+                                    ),
+                                    statement.span,
+                                ));
+                            }
+                        }
+                        Value::Values {
+                            items_type: type_annotation.clone(),
+                            items,
+                        }
+                    }
                     other => {
                         return Err(self.err(
                             format!("expected array value found {}", other.type_name()),
@@ -108,10 +122,24 @@ impl Evaluator {
             } => {
                 let val = self.evaluate(value)?;
                 let val = match val {
-                    Value::Values { items, .. } => Value::Values {
-                        items_type: type_annotation.clone(),
-                        items,
-                    },
+                    Value::Values { items, .. } => {
+                        for item in &items {
+                            let actual = Self::infer_type(item, false);
+                            if !Self::types_compatible(&actual, &type_annotation) {
+                                return Err(self.err(
+                                    format!(
+                                        "array element type mismatch: expected {:?}, found {:?}",
+                                        type_annotation, actual
+                                    ),
+                                    statement.span,
+                                ));
+                            }
+                        }
+                        Value::Values {
+                            items_type: type_annotation.clone(),
+                            items,
+                        }
+                    }
                     other => {
                         return Err(self.err(
                             format!("expected array value found {}", other.type_name()),
