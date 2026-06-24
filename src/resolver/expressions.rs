@@ -1,3 +1,16 @@
+//! Expression resolution - transforms name references into indexed lookups.
+//!
+//! Each expression variant is handled in [`Resolver::resolve_expression`]:
+//!
+//! - `Identifier` -> `ResolvedIdentifier { depth, slot }` if found in scope,
+//!   left as `Identifier` if not (stdlib names, unresolved at this stage)
+//! - `Assign` -> `ResolvedAssign { depth, slot, value }`
+//! - `Lambda` -> `ResolvedLambda { capture_depth, ... }` with a fresh scope
+//!   for its parameters; `capture_depth` is the scope stack length at the
+//!   point of definition, used by the evaluator to capture the environment
+//! - `Call` with a single-segment path -> `CallExpr` with a `ResolvedIdentifier`
+//!   callee if the name is in scope; left as `Call` for stdlib paths
+//! - All other variants recurse into their sub-expressions unchanged
 use crate::{
     ast::nodes::{Expression, ExpressionKind},
     resolver::Resolver,
