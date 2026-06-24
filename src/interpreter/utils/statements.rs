@@ -88,7 +88,7 @@ impl Evaluator {
                     Value::Values { items, .. } => {
                         for item in &items {
                             let actual = Self::infer_type(item, false);
-                            if !Self::types_compatible(&actual, &type_annotation) {
+                            if !Self::types_compatible(&actual, type_annotation) {
                                 return Err(self.err(
                                     format!(
                                         "array element type mismatch: expected {:?}, found {:?}",
@@ -125,7 +125,7 @@ impl Evaluator {
                     Value::Values { items, .. } => {
                         for item in &items {
                             let actual = Self::infer_type(item, false);
-                            if !Self::types_compatible(&actual, &type_annotation) {
+                            if !Self::types_compatible(&actual, type_annotation) {
                                 return Err(self.err(
                                     format!(
                                         "array element type mismatch: expected {:?}, found {:?}",

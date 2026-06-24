@@ -358,8 +358,8 @@ impl Evaluator {
             } => {
                 let left_val = self.evaluate(left)?;
                 let right_val = self.evaluate(right)?;
-                if matches!(operator, TokenType::Compare | TokenType::BangEqual) {
-                    if matches!(left_val, Value::Null) || matches!(right_val, Value::Null) {
+                if matches!(operator, TokenType::Compare | TokenType::BangEqual)
+                    && (matches!(left_val, Value::Null) || matches!(right_val, Value::Null)) {
                         let result = matches!((&left_val, &right_val), (Value::Null, Value::Null));
                         return Ok(if matches!(operator, TokenType::Compare) {
                             Value::Bool(result)
@@ -367,7 +367,6 @@ impl Evaluator {
                             Value::Bool(!result)
                         });
                     }
-                }
                 self.check_not_null(&left_val, left.span)?;
                 self.check_not_null(&right_val, right.span)?;
                 self.match_binary_operator(
