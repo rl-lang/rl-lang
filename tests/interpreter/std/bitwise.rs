@@ -5,10 +5,10 @@ use crate::common::eval_program;
 #[test]
 fn bit_and_int() {
     let evaluator = eval_program(
-        "
-        get bit_and from std::bitwise
-        dec int x = bit_and(5, 3)
-        ",
+        r#"
+get bit_and from std::bitwise
+dec int x = bit_and(5, 3)
+        "#,
     )
     .unwrap();
 
@@ -18,10 +18,10 @@ fn bit_and_int() {
 #[test]
 fn bit_or_int() {
     let evaluator = eval_program(
-        "
-        get bit_or from std::bitwise
-        dec int x = bit_or(5, 3)
-        ",
+        r#"
+get bit_or from std::bitwise
+dec int x = bit_or(5, 3)
+        "#,
     )
     .unwrap();
 
@@ -31,10 +31,10 @@ fn bit_or_int() {
 #[test]
 fn bit_xor_int() {
     let evaluator = eval_program(
-        "
-        get bit_xor from std::bitwise
-        dec int x = bit_xor(5, 3)
-        ",
+        r#"
+get bit_xor from std::bitwise
+dec int x = bit_xor(5, 3)
+        "#,
     )
     .unwrap();
 
@@ -44,10 +44,10 @@ fn bit_xor_int() {
 #[test]
 fn bit_not_byte() {
     let evaluator = eval_program(
-        "
-        get bit_not from std::bitwise
-        dec int x = bit_not(0)
-        ",
+        r#"
+get bit_not from std::bitwise
+dec int x = bit_not(0)
+        "#,
     )
     .unwrap();
 
@@ -60,10 +60,10 @@ fn bit_not_byte() {
 #[test]
 fn bit_shift_left_int() {
     let evaluator = eval_program(
-        "
-        get bit_shift_left from std::bitwise
-        dec int x = bit_shift_left(5, 1)
-        ",
+        r#"
+get bit_shift_left from std::bitwise
+dec int x = bit_shift_left(5, 1)
+        "#,
     )
     .unwrap();
 
@@ -73,10 +73,10 @@ fn bit_shift_left_int() {
 #[test]
 fn bit_shift_right_int() {
     let evaluator = eval_program(
-        "
-        get bit_shift_right from std::bitwise
-        dec int x = bit_shift_right(10, 1)
-        ",
+        r#"
+get bit_shift_right from std::bitwise
+dec int x = bit_shift_right(10, 1)
+        "#,
     )
     .unwrap();
 
@@ -86,10 +86,10 @@ fn bit_shift_right_int() {
 #[test]
 fn count_bits_int() {
     let evaluator = eval_program(
-        "
-        get count_bits from std::bitwise
-        dec int x = count_bits(7)
-        ",
+        r#"
+get count_bits from std::bitwise
+dec int x = count_bits(7)
+        "#,
     )
     .unwrap();
 
@@ -99,10 +99,10 @@ fn count_bits_int() {
 #[test]
 fn leading_zeros_int() {
     let evaluator = eval_program(
-        "
-        get leading_zeros from std::bitwise
-        dec int x = leading_zeros(8)
-        ",
+        r#"
+get leading_zeros from std::bitwise
+dec int x = leading_zeros(8)
+        "#,
     )
     .unwrap();
 
@@ -115,10 +115,10 @@ fn leading_zeros_int() {
 #[test]
 fn trailing_zeros_int() {
     let evaluator = eval_program(
-        "
-        get trailing_zeros from std::bitwise
-        dec int x = trailing_zeros(8)
-        ",
+        r#"
+get trailing_zeros from std::bitwise
+dec int x = trailing_zeros(8)
+        "#,
     )
     .unwrap();
 

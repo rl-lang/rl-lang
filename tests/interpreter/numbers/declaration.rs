@@ -40,13 +40,23 @@ fn assign_float() {
 
 #[test]
 fn compound_assign_int() {
-    let evaluator = eval_program("dec int x = 42\nx += 3").unwrap();
+    let evaluator = eval_program(
+        r#"
+dec int x = 42
+x += 3"#,
+    )
+    .unwrap();
     assert_eq!(evaluator.get_value_raw("x"), Some(Value::Integer(45)));
 }
 
 #[test]
 fn compound_assign_float() {
-    let evaluator = eval_program("dec float x = 42.0\nx += 3.0").unwrap();
+    let evaluator = eval_program(
+        r#"
+dec float x = 42.0
+x += 3.0"#,
+    )
+    .unwrap();
     assert_eq!(evaluator.get_value_raw("x"), Some(Value::Float(45.0)));
 }
 

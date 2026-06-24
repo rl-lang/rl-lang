@@ -59,7 +59,7 @@ fn dec_bool_declaration() {
 /// `dec string x = "hello"` - checks every token in order
 #[test]
 fn dec_string_declaration() {
-    let tokens = common::lex("dec string x = \"hello\"");
+    let tokens = common::lex(r#"dec string x = "hello""#);
     assert_eq!(tokens[0].token, TokenType::Dec);
     assert_eq!(tokens[0].lexeme, "dec");
     assert_eq!(tokens[1].token, TokenType::String);
@@ -196,7 +196,7 @@ fn dec_arr_bool_declaration() {
 /// `dec arr[string] x = ["one", "two", "three"]` - checks every token in order
 #[test]
 fn dec_arr_string_declaration() {
-    let tokens = common::lex("dec arr[string] x = [\"one\", \"two\", \"three\"]");
+    let tokens = common::lex(r#"dec arr[string] x = ["one", "two", "three"]"#);
     assert_eq!(tokens[0].token, TokenType::Dec);
     assert_eq!(tokens[0].lexeme, "dec");
     assert_eq!(tokens[1].token, TokenType::Array);
@@ -459,7 +459,7 @@ fn const_arr_bool_declaration() {
 /// `CONST arr[string] x = ["one", "two", "three"]` - checks every token in order
 #[test]
 fn const_arr_string_declaration() {
-    let tokens = common::lex("CONST arr[string] x = [\"one\", \"two\", \"three\"]");
+    let tokens = common::lex(r#"CONST arr[string] x = ["one", "two", "three"]"#);
     assert_eq!(tokens[0].token, TokenType::Const);
     assert_eq!(tokens[0].lexeme, "CONST");
     assert_eq!(tokens[1].token, TokenType::Array);

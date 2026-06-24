@@ -67,11 +67,11 @@ fn string_to_float() {
     let ev = eval_program(
         r#"
 get to_float from std::types
-dec float x = to_float("3.14")
+dec float x = to_float("4.14")
 "#,
     )
     .unwrap();
-    assert_eq!(ev.get_value_raw("x"), Some(Value::Float(3.14)));
+    assert_eq!(ev.get_value_raw("x"), Some(Value::Float(4.14)));
 }
 
 #[test]
