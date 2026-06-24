@@ -21,6 +21,7 @@ impl Tokenizer {
     /// | Types          | `int`, `float`, `bool`, `string`, `byte`, `char`, `arr` |
     /// | Declarations   | `dec`, `CONST`                                        |
     /// | Literals       | `true`, `false`, `null`                               |
+    /// | Special        | `as`                                                  |
     ///
     /// `CONST` in uppercase in intentional
     pub fn identifier(&mut self) {
@@ -56,6 +57,7 @@ impl Tokenizer {
             "if" => self.add_token(TokenType::If),
             "else" => self.add_token(TokenType::Else),
             "arr" => self.add_token(TokenType::Array),
+            "as" => self.add_token(TokenType::As),
 
             &_ => self.add_token(TokenType::Identifier(value)),
         }
