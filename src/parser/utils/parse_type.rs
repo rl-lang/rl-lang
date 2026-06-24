@@ -59,14 +59,16 @@ impl Parser {
                     self.match_type(&[TokenType::RightBracket]);
                     TypeAnnotation::Array(Box::new(inner))
                 }
-                TokenType::RightParen => {
+                TokenType::LeftParen => {
                     self.advance();
                     let mut inner = vec![];
-                    while !self.match_type(&[TokenType::LeftParen]) {
+                    while !self.match_type(&[TokenType::RightParen]) {
                         let item_type = self.parse_type(true)?;
                         inner.push(item_type);
                         if !self.match_type(&[TokenType::Comma]) {
-                            break;
+                            return Err(
+                                self.err("expected `,` between tuple types", self.peek_span())
+                            );
                         }
                     }
                     TypeAnnotation::Tuple(inner)
@@ -113,17 +115,19 @@ impl Parser {
                     self.match_type(&[TokenType::RightBracket]);
                     TypeAnnotation::CArray(Box::new(inner))
                 }
-                TokenType::RightParen => {
+                TokenType::LeftParen => {
                     self.advance();
                     let mut inner = vec![];
-                    while !self.match_type(&[TokenType::LeftParen]) {
+                    while !self.match_type(&[TokenType::RightParen]) {
                         let item_type = self.parse_type(false)?;
                         inner.push(item_type);
                         if !self.match_type(&[TokenType::Comma]) {
-                            break;
+                            return Err(
+                                self.err("expected `,` between tuple types", self.peek_span())
+                            );
                         }
                     }
-                    TypeAnnotation::Tuple(inner)
+                    TypeAnnotation::CTuple(inner)
                 }
                 TokenType::Error => {
                     self.advance();
