@@ -1,3 +1,12 @@
+//! Converts the [`OutputLine`] buffer into ratatui [`Line`]s for rendering.
+//!
+//! `ValidInput` lines are intentionally filtered out - they exist only for
+//! `:save` and are never shown in the output area.
+//!
+//! `Result` lines run through [`highlight`] first; if the highlighter returns
+//! only red or white spans (i.e. plain text, not code), the line is rendered
+//! as plain green instead.
+
 use ratatui::{
     style::{Color, Modifier, Style},
     text::{Line, Span},
@@ -5,6 +14,7 @@ use ratatui::{
 
 use crate::repl::{lines_types::OutputLine, syntax_highlighting::highlight};
 
+/// Converts the output buffer into a list of styled ratatui lines ready to render.
 pub fn render_output(output: &[OutputLine]) -> Vec<Line<'static>> {
     output
         .iter()
