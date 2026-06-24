@@ -108,6 +108,7 @@ pub enum TokenType {
     Byte,
     Char,
     Array,
+    Error,
 
     // -- special --
     /// Emitted for each newline in the source
