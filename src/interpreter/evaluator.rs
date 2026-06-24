@@ -1,3 +1,5 @@
+//! Core evaluator - expression evaluation, function calls, and the runtime state.
+
 use std::sync::Arc;
 
 use crate::interpreter::stdlib::random::xoshiro::Xoshiro256;
@@ -20,28 +22,45 @@ use crate::{
     },
 };
 
+/// A slot in the environment - holds a value, its declared type, and mutability.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PItem {
+    /// The runtime value stored in this slot.
     pub value: Value,
+    /// The declared type of this slot, used for assignment type checking.
     pub type_annotation: TypeAnnotation,
+    /// Whether this slot is immutable (`CONST`).
     pub is_const: bool,
 }
 
+/// A single environment entry. Currently only [`PItem`] exists;
+/// the enum wrapper leaves room for future variants (e.g. closures, records).
 #[derive(Debug, Clone, PartialEq)]
 pub enum EnvironmentItem {
     PItem(PItem),
 }
 
+/// The tree-walking interpreter, carrying all runtime state.
 pub struct Evaluator {
+    /// The environment stack - each frame is a scope; innermost is last.
     pub environment: Vec<Vec<EnvironmentItem>>,
+    /// Source file for Ariadne error rendering; `None` in embedded/test contexts.
     pub source_file: Option<SourceFile>,
+    /// The stdlib module tree, used for resolving `std::*` calls.
     pub root_module: Module,
+    /// Set by a `return` statement; cleared when the enclosing function call collects it.
     pub return_value: Option<Value>,
+    /// Set by `break`; cleared by the enclosing loop after it exits.
     pub is_breaking: bool,
+    /// Set by `continue`; cleared by the enclosing loop at the top of the next iteration.
     pub is_continuing: bool,
+    /// When `Some`, `print`/`println` write here instead of stdout (used by the LSP and REPL).
     pub output_buffer: Option<String>,
+    /// The Xoshiro256** PRNG instance shared across all `std::random` calls.
     pub rng: Xoshiro256,
+    /// The resolver, kept alive so import statements can resolve newly loaded files inline.
     pub resolver: Resolver,
+    /// Maps top-level function names to their environment slot for `call_path` shortcut.
     pub fn_names: std::collections::HashMap<String, usize>,
 }
 
@@ -67,20 +86,24 @@ impl Evaluator {
         }
     }
 
+    /// Attaches a source file for error rendering.
     pub fn with_source_file(mut self, file: SourceFile) -> Self {
         self.source_file = Some(file);
         self
     }
 
+    /// Attaches a source file for error rendering (mutable reference variant).
     pub fn set_source_file(&mut self, file: SourceFile) {
         self.source_file = Some(file);
     }
 
+    /// Registers a [`Module`] as a submodule of the root module.
     pub fn with_module(mut self, m: Module) -> Self {
         self.root_module.submodules.insert(m.name.clone(), m);
         self
     }
 
+    /// Registers a typed Rust function directly on the root module.
     pub fn with_function<F, A>(mut self, name: impl Into<String>, f: F) -> Self
     where
         F: IntoNativeFn<A>,
@@ -91,6 +114,7 @@ impl Evaluator {
         self
     }
 
+    /// Loads the full stdlib into the root module under `std::*`.
     pub fn with_stdlib(self) -> Self {
         self.with_module(
             Module::new("std")
@@ -117,7 +141,10 @@ impl Evaluator {
         }
     }
 
-    /// Infer the [`TypeAnnotation`] of a runtime [`Value`].
+    /// Infers the [`TypeAnnotation`] of a runtime [`Value`].
+    ///
+    /// For arrays, uses the type of the first element; empty arrays infer `Null`.
+    /// `is_const` controls whether the result is the mutable or const variant.
     pub fn infer_type(value: &Value, is_const: bool) -> TypeAnnotation {
         match value {
             Value::Integer(_) => {
@@ -178,11 +205,18 @@ impl Evaluator {
         }
     }
 
+    /// Returns `true` if `value`'s inferred type is compatible with `expected`.
     pub fn value_compatible(value: &Value, expected: &TypeAnnotation) -> bool {
         let actual = Self::infer_type(value, false);
         Self::types_compatible(&actual, expected)
     }
 
+    /// Returns `true` if `actual` and `expected` types are assignment-compatible.
+    ///
+    /// Compatibility rules (beyond equality):
+    /// - `Null` is compatible with anything
+    /// - `Byte` widens to `Int` / `CInt`
+    /// - Arrays are compatible if their element types are compatible (recursive)
     pub fn types_compatible(actual: &TypeAnnotation, expected: &TypeAnnotation) -> bool {
         if actual == expected {
             return true;
@@ -206,6 +240,8 @@ impl Evaluator {
         }
     }
 
+    /// Recursively coerces `value` to match `expected`, primarily widening
+    /// `Byte` elements to `Int` inside arrays when the declared element type is `Int`.
     pub fn coerce_array_type(value: Value, expected: &TypeAnnotation) -> Value {
         match (value, expected) {
             (Value::Values { items, .. }, expected) => {
@@ -419,6 +455,10 @@ impl Evaluator {
         Ok(value)
     }
 
+    /// Calls a [`Value::Function`], setting up the captured environment, inserting
+    /// arguments into a new scope, running the body, and validating the return type.
+    ///
+    /// Global scope mutations made inside the call are propagated back to the caller.
     pub fn call_value(
         &mut self,
         func: Value,
@@ -493,6 +533,13 @@ impl Evaluator {
         Err(self.err("value is not callable", span))
     }
 
+    /// Resolves a call path and dispatches to either a stdlib [`NativeFn`] or a
+    /// user-defined function looked up via [`fn_names`].
+    ///
+    /// Resolution order:
+    /// 1. Full stdlib path via [`root_module.resolve`]
+    /// 2. Single-name shorthand via [`fn_names`]
+    /// 3. Error with "did you mean?" suggestion from stdlib keywords
     pub fn call_path(
         &mut self,
         path: &[String],

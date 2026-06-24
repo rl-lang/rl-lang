@@ -1,3 +1,20 @@
+//! Statement resolution - transforms declarations and control flow into
+//! slot-indexed variants and resolves import statements at compile time.
+//!
+//! Key behaviors:
+//!
+//! - Variable/constant/array declarations: resolve the initializer expression
+//!   first, *then* declare the name so the initializer cannot reference itself
+//! - Function declarations: declare the name in the outer scope first (enabling
+//!   recursion), then push a new scope for parameters and resolve the body
+//! - `ForEach`/`ForRange`: the loop variable is declared inside its own scope
+//!   so it does not leak into the surrounding scope after the loop ends
+//! - `ImportFile` / `ImportFileNamed`: reads the file from disk, lexes, parses,
+//!   and resolves it inline - the result replaces the import statement with
+//!   `ResolvedImportFile { body }` containing the fully resolved statements.
+//!   `ImportFileNamed` additionally filters to only the requested names before resolving.
+//!   Both silently return the original unresolved statement on any IO/parse failure
+
 use crate::{
     ast::{
         nodes::{Expression, ExpressionKind},
@@ -191,16 +208,13 @@ impl Resolver {
             StatementKind::ImportFile { path } => {
                 let import_name = format!("{}.rl", path.join("/"));
                 let Ok(source_text) = std::fs::read_to_string(&import_name) else {
-                    eprintln!("DEBUG import: could not read '{}'", import_name);
                     return Statement::new(StatementKind::ImportFile { path }, span);
                 };
                 let source_file = SourceFile::new(import_name, source_text);
                 let Ok(tokens) = Tokenizer::lex(source_file.clone()) else {
-                    eprintln!("DEBUG import: lex failed");
                     return Statement::new(StatementKind::ImportFile { path }, span);
                 };
                 let Ok(stmts) = Parser::parse(tokens, source_file) else {
-                    eprintln!("DEBUG import: parse failed");
                     return Statement::new(StatementKind::ImportFile { path }, span);
                 };
                 let resolved = self.resolve_statements(stmts);

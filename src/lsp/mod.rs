@@ -1,13 +1,36 @@
+//! LSP server for rl, built on [`tower_lsp`].
+//!
+//! Communicates with editors over stdio using JSON-RPC.
+//! Currently supports:
+//! - **Diagnostics** - lex/parse/type-check errors on every file change
+//! - **Hover** - markdown type info at the cursor position
+//!
+//! # Architecture
+//!
+//! ```text
+//! editor (VS Code, Zed, Neovim, ...)
+//!     │  JSON-RPC over stdio
+//! |---V----------------------------|
+//! |  Backend  (tower-lsp handler)  |
+//! |  |-- did_open / did_change --> pipeline::run_pipeline  --> diagnostics
+//! |  |-- hover -----------------> hover::run_hover         --> hover info
+//! |--------------------------------|
+//! ```
+
+use tower_lsp::{LspService, Server};
+
+use crate::lsp::backend::Backend;
+
 mod backend;
 mod hover;
 mod pipeline;
 mod to_diagnostic;
 mod utils;
 
-use tower_lsp::{LspService, Server};
-
-use crate::lsp::backend::Backend;
-
+/// Starts the LSP server, reading JSON-RPC from stdin and writing to stdout.
+///
+/// Blocks indefinitely - intended to be spawned as a long-running process
+/// by the editor's LSP client.
 pub async fn run_lsp() {
     // declare stdin and out for editor and lsp communications
     let stdin = tokio::io::stdin();

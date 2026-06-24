@@ -1,3 +1,11 @@
+//! `std::str` - string manipulation functions.
+//!
+//! Note: the module name in rl imports is `str`, not `string`
+//! (registered as `Module::new("str")`).
+//!
+//! `format` uses `with_raw_function` for variadic `{}` placeholder substitution.
+//! `concat` also variadic - concatenates any number of values as strings.
+
 mod bytes;
 mod char_at;
 mod chars;
@@ -66,7 +74,7 @@ pub fn module() -> Module {
         .with_function("chars", chars::std_chars)
         .with_function("reverse", reverse::std_reverse)
         .with_function("slice", slice::std_slice)
-        .with_function("contains", contains::std_cotains)
+        .with_function("contains", contains::std_contains)
         .with_function("starts_with", starts_with::std_starts_with)
         .with_function("ends_with", ends_with::std_ends_with)
         .with_function("join", join::std_join)

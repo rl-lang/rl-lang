@@ -1,5 +1,6 @@
-pub mod array;
+//! The rl standard library - all built-in modules registered under `std::*`.
 
+pub mod array;
 pub mod bitwise;
 pub mod fs;
 pub mod io;

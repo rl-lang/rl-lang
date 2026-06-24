@@ -1,3 +1,4 @@
+//! Standard library documentation entries, one module per file.
 pub mod arrays;
 pub mod constants;
 pub mod fs;

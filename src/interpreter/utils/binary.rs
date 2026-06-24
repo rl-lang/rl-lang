@@ -1,3 +1,9 @@
+//! Binary operator evaluation for all supported operand type combinations.
+//!
+//! `byte op int` and `int op byte` always widen to `int`.
+//! `byte op byte` stays `byte` if the result fits in `0..=255`, otherwise widens to `int`.
+//! All type mismatches emit a labeled error pointing at both operands.
+
 use crate::{
     interpreter::evaluator::Evaluator,
     interpreter::values::Value,

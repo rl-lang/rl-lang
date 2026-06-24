@@ -11,7 +11,7 @@ pub fn std_to_hex(eval: &mut Evaluator, value: Value, span: Span) -> Result<Stri
         Value::String(s) => Ok(s.bytes().map(|b| format!("{:x}", b)).collect::<String>()),
 
         other => Err(eval.err(
-            format!("cannot parse \"{}\" as bool", other.type_name()),
+            format!("cannot parse \"{}\" as hexadecimal", other.type_name()),
             span,
         )),
     }

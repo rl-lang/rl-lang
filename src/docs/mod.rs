@@ -1,9 +1,25 @@
+//! In-process documentation system for the `rl docs` CLI command.
+//!
+//! Stores all language reference material as static data compiled into the binary -
+//! no external files needed at runtime. Organized into three categories:
+//!
+//! - **stdlib** - [`StdEntry`] / [`FnEntry`] for every stdlib module and function
+//! - **concepts** - [`ConceptEntry`] for language features (types, loops, imports, etc.)
+//! - **tutorials** - [`ConceptEntry`] steps for the beginner and advanced tutorials
+//!
+//! The [`std_to_markdown`], [`concept_to_markdown`], and [`tutorial_to_markdown`]
+//! functions render these entries into Markdown for display in the terminal.
+
 pub mod entries;
 pub mod entry;
 use crate::docs::entry::{ConceptEntry, FnEntry, StdEntry};
 
-// finds the FnEntry whose signature starts with `fn_name(`
-// can accept std::io::print() and print()
+/// Searches all stdlib entries for a function whose signature starts with `fn_name(`.
+///
+/// `module` narrows the search to a specific stdlib module (e.g. `"io"`, `"math"`).
+/// Accepts both bare names (`print`) and qualified names (`std::io::print`).
+///
+/// Returns `None` if no match is found.
 pub fn find_fn_doc(
     module: Option<&str>,
     fn_name: &str,
@@ -24,9 +40,19 @@ pub fn find_fn_doc(
     None
 }
 
-// helper functions that transform docs into readable mark down
+/// Renders all stdlib entries into a Markdown reference document.
+///
+/// Output is structured as:
+/// ```text
+/// # rl stdlib reference
+/// ## std::<module>
+/// ### `<signature>`
+/// <description>
+/// ```rl
+/// <example>
+/// ```
+/// ```
 pub fn std_to_markdown(entries: &[&StdEntry]) -> String {
-    // markdown header
     let mut output = String::from("# rl stdlib reference\n\n");
     for entry in entries {
         output.push_str(&format!("## std::{}\n\n", entry.name));
@@ -41,7 +67,7 @@ pub fn std_to_markdown(entries: &[&StdEntry]) -> String {
     output
 }
 
-// shared renderer for any list of ConceptEntry under a custom header
+/// shared renderer for any list of ConceptEntry under a custom header
 fn entries_to_markdown(header: &str, entries: &[&ConceptEntry]) -> String {
     let mut output = format!("# {}\n\n", header);
     for entry in entries {
@@ -56,12 +82,12 @@ fn entries_to_markdown(header: &str, entries: &[&ConceptEntry]) -> String {
     output
 }
 
-// returns concept with the example provided
+/// Renders concept entries into a Markdown language reference document.
 pub fn concept_to_markdown(entries: &[&ConceptEntry]) -> String {
     entries_to_markdown("rl concepts reference", entries)
 }
 
-// returns the tutorial, step by step, same format as concepts
+/// Renders tutorial entries into a Markdown step-by-step tutorial document.
 pub fn tutorial_to_markdown(entries: &[&ConceptEntry]) -> String {
     entries_to_markdown("rl tutorial", entries)
 }

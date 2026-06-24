@@ -1,3 +1,9 @@
+//! Diagnostic pipeline: lex -> parse -> type-check.
+//!
+//! The evaluator is intentionally excluded. Running user code on every
+//! keystroke caused the LSP to hang on infinite loops (e.g. `while true {}`).
+//! The [`TypeChecker`] walks the AST without executing anything, making it
+//! always safe to run on in-progress or non-terminating source.
 use crate::{
     checker::TypeChecker, lexer::tokenizer::Tokenizer, lsp::to_diagnostic::error_to_diagnostic,
     parser::parser_logic::Parser, utils::source::SourceFile,

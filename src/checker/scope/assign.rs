@@ -1,3 +1,5 @@
+//! Assignment type checking - validates reassignment against the declared type.
+
 use crate::{
     ast::statements::TypeAnnotation,
     checker::structs::{CheckType, TypeChecker},
@@ -5,12 +7,12 @@ use crate::{
 };
 
 impl TypeChecker {
-    // search for variable name via loop thru the scopes
-    // and if it is found then checks
-    // if constant add error to const_error
-    // if variable but type mismatch add error to type_error
-    // then break the loop and push the error
-    // if not found pushs undefined variable error
+    /// Checks that assigning `value_type` to `name` is valid.
+    ///
+    /// Walks scopes from innermost to outermost. Emits an error if:
+    /// - The variable is declared `const`
+    /// - The value type doesn't match the declared type (with `byte` -> `int` widening)
+    /// - The name is not declared in any scope (with a "did you mean?" suggestion)
     pub fn assign(&mut self, name: &str, value_type: CheckType, span: Span) {
         let mut const_error: Option<String> = None;
         let mut type_error: Option<String> = None;

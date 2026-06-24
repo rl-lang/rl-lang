@@ -1,14 +1,24 @@
+//! [`LanguageServer`] implementation - the JSON-RPC entry point for all LSP events.
+//!
+//! [`Backend`] holds a [`RwLock`]-guarded map of open document URIs to their
+//! latest source text. Every file event updates this cache so [`hover`] always
+//! has the most recent content to work with.
+
+use crate::lsp::hover::run_hover;
+use crate::lsp::pipeline::run_pipeline;
 use std::collections::HashMap;
 use tokio::sync::RwLock;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer};
 
-use crate::lsp::hover::run_hover;
-use crate::lsp::pipeline::run_pipeline;
-
+/// The LSP backend, wiring tower-lsp events to the rl pipeline.
 pub struct Backend {
+    /// The tower-lsp client handle used to send messages and diagnostics back to the editor.
     pub client: Client,
+    /// Cache of open document source text, keyed by URI.
+    ///
+    /// Written on `didOpen`/`didChange`, read on `hover`, cleared on `didClose`.
     pub docs: RwLock<HashMap<Url, String>>,
 }
 
@@ -85,8 +95,7 @@ impl LanguageServer for Backend {
 }
 
 impl Backend {
-    // caches the latest full text for a document so hover() has
-    // something to read later
+    /// Inserts or updates the cached source text for `uri`.
     async fn store(&self, uri: &Url, source: &str) {
         self.docs
             .write()
@@ -94,7 +103,7 @@ impl Backend {
             .insert(uri.clone(), source.to_string());
     }
 
-    // pushes the diagnostics from pipeline to client (editors)
+    /// Runs the rl pipeline on `source` and publishes the resulting diagnostics to the editor.
     async fn publish(&self, uri: &Url, source: &str) {
         let diagnostics = run_pipeline(source);
 

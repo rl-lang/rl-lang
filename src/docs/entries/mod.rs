@@ -1,9 +1,12 @@
+//! Aggregates all documentation entries and exposes them as flat `Vec`s
+//! for the renderer functions in [`crate::docs`].
 use crate::docs::entry::{ConceptEntry, StdEntry};
 
 mod concepts;
 mod stdlib;
 mod tutorial;
 
+/// Returns all stdlib module entries in display order.
 pub fn stdlib_entries() -> Vec<&'static StdEntry> {
     vec![
         &stdlib::math::MATH,
@@ -20,6 +23,7 @@ pub fn stdlib_entries() -> Vec<&'static StdEntry> {
     ]
 }
 
+/// Returns all language concept entries in display order.
 pub fn concept_entries() -> Vec<&'static ConceptEntry> {
     vec![
         &concepts::arrays::ARRAYS,
@@ -40,6 +44,7 @@ pub fn concept_entries() -> Vec<&'static ConceptEntry> {
     ]
 }
 
+/// Returns all tutorial step entries in display order.
 pub fn tutorial_entries() -> Vec<&'static ConceptEntry> {
     vec![
         &tutorial::STEP_FIRST_PROGRAM,

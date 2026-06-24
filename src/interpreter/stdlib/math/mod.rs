@@ -1,36 +1,42 @@
-pub mod abs;
-pub mod acos;
-pub mod asin;
-pub mod atan;
-pub mod atan2;
-pub mod ceil;
-pub mod clamp;
+//! `std::math` - mathematical functions and the `std::math::consts` submodule.
+//!
+//! Most functions accept both `int` and `float`; mixed types are handled per-function.
+//! `pow` uses `with_raw_function` to handle `(int, int)`, `(int, float)`, `(float, float)`,
+//! and `(float, int)` combinations manually.
+
+mod abs;
+mod acos;
+mod asin;
+mod atan;
+mod atan2;
+mod ceil;
+mod clamp;
 pub mod constants;
-pub mod cos;
-pub mod degrees;
-pub mod exp;
-pub mod factorial;
-pub mod fibonacci;
-pub mod floor;
-pub mod gcd;
-pub mod hypot;
-pub mod is_prime;
-pub mod lcm;
-pub mod lerp;
-pub mod log;
-pub mod log10;
-pub mod log2;
-pub mod map_range;
-pub mod max;
-pub mod min;
-pub mod modulo;
-pub mod power;
-pub mod radians;
-pub mod round;
-pub mod sign;
-pub mod sin;
-pub mod sqrt;
-pub mod tan;
+mod cos;
+mod degrees;
+mod exp;
+mod factorial;
+mod fibonacci;
+mod floor;
+mod gcd;
+mod hypot;
+mod is_prime;
+mod lcm;
+mod lerp;
+mod log;
+mod log10;
+mod log2;
+mod map_range;
+mod max;
+mod min;
+mod modulo;
+mod power;
+mod radians;
+mod round;
+mod sign;
+mod sin;
+mod sqrt;
+mod tan;
 
 use crate::interpreter::native::Module;
 

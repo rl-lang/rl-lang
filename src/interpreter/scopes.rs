@@ -1,3 +1,9 @@
+//! Environment stack operations - scope management and slot-indexed value access.
+//!
+//! The environment is a `Vec<Vec<EnvironmentItem>>` - a stack of frames.
+//! Each frame is a flat vec of slots indexed by the resolver's slot numbers.
+//! Depth 0 = current frame, depth 1 = one scope up, etc.
+
 use crate::{
     ast::statements::TypeAnnotation,
     interpreter::{
@@ -8,10 +14,12 @@ use crate::{
 };
 
 impl Evaluator {
+    /// Pushes a new empty scope frame onto the environment stack.
     pub fn push_scope(&mut self) {
         self.environment.push(vec![]);
     }
 
+    /// Pops the innermost scope frame.
     pub fn pop_scope(&mut self) {
         self.environment.pop();
     }
@@ -29,6 +37,9 @@ impl Evaluator {
         frame[slot] = item;
     }
 
+    /// Reads the value at `(depth, slot)` in the environment.
+    ///
+    /// `depth` counts from the innermost frame outward (0 = current).
     pub fn get_value(&self, depth: usize, slot: usize, span: Span) -> Result<Value, Error> {
         let idx = self.environment.len().saturating_sub(1 + depth);
         match self.environment.get(idx).and_then(|f| f.get(slot)) {
@@ -37,6 +48,9 @@ impl Evaluator {
         }
     }
 
+    /// Inserts a mutable value at `slot` in the current (innermost) frame.
+    ///
+    /// Grows the frame with `Null` placeholders if `slot` is past the end.
     pub fn insert_value(
         &mut self,
         slot: usize,
@@ -58,6 +72,9 @@ impl Evaluator {
         Ok(())
     }
 
+    /// Inserts an immutable (const) value at `slot` in the current frame.
+    ///
+    /// Returns an error if the slot already holds a const.
     pub fn insert_const(
         &mut self,
         slot: usize,
@@ -84,6 +101,7 @@ impl Evaluator {
         Ok(())
     }
 
+    /// Overwrites the value at `(depth, slot)`, enforcing type compatibility and immutability.
     pub fn assign_value(
         &mut self,
         depth: usize,
@@ -132,7 +150,7 @@ impl Evaluator {
         }
     }
 
-    // tests only
+    /// Looks up a variable by name via the resolver - used only in tests.
     pub fn get_value_raw(&self, name: &str) -> Option<Value> {
         let (depth, slot) = self.resolver.resolve_name(name)?;
         let idx = self.environment.len().saturating_sub(1 + depth);
@@ -141,6 +159,7 @@ impl Evaluator {
         }
     }
 
+    /// Returns the declared [`TypeAnnotation`] of the slot at `(depth, slot)`, if it exists.
     pub fn get_declared_type(&self, depth: usize, slot: usize) -> Option<TypeAnnotation> {
         let idx = self.environment.len().saturating_sub(1 + depth);
         match self.environment.get(idx)?.get(slot)? {

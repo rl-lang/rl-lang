@@ -13,7 +13,7 @@ pub fn std_to_string(eval: &mut Evaluator, value: Value, span: Span) -> Result<S
         Value::String(s) => Ok(s),
 
         other => Err(eval.err(
-            format!("cannot parse \"{}\" as bool", other.type_name()),
+            format!("cannot parse \"{}\" as string", other.type_name()),
             span,
         )),
     }

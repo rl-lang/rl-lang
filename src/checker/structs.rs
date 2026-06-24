@@ -1,3 +1,5 @@
+//! Core data structures for the type checker.
+//!
 use std::collections::HashMap;
 
 use crate::{
@@ -6,42 +8,46 @@ use crate::{
     utils::{errors::Error, source::SourceFile, span::Span},
 };
 
+/// The stateful type checker, threaded through the entire AST walk.
 pub struct TypeChecker {
-    // list of scopes
+    /// Stack of scopes, each mapping variable/function names to their [`ScopeItem`].
     pub scopes: Vec<HashMap<String, ScopeItem>>,
-    // source file if exists for ariadne
+    /// Source file attached for Ariadne error rendering; `None` in LSP-less contexts.
     pub source_file: Option<SourceFile>,
-    // for the stdlib modules to populate the stdlib functions name
+    /// The stdlib module tree, used to resolve stdlib call paths.
     pub root_module: Module,
-    // all errors found in same file
+    /// All type errors accumulated during the check pass.
     pub errors: Vec<Error>,
-    // for lambdas and functions to check what type should be returned
+    /// Stack of expected return types, pushed/popped on function and lambda entry/exit.
     pub return_type_stack: Vec<TypeAnnotation>,
-    // for loops to know what level of depth in loop the checker at
+    /// Nesting depth of loops - used to validate `break` and `continue`.
     pub loop_depth: u32,
-    // functions name to use in check_call_path
+    /// Flat set of all stdlib function names for fast single-name lookup.
     pub stdlib_fn_names: std::collections::HashSet<String>,
-    // (span, markdown text) pairs collected while checking
-    // one per declaration or usage site
+    /// `(span, markdown)` pairs collected at every declaration and usage site,
+    /// consumed by the LSP hover provider.
     pub hovers: Vec<(Span, String)>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+/// A single entry in a type checker scope.
 pub struct ScopeItem {
-    // item type
+    /// The static type of this variable or function.
     pub type_annotation: CheckType,
-    // weather is it a constant or variable
+    /// Whether this binding is immutable (`CONST`).
     pub is_const: bool,
 }
 
+/// The type of a value as seen by the static checker.
 #[derive(Debug, Clone, PartialEq)]
 pub enum CheckType {
-    // types that can be known during checks
+    /// A fully resolved type (e.g. `int`, `arr[string]`).
     Known(TypeAnnotation),
+    /// A function type with known parameter and return types.
     Function {
         params: Vec<TypeAnnotation>,
         return_type: TypeAnnotation,
     },
-    // types that cannot be known during checks
+    /// Type could not be determined statically (stdlib calls, unresolved names).
+    /// Propagates silently to avoid cascading false errors.
     Unknown,
 }

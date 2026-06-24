@@ -1,3 +1,11 @@
+//! Unary operator type checking.
+//!
+//! | Operator | Operand         | Result |
+//! |----------|-----------------|--------|
+//! | `!`      | bool            | bool   |
+//! | `-`      | int / byte      | int    |
+//! | `-`      | float           | float  |
+
 use crate::{
     ast::statements::TypeAnnotation,
     checker::structs::{CheckType, TypeChecker},

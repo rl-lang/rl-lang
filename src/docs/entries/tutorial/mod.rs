@@ -1,3 +1,4 @@
+//! Tutorial documentation entries (beginner, advanced, etc.).
 use crate::docs::entry::{ConceptEntry, DescriptionEntry};
 
 pub static STEP_FIRST_PROGRAM: ConceptEntry = ConceptEntry {

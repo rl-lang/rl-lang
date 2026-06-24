@@ -1,4 +1,7 @@
-pub mod xoshiro;
+//! `std::random` - random number generation using a custom Xoshiro256** PRNG.
+//!
+//! The PRNG state is stored on [`Evaluator::rng`] and seeded from the system clock
+//! at startup. All random functions share this single instance.
 
 mod rand_bool;
 mod rand_bool_weighted;
@@ -7,6 +10,7 @@ mod rand_float_range;
 mod rand_int;
 mod rand_int_range;
 mod random_general;
+pub mod xoshiro;
 
 use crate::interpreter::native::Module;
 

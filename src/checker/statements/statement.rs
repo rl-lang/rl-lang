@@ -1,3 +1,6 @@
+//! Statement type checking - walks every [`StatementKind`] variant,
+//! declares names into scope, and validates control flow constraints.
+
 use crate::{
     ast::statements::{StatementKind, TypeAnnotation},
     checker::structs::{CheckType, TypeChecker},

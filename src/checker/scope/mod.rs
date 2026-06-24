@@ -1,3 +1,5 @@
+//! Scope management and name lookup for the type checker.
+
 mod assign;
 mod call;
 mod declare;
@@ -9,15 +11,20 @@ use crate::{
 use std::collections::HashMap;
 
 impl TypeChecker {
-    // adds or removes scope from/to TypeChecker scopes
+    /// Pushes a new empty scope onto the scope stack.
     pub fn push_scope(&mut self) {
         self.scopes.push(HashMap::new());
     }
+    /// Pops the innermost scope from the stack.
     pub fn pop_scope(&mut self) {
         self.scopes.pop();
     }
 
-    // checks current scope for the said identifier
+    /// Looks up `name` in all scopes from innermost to outermost.
+    ///
+    /// On success, pushes a hover entry with the variable's type and kind,
+    /// then returns the [`CheckType`]. On failure, emits an undefined variable
+    /// error with a "did you mean?" suggestion and returns [`CheckType::Unknown`].
     pub fn lookup(&mut self, name: &str, span: Span) -> CheckType {
         let found = self.scopes.iter().rev().find_map(|scope| {
             scope

@@ -1,3 +1,10 @@
+//! Hover resolution: lex -> parse -> type-check -> pick the smallest matching span.
+//!
+//! The [`TypeChecker`] populates a `hovers` side-table of `(Span, markdown)`
+//! pairs at every declaration, identifier usage, and stdlib call site.
+//! [`run_hover`] finds the entry whose span contains the cursor offset and
+//! whose span is the smallest (to prefer the most specific match when multiple
+//! spans overlap on the same line).
 use crate::{
     checker::TypeChecker,
     lexer::{tokenizer::Tokenizer, tokentypes::TokenType},
@@ -7,12 +14,11 @@ use crate::{
 };
 use tower_lsp::lsp_types::{Hover, HoverContents, MarkupContent, MarkupKind, Position, Range};
 
-/// lex -> parse -> type-check `source` then resolve a hover for the
-/// given cursor `position`
-/// mirrors `pipeline::run_pipeline` but instead
-/// of diagnostics it reads `checker.hovers` the side table of
-/// (span, markdown) pairs the checker records at every declaration
-/// identifier usage and stdlib call site
+/// Runs the full pipeline on `source` and returns a [`Hover`] for `position`,
+/// or `None` if the cursor is not over a hoverable token.
+///
+/// Only [`TokenType::Identifier`] tokens carry hover info - non-identifier
+/// positions short-circuit early before running the parser and type-checker.
 pub fn run_hover(source: &str, position: Position) -> Option<Hover> {
     let offset = position_to_offset(source, position);
     let file = SourceFile::new("buffer", source.to_string());
@@ -54,6 +60,8 @@ pub fn run_hover(source: &str, position: Position) -> Option<Hover> {
     })
 }
 
+/// Returns the [`Span`] of the identifier token that contains `offset`,
+/// or `None` if no identifier token covers that position.
 fn find_identifier_span_at(
     tokens: &[crate::lexer::tokentypes::Token],
     offset: usize,

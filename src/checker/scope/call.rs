@@ -1,3 +1,5 @@
+//! Function call type checking - path resolution and argument validation.
+
 use crate::{
     ast::statements::TypeAnnotation,
     checker::structs::{CheckType, TypeChecker},
@@ -6,7 +8,16 @@ use crate::{
 };
 
 impl TypeChecker {
-    // is it callable path?
+    /// Resolves a call path and checks argument types.
+    ///
+    /// Resolution order:
+    /// 1. Full stdlib path (`std::io::print`) via [`root_module`]
+    /// 2. Single-name stdlib shorthand (`print`) via [`stdlib_fn_names`]
+    /// 3. User-defined name via [`lookup`]
+    /// 4. Error - unknown function, with a "did you mean?" suggestion from stdlib keywords
+    ///
+    /// Stdlib calls always return [`CheckType::Unknown`] since their return
+    /// types are not tracked statically.
     pub fn check_call_path(
         &mut self,
         path: &[String],
@@ -55,7 +66,12 @@ impl TypeChecker {
         CheckType::Unknown
     }
 
-    // is it callable?
+    /// Checks that a resolved callee value is callable and receives the correct arguments.
+    ///
+    /// - `Unknown` and `Known(Fn)` pass through without argument checking
+    /// - `Function { params, return_type }` validates arity and argument types,
+    ///   then returns `Known(return_type)`
+    /// - Anything else emits a "not callable" error
     pub fn check_call_value(
         &mut self,
         callee_type: CheckType,

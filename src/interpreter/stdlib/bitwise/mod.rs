@@ -1,3 +1,7 @@
+//! `std::bitwise` - bitwise operations on `byte` and `int` values.
+//!
+//! Mixed `byte`/`int` operands widen to `int`. `bit_xor` requires matching types.
+
 pub mod bit_and;
 pub mod bit_not;
 pub mod bit_or;
