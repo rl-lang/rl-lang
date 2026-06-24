@@ -22,7 +22,7 @@ fn while_loop() {
             ),
             body: vec![Statement::new(
                 StatementKind::Expression(Expression::new(
-                    ExpressionKind::Byte(0),
+                    ExpressionKind::Integer(0),
                     Span::new(14, 15),
                 )),
                 Span::new(14, 15),
