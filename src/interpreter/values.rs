@@ -38,6 +38,10 @@ pub enum Value {
         /// The captured environment frames at the point of lambda definition.
         captured_env: Vec<Vec<EnvironmentItem>>,
     },
+    /// A heterogeneous tuple of values.
+    Tuple(Vec<Value>),
+    /// An error value wrapping any non-error value.
+    Error(Box<Value>),
 }
 
 impl Value {
@@ -53,6 +57,8 @@ impl Value {
             Value::Values { .. } => "array",
             Value::Null => "null",
             Value::Function { .. } => "function",
+            Value::Tuple(_) => "tuple",
+            Value::Error(_) => "error",
         }
     }
 }
@@ -78,6 +84,11 @@ impl fmt::Display for Value {
                 }
                 write!(f, "<fn({})>", params_name.join(", "))
             }
+            Value::Tuple(items) => {
+                let formatted: Vec<String> = items.iter().map(|v| v.to_string()).collect();
+                write!(f, "({})", formatted.join(", "))
+            }
+            Value::Error(inner) => write!(f, "error({})", inner),
         }
     }
 }

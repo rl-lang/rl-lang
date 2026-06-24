@@ -203,6 +203,22 @@ impl Evaluator {
             }
             Value::Null => TypeAnnotation::Null,
             Value::Function { .. } => TypeAnnotation::Fn,
+            Value::Tuple(items) => {
+                let inner: Vec<TypeAnnotation> =
+                    items.iter().map(|v| Self::infer_type(v, false)).collect();
+                if is_const {
+                    TypeAnnotation::CTuple(inner)
+                } else {
+                    TypeAnnotation::Tuple(inner)
+                }
+            }
+            Value::Error(_) => {
+                if is_const {
+                    TypeAnnotation::CError
+                } else {
+                    TypeAnnotation::Error
+                }
+            }
         }
     }
 
