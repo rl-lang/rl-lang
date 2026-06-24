@@ -339,9 +339,34 @@ impl Evaluator {
                     .first()
                     .map(|v| Self::infer_type(v, false))
                     .unwrap_or(TypeAnnotation::Null);
-                Value::Values {
-                    items_type,
-                    items: values,
+
+                // Validate and coerce every element after the first against items_type.
+                if items_type != TypeAnnotation::Null {
+                    let mut coerced = Vec::with_capacity(values.len());
+                    for (i, v) in values.into_iter().enumerate() {
+                        let actual = Self::infer_type(&v, false);
+                        if !Self::types_compatible(&actual, &items_type) {
+                            return Err(self.err(
+                                format!(
+                                    "array element type mismatch: element {} is {:?}, expected {:?}",
+                                    i,
+                                    actual,
+                                    items_type,
+                                ),
+                                expression.span,
+                            ));
+                        }
+                        coerced.push(Self::coerce_array_type(v, &items_type));
+                    }
+                    Value::Values {
+                        items_type,
+                        items: coerced,
+                    }
+                } else {
+                    Value::Values {
+                        items_type,
+                        items: values,
+                    }
                 }
             }
 
@@ -359,14 +384,15 @@ impl Evaluator {
                 let left_val = self.evaluate(left)?;
                 let right_val = self.evaluate(right)?;
                 if matches!(operator, TokenType::Compare | TokenType::BangEqual)
-                    && (matches!(left_val, Value::Null) || matches!(right_val, Value::Null)) {
-                        let result = matches!((&left_val, &right_val), (Value::Null, Value::Null));
-                        return Ok(if matches!(operator, TokenType::Compare) {
-                            Value::Bool(result)
-                        } else {
-                            Value::Bool(!result)
-                        });
-                    }
+                    && (matches!(left_val, Value::Null) || matches!(right_val, Value::Null))
+                {
+                    let result = matches!((&left_val, &right_val), (Value::Null, Value::Null));
+                    return Ok(if matches!(operator, TokenType::Compare) {
+                        Value::Bool(result)
+                    } else {
+                        Value::Bool(!result)
+                    });
+                }
                 self.check_not_null(&left_val, left.span)?;
                 self.check_not_null(&right_val, right.span)?;
                 self.match_binary_operator(
