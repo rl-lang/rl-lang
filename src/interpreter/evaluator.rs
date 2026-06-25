@@ -219,6 +219,14 @@ impl Evaluator {
                     TypeAnnotation::Error
                 }
             }
+            Value::Ok(inner) | Value::Err(inner) => {
+                let inner_ty = Self::infer_type(inner, false);
+                if is_const {
+                    TypeAnnotation::CResult(Box::new(inner_ty))
+                } else {
+                    TypeAnnotation::Result(Box::new(inner_ty))
+                }
+            }
         }
     }
 
@@ -265,6 +273,10 @@ impl Evaluator {
             (
                 TypeAnnotation::Error | TypeAnnotation::CError,
                 TypeAnnotation::Error | TypeAnnotation::CError,
+            ) => true,
+            (
+                TypeAnnotation::Result(_) | TypeAnnotation::CResult(_),
+                TypeAnnotation::Result(_) | TypeAnnotation::CResult(_),
             ) => true,
             _ => false,
         }
@@ -595,6 +607,14 @@ impl Evaluator {
                     return Err(self.err("error cannot wrap another error", expression.span));
                 }
                 Value::Error(Box::new(val))
+            }
+            ExpressionKind::OkLiteral(inner) => {
+                let val = self.evaluate(inner)?;
+                Value::Ok(Box::new(val))
+            }
+            ExpressionKind::ErrLiteral(inner) => {
+                let val = self.evaluate(inner)?;
+                Value::Err(Box::new(val))
             }
 
             _ => Value::Null,
