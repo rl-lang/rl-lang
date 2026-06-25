@@ -270,7 +270,14 @@ impl TypeChecker {
                 }
                 CheckType::Known(TypeAnnotation::Error)
             }
-
+            ExpressionKind::OkLiteral(inner) => {
+                let inner_ann = Self::to_type_annotation(&self.check_expression(inner));
+                CheckType::Known(TypeAnnotation::Result(Box::new(inner_ann)))
+            }
+            ExpressionKind::ErrLiteral(inner) => {
+                let inner_ann = Self::to_type_annotation(&self.check_expression(inner));
+                CheckType::Known(TypeAnnotation::Result(Box::new(inner_ann)))
+            }
             _ => CheckType::Unknown,
         }
     }
