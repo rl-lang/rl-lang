@@ -39,6 +39,7 @@ mod arr_sort;
 mod arr_sort_by;
 mod arr_sum;
 mod arr_unique;
+mod arr_zip;
 
 pub const KEYWORDS: &[&str] = &[
     "arr_push",
@@ -74,6 +75,7 @@ pub const KEYWORDS: &[&str] = &[
     "arr_sort_by",
     "arr_flat_map",
     "arr_for_each",
+    "arr_zip",
 ];
 
 pub fn module() -> Module {
@@ -111,4 +113,5 @@ pub fn module() -> Module {
         .with_function("arr_sort_by", arr_sort_by::std_arr_sort_by)
         .with_function("arr_flat_map", arr_flat_map::std_arr_flat_map)
         .with_function("arr_for_each", arr_for_each::std_arr_for_each)
+        .with_raw_function("arr_zip", arr_zip::std_arr_zip)
 }
