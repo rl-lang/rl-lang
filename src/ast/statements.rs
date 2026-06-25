@@ -253,6 +253,9 @@ pub enum TypeAnnotation {
 
     Error,
     CError,
+
+    Result(Box<TypeAnnotation>),
+    CResult(Box<TypeAnnotation>),
 }
 
 /// A single function or lambda parameter: a name and its type annotation.
