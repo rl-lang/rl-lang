@@ -99,6 +99,8 @@ pub enum TokenType {
     Const,
     Dec,
     As,
+    Ok,
+    Err,
 
     // -- type keywords --
     Int,
@@ -109,6 +111,7 @@ pub enum TokenType {
     Char,
     Array,
     Error,
+    Result,
 
     // -- special --
     /// Emitted for each newline in the source

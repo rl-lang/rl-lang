@@ -59,6 +59,9 @@ impl Tokenizer {
             "arr" => self.add_token(TokenType::Array),
             "as" => self.add_token(TokenType::As),
             "error" => self.add_token(TokenType::Error),
+            "result" => self.add_token(TokenType::Result),
+            "ok" => self.add_token(TokenType::Ok),
+            "err" => self.add_token(TokenType::Err),
 
             &_ => self.add_token(TokenType::Identifier(value)),
         }
