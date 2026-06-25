@@ -1,6 +1,7 @@
 //! Language concept documentation entries (variables, types, loops, etc.).
 pub mod arrays;
 pub mod byte;
+pub mod casting;
 pub mod constants;
 pub mod entry;
 pub mod errors;
