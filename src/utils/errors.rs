@@ -62,19 +62,6 @@ pub enum Reason {
 }
 
 impl Error {
-    /// legacy constructor: builds an error with just a message, optional line, and reason.
-    /// Used by call sites that haven't been migrated to span-based errors yet.
-    pub fn init(message: String, line: Option<usize>, reason: Option<ErrorReason>) -> Self {
-        #[cfg(feature = "debug")]
-        log::debug!("Error: {}", message);
-        Self {
-            message,
-            line,
-            reason,
-            detail: None,
-        }
-    }
-
     /// builder-style constructor for span-aware errors.
     /// the `span` becomes the primary anchor of the report.
     pub fn at(kind: Reason, message: impl Into<String>, span: Span) -> Self {
@@ -205,7 +192,7 @@ impl Error {
         }
     }
 
-    // adds a way to extract bytes from span in Error
+    /// Extracts the primary [`Span`] of this error, if one was set.
     pub fn span(&self) -> Option<crate::utils::span::Span> {
         self.detail.as_ref().map(|d| d.primary.0)
     }
@@ -214,7 +201,8 @@ impl Error {
 impl ErrorReason {
     /// creates a new [`ErrorReason`] with category type and optional data
     ///
-    /// # example
+    /// # Example
+    ///
     /// ```rust
     /// use rl_lang::utils::errors::{ErrorReason, Reason};
     /// ErrorReason::init(Reason::Lexer, Some(vec!["unknown token `$`".to_string()]));
@@ -239,6 +227,7 @@ impl ErrorReason {
 }
 
 impl Error {
+    /// Returns the raw error message string.
     pub fn message(&self) -> &str {
         &self.message
     }

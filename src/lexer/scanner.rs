@@ -1,14 +1,44 @@
+//! Top-level scan driver.
+//!
+//! Exposes the single entry point that the pipeline calls to turn a source
+//! string into a token stream. Delegates all real work to [`Tokenizer`].
 use crate::lexer::{tokenizer::Tokenizer, tokentypes::TokenType};
 use crate::utils::errors::Error;
 
 impl Tokenizer {
-    /// scans the current character and returns the correct token
+    /// Scans the source file and return token stream
     ///
-    /// for multi character tokens (e.g. '==') it peeks ahead
-    /// and decide which token to return
+    /// Iterates over every character in the source file, identifies lexemes,
+    /// and returns a flat list of [`Token`]s terminated by [`TokenType::EOF`].
+    ///
+    /// For multi-character tokens (e.g. `==`, `!=`, `<=`) the scanner peeks
+    /// ahead one character to decide which token to emit.
+    ///
+    /// # Tokens
+    ///
+    /// | category       | examples                                      |
+    /// |----------------|-----------------------------------------------|
+    /// | literals       | `1`, `3.14`, `'a'`, `"hello"`                 |
+    /// | identifiers    | `foo`, `my_var`, `_private`                   |
+    /// | arithmetic     | `+`, `-`, `*`, `/`                            |
+    /// | comparison     | `==`, `!=`, `<`, `>`, `<=`, `>=`              |
+    /// | assignment     | `=`, `+=`, `-=`, `*=`, `/=`                   |
+    /// | delimiters     | `(`, `)`, `{`, `}`, `[`, `]`                  |
+    /// | punctuation    | `,`, `;`, `.`, `..`, `:`, `::`                |
+    /// | special        | `#`, `!#`, `->`, `//` (comment)               |
+    /// | whitespace     | newlines (emitted), spaces/tabs (skipped)     |
+    ///
+    ///
+    /// # Errors
+    ///
+    /// - unterminated character literal
+    /// - unknown escape sequence
+    /// - unterminated string
+    /// - unexpected character
     pub fn scan_tokens(&mut self) -> Result<(), Error> {
         let current_character = self.advance();
         match current_character {
+            // single character
             '{' => self.add_token(TokenType::LeftBrace),
             '}' => self.add_token(TokenType::RightBrace),
             '[' => self.add_token(TokenType::LeftBracket),
@@ -19,6 +49,7 @@ impl Tokenizer {
             ',' => self.add_token(TokenType::Comma),
             ';' => self.add_token(TokenType::Semicolon),
 
+            // multi character
             ':' => {
                 if self.peek() == ':' {
                     self.advance();
@@ -119,6 +150,7 @@ impl Tokenizer {
                 }
             }
 
+            // whitespaces
             ' ' | '\t' | '\r' => {}
 
             '\n' => {
@@ -126,11 +158,14 @@ impl Tokenizer {
                 self.add_token(TokenType::Newline)
             }
 
+            // literals
             '\'' => self.character_literal()?,
             '"' => self.string_literal()?,
 
             '0'..='9' => self.number_literal(),
-            'a'..='z' | 'A'..='Z' => self.identifier(),
+
+            '_' | 'a'..='z' | 'A'..='Z' => self.identifier(),
+
             other => {
                 return Err(self.err(
                     format!("unexpected character `{}`", other),

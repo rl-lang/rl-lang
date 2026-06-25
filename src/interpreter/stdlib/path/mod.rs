@@ -1,3 +1,9 @@
+//! `std::path` - path manipulation using [`std::path::PathBuf`].
+//!
+//! All functions take path strings and return strings or booleans.
+//! `path_pop` removes the last component (returns the shortened path).
+//! `path_push` appends a component (same as `path_join`).
+
 mod path_exists;
 mod path_extension;
 mod path_filename;

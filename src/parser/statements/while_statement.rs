@@ -1,3 +1,11 @@
+//! `while` loop parser.
+//!
+//! Handles the single `while` form:
+//!
+//! ```text
+//! while (condition) { body }
+//! ```
+
 use crate::{
     ast::statements::{Statement, StatementKind},
     parser::parser_logic::Parser,
@@ -5,14 +13,20 @@ use crate::{
 };
 
 impl Parser {
-    /// called when parser finds [`crate::lexer::tokentypes::TokenType::While`]
+    /// Parses a `while` loop.
     ///
-    /// parses the condition of loop into [`crate::ast::nodes::Expression`] then parses
-    /// the body of it into [`Vec<Statement>`] then returns [`Statement::While`]
+    /// Called after `while` has been consumed. Reads the loop condition as an
+    /// expression, then the loop body via [`parse_block`], and produces
+    /// [`StatementKind::While`].
+    ///
+    /// [`parse_block`]: Parser::parse_block
     pub fn parse_while(&mut self, start: Span) -> Result<Statement, Error> {
         let condition = self.parse_expression()?;
         let body = self.parse_block()?;
         let span = start.join(self.previous_span());
-        Ok(Statement::new(StatementKind::While { condition, body }, span))
+        Ok(Statement::new(
+            StatementKind::While { condition, body },
+            span,
+        ))
     }
 }

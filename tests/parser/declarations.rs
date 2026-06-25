@@ -10,28 +10,28 @@ use crate::common;
 
 #[test]
 fn dec_int() {
-    let statements = common::parse("dec int x = 0");
+    let statements = common::parse("dec int x = 1000");
     let expected = Statement::new(
         StatementKind::VariableDeclaration {
             name: "x".to_string(),
             type_annotation: TypeAnnotation::Int,
-            value: Expression::new(ExpressionKind::Integer(0), Span::new(12, 13)),
+            value: Expression::new(ExpressionKind::Integer(1000), Span::new(12, 16)),
         },
-        Span::new(0, 13),
+        Span::new(0, 16),
     );
     assert_eq!(statements, vec![expected]);
 }
 
 #[test]
 fn const_int() {
-    let statements = common::parse("CONST int x = 0");
+    let statements = common::parse("CONST int x = 1000");
     let expected = Statement::new(
         StatementKind::ConstantDeclaration {
             name: "x".to_string(),
             type_annotation: TypeAnnotation::CInt,
-            value: Expression::new(ExpressionKind::Integer(0), Span::new(14, 15)),
+            value: Expression::new(ExpressionKind::Integer(1000), Span::new(14, 18)),
         },
-        Span::new(0, 15),
+        Span::new(0, 18),
     );
     assert_eq!(statements, vec![expected]);
 }
@@ -88,6 +88,34 @@ fn const_string() {
             value: Expression::new(ExpressionKind::String("hi".to_string()), Span::new(17, 21)),
         },
         Span::new(0, 21),
+    );
+    assert_eq!(statements, vec![expected]);
+}
+
+#[test]
+fn dec_byte() {
+    let statements = common::parse("dec byte x = 65 as byte");
+    let expected = Statement::new(
+        StatementKind::VariableDeclaration {
+            name: "x".to_string(),
+            type_annotation: TypeAnnotation::Byte,
+            value: Expression::new(ExpressionKind::Byte(65), Span::new(13, 15)),
+        },
+        Span::new(0, 15),
+    );
+    assert_eq!(statements, vec![expected]);
+}
+
+#[test]
+fn const_byte() {
+    let statements = common::parse("CONST byte x = 65 as byte");
+    let expected = Statement::new(
+        StatementKind::ConstantDeclaration {
+            name: "x".to_string(),
+            type_annotation: TypeAnnotation::CByte,
+            value: Expression::new(ExpressionKind::Byte(65), Span::new(15, 17)),
+        },
+        Span::new(0, 17),
     );
     assert_eq!(statements, vec![expected]);
 }

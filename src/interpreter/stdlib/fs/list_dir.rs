@@ -1,16 +1,15 @@
 use crate::{
     ast::statements::TypeAnnotation,
     interpreter::{evaluator::Evaluator, values::Value},
-    utils::errors::{Error, ErrorReason, Reason},
+    utils::{errors::Error, span::Span},
 };
 
-pub fn std_list_dir(_: &mut Evaluator, path: String) -> Result<Value, Error> {
+pub fn std_list_dir(eval: &mut Evaluator, path: String, span: Span) -> Result<Value, Error> {
     let data = std::fs::read_dir(&path)
         .map_err(|e| {
-            Error::init(
+            eval.err(
                 format!("list_dir(): failed to read \"{}\": {}", path, e),
-                None,
-                Some(ErrorReason::init(Reason::Runtime, None)),
+                span,
             )
         })?
         .filter_map(|i| i.ok())

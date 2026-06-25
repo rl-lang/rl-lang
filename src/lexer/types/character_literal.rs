@@ -1,11 +1,29 @@
+//! Single-quoted character literal scanner.
+//!
+//! Handles `'x'` and simple escape sequences, emitting [`TokenType::CharacterLiteral`].
 use crate::lexer::{tokenizer::Tokenizer, tokentypes::TokenType};
 use crate::utils::errors::Error;
 
 impl Tokenizer {
-    /// scans a single quoted literal
+    /// Scans a single-quoted character literal and emits [`TokenType::CharacterLiteral`].
     ///
-    /// only single character are allowed
-    /// returns TokenType::CharacterLiteral
+    /// Only a single character is allowed between the quotes.
+    /// Supports the following escape sequences:
+    ///
+    /// | Sequence | Meaning         |
+    /// |----------|-----------------|
+    /// | `\n`     | newline         |
+    /// | `\t`     | tab             |
+    /// | `\r`     | carriage return |
+    /// | `\0`     | null            |
+    /// | `\\`     | backslash       |
+    /// | '\"'     | double quote    |
+    /// | `\'`     | single quote    |
+    ///
+    /// # Errors
+    ///
+    /// - `unterminated character literal` -> if EOF is reached or no closing `'` is found
+    /// - `unknown escape sequence` -> if `\` is followed by an unrecognized character
     pub fn character_literal(&mut self) -> Result<(), Error> {
         self.advance();
 
@@ -26,6 +44,7 @@ impl Tokenizer {
                 't' => '\t',
                 'r' => '\r',
                 '\\' => '\\',
+                '\"' => '\"',
                 '\'' => '\'',
                 '0' => '\0',
                 _ => {

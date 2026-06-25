@@ -1,40 +1,43 @@
-// function entry that contains signature (for example `pop(arr)`)
-// and description of what said function can and cannot do
-// and usage example in `rl`
+//! Static data types used to represent all documentation entries.
+//!
+//! Every entry is a `'static` struct so the entire doc system lives in the
+//! binary with zero heap allocation at startup.
+
+/// A single stdlib function's documentation.
 pub struct FnEntry {
-    // what function look like
+    /// The function signature as it appears in rl (e.g. `"arr_push(arr, value)"`).
     pub signature: &'static str,
-    // what function can do and use cases
+    /// What the function does, including edge cases and constraints.
     pub description: &'static str,
-    // how to use it in `rl`
+    /// A runnable rl example showing typical usage.
     pub example: &'static str,
 }
 
-// std entry that contains std name and description about it
-// and has functions entry
+/// A stdlib module's documentation, grouping related [`FnEntry`]s together.
 pub struct StdEntry {
-    // what is the std entry called
+    /// The module name as used in imports (e.g. `"io"`, `"math::consts"`).
     pub name: &'static str,
-    // what is the std entry used for
+    /// A short description of the module's purpose.
     pub description: &'static str,
-    // std functions
+    /// All documented functions in this module.
     pub functions: &'static [&'static FnEntry],
 }
 
-// entry for explaining concepts of `rl` like variables
-// each concept entry can have multiple discriptions and each
-// discription can have multiple example
+/// Documentation for a language concept (variables, loops, types, etc.).
+///
+/// Each concept has one or more [`DescriptionEntry`]s, each of which
+/// pairs a prose explanation with one or more runnable rl examples.
 pub struct ConceptEntry {
-    // concept name
+    /// The concept name shown as a section header (e.g. `"arrays"`, `"for loops"`).
     pub name: &'static str,
-    // descriptions about the concept (description and one or multiple examples)
+    /// One or more description+example pairs explaining this concept.
     pub descriptions: &'static [DescriptionEntry],
 }
 
-// entry for descriptions
-// one entry can have multiple examples
-// useful for diffrent approach examples
+/// A single description with one or more accompanying rl code examples.
 pub struct DescriptionEntry {
+    /// Prose explanation of this aspect of the concept.
     pub description: &'static str,
+    /// One or more rl snippets illustrating the description.
     pub examples: &'static [&'static str],
 }

@@ -25,7 +25,7 @@ Check the [issues](https://github.com/MohamedGonem/rl-lang/issues) page for open
 
 ## Guidelines
 
-- Keep PRs focused — one fix or feature per PR
+- Keep PRs focused - one fix or feature per PR
 - Add tests for new behavior where possible
 - Follow the existing code style
 - Update docs if you change language behavior or add stdlib functions

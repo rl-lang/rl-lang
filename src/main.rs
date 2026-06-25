@@ -1,3 +1,17 @@
+//! CLI entry point for the `rl` command.
+//!
+//! Parses subcommands via [`clap`] and dispatches to the appropriate pipeline
+//! functions or subsystems.
+//!
+//! | Subcommand | Action |
+//! |---|---|
+//! | `run <file>` | lex -> parse -> eval a `.rl` file |
+//! | `dev` | read `rl.toml`, lex -> parse -> eval the project entry |
+//! | `check <file>` | lex -> parse -> type-check, report errors |
+//! | `new <name>` | scaffold a new project directory |
+//! | `docs [topic]` | print stdlib / concept / tutorial reference |
+//! | `repl` | start the interactive TUI REPL (`repl_tui` feature) |
+//! | `lsp` | start the LSP server over stdio (`lsp` feature) |
 use clap::{Parser, Subcommand};
 use rl_lang::docs;
 use rl_lang::tooling::new::create_project;
@@ -114,7 +128,24 @@ fn main() {
             });
             let source = SourceFile::new(&*path, source_text);
             let tokens = lexing_loop(source.clone());
-            parsing_loop(source.clone(), tokens);
+            let statements = parsing_loop(source.clone(), tokens);
+
+            #[cfg(feature = "eval")]
+            {
+                use rl_lang::checker::TypeChecker;
+                let mut checker = TypeChecker::new().with_source_file(source);
+                let errors = checker.check(&statements);
+                if errors.is_empty() {
+                    println!("ok");
+                } else {
+                    for e in errors {
+                        e.report_to_stderr();
+                    }
+                    std::process::exit(1);
+                }
+            }
+
+            #[cfg(not(feature = "eval"))]
             println!("ok");
         }
 
@@ -125,11 +156,13 @@ fn main() {
         Commands::Docs { topic } => {
             let std_entries = docs::entries::stdlib_entries();
             let concept_entries = docs::entries::concept_entries();
+            let tutorial_entries = docs::entries::tutorial_entries();
 
             match topic.as_deref() {
                 None => {
                     println!("{}", docs::std_to_markdown(&std_entries));
                     println!("{}", docs::concept_to_markdown(&concept_entries));
+                    println!("{}", docs::tutorial_to_markdown(&tutorial_entries));
                 }
                 Some(query) => {
                     // search stdlib entries
@@ -146,7 +179,17 @@ fn main() {
                         .filter(|e| e.name.contains(query))
                         .collect();
 
-                    if matched_std.is_empty() && matched_concepts.is_empty() {
+                    // search tutorial entries
+                    let matched_tutorial: Vec<&docs::entry::ConceptEntry> = tutorial_entries
+                        .iter()
+                        .copied()
+                        .filter(|e| e.name.contains(query))
+                        .collect();
+
+                    if matched_std.is_empty()
+                        && matched_concepts.is_empty()
+                        && matched_tutorial.is_empty()
+                    {
                         eprintln!("no docs found for '{}'", query);
                         std::process::exit(1);
                     }
@@ -156,6 +199,9 @@ fn main() {
                     }
                     if !matched_concepts.is_empty() {
                         println!("{}", docs::concept_to_markdown(&matched_concepts));
+                    }
+                    if !matched_tutorial.is_empty() {
+                        println!("{}", docs::tutorial_to_markdown(&matched_tutorial));
                     }
                 }
             }

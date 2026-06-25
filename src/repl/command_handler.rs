@@ -1,3 +1,21 @@
+//! REPL command dispatcher - handles all `:` prefixed commands.
+//!
+//! # Commands
+//!
+//! | Command              | Description                                   |
+//! |----------------------|-----------------------------------------------|
+//! | `:help`              | Print all available commands                  |
+//! | `:stdlib`            | List all stdlib modules                       |
+//! | `:stdlib <mod>`      | List all functions in a stdlib module         |
+//! | `:save <file>`       | Save all `ValidInput` lines to a file         |
+//! | `:load <file>`       | Print a file's contents into the output       |
+//! | `:attach <file>`     | Lex, parse, and evaluate a file into the env  |
+//! | `:detach <file>`     | Remove a file from the attached list          |
+//! | `:exit`              | Exit the REPL                                 |
+//!
+//! Note: `:detach` removes the file from the tracked list but does **not**
+//! undefine variables or functions already loaded into the evaluator environment.
+
 use std::{fs, path::PathBuf};
 
 use ratatui::style::{Color, Modifier, Style};
@@ -10,6 +28,7 @@ use crate::{
     utils::source::SourceFile,
 };
 
+/// Dispatches a `:command` string, mutating `output`, `evaluator`, and `attached` as needed.
 pub fn handle_command(
     cmd: &str,
     output: &mut Vec<OutputLine>,
@@ -53,7 +72,7 @@ pub fn handle_command(
                 let used = 2 + command.len() + argument.map(|a| a.len()).unwrap_or(0);
                 let pad = " ".repeat(24_usize.saturating_sub(used));
                 parts.push((pad, sep));
-                parts.push(("— ".to_string(), sep));
+                parts.push(("- ".to_string(), sep));
                 parts.push((description.to_string(), desc));
                 output.push(OutputLine::Styled(parts));
             }

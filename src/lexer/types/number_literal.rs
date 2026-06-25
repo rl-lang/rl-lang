@@ -1,10 +1,22 @@
+//! Integer and float literal scanner.
+//!
+//! Consumes a run of digits, checks for a `.` to decide between
+//! [`TokenType::NumberLiteral`] and [`TokenType::FloatLiteral`], and handles
+//! byte literals (`0b` prefix -> [`TokenType::ByteLiteral`]).
 use crate::lexer::{tokenizer::Tokenizer, tokentypes::TokenType};
 
 impl Tokenizer {
-    /// scans a integer or float literal starting at the current position
+    /// Scans an integer or float literal starting at the current position.
     ///
-    /// '.' enables float parsing
-    /// returns either TokenType::NumberLiteral or TokenType::FloatLiteral
+    /// A `.` followed by a digit switches to float parsing.
+    /// Integers in the range `0..=255` are emitted as [`TokenType::ByteLiteral`],
+    /// larger integers as [`TokenType::NumberLiteral`], and decimals as [`TokenType::FloatLiteral`].
+    ///
+    /// | Input   | Emitted token               |
+    /// |---------|-----------------------------|
+    /// | `1`     | `ByteLiteral(1)`            |
+    /// | `1000`  | `NumberLiteral(1000)`       |
+    /// | `3.14`  | `FloatLiteral(3.14)`        |
     pub fn number_literal(&mut self) {
         let mut is_float = false;
         while self.peek().is_ascii_digit() {

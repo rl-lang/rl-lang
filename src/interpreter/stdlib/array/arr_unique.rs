@@ -1,9 +1,9 @@
 use crate::{
     interpreter::{evaluator::Evaluator, values::Value},
-    utils::errors::Error,
+    utils::{errors::Error, span::Span},
 };
 
-pub fn std_arr_unique(_: &mut Evaluator, array: Value) -> Result<Value, Error> {
+pub fn std_arr_unique(eval: &mut Evaluator, array: Value, span: Span) -> Result<Value, Error> {
     match array {
         Value::Values { items_type, items } => {
             let mut seen = Vec::new();
@@ -17,10 +17,6 @@ pub fn std_arr_unique(_: &mut Evaluator, array: Value) -> Result<Value, Error> {
                 items: seen,
             })
         }
-        _ => Err(Error::init(
-            "arr_unique() accepts only arrays".to_string(),
-            None,
-            None,
-        )),
+        _ => Err(eval.err("arr_unique() accepts only arrays".to_string(), span)),
     }
 }

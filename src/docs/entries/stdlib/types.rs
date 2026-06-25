@@ -55,7 +55,7 @@ static TO_BIN: FnEntry = FnEntry {
 
 static TO_BOOL: FnEntry = FnEntry {
     signature: "to_bool(x)",
-    description: "converts int, float, string, or null to bool — 0/0.0/\"\"/null are false, everything else is true",
+    description: "converts int, float, string, or null to bool - 0/0.0/\"\"/null are false, everything else is true",
     example: "get std::types::to_bool\n\nto_bool(0) // false",
 };
 

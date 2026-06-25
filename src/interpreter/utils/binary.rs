@@ -1,3 +1,9 @@
+//! Binary operator evaluation for all supported operand type combinations.
+//!
+//! `byte op int` and `int op byte` always widen to `int`.
+//! `byte op byte` stays `byte` if the result fits in `0..=255`, otherwise widens to `int`.
+//! All type mismatches emit a labeled error pointing at both operands.
+
 use crate::{
     interpreter::evaluator::Evaluator,
     interpreter::values::Value,
@@ -33,73 +39,131 @@ impl Evaluator {
             TokenType::Plus => match (&left, &right) {
                 (Value::Integer(a), Value::Integer(b)) => Value::Integer(a + b),
                 (Value::Float(a), Value::Float(b)) => Value::Float(a + b),
+                (Value::Integer(a), Value::Byte(b)) => Value::Integer(a + *b as i64),
+                (Value::Byte(a), Value::Integer(b)) => Value::Integer(*a as i64 + b),
+                (Value::Byte(a), Value::Byte(b)) => {
+                    let ab = *a as i64 + *b as i64;
+                    if !(0..=255).contains(&ab) {
+                        Value::Integer(ab)
+                    } else {
+                        Value::Byte(a + b)
+                    }
+                }
                 _ => {
-                    return Err(self.type_mismatch_binary(
-                        "+", &left, left_span, &right, right_span, span,
-                    ))
+                    return Err(
+                        self.type_mismatch_binary("+", &left, left_span, &right, right_span, span)
+                    );
                 }
             },
             TokenType::Minus => match (&left, &right) {
                 (Value::Integer(a), Value::Integer(b)) => Value::Integer(a - b),
                 (Value::Float(a), Value::Float(b)) => Value::Float(a - b),
+                (Value::Integer(a), Value::Byte(b)) => Value::Integer(a - *b as i64),
+                (Value::Byte(a), Value::Integer(b)) => Value::Integer(*a as i64 - b),
+                (Value::Byte(a), Value::Byte(b)) => {
+                    let ab = *a as i64 - *b as i64;
+                    if !(0..=255).contains(&ab) {
+                        Value::Integer(ab)
+                    } else {
+                        Value::Byte(a - b)
+                    }
+                }
                 _ => {
-                    return Err(self.type_mismatch_binary(
-                        "-", &left, left_span, &right, right_span, span,
-                    ))
+                    return Err(
+                        self.type_mismatch_binary("-", &left, left_span, &right, right_span, span)
+                    );
                 }
             },
             TokenType::Star => match (&left, &right) {
                 (Value::Integer(a), Value::Integer(b)) => Value::Integer(a * b),
                 (Value::Float(a), Value::Float(b)) => Value::Float(a * b),
+                (Value::Integer(a), Value::Byte(b)) => Value::Integer(a * *b as i64),
+                (Value::Byte(a), Value::Integer(b)) => Value::Integer(*a as i64 * b),
+                (Value::Byte(a), Value::Byte(b)) => {
+                    let ab = *a as i64 * *b as i64;
+                    if !(0..=255).contains(&ab) {
+                        Value::Integer(ab)
+                    } else {
+                        Value::Byte(a * b)
+                    }
+                }
                 _ => {
-                    return Err(self.type_mismatch_binary(
-                        "*", &left, left_span, &right, right_span, span,
-                    ))
+                    return Err(
+                        self.type_mismatch_binary("*", &left, left_span, &right, right_span, span)
+                    );
                 }
             },
             TokenType::Slash => match (&left, &right) {
-                (Value::Integer(a), Value::Integer(b)) => Value::Integer(a / b),
+                (Value::Integer(a), Value::Integer(b)) => {
+                    if *b == 0 {
+                        return Err(self.err("division by zero", span));
+                    }
+                    Value::Integer(a / b)
+                }
                 (Value::Float(a), Value::Float(b)) => Value::Float(a / b),
+                (Value::Byte(a), Value::Byte(b)) => {
+                    if *b == 0 {
+                        return Err(self.err("division by zero", span));
+                    }
+                    let ab = *a as i64 / *b as i64;
+                    if !(0..=255).contains(&ab) {
+                        Value::Integer(ab)
+                    } else {
+                        Value::Byte(a / b)
+                    }
+                }
                 _ => {
-                    return Err(self.type_mismatch_binary(
-                        "/", &left, left_span, &right, right_span, span,
-                    ))
+                    return Err(
+                        self.type_mismatch_binary("/", &left, left_span, &right, right_span, span)
+                    );
                 }
             },
             TokenType::Less => match (&left, &right) {
                 (Value::Integer(a), Value::Integer(b)) => Value::Bool(a < b),
                 (Value::Float(a), Value::Float(b)) => Value::Bool(a < b),
+                (Value::Integer(a), Value::Byte(b)) => Value::Bool(*a < (*b as i64)),
+                (Value::Byte(a), Value::Integer(b)) => Value::Bool((*a as i64) < *b),
+                (Value::Byte(a), Value::Byte(b)) => Value::Bool(a < b),
                 _ => {
-                    return Err(self.type_mismatch_binary(
-                        "<", &left, left_span, &right, right_span, span,
-                    ))
+                    return Err(
+                        self.type_mismatch_binary("<", &left, left_span, &right, right_span, span)
+                    );
                 }
             },
             TokenType::Greater => match (&left, &right) {
                 (Value::Integer(a), Value::Integer(b)) => Value::Bool(a > b),
                 (Value::Float(a), Value::Float(b)) => Value::Bool(a > b),
+                (Value::Integer(a), Value::Byte(b)) => Value::Bool(*a > (*b as i64)),
+                (Value::Byte(a), Value::Integer(b)) => Value::Bool((*a as i64) > *b),
+                (Value::Byte(a), Value::Byte(b)) => Value::Bool(a > b),
                 _ => {
-                    return Err(self.type_mismatch_binary(
-                        ">", &left, left_span, &right, right_span, span,
-                    ))
+                    return Err(
+                        self.type_mismatch_binary(">", &left, left_span, &right, right_span, span)
+                    );
                 }
             },
             TokenType::LessEqual => match (&left, &right) {
                 (Value::Integer(a), Value::Integer(b)) => Value::Bool(a <= b),
                 (Value::Float(a), Value::Float(b)) => Value::Bool(a <= b),
+                (Value::Integer(a), Value::Byte(b)) => Value::Bool(*a <= (*b as i64)),
+                (Value::Byte(a), Value::Integer(b)) => Value::Bool((*a as i64) <= *b),
+                (Value::Byte(a), Value::Byte(b)) => Value::Bool(a <= b),
                 _ => {
-                    return Err(self.type_mismatch_binary(
-                        "<=", &left, left_span, &right, right_span, span,
-                    ))
+                    return Err(
+                        self.type_mismatch_binary("<=", &left, left_span, &right, right_span, span)
+                    );
                 }
             },
             TokenType::GreaterEqual => match (&left, &right) {
                 (Value::Integer(a), Value::Integer(b)) => Value::Bool(a >= b),
                 (Value::Float(a), Value::Float(b)) => Value::Bool(a >= b),
+                (Value::Integer(a), Value::Byte(b)) => Value::Bool(*a >= (*b as i64)),
+                (Value::Byte(a), Value::Integer(b)) => Value::Bool((*a as i64) >= *b),
+                (Value::Byte(a), Value::Byte(b)) => Value::Bool(a >= b),
                 _ => {
-                    return Err(self.type_mismatch_binary(
-                        ">=", &left, left_span, &right, right_span, span,
-                    ))
+                    return Err(
+                        self.type_mismatch_binary(">=", &left, left_span, &right, right_span, span)
+                    );
                 }
             },
             TokenType::BangEqual => match (&left, &right) {
@@ -108,10 +172,13 @@ impl Evaluator {
                 (Value::String(a), Value::String(b)) => Value::Bool(a != b),
                 (Value::Char(a), Value::Char(b)) => Value::Bool(a != b),
                 (Value::Bool(a), Value::Bool(b)) => Value::Bool(a != b),
+                (Value::Integer(a), Value::Byte(b)) => Value::Bool(*a != (*b as i64)),
+                (Value::Byte(a), Value::Integer(b)) => Value::Bool((*a as i64) != *b),
+                (Value::Byte(a), Value::Byte(b)) => Value::Bool(a != b),
                 _ => {
-                    return Err(self.type_mismatch_binary(
-                        "!=", &left, left_span, &right, right_span, span,
-                    ))
+                    return Err(
+                        self.type_mismatch_binary("!=", &left, left_span, &right, right_span, span)
+                    );
                 }
             },
             TokenType::Compare => match (&left, &right) {
@@ -120,10 +187,13 @@ impl Evaluator {
                 (Value::String(a), Value::String(b)) => Value::Bool(a == b),
                 (Value::Char(a), Value::Char(b)) => Value::Bool(a == b),
                 (Value::Bool(a), Value::Bool(b)) => Value::Bool(a == b),
+                (Value::Integer(a), Value::Byte(b)) => Value::Bool(*a == (*b as i64)),
+                (Value::Byte(a), Value::Integer(b)) => Value::Bool((*a as i64) == *b),
+                (Value::Byte(a), Value::Byte(b)) => Value::Bool(a == b),
                 _ => {
-                    return Err(self.type_mismatch_binary(
-                        "==", &left, left_span, &right, right_span, span,
-                    ))
+                    return Err(
+                        self.type_mismatch_binary("==", &left, left_span, &right, right_span, span)
+                    );
                 }
             },
             _ => return Err(self.err("unknown binary operator", span)),

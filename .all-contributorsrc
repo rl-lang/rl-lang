@@ -1,0 +1,66 @@
+{
+  "projectName": "rl-lang",
+  "projectOwner": "rl-lang",
+  "repoType": "github",
+  "files": [
+    "README.md"
+  ],
+  "imageSize": 100,
+  "commit": true,
+  "contributorsPerLine": 7,
+  "contributors": [
+    {
+      "login": "MohamedGonem",
+      "name": "Mohamed Gonem",
+      "avatar_url": "https://avatars.githubusercontent.com/u/73464078?v=4",
+      "profile": "https://github.com/MohamedGonem",
+      "contributions": [
+        "code",
+        "doc",
+        "ideas",
+        "test",
+        "example",
+        "infra",
+        "tool"
+      ]
+    },
+    {
+      "login": "FlawlessDeveloper",
+      "name": "Flawlesscode",
+      "avatar_url": "https://avatars.githubusercontent.com/u/37778817?v=4",
+      "profile": "https://yt-dl.flawlessco.de",
+      "contributions": [
+        "code"
+      ]
+    },
+    {
+      "login": "kill-ux",
+      "name": "Mustapha Boutoub",
+      "avatar_url": "https://avatars.githubusercontent.com/u/185858933?v=4",
+      "profile": "https://github.com/kill-ux",
+      "contributions": [
+        "code"
+      ]
+    },
+    {
+      "login": "RubyPaws39",
+      "name": "RubyPaws39",
+      "avatar_url": "https://avatars.githubusercontent.com/u/280778337?v=4",
+      "profile": "https://github.com/RubyPaws39",
+      "contributions": [
+        "code"
+      ]
+    },
+    {
+      "login": "CapThunder19",
+      "name": "Anirudh Patwal",
+      "avatar_url": "https://avatars.githubusercontent.com/u/161865581?v=4",
+      "profile": "https://github.com/CapThunder19",
+      "contributions": [
+        "code"
+      ]
+    }
+  ],
+  "commitType": "docs",
+  "commitConvention": "angular"
+}

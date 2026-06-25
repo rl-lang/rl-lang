@@ -1,3 +1,11 @@
+//! `std::io` - input/output: reading from stdin, reading/writing files, printing.
+//!
+//! `print` and `println` write to [`Evaluator::output_buffer`] when set (LSP/REPL),
+//! otherwise they write directly to stdout.
+//!
+//! `eprint` raises a runtime error rather than writing to stderr, so errors
+//! surface through rl's normal error reporting pipeline.
+
 mod append_file;
 mod delete_file;
 mod eprint;

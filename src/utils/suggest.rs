@@ -1,6 +1,6 @@
 /// Find the closest match to `target` from `candidates` using Levenshtein
 /// distance. Returns `Some(name)` only when the best candidate is within
-/// `max(target.len() / 3, 1)` edits — enough to catch typical typos
+/// `max(target.len() / 3, 1)` edits - enough to catch typical typos
 /// without surfacing wild guesses.
 pub fn closest_match<'a, I>(target: &str, candidates: I) -> Option<&'a str>
 where
@@ -20,6 +20,7 @@ where
     best.map(|(s, _)| s)
 }
 
+/// Computes the Levenshtein edit distance between two strings.
 fn levenshtein(a: &str, b: &str) -> usize {
     let a: Vec<char> = a.chars().collect();
     let b: Vec<char> = b.chars().collect();

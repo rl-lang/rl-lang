@@ -1,3 +1,4 @@
+//! Evaluates a complete input string and appends results to the output buffer.
 use crate::{
     interpreter::evaluator::Evaluator,
     lexer::tokenizer::Tokenizer,
@@ -6,6 +7,16 @@ use crate::{
     utils::source::SourceFile,
 };
 
+/// Lexes, parses, and evaluates `input`, appending results to `output`.
+///
+/// Expression statements have their return value rendered directly with syntax
+/// highlighting (unless the value is `null`). Non-expression statements
+/// (declarations, loops, etc.) are evaluated for their side effects only.
+///
+/// Any `println` / `print` output captured in [`Evaluator::output_buffer`]
+/// is flushed into `output` as [`OutputLine::Result`] lines after evaluation.
+///
+/// Returns `true` if all statements evaluated without error.
 pub fn eval_input(input: &str, evaluator: &mut Evaluator, output: &mut Vec<OutputLine>) -> bool {
     let source = SourceFile::new("<repl>", input.to_string());
 

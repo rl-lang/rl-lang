@@ -1,8 +1,17 @@
+//! Determines whether a multiline input block is complete and ready to evaluate.
 use crate::{
     lexer::{tokenizer::Tokenizer, tokentypes::TokenType},
     utils::source::SourceFile,
 };
 
+/// Returns `true` if `input` is a syntactically complete expression or statement.
+///
+/// Lexes `input` and counts bracket/brace/paren depth. The input is considered
+/// incomplete (returns `false`) when:
+/// - any parentheses or brackets are unclosed
+/// - braces are unclosed and the input does not end with `{` (a block opener)
+///
+/// On lex error, returns `true` so the evaluator can surface the error to the user.
 pub fn is_complete(input: &str) -> bool {
     let source = SourceFile::new("<check>", input.to_string());
     let tokens = match Tokenizer::lex(source) {

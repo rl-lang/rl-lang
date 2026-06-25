@@ -1,20 +1,19 @@
 use crate::{
     interpreter::{evaluator::Evaluator, values::Value},
-    utils::errors::Error,
+    utils::{errors::Error, span::Span},
 };
 
-pub fn std_arr_contains(_: &mut Evaluator, array: Value, value: Value) -> Result<bool, Error> {
+pub fn std_arr_contains(
+    eval: &mut Evaluator,
+    array: Value,
+    value: Value,
+    span: Span,
+) -> Result<bool, Error> {
     match array {
-        Value::Values { items, .. } => {
-            if items.contains(&value) {
-                return Ok(true);
-            }
-            Ok(false)
+        Value::Values { items, items_type } => {
+            let needle = Evaluator::coerce_array_type(value, &items_type);
+            Ok(items.contains(&needle))
         }
-        _ => Err(Error::init(
-            "arr_contains() accepts only arrays".to_string(),
-            None,
-            None,
-        )),
+        _ => Err(eval.err("arr_contains() accepts only arrays".to_string(), span)),
     }
 }

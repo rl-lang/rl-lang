@@ -1,17 +1,18 @@
 use crate::{
     interpreter::{evaluator::Evaluator, values::Value},
-    utils::errors::Error,
+    utils::{errors::Error, span::Span},
 };
 
-pub fn std_arr_remove(_: &mut Evaluator, array: Value, index: i64) -> Result<Value, Error> {
+pub fn std_arr_remove(
+    eval: &mut Evaluator,
+    array: Value,
+    index: i64,
+    span: Span,
+) -> Result<Value, Error> {
     match array {
         Value::Values { items, items_type } => {
             if index as usize >= items.len() {
-                return Err(Error::init(
-                    format!("index out of bounds: {}", index),
-                    None,
-                    None,
-                ));
+                return Err(eval.err(format!("index out of bounds: {}", index), span));
             }
             let mut v = items;
             v.remove(index as usize);
@@ -20,10 +21,6 @@ pub fn std_arr_remove(_: &mut Evaluator, array: Value, index: i64) -> Result<Val
                 items: v,
             })
         }
-        _ => Err(Error::init(
-            "arr_remove() accepts only arrays".to_string(),
-            None,
-            None,
-        )),
+        _ => Err(eval.err("arr_remove() accepts only arrays".to_string(), span)),
     }
 }

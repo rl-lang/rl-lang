@@ -1,3 +1,13 @@
+//! Top-level statement dispatcher and block parser.
+//!
+//! [`parse_statement_to_ast`] is the main entry point called by the top-level
+//! parse loop in [`Parser::parse`]. It peeks at the current token and routes
+//! to the appropriate sub-parser. Anything that does not start with a known
+//! keyword is parsed as a bare expression statement.
+//!
+//! [`parse_statement_to_ast`]: Parser::parse_statement_to_ast
+//! [`Parser::parse`]: crate::parser::parser_logic::Parser::parse
+
 mod const_declaration;
 mod for_statement;
 mod function_declaration;
@@ -17,7 +27,33 @@ use crate::{
 };
 
 impl Parser {
-    /// parsing [`TokenType`]s into [`Statement`]s
+    /// Dispatches the current token to the appropriate statement sub-parser.
+    ///
+    /// | Token | Action |
+    /// |---|---|
+    /// | `Newline` | skip - emits a no-op `Expression(0)` placeholder |
+    /// | `get` | [`parse_import`] |
+    /// | `dec` | [`parse_variable_declaration`] |
+    /// | `CONST` | [`parse_const_declaration`] |
+    /// | `while` | [`parse_while`] |
+    /// | `for` | [`parse_for`] |
+    /// | `if` | [`parse_if`] |
+    /// | `fn` | [`parse_function`] |
+    /// | `!#` | [`parse_entry_attribute`] |
+    /// | `return` | inline - parses optional return value |
+    /// | `break` | inline - emits [`StatementKind::Break`] |
+    /// | `continue` | inline - emits [`StatementKind::Continue`] |
+    /// | anything else | [`parse_expression`] wrapped in [`StatementKind::Expression`] |
+    ///
+    /// [`parse_import`]: Parser::parse_import
+    /// [`parse_variable_declaration`]: Parser::parse_variable_declartion
+    /// [`parse_const_declaration`]: Parser::parse_const_declartion
+    /// [`parse_while`]: Parser::parse_while
+    /// [`parse_for`]: Parser::parse_for
+    /// [`parse_if`]: Parser::parse_if
+    /// [`parse_function`]: Parser::parse_function
+    /// [`parse_entry_attribute`]: Parser::parse_entry_attribute
+    /// [`parse_expression`]: Parser::parse_expression
     pub fn parse_statement_to_ast(&mut self) -> Result<Statement, Error> {
         let start = self.peek_span();
         match self.peek() {
@@ -32,14 +68,10 @@ impl Parser {
                 ))
             }
 
-            // the new import
             TokenType::Get => {
-                // consume it
                 self.advance();
-                // log it
                 #[cfg(feature = "debug")]
                 log::info!("found `get` for import while parsing");
-                // parse it
                 self.parse_import(start)
             }
             TokenType::Dec => {
@@ -77,12 +109,16 @@ impl Parser {
                 self.advance();
                 #[cfg(feature = "debug")]
                 log::info!("found 'fn' while parsing");
-                self.parse_function(start)
+                self.parse_function(start, false)
             }
 
+            TokenType::BangHash => {
+                self.advance();
+                self.parse_entry_attribute(start)
+            }
             TokenType::Return => {
                 self.advance();
-                // if next token can start an expression, parse it
+                // parse the return value only when one is present on the same line
                 let expr = if !matches!(self.peek(), TokenType::Newline)
                     && !matches!(self.peek(), TokenType::RightBrace)
                     && !self.is_at_end()
@@ -117,7 +153,16 @@ impl Parser {
         }
     }
 
-    /// parses the body between '{' '}' into list of [`Statement`]s
+    /// Parses a brace-delimited block `{ stmts* }` into a [`Vec<Statement>`].
+    ///
+    /// Consumes the opening `{`, then repeatedly calls [`parse_statement_to_ast`]
+    /// until `}` or [`TokenType::Eof`] is reached. Blank lines (newlines) inside
+    /// the block are skipped.
+    ///
+    /// # Errors
+    /// Returns an error if the opening `{` is missing.
+    ///
+    /// [`parse_statement_to_ast`]: Parser::parse_statement_to_ast
     pub fn parse_block(&mut self) -> Result<Vec<Statement>, Error> {
         if !self.match_type(&[TokenType::LeftBrace]) {
             return Err(self.err("expected `{`", self.peek_span()));
@@ -133,7 +178,43 @@ impl Parser {
             }
             statements.push(self.parse_statement_to_ast()?);
         }
-        self.match_type(&[TokenType::RightBrace]);
         Ok(statements)
+    }
+
+    /// Parses a `!#[entry]` attribute and the `fn` declaration that follows it.
+    ///
+    /// The `!#` token has already been consumed by [`parse_statement_to_ast`]
+    /// before this is called. Expects `[entry]` then a function declaration,
+    /// which is forwarded to [`parse_function`] with `is_entry = true`.
+    ///
+    /// # Errors
+    /// Returns an error if `[`, the `entry` identifier, `]`, or `fn` are missing
+    /// or in the wrong order.
+    ///
+    /// [`parse_function`]: Parser::parse_function
+    fn parse_entry_attribute(
+        &mut self,
+        start: crate::utils::span::Span,
+    ) -> Result<Statement, Error> {
+        if !self.match_type(&[TokenType::LeftBracket]) {
+            return Err(self.err("expected `[` after `!#`", self.peek_span()));
+        }
+        match self.peek() {
+            TokenType::Identifier(name) if name == "entry" => {
+                self.advance();
+            }
+            _ => return Err(self.err("expected `entry` attribute", self.peek_span())),
+        }
+        if !self.match_type(&[TokenType::RightBracket]) {
+            return Err(self.err("expected `]` after entry attribute", self.peek_span()));
+        }
+        while self.match_type(&[TokenType::Newline]) {}
+        if !self.match_type(&[TokenType::Fn]) {
+            return Err(self.err(
+                "expected function declaration after `!#[entry]`",
+                self.peek_span(),
+            ));
+        }
+        self.parse_function(start, true)
     }
 }

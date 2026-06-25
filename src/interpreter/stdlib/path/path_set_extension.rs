@@ -1,12 +1,13 @@
 use crate::{
     interpreter::{evaluator::Evaluator, values::Value},
-    utils::errors::Error,
+    utils::{errors::Error, span::Span},
 };
 
 pub fn std_path_set_extension(
-    _: &mut Evaluator,
+    eval: &mut Evaluator,
     path: Value,
     target: String,
+    span: Span,
 ) -> Result<Value, Error> {
     match path {
         Value::String(s) => {
@@ -14,13 +15,12 @@ pub fn std_path_set_extension(
             buf.set_extension(&target);
             Ok(Value::String(buf.to_string_lossy().to_string()))
         }
-        other => Err(Error::init(
+        other => Err(eval.err(
             format!(
                 "path_set_extension() expects a string, got {}",
                 other.type_name()
             ),
-            None,
-            None,
+            span,
         )),
     }
 }

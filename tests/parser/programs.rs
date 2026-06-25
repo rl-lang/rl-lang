@@ -656,9 +656,9 @@ for [int i = 0, i < 2, i += 1] {
     dec fn op = ops[i]
     dec int j = 1
     while (j < n) {
-        dec int result = op(j)
-        if (is_prime(result)) {
-            println(result)
+        dec int _resul = op(j)
+        if (is_prime(_resul)) {
+            println(_resul)
             j += 1
         } else {
             break
@@ -808,7 +808,7 @@ for [int i = 0, i < 2, i += 1] {
                                 body: vec![
                                     Statement::new(
                                         StatementKind::VariableDeclaration {
-                                            name: "result".to_string(),
+                                            name: "_resul".to_string(),
                                             type_annotation: TypeAnnotation::Int,
                                             value: Expression::new(
                                                 ExpressionKind::Call {
@@ -828,7 +828,7 @@ for [int i = 0, i < 2, i += 1] {
                                                         ExpressionKind::Grouping(Box::new(Expression::new(
                                                             ExpressionKind::Call {
                                                                 path: vec!["is_prime".to_string()],
-                                                                args: vec![Expression::new(ExpressionKind::Identifier("result".to_string()), Span::new(293, 299))],
+                                                                args: vec![Expression::new(ExpressionKind::Identifier("_resul".to_string()), Span::new(293, 299))],
                                                             },
                                                             Span::new(284, 300),
                                                         ))),
@@ -839,7 +839,7 @@ for [int i = 0, i < 2, i += 1] {
                                                             StatementKind::Expression(Expression::new(
                                                                 ExpressionKind::Call {
                                                                     path: vec!["println".to_string()],
-                                                                    args: vec![Expression::new(ExpressionKind::Identifier("result".to_string()), Span::new(324, 330))],
+                                                                    args: vec![Expression::new(ExpressionKind::Identifier("_resul".to_string()), Span::new(324, 330))],
                                                                 },
                                                                 Span::new(316, 331),
                                                             )),
@@ -866,7 +866,7 @@ for [int i = 0, i < 2, i += 1] {
                                                 },
                                                 Span::new(280, 360),
                                             )),
-                                            elseif_branch: Some(vec![]),
+
                                             else_branch: Some(Box::new(Statement::new(
                                                 StatementKind::ConditionalBranch {
                                                     condition: None,

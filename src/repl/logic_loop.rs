@@ -1,3 +1,37 @@
+//! The main REPL event loop - input handling, rendering, and evaluation dispatch.
+//!
+//! # State
+//!
+//! | Variable        | Purpose                                                  |
+//! |-----------------|----------------------------------------------------------|
+//! | `input_buf`     | The current line being typed                             |
+//! | `accumulated`   | Multiline buffer - grows until [`is_complete`] is true   |
+//! | `cursor_pos`    | Cursor position in chars (not bytes)                     |
+//! | `history`       | Submitted input history, navigated with `↑`/`↓`          |
+//! | `history_idx`   | Current position in history (`None` = live input)        |
+//! | `attached`      | Files evaluated into the env via `:attach`               |
+//! | `scroll_offset` | Output scroll position (`0` = bottom, higher = older)    |
+//!
+//! # Multiline input
+//!
+//! Lines are accumulated into `accumulated` until [`is_complete`] returns `true`
+//! and the last line does not end with `{` (a bare block opener waits for body).
+//! The prompt switches from `>>` to `..` while accumulating.
+//! `Esc` cancels and clears the accumulator.
+//!
+//! # Evaluation flow
+//!
+//! ```text
+//! Enter key
+//!   |
+//!   |- starts with ':'  ──► handle_command
+//!   |
+//!   |- code input
+//!        |
+//!        |- not complete yet --> keep accumulating
+//!        |
+//!        |- complete --> eval_input --> output buffer
+//! ```
 use super::{
     command_handler::handle_command, depth_checker::is_complete, input_eval::eval_input,
     lines_types::OutputLine, output_render::render_output, syntax_highlighting::highlight,
@@ -15,11 +49,17 @@ use std::path::PathBuf;
 
 use crate::interpreter::evaluator::Evaluator;
 
+/// Runs the REPL event loop until the user exits with `Ctrl+C` or `:exit`.
+///
+/// Initializes a fresh [`Evaluator`] with the stdlib loaded, then enters a
+/// draw-then-poll loop: renders the current state, blocks on the next key
+/// event, and dispatches it. Returns an [`io::Result`] so terminal errors
+/// propagate cleanly to [`start_repl`].
 pub fn run_repl(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
     let mut evaluator = Evaluator::default().with_stdlib();
     let mut output: Vec<OutputLine> = vec![
         OutputLine::Info(format!(
-            "rl-lang v{} — type :help for commands",
+            "rl-lang v{} - type :help for commands",
             env!("CARGO_PKG_VERSION")
         )),
         OutputLine::Separator,
@@ -276,7 +316,7 @@ pub fn run_repl(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
                     }
                 },
 
-                // escape — cancel multiline accumulation
+                // escape - cancel multiline accumulation
                 (_, KeyCode::Esc) => {
                     if !accumulated.is_empty() {
                         accumulated.clear();

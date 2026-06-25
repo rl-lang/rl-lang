@@ -294,7 +294,7 @@ fn bench_v0_1_0_parser(c: &mut Criterion) {
         b.iter(|| lex_and_parse(SRC_DEC_FN_LAMBDA))
     });
 
-    // programs — also bench at repeat counts to observe scaling
+    // programs - also bench at repeat counts to observe scaling
     for size in [1, 10, 50] {
         let text = SRC_PROGRAM_MATH_PRINT.repeat(size);
         group.bench_with_input(

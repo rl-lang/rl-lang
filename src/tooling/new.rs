@@ -1,5 +1,21 @@
 use std::io;
 
+/// Creates a new rl project directory at `name`.
+///
+/// Scaffolds the following structure:
+/// ```text
+/// <name>/
+/// |-- .gitignore
+/// |-- rl.toml
+/// |-- src/
+///     |-- main.rl
+/// ```
+///
+/// `rl.toml` is pre-filled with the project name and current rl version.
+/// `src/main.rl` contains a hello world entry point.
+/// A git repository is initialized automatically.
+///
+/// Prints an error and exits with code `1` on any IO failure.
 pub fn create_project(name: &str) {
     if let Err(e) = try_create_project(name) {
         eprintln!("error: failed to create project '{}': {}", name, e);
@@ -8,6 +24,9 @@ pub fn create_project(name: &str) {
     println!("created project '{}'", name);
 }
 
+/// Inner fallible implementation of [`create_project`].
+///
+/// Returns [`io::Error`] if any filesystem operation or `git init` fails.
 fn try_create_project(name: &str) -> io::Result<()> {
     let toml = format!(
         r#"[project]
