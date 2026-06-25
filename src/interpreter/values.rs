@@ -42,6 +42,8 @@ pub enum Value {
     Tuple(Vec<Value>),
     /// An error value wrapping any non-error value.
     Error(Box<Value>),
+    Ok(Box<Value>),
+    Err(Box<Value>),
 }
 
 impl Value {
@@ -59,7 +61,16 @@ impl Value {
             Value::Function { .. } => "function",
             Value::Tuple(_) => "tuple",
             Value::Error(_) => "error",
+            Value::Ok(_) => "ok",
+            Value::Err(_) => "err",
         }
+    }
+
+    pub fn is_ok(&self) -> bool {
+        matches!(self, Value::Ok(_))
+    }
+    pub fn is_err(&self) -> bool {
+        matches!(self, Value::Err(_))
     }
 }
 
@@ -89,6 +100,8 @@ impl fmt::Display for Value {
                 write!(f, "({})", formatted.join(", "))
             }
             Value::Error(inner) => write!(f, "error({})", inner),
+            Value::Ok(inner) => write!(f, "ok({})", inner),
+            Value::Err(inner) => write!(f, "err({})", inner),
         }
     }
 }
