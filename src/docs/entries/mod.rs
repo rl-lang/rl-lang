@@ -20,6 +20,7 @@ pub fn stdlib_entries() -> Vec<&'static StdEntry> {
         &stdlib::random::RANDOM,
         &stdlib::time::TIME,
         &stdlib::process::PROCESS,
+        &stdlib::result::RES,
     ]
 }
 
@@ -43,6 +44,7 @@ pub fn concept_entries() -> Vec<&'static ConceptEntry> {
         &concepts::byte::BYTES,
         &concepts::tuples::TUPLES,
         &concepts::errors::ERROR_TYPE,
+        &concepts::casting::CASTING,
     ]
 }
 

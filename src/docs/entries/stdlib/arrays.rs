@@ -40,6 +40,7 @@ static FUNCTIONS: &[&FnEntry] = &[
     &ARR_MAP,
     &ARR_REDUCE,
     &ARR_SORT_BY,
+    &ARR_ZIP,
 ];
 
 static ARR_CONCAT: FnEntry = FnEntry {
@@ -238,4 +239,10 @@ static ARR_SORT_BY: FnEntry = FnEntry {
     signature: "arr_sort_by(arr, fn)",
     description: "sorts the array using a comparator callback that returns -1, 0, or 1",
     example: "get std::array::arr_sort_by\n\narr_sort_by([3, 1, 2], fn(int a, int b) -> int { return a - b }) // [1, 2, 3]",
+};
+
+static ARR_ZIP: FnEntry = FnEntry {
+    signature: "arr_zip(arr1, arr2)",
+    description: "zips two arrays into an array of tuples; stops at the shorter array",
+    example: "get std::array::arr_zip\n\narr_zip([1, 2, 3], [\"a\", \"b\", \"c\"]) // [(1, \"a\"), (2, \"b\"), (3, \"c\")]",
 };
