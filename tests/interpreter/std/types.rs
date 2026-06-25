@@ -262,3 +262,144 @@ dec string x = to_oct(8)
     .unwrap();
     assert_eq!(ev.get_value_raw("x"), Some(Value::String("10".to_string())));
 }
+
+#[test]
+fn to_bool_from_true_string() {
+    let ev = eval_program(
+        r#"
+get to_bool from std::types
+dec bool x = to_bool("true")
+"#,
+    )
+    .unwrap();
+    assert_eq!(ev.get_value_raw("x"), Some(Value::Bool(true)));
+}
+
+#[test]
+fn to_bool_from_int_one() {
+    let ev = eval_program(
+        r#"
+get to_bool from std::types
+dec bool x = to_bool(1)
+"#,
+    )
+    .unwrap();
+    assert_eq!(ev.get_value_raw("x"), Some(Value::Bool(true)));
+}
+
+#[test]
+fn to_bool_from_int_zero() {
+    let ev = eval_program(
+        r#"
+get to_bool from std::types
+dec bool x = to_bool(0)
+"#,
+    )
+    .unwrap();
+    assert_eq!(ev.get_value_raw("x"), Some(Value::Bool(false)));
+}
+
+#[test]
+fn to_string_from_int() {
+    let ev = eval_program(
+        r#"
+get to_string from std::types
+dec string x = to_string(42)
+"#,
+    )
+    .unwrap();
+    assert_eq!(ev.get_value_raw("x"), Some(Value::String("42".to_string())));
+}
+
+#[test]
+fn to_string_from_float() {
+    let ev = eval_program(
+        r#"
+get to_string from std::types
+dec string x = to_string(3.14)
+"#,
+    )
+    .unwrap();
+    assert_eq!(
+        ev.get_value_raw("x"),
+        Some(Value::String("3.14".to_string()))
+    );
+}
+
+#[test]
+fn to_string_from_bool() {
+    let ev = eval_program(
+        r#"
+get to_string from std::types
+dec string x = to_string(true)
+"#,
+    )
+    .unwrap();
+    assert_eq!(
+        ev.get_value_raw("x"),
+        Some(Value::String("true".to_string()))
+    );
+}
+
+#[test]
+fn to_hex_from_int() {
+    let ev = eval_program(
+        r#"
+get to_hex from std::types
+dec string x = to_hex(255)
+"#,
+    )
+    .unwrap();
+    assert_eq!(ev.get_value_raw("x"), Some(Value::String("ff".to_string())));
+}
+
+#[test]
+fn to_bin_from_int() {
+    let ev = eval_program(
+        r#"
+get to_bin from std::types
+dec string x = to_bin(5)
+"#,
+    )
+    .unwrap();
+    assert_eq!(
+        ev.get_value_raw("x"),
+        Some(Value::String("101".to_string()))
+    );
+}
+
+#[test]
+fn to_oct_from_int() {
+    let ev = eval_program(
+        r#"
+get to_oct from std::types
+dec string x = to_oct(8)
+"#,
+    )
+    .unwrap();
+    assert_eq!(ev.get_value_raw("x"), Some(Value::String("10".to_string())));
+}
+
+#[test]
+fn is_int_false() {
+    let ev = eval_program(
+        r#"
+get is_int from std::types
+dec bool x = is_int("hello")
+"#,
+    )
+    .unwrap();
+    assert_eq!(ev.get_value_raw("x"), Some(Value::Bool(false)));
+}
+
+#[test]
+fn is_null_false() {
+    let ev = eval_program(
+        r#"
+get is_null from std::types
+dec bool x = is_null(42)
+"#,
+    )
+    .unwrap();
+    assert_eq!(ev.get_value_raw("x"), Some(Value::Bool(false)));
+}

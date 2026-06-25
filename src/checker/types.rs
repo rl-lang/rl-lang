@@ -77,6 +77,7 @@ impl CheckType {
             (CheckType::Known(a), CheckType::Known(b)) => {
                 a == b || null_array_elision(a, b) || const_matches(a, b)
             }
+
             _ => false,
         }
     }
@@ -133,6 +134,7 @@ fn const_variant(ty: TypeAnnotation) -> TypeAnnotation {
         TypeAnnotation::Array(inner) => TypeAnnotation::CArray(inner),
         TypeAnnotation::Tuple(inner) => TypeAnnotation::CTuple(inner),
         TypeAnnotation::Error => TypeAnnotation::CError,
+        TypeAnnotation::Result(inner) => TypeAnnotation::CResult(inner),
         other => other,
     }
 }
@@ -151,5 +153,7 @@ fn const_matches(a: &TypeAnnotation, b: &TypeAnnotation) -> bool {
             | (TypeAnnotation::Tuple(_), TypeAnnotation::CTuple(_))
             | (TypeAnnotation::CError, TypeAnnotation::Error)
             | (TypeAnnotation::Error, TypeAnnotation::CError)
+            | (TypeAnnotation::CResult(_), TypeAnnotation::Result(_))
+            | (TypeAnnotation::Result(_), TypeAnnotation::CResult(_))
     )
 }

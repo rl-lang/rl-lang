@@ -591,6 +591,38 @@ impl Parser {
             return self.parse_postfix(expr, start);
         }
 
+        if self.match_type(&[TokenType::Ok]) {
+            let kw_span = self.previous_span();
+            if !self.match_type(&[TokenType::LeftParen]) {
+                return Err(self.err("expected `(` after `ok`", self.peek_span()));
+            }
+            let inner = self.parse_expression()?;
+            if !self.match_type(&[TokenType::RightParen]) {
+                return Err(self.err("expected `)` after ok value", self.peek_span()));
+            }
+            let span = kw_span.join(self.previous_span());
+            return self.parse_postfix(
+                Expression::new(ExpressionKind::OkLiteral(Box::new(inner)), span),
+                start,
+            );
+        }
+
+        if self.match_type(&[TokenType::Err]) {
+            let kw_span = self.previous_span();
+            if !self.match_type(&[TokenType::LeftParen]) {
+                return Err(self.err("expected `(` after `err`", self.peek_span()));
+            }
+            let inner = self.parse_expression()?;
+            if !self.match_type(&[TokenType::RightParen]) {
+                return Err(self.err("expected `)` after err value", self.peek_span()));
+            }
+            let span = kw_span.join(self.previous_span());
+            return self.parse_postfix(
+                Expression::new(ExpressionKind::ErrLiteral(Box::new(inner)), span),
+                start,
+            );
+        }
+
         if self.match_type(&[TokenType::Null]) {
             let span = self.previous_span();
             let expr = Expression::new(ExpressionKind::Null, span);

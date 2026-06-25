@@ -135,4 +135,7 @@ pub enum ExpressionKind {
 
     TupleLiteral(Vec<Expression>),
     ErrorLiteral(Box<Expression>),
+
+    OkLiteral(Box<Expression>),
+    ErrLiteral(Box<Expression>),
 }

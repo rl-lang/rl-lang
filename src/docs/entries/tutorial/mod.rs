@@ -231,7 +231,7 @@ pub static STEP_FUNCTIONS: ConceptEntry = ConceptEntry {
         DescriptionEntry {
             description: "functions can give back a value with return. you declare what type they return with -> after the parameter list",
             examples: &[
-                "fn add(int a, int b) -> int {\n    return a + b\n}\n\ndec int result = add(3, 4)\nprintln(result) // 7",
+                "fn add(int a, int b) -> int {\n    return a + b\n}\n\ndec int res = add(3, 4)\nprintln(result) // 7",
             ],
         },
         DescriptionEntry {
@@ -369,7 +369,7 @@ pub static STEP_NULL: ConceptEntry = ConceptEntry {
         DescriptionEntry {
             description: "use is_null from std::types to check if a value is null before using it. this avoids surprises when a function might return nothing",
             examples: &[
-                "get is_null from std::types\n\nfn find_even(arr[int] nums) -> int {\n    for n in nums {\n        if (n > 10) { return n }\n    }\n    return null // nothing matched\n}\n\ndec int result = find_even([1, 2, 3])\n\nif (is_null(result)) {\n    println(\"nothing found\")\n} else {\n    println(result)\n}",
+                "get is_null from std::types\n\nfn find_even(arr[int] nums) -> int {\n    for n in nums {\n        if (n > 10) { return n }\n    }\n    return null // nothing matched\n}\n\ndec int res = find_even([1, 2, 3])\n\nif (is_null(res)) {\n    println(\"nothing found\")\n} else {\n    println(res)\n}",
             ],
         },
         DescriptionEntry {

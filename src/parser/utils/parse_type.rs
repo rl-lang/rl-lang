@@ -73,6 +73,13 @@ impl Parser {
                     }
                     TypeAnnotation::Tuple(inner)
                 }
+                TokenType::Result => {
+                    self.advance();
+                    self.match_type(&[TokenType::LeftBracket]);
+                    let inner = self.parse_type(true)?;
+                    self.match_type(&[TokenType::RightBracket]);
+                    TypeAnnotation::Result(Box::new(inner))
+                }
                 TokenType::Error => {
                     self.advance();
                     TypeAnnotation::Error
@@ -128,6 +135,13 @@ impl Parser {
                         }
                     }
                     TypeAnnotation::CTuple(inner)
+                }
+                TokenType::Result => {
+                    self.advance();
+                    self.match_type(&[TokenType::LeftBracket]);
+                    let inner = self.parse_type(false)?;
+                    self.match_type(&[TokenType::RightBracket]);
+                    TypeAnnotation::CResult(Box::new(inner))
                 }
                 TokenType::Error => {
                     self.advance();

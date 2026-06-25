@@ -37,11 +37,11 @@ cranelift = []
 lsp = ["dep:tower-lsp", "dep:tokio", "dep:serde_json"]
 
 [[bench]]
-name = "test_benchmark"
-harness = false
-[[bench]]
-
 name = "v0_1_0"
+harness = false
+
+[[bench]]
+name = "v0_1_4"
 harness = false
 
 [[bin]]
@@ -52,3 +52,6 @@ path = "src/main.rs"
 opt-level = 3
 lto = true
 codegen-units = 1
+
+[profile.bench]
+debug = true

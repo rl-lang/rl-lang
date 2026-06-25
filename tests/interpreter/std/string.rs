@@ -11,7 +11,10 @@ dec string x = to_upper("hello")
 "#,
     )
     .unwrap();
-    assert_eq!(ev.get_value_raw("x"), Some(Value::String("HELLO".to_string())));
+    assert_eq!(
+        ev.get_value_raw("x"),
+        Some(Value::String("HELLO".to_string()))
+    );
 }
 
 #[test]
@@ -23,7 +26,10 @@ dec string x = to_lower("WORLD")
 "#,
     )
     .unwrap();
-    assert_eq!(ev.get_value_raw("x"), Some(Value::String("world".to_string())));
+    assert_eq!(
+        ev.get_value_raw("x"),
+        Some(Value::String("world".to_string()))
+    );
 }
 
 #[test]
@@ -35,7 +41,10 @@ dec string x = trim("  hello  ")
 "#,
     )
     .unwrap();
-    assert_eq!(ev.get_value_raw("x"), Some(Value::String("hello".to_string())));
+    assert_eq!(
+        ev.get_value_raw("x"),
+        Some(Value::String("hello".to_string()))
+    );
 }
 
 #[test]
@@ -47,7 +56,10 @@ dec string x = trim_start("  hello  ")
 "#,
     )
     .unwrap();
-    assert_eq!(ev.get_value_raw("x"), Some(Value::String("hello  ".to_string())));
+    assert_eq!(
+        ev.get_value_raw("x"),
+        Some(Value::String("hello  ".to_string()))
+    );
 }
 
 #[test]
@@ -59,7 +71,10 @@ dec string x = trim_end("  hello  ")
 "#,
     )
     .unwrap();
-    assert_eq!(ev.get_value_raw("x"), Some(Value::String("  hello".to_string())));
+    assert_eq!(
+        ev.get_value_raw("x"),
+        Some(Value::String("  hello".to_string()))
+    );
 }
 
 #[test]
@@ -119,7 +134,10 @@ dec string x = replace("foo bar foo", "foo", "baz")
 "#,
     )
     .unwrap();
-    assert_eq!(ev.get_value_raw("x"), Some(Value::String("baz bar baz".to_string())));
+    assert_eq!(
+        ev.get_value_raw("x"),
+        Some(Value::String("baz bar baz".to_string()))
+    );
 }
 
 #[test]
@@ -131,7 +149,10 @@ dec string x = repeat("ab", 3)
 "#,
     )
     .unwrap();
-    assert_eq!(ev.get_value_raw("x"), Some(Value::String("ababab".to_string())));
+    assert_eq!(
+        ev.get_value_raw("x"),
+        Some(Value::String("ababab".to_string()))
+    );
 }
 
 #[test]
@@ -167,7 +188,10 @@ dec string x = concat("foo", "bar")
 "#,
     )
     .unwrap();
-    assert_eq!(ev.get_value_raw("x"), Some(Value::String("foobar".to_string())));
+    assert_eq!(
+        ev.get_value_raw("x"),
+        Some(Value::String("foobar".to_string()))
+    );
 }
 
 #[test]
@@ -191,7 +215,10 @@ dec string x = slice("hello world", 6, 11)
 "#,
     )
     .unwrap();
-    assert_eq!(ev.get_value_raw("x"), Some(Value::String("world".to_string())));
+    assert_eq!(
+        ev.get_value_raw("x"),
+        Some(Value::String("world".to_string()))
+    );
 }
 
 #[test]
@@ -203,7 +230,10 @@ dec string x = pad_left("hi", 5, ' ')
 "#,
     )
     .unwrap();
-    assert_eq!(ev.get_value_raw("x"), Some(Value::String("   hi".to_string())));
+    assert_eq!(
+        ev.get_value_raw("x"),
+        Some(Value::String("   hi".to_string()))
+    );
 }
 
 #[test]
@@ -215,5 +245,105 @@ dec string x = pad_right("hi", 5, '.')
 "#,
     )
     .unwrap();
-    assert_eq!(ev.get_value_raw("x"), Some(Value::String("hi...".to_string())));
+    assert_eq!(
+        ev.get_value_raw("x"),
+        Some(Value::String("hi...".to_string()))
+    );
+}
+
+#[test]
+fn replace_substring() {
+    let ev = eval_program(
+        r#"
+get replace from std::str
+dec string x = replace("hello world", "world", "rl")
+"#,
+    )
+    .unwrap();
+    assert_eq!(
+        ev.get_value_raw("x"),
+        Some(Value::String("hello rl".to_string()))
+    );
+}
+
+#[test]
+fn split_by_delimiter() {
+    let ev = eval_program(
+        r#"
+get split from std::str
+get arr_count from std::array
+dec arr[string] parts = split("a,b,c", ",")
+dec int n = arr_count(parts)
+"#,
+    )
+    .unwrap();
+    assert_eq!(ev.get_value_raw("n"), Some(Value::Integer(3)));
+}
+
+#[test]
+fn repeat_string() {
+    let ev = eval_program(
+        r#"
+get repeat from std::str
+dec string x = repeat("ab", 3)
+"#,
+    )
+    .unwrap();
+    assert_eq!(
+        ev.get_value_raw("x"),
+        Some(Value::String("ababab".to_string()))
+    );
+}
+
+#[test]
+fn reverse_string() {
+    let ev = eval_program(
+        r#"
+get reverse from std::str
+dec string x = reverse("hello")
+"#,
+    )
+    .unwrap();
+    assert_eq!(
+        ev.get_value_raw("x"),
+        Some(Value::String("olleh".to_string()))
+    );
+}
+
+#[test]
+fn str_len() {
+    let ev = eval_program(
+        r#"
+get len from std::array
+dec int x = len("hello")"#,
+    )
+    .unwrap();
+    assert_eq!(ev.get_value_raw("x"), Some(Value::Integer(5)));
+}
+
+#[test]
+fn index_of_found() {
+    let ev = eval_program(
+        r#"
+get index_of from std::str
+dec int x = index_of("hello", "ll")
+"#,
+    )
+    .unwrap();
+    assert_eq!(ev.get_value_raw("x"), Some(Value::Integer(2)));
+}
+
+#[test]
+fn slice_string() {
+    let ev = eval_program(
+        r#"
+get slice from std::str
+dec string x = slice("hello world", 6, 11)
+"#,
+    )
+    .unwrap();
+    assert_eq!(
+        ev.get_value_raw("x"),
+        Some(Value::String("world".to_string()))
+    );
 }

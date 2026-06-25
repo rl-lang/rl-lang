@@ -152,6 +152,40 @@ impl Parser {
                 self.advance();
                 Ok(TypeAnnotation::Fn)
             }
+            TokenType::LeftParen => {
+                self.advance();
+                let mut inner = vec![];
+                loop {
+                    inner.push(self.parse_param_type()?);
+                    if !self.match_type(&[TokenType::Comma]) {
+                        break;
+                    }
+                }
+                if !self.match_type(&[TokenType::RightParen]) {
+                    return Err(self.err("expected `)` after tuple types", self.peek_span()));
+                }
+                Ok(TypeAnnotation::Tuple(inner))
+            }
+            TokenType::Error => {
+                self.advance();
+                Ok(TypeAnnotation::Error)
+            }
+            TokenType::Result => {
+                self.advance();
+                if !self.match_type(&[TokenType::LeftBracket]) {
+                    return Err(self.err("expected `[` after `result`", self.peek_span()));
+                }
+                let inner = self.parse_param_type()?;
+                if !self.match_type(&[TokenType::RightBracket]) {
+                    return Err(self.err("expected `]` after result inner type", self.peek_span()));
+                }
+                Ok(TypeAnnotation::Result(Box::new(inner)))
+            }
+            TokenType::Null => {
+                self.advance();
+                Ok(TypeAnnotation::Null)
+            }
+
             _ => Err(self.err("expected type", self.peek_span())),
         }
     }

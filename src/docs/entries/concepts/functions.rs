@@ -10,7 +10,7 @@ pub static FUNCTIONS: ConceptEntry = ConceptEntry {
         DescriptionEntry {
             description: "specify a return type with `-> <type>` and use `return` to return a value",
             examples: &[
-                "fn add(int a, int b) -> int {\n    return a + b\n}\n\ndec int result = add(3, 4)  // 7",
+                "fn add(int a, int b) -> int {\n    return a + b\n}\n\ndec int res = add(3, 4)  // 7",
             ],
         },
         DescriptionEntry {

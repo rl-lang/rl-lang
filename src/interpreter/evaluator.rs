@@ -129,7 +129,8 @@ impl Evaluator {
                 .with_module(stdlib::fs::module())
                 .with_module(stdlib::random::module())
                 .with_module(stdlib::time::module())
-                .with_module(stdlib::process::module()),
+                .with_module(stdlib::process::module())
+                .with_module(stdlib::result::module()),
         )
     }
 
@@ -219,6 +220,14 @@ impl Evaluator {
                     TypeAnnotation::Error
                 }
             }
+            Value::Ok(inner) | Value::Err(inner) => {
+                let inner_ty = Self::infer_type(inner, false);
+                if is_const {
+                    TypeAnnotation::CResult(Box::new(inner_ty))
+                } else {
+                    TypeAnnotation::Result(Box::new(inner_ty))
+                }
+            }
         }
     }
 
@@ -265,6 +274,10 @@ impl Evaluator {
             (
                 TypeAnnotation::Error | TypeAnnotation::CError,
                 TypeAnnotation::Error | TypeAnnotation::CError,
+            ) => true,
+            (
+                TypeAnnotation::Result(_) | TypeAnnotation::CResult(_),
+                TypeAnnotation::Result(_) | TypeAnnotation::CResult(_),
             ) => true,
             _ => false,
         }
@@ -596,6 +609,14 @@ impl Evaluator {
                 }
                 Value::Error(Box::new(val))
             }
+            ExpressionKind::OkLiteral(inner) => {
+                let val = self.evaluate(inner)?;
+                Value::Ok(Box::new(val))
+            }
+            ExpressionKind::ErrLiteral(inner) => {
+                let val = self.evaluate(inner)?;
+                Value::Err(Box::new(val))
+            }
 
             _ => Value::Null,
         };
@@ -726,6 +747,7 @@ impl Evaluator {
                 .chain(stdlib::random::KEYWORDS)
                 .chain(stdlib::time::KEYWORDS)
                 .chain(stdlib::process::KEYWORDS)
+                .chain(stdlib::result::KEYWORDS)
                 .copied();
             if let Some(suggestion) = closest_match(last, candidates) {
                 err = err.with_help(format!("did you mean `{}`?", suggestion));

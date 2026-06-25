@@ -150,6 +150,25 @@ impl Resolver {
                 target_type,
             },
 
+            ExpressionKind::ErrorLiteral(inner) => {
+                ExpressionKind::ErrorLiteral(Box::new(self.resolve_expression(*inner)))
+            }
+
+            ExpressionKind::TupleLiteral(items) => ExpressionKind::TupleLiteral(
+                items
+                    .into_iter()
+                    .map(|e| self.resolve_expression(e))
+                    .collect(),
+            ),
+
+            ExpressionKind::OkLiteral(inner) => {
+                ExpressionKind::OkLiteral(Box::new(self.resolve_expression(*inner)))
+            }
+
+            ExpressionKind::ErrLiteral(inner) => {
+                ExpressionKind::ErrLiteral(Box::new(self.resolve_expression(*inner)))
+            }
+
             other => other,
         };
 
