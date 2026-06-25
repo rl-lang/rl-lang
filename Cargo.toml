@@ -1,10 +1,10 @@
 [package]
 name = "rl-lang"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "A simple interpreted programming language"
-repository = "https://github.com/MohamedGonem/rl-lang"
+repository = "https://github.com/rl-lang/rl-lang"
 readme = "README.md"
 keywords = ["language", "interpreter", "cli"]
 categories = ["command-line-utilities"]
