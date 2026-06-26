@@ -15,6 +15,7 @@
 use clap::{Parser, Subcommand};
 use rl_lang::docs;
 use rl_lang::tooling::new::create_project;
+use rl_lang::tooling::package::{find_embedded, package};
 use std::path::PathBuf;
 
 #[cfg(feature = "lsp")]
@@ -69,9 +70,29 @@ enum Commands {
     /// Start the LSP server
     #[cfg(feature = "lsp")]
     Lsp,
+
+    /// Package a .rl file into a self-contained binary
+    Package {
+        /// Path to the .rl source file
+        file: PathBuf,
+        /// Output binary path
+        #[arg(short, long, default_value = "program")]
+        output: String,
+    },
 }
 
 fn main() {
+    // expriemental
+    if let Some(source) = find_embedded() {
+        let sf = SourceFile::new("program", source);
+        let tokens = lexing_loop(sf.clone());
+        let statements = parsing_loop(sf.clone(), tokens);
+        if cfg!(feature = "eval") {
+            eval_loop(sf, statements);
+        }
+        return;
+    }
+
     let cli = Cli::parse();
 
     match cli.command {
@@ -220,5 +241,13 @@ fn main() {
                 std::process::exit(1);
             }
         },
+
+        Commands::Package { file, output } => {
+            let path = file.to_str().unwrap_or_else(|| {
+                eprintln!("error: invalid file path");
+                std::process::exit(1);
+            });
+            package(path, &output);
+        }
     }
 }
