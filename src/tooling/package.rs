@@ -18,7 +18,7 @@
 use std::io::Write;
 
 const MAGIC: &[u8] = b"\x00RL_PACKAGE_V1\x00";
-const MAGIC_LEN: usize = 16; // b"\x00RL_PACKAGE_V1\x00".len()
+const MAGIC_LEN: usize = 15; // b"\x00RL_PACKAGE_V1\x00".len()
 const FOOTER_LEN: usize = MAGIC_LEN + 8; // magic + u64
 
 /// Searches the running binary's own bytes for an embedded rl program.
