@@ -15,11 +15,13 @@
 //! The magic + length are appended *after* the source so detection only
 //! needs to read the last few bytes — no full scan required.
 
+use std::collections::HashSet;
 use std::io::Write;
+use std::path::{Path, PathBuf};
 
 const MAGIC: &[u8] = b"\x00RL_PACKAGE_V1\x00";
-const MAGIC_LEN: usize = 15; // b"\x00RL_PACKAGE_V1\x00".len()
-const FOOTER_LEN: usize = MAGIC_LEN + 8; // magic + u64
+const MAGIC_LEN: usize = 15;
+const FOOTER_LEN: usize = MAGIC_LEN + 8;
 
 /// Searches the running binary's own bytes for an embedded rl program.
 ///
@@ -65,7 +67,7 @@ pub fn package(source_path: &str, output_path: &str) {
 }
 
 fn try_package(source_path: &str, output_path: &str) -> std::io::Result<()> {
-    let source = std::fs::read_to_string(source_path)?;
+    let source = bundle(source_path)?;
     let self_bytes = std::fs::read(std::env::current_exe()?)?;
 
     let mut out = std::fs::File::create(output_path)?;
@@ -83,4 +85,57 @@ fn try_package(source_path: &str, output_path: &str) -> std::io::Result<()> {
     }
 
     Ok(())
+}
+
+fn bundle(entry_path: &str) -> std::io::Result<String> {
+    let mut visited = HashSet::new();
+    bundle_inner(Path::new(entry_path), &mut visited)
+}
+
+fn bundle_inner(path: &Path, visited: &mut HashSet<PathBuf>) -> std::io::Result<String> {
+    let canonical = path.canonicalize()?;
+    if visited.contains(&canonical) {
+        return Ok(String::new());
+    }
+    visited.insert(canonical.clone());
+
+    let source = std::fs::read_to_string(path)?;
+    let base_dir = path.parent().unwrap_or(Path::new("."));
+    let mut output = String::new();
+
+    for line in source.lines() {
+        let trimmed = line.trim();
+
+        if let Some(rest) = trimmed.strip_prefix("get ") {
+            // extract the file name from either form:
+            // "get csv"  ->  file_part = "csv"
+            // "get x, y from csv"  ->  file_part = "csv"
+            let file_part = if let Some(from_idx) = rest.find(" from ") {
+                rest[from_idx + 6..].trim()
+            } else {
+                rest.trim()
+            };
+
+            // only inline local files, not std::
+            if !file_part.contains("::") {
+                let rel: PathBuf = file_part.split('/').collect();
+                let file_path = base_dir.join(rel).with_extension("rl");
+                match bundle_inner(&file_path, visited) {
+                    Ok(inlined) => {
+                        output.push_str(&inlined);
+                        output.push('\n');
+                        continue;
+                    }
+                    Err(e) => {
+                        eprintln!("warning: could not bundle '{}': {}", file_path.display(), e);
+                    }
+                }
+            }
+        }
+
+        output.push_str(line);
+        output.push('\n');
+    }
+
+    Ok(output)
 }
