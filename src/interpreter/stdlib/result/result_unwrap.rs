@@ -1,5 +1,5 @@
 use crate::{
-    interpreter::{evaluator::Evaluator, stdlib::check_arity, values::Value},
+    interpreter::{evaluator::Evaluator, stdlib::common::check_arity, values::Value},
     utils::{errors::Error, span::Span},
 };
 
