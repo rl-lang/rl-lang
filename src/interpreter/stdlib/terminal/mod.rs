@@ -12,6 +12,7 @@ mod move_cursor;
 mod move_rel;
 mod restore_cursor;
 mod save_cursor;
+mod scroll;
 mod set_title;
 mod show_cursor;
 mod size;
@@ -39,6 +40,8 @@ pub const KEYWORDS: &[&str] = &[
     "term_get_size",
     "term_set_size",
     "term_set_title",
+    "term_scroll_up",
+    "term_scroll_down",
 ];
 
 pub fn module() -> Module {
@@ -70,4 +73,7 @@ pub fn module() -> Module {
         .with_raw_function("term_get_size", size::std_term_get_size)
         .with_raw_function("term_set_size", size::std_term_set_size)
         .with_raw_function("term_set_title", set_title::func)
+        // scroll
+        .with_raw_function("term_scroll_up", scroll::std_term_scroll_up)
+        .with_raw_function("term_scroll_down", scroll::std_term_scroll_down)
 }
