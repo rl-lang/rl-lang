@@ -14,7 +14,9 @@ mod mouse;
 mod move_cursor;
 mod move_rel;
 mod named_color;
+mod poll;
 mod print;
+mod read_key;
 mod reset_color;
 mod restore_cursor;
 mod save_cursor;
@@ -73,6 +75,8 @@ pub const KEYWORDS: &[&str] = &[
     "term_end_sync",
     "term_enable_mouse",
     "term_disable_mouse",
+    "term_read_key",
+    "term_poll",
 ];
 
 pub fn module() -> Module {
@@ -135,4 +139,7 @@ pub fn module() -> Module {
         // mouse
         .with_raw_function("term_enable_mouse", mouse::std_term_enable_mouse)
         .with_raw_function("term_disable_mouse", mouse::std_term_disable_mouse)
+        // input
+        .with_raw_function("term_read_key", read_key::func)
+        .with_raw_function("term_poll", poll::func)
 }
