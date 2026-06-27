@@ -6,11 +6,13 @@ mod common;
 mod cursor_col;
 mod cursor_row;
 mod enter;
+mod hide_cursor;
 mod leave;
 mod move_cursor;
 mod move_rel;
 mod restore_cursor;
 mod save_cursor;
+mod show_cursor;
 
 use crate::interpreter::native::Module;
 
@@ -30,6 +32,8 @@ pub const KEYWORDS: &[&str] = &[
     "term_prev_line",
     "term_save_cursor",
     "term_restore_cursor",
+    "term_hide_cursor",
+    "term_show_cursor",
 ];
 
 pub fn module() -> Module {
@@ -54,4 +58,7 @@ pub fn module() -> Module {
         // save / restore
         .with_raw_function("term_save_cursor", save_cursor::func)
         .with_raw_function("term_restore_cursor", restore_cursor::func)
+        // show / hide
+        .with_raw_function("term_hide_cursor", hide_cursor::func)
+        .with_raw_function("term_show_cursor", show_cursor::func)
 }
