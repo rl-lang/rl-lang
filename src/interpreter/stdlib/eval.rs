@@ -7,7 +7,7 @@ use crate::utils::{errors::Error, source::SourceFile, span::Span};
 pub fn func(eval: &mut Evaluator, args: Vec<Value>, span: Span) -> Result<Value, Error> {
     check_arity(&args, 1, "eval", span)?;
 
-    let code = extract_string(args[0].clone(), "string", "eval", span)?;
+    let code = extract_string(args[0].clone(), "eval", span)?;
 
     let source = SourceFile::new("<eval>", code);
 

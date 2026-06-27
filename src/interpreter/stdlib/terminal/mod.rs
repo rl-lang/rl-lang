@@ -12,7 +12,9 @@ mod move_cursor;
 mod move_rel;
 mod restore_cursor;
 mod save_cursor;
+mod set_title;
 mod show_cursor;
+mod size;
 
 use crate::interpreter::native::Module;
 
@@ -34,6 +36,9 @@ pub const KEYWORDS: &[&str] = &[
     "term_restore_cursor",
     "term_hide_cursor",
     "term_show_cursor",
+    "term_get_size",
+    "term_set_size",
+    "term_set_title",
 ];
 
 pub fn module() -> Module {
@@ -61,4 +66,8 @@ pub fn module() -> Module {
         // show / hide
         .with_raw_function("term_hide_cursor", hide_cursor::func)
         .with_raw_function("term_show_cursor", show_cursor::func)
+        // size / title
+        .with_raw_function("term_get_size", size::std_term_get_size)
+        .with_raw_function("term_set_size", size::std_term_set_size)
+        .with_raw_function("term_set_title", set_title::func)
 }
