@@ -3,6 +3,8 @@
 mod clear;
 mod clear_line;
 mod common;
+mod cursor_col;
+mod cursor_row;
 mod enter;
 mod leave;
 mod move_cursor;
@@ -15,6 +17,8 @@ pub const KEYWORDS: &[&str] = &[
     "term_clear",
     "term_clear_line",
     "term_move",
+    "term_move_to_col",
+    "term_move_to_row",
 ];
 
 pub fn module() -> Module {
@@ -27,4 +31,6 @@ pub fn module() -> Module {
         .with_raw_function("term_clear_line", clear_line::func)
         // absolute cursor
         .with_raw_function("term_move", move_cursor::func)
+        .with_raw_function("term_move_to_col", cursor_col::func)
+        .with_raw_function("term_move_to_row", cursor_row::func)
 }
