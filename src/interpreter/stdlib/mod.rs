@@ -14,5 +14,6 @@ pub mod process;
 pub mod random;
 pub mod result;
 pub mod string;
+pub mod terminal;
 pub mod time;
 pub mod types;
