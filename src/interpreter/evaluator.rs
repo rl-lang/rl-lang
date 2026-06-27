@@ -63,6 +63,8 @@ pub struct Evaluator {
     pub resolver: Resolver,
     /// Maps top-level function names to their environment slot for `call_path` shortcut.
     pub fn_names: std::collections::HashMap<String, usize>,
+    // for diffrent calls
+    pub user_args_offset: usize,
 }
 
 impl Default for Evaluator {
@@ -84,6 +86,7 @@ impl Evaluator {
             rng: Xoshiro256::default(),
             resolver: Resolver::new(),
             fn_names: std::collections::HashMap::new(),
+            user_args_offset: 1,
         }
     }
 
@@ -135,6 +138,11 @@ impl Evaluator {
                 .with_raw_function("eval", stdlib::eval::func)
                 .with_raw_function("eval_isolated", stdlib::eval_isolated::func),
         )
+    }
+
+    pub fn with_user_args_offset(mut self, offset: usize) -> Self {
+        self.user_args_offset = offset;
+        self
     }
 
     /// Build a [`Reason::Runtime`] error anchored at `span`, with source attached when known.

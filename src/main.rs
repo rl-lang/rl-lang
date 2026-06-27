@@ -41,6 +41,8 @@ enum Commands {
     Run {
         /// Path to the .rl file
         file: PathBuf,
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        extra_args: Vec<String>,
     },
     /// Start the REPL
     Repl,
@@ -88,7 +90,7 @@ fn main() {
         let tokens = lexing_loop(sf.clone());
         let statements = parsing_loop(sf.clone(), tokens);
         if cfg!(feature = "eval") {
-            eval_loop(sf, statements);
+            eval_loop(sf, statements, 1);
         }
         return;
     }
@@ -96,7 +98,7 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Run { file } => {
+        Commands::Run { file, .. } => {
             let path = file
                 .to_str()
                 .unwrap_or_else(|| {
@@ -112,7 +114,7 @@ fn main() {
             let tokens = lexing_loop(source.clone());
             let statements = parsing_loop(source.clone(), tokens);
             if cfg!(feature = "eval") {
-                eval_loop(source, statements);
+                eval_loop(source, statements, 3);
             }
         }
 
@@ -131,7 +133,7 @@ fn main() {
             let tokens = lexing_loop(source.clone());
             let statements = parsing_loop(source.clone(), tokens);
             if cfg!(feature = "eval") {
-                eval_loop(source, statements);
+                eval_loop(source, statements, 3);
             }
         }
 

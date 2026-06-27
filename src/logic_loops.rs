@@ -59,10 +59,13 @@ pub fn parsing_loop(source: SourceFile, tokens: Vec<Token>) -> Vec<Statement> {
 ///
 /// [`Resolver`]: crate::resolver
 #[cfg(feature = "eval")]
-pub fn eval_loop(source: SourceFile, statements: Vec<Statement>) {
+pub fn eval_loop(source: SourceFile, statements: Vec<Statement>, user_args_offset: usize) {
     #[cfg(feature = "debug")]
     info!("evaluating the ast tree...");
-    let mut evaluator = Evaluator::default().with_stdlib().with_source_file(source);
+    let mut evaluator = Evaluator::default()
+        .with_stdlib()
+        .with_source_file(source)
+        .with_user_args_offset(user_args_offset);
     let statements = evaluator.resolver.resolve_statements(statements);
     if let Err(e) = evaluator.evaluate_program(&statements) {
         e.report_to_stderr();
