@@ -42,7 +42,7 @@ pub fn check_type(value: &Value, expected: &str, name: &str, span: Span) -> Resu
                 other_val.type_name()
             );
 
-            return Err(Error::at(Reason::Runtime, message, span));
+            Err(Error::at(Reason::Runtime, message, span))
         }
     }
 }
@@ -67,6 +67,7 @@ pub fn extract_int(value: Value, name: &str, span: Span) -> Result<i64, Error> {
     }
 }
 
+/*
 pub fn extract_byte(value: Value, name: &str, span: Span) -> Result<u8, Error> {
     check_type(&value, "byte", name, span)?;
     match value {
@@ -76,6 +77,7 @@ pub fn extract_byte(value: Value, name: &str, span: Span) -> Result<u8, Error> {
         }
     }
 }
+*/
 
 pub fn extract_number(value: Value, name: &str, span: Span) -> Result<u64, Error> {
     if check_type(&value, "int", name, span).is_err()
