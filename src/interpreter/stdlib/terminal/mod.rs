@@ -12,9 +12,12 @@ mod leave;
 mod move_cursor;
 mod move_rel;
 mod print;
+mod reset_color;
 mod restore_cursor;
 mod save_cursor;
 mod scroll;
+mod set_bg;
+mod set_fg;
 mod set_title;
 mod show_cursor;
 mod size;
@@ -46,6 +49,9 @@ pub const KEYWORDS: &[&str] = &[
     "term_scroll_down",
     "term_print",
     "term_flush",
+    "term_set_fg",
+    "term_set_bg",
+    "term_reset_color",
 ];
 
 pub fn module() -> Module {
@@ -83,4 +89,8 @@ pub fn module() -> Module {
         // output
         .with_raw_function("term_print", print::func)
         .with_raw_function("term_flush", flush::func)
+        // rgb color
+        .with_raw_function("term_set_fg", set_fg::func)
+        .with_raw_function("term_set_bg", set_bg::func)
+        .with_raw_function("term_reset_color", reset_color::func)
 }
