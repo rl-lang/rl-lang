@@ -10,6 +10,7 @@ mod enter;
 mod flush;
 mod hide_cursor;
 mod leave;
+mod mouse;
 mod move_cursor;
 mod move_rel;
 mod named_color;
@@ -70,6 +71,8 @@ pub const KEYWORDS: &[&str] = &[
     "term_disable_wrap",
     "term_begin_sync",
     "term_end_sync",
+    "term_enable_mouse",
+    "term_disable_mouse",
 ];
 
 pub fn module() -> Module {
@@ -129,4 +132,7 @@ pub fn module() -> Module {
         // synchronized output
         .with_raw_function("term_begin_sync", sync_output::std_term_begin_sync)
         .with_raw_function("term_end_sync", sync_output::std_term_end_sync)
+        // mouse
+        .with_raw_function("term_enable_mouse", mouse::std_term_enable_mouse)
+        .with_raw_function("term_disable_mouse", mouse::std_term_disable_mouse)
 }
