@@ -18,7 +18,7 @@ fn set_attr(
 
     execute!(stdout(), SetAttribute(attr))
         .map_err(|e| eval.err(format!("{}(): {}", name, e), span))?;
-    Ok(Value::Null)
+    Ok(Value::Ok(Box::new(Value::Null)))
 }
 
 pub fn std_term_bold(eval: &mut Evaluator, args: Vec<Value>, span: Span) -> Result<Value, Error> {
