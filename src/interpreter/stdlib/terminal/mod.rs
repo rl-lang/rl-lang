@@ -11,6 +11,7 @@ mod hide_cursor;
 mod leave;
 mod move_cursor;
 mod move_rel;
+mod named_color;
 mod print;
 mod reset_color;
 mod restore_cursor;
@@ -52,6 +53,8 @@ pub const KEYWORDS: &[&str] = &[
     "term_set_fg",
     "term_set_bg",
     "term_reset_color",
+    "term_fg",
+    "term_bg",
 ];
 
 pub fn module() -> Module {
@@ -93,4 +96,7 @@ pub fn module() -> Module {
         .with_raw_function("term_set_fg", set_fg::func)
         .with_raw_function("term_set_bg", set_bg::func)
         .with_raw_function("term_reset_color", reset_color::func)
+        // named color
+        .with_raw_function("term_fg", named_color::std_term_fg)
+        .with_raw_function("term_bg", named_color::std_term_bg)
 }
