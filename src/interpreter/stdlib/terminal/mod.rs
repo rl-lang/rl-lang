@@ -23,6 +23,7 @@ mod set_fg;
 mod set_title;
 mod show_cursor;
 mod size;
+mod sync_output;
 mod wrap;
 
 use crate::interpreter::native::Module;
@@ -67,6 +68,8 @@ pub const KEYWORDS: &[&str] = &[
     "term_reset_attr",
     "term_enable_wrap",
     "term_disable_wrap",
+    "term_begin_sync",
+    "term_end_sync",
 ];
 
 pub fn module() -> Module {
@@ -123,4 +126,7 @@ pub fn module() -> Module {
         // line wrap
         .with_raw_function("term_enable_wrap", wrap::std_term_enable_wrap)
         .with_raw_function("term_disable_wrap", wrap::std_term_disable_wrap)
+        // synchronized output
+        .with_raw_function("term_begin_sync", sync_output::std_term_begin_sync)
+        .with_raw_function("term_end_sync", sync_output::std_term_end_sync)
 }

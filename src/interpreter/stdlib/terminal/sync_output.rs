@@ -3,30 +3,30 @@ use crate::interpreter::{evaluator::Evaluator, values::Value};
 use crate::utils::{errors::Error, span::Span};
 use crossterm::{
     execute,
-    terminal::{DisableLineWrap, EnableLineWrap},
+    terminal::{BeginSynchronizedUpdate, EndSynchronizedUpdate},
 };
 use std::io::stdout;
 
-pub fn std_term_enable_wrap(
+pub fn std_term_begin_sync(
     eval: &mut Evaluator,
     args: Vec<Value>,
     span: Span,
 ) -> Result<Value, Error> {
-    check_arity(&args, 0, "term_enable_wrap", span)?;
+    check_arity(&args, 0, "term_begin_sync", span)?;
 
-    execute!(stdout(), EnableLineWrap)
-        .map_err(|e| eval.err(format!("term_enable_wrap(): {}", e), span))?;
+    execute!(stdout(), BeginSynchronizedUpdate)
+        .map_err(|e| eval.err(format!("term_begin_sync(): {}", e), span))?;
     Ok(Value::Ok(Box::new(Value::Null)))
 }
 
-pub fn std_term_disable_wrap(
+pub fn std_term_end_sync(
     eval: &mut Evaluator,
     args: Vec<Value>,
     span: Span,
 ) -> Result<Value, Error> {
-    check_arity(&args, 0, "term_disable_wrap", span)?;
+    check_arity(&args, 0, "term_end_sync", span)?;
 
-    execute!(stdout(), DisableLineWrap)
-        .map_err(|e| eval.err(format!("term_disable_wrap(): {}", e), span))?;
+    execute!(stdout(), EndSynchronizedUpdate)
+        .map_err(|e| eval.err(format!("term_end_sync(): {}", e), span))?;
     Ok(Value::Ok(Box::new(Value::Null)))
 }
