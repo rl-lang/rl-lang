@@ -6,10 +6,12 @@ mod common;
 mod cursor_col;
 mod cursor_row;
 mod enter;
+mod flush;
 mod hide_cursor;
 mod leave;
 mod move_cursor;
 mod move_rel;
+mod print;
 mod restore_cursor;
 mod save_cursor;
 mod scroll;
@@ -42,6 +44,8 @@ pub const KEYWORDS: &[&str] = &[
     "term_set_title",
     "term_scroll_up",
     "term_scroll_down",
+    "term_print",
+    "term_flush",
 ];
 
 pub fn module() -> Module {
@@ -76,4 +80,7 @@ pub fn module() -> Module {
         // scroll
         .with_raw_function("term_scroll_up", scroll::std_term_scroll_up)
         .with_raw_function("term_scroll_down", scroll::std_term_scroll_down)
+        // output
+        .with_raw_function("term_print", print::func)
+        .with_raw_function("term_flush", flush::func)
 }
