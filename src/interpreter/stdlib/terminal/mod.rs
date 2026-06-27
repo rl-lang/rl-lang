@@ -1,5 +1,6 @@
 //! `std::term` - full terminal control via crossterm.
 
+mod attr;
 mod clear;
 mod clear_line;
 mod common;
@@ -55,6 +56,14 @@ pub const KEYWORDS: &[&str] = &[
     "term_reset_color",
     "term_fg",
     "term_bg",
+    "term_bold",
+    "term_dim",
+    "term_italic",
+    "term_underline",
+    "term_blink",
+    "term_reverse",
+    "term_crossed_out",
+    "term_reset_attr",
 ];
 
 pub fn module() -> Module {
@@ -99,4 +108,13 @@ pub fn module() -> Module {
         // named color
         .with_raw_function("term_fg", named_color::std_term_fg)
         .with_raw_function("term_bg", named_color::std_term_bg)
+        // attributes
+        .with_raw_function("term_bold", attr::std_term_bold)
+        .with_raw_function("term_dim", attr::std_term_dim)
+        .with_raw_function("term_italic", attr::std_term_italic)
+        .with_raw_function("term_underline", attr::std_term_underline)
+        .with_raw_function("term_blink", attr::std_term_blink)
+        .with_raw_function("term_reverse", attr::std_term_reverse)
+        .with_raw_function("term_crossed_out", attr::std_term_crossed_out)
+        .with_raw_function("term_reset_attr", attr::std_term_reset_attr)
 }
