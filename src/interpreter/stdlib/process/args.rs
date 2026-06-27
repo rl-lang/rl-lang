@@ -4,9 +4,9 @@ use crate::{
     utils::{errors::Error, span::Span},
 };
 
-pub fn std_args(_: &mut Evaluator, _: Vec<Value>, _: Span) -> Result<Value, Error> {
+pub fn std_args(eval: &mut Evaluator, _: Vec<Value>, _: Span) -> Result<Value, Error> {
     let args: Vec<Value> = std::env::args()
-        .skip(1) // skip the interpreter binary itself
+        .skip(eval.user_args_offset) // skip the interpreter binary itself
         .map(Value::String)
         .collect();
     Ok(Value::Values {
