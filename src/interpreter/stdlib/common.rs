@@ -19,8 +19,8 @@ pub fn check_arity(args: &[Value], expected: usize, name: &str, span: Span) -> R
     Ok(())
 }
 
-pub fn check_type(value: Value, expected: &str, name: &str, span: Span) -> Result<Value, Error> {
-    match (&value, expected) {
+pub fn check_type(value: &Value, expected: &str, name: &str, span: Span) -> Result<(), Error> {
+    match (value, expected) {
         (Value::Bool(_), "bool")
         | (Value::String(_), "string")
         | (Value::Integer(_), "int")
@@ -32,7 +32,7 @@ pub fn check_type(value: Value, expected: &str, name: &str, span: Span) -> Resul
         | (Value::Null, "none" | "null")
         | (Value::Ok(_), "ok")
         | (Value::Tuple(_), "tuple" | "()")
-        | (Value::Values { .. }, "arr") => Ok(value),
+        | (Value::Values { .. }, "arr") => Ok(()),
 
         (other_val, other_exp) => {
             let message = format!(
@@ -43,6 +43,21 @@ pub fn check_type(value: Value, expected: &str, name: &str, span: Span) -> Resul
             );
 
             return Err(Error::at(Reason::Runtime, message, span));
+        }
+    }
+}
+
+pub fn extract_string(
+    value: Value,
+    expected: &str,
+    name: &str,
+    span: Span,
+) -> Result<String, Error> {
+    check_type(&value, expected, name, span)?;
+    match value {
+        Value::String(s) => Ok(s),
+        _ => {
+            unreachable!()
         }
     }
 }
