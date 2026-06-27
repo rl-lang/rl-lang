@@ -130,7 +130,9 @@ impl Evaluator {
                 .with_module(stdlib::random::module())
                 .with_module(stdlib::time::module())
                 .with_module(stdlib::process::module())
-                .with_module(stdlib::result::module()),
+                .with_module(stdlib::result::module())
+                .with_raw_function("eval", stdlib::eval::func)
+                .with_raw_function("eval_isolated", stdlib::eval_isolated::func),
         )
     }
 
@@ -748,6 +750,7 @@ impl Evaluator {
                 .chain(stdlib::time::KEYWORDS)
                 .chain(stdlib::process::KEYWORDS)
                 .chain(stdlib::result::KEYWORDS)
+                .chain(&["eval", "eval_isolated"])
                 .copied();
             if let Some(suggestion) = closest_match(last, candidates) {
                 err = err.with_help(format!("did you mean `{}`?", suggestion));
