@@ -9,6 +9,8 @@ mod enter;
 mod leave;
 mod move_cursor;
 mod move_rel;
+mod restore_cursor;
+mod save_cursor;
 
 use crate::interpreter::native::Module;
 
@@ -24,6 +26,10 @@ pub const KEYWORDS: &[&str] = &[
     "term_move_right",
     "term_move_to_col",
     "term_move_to_row",
+    "term_next_line",
+    "term_prev_line",
+    "term_save_cursor",
+    "term_restore_cursor",
 ];
 
 pub fn module() -> Module {
@@ -45,4 +51,7 @@ pub fn module() -> Module {
         .with_raw_function("term_move_right", move_rel::std_term_move_right)
         .with_raw_function("term_next_line", move_rel::std_term_next_line)
         .with_raw_function("term_prev_line", move_rel::std_term_prev_line)
+        // save / restore
+        .with_raw_function("term_save_cursor", save_cursor::func)
+        .with_raw_function("term_restore_cursor", restore_cursor::func)
 }
