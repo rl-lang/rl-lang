@@ -804,6 +804,9 @@ impl Parser {
                     },
                     span,
                 )
+            } else if self.match_type(&[TokenType::Question]) {
+                let span = start.join(self.previous_span());
+                expr = Expression::new(ExpressionKind::Propagate(Box::new(expr)), span)
             } else {
                 break;
             }
