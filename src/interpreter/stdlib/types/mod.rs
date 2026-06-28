@@ -4,20 +4,20 @@
 //! `to_int` accepts hex strings prefixed with `0x`/`0X`.
 
 mod bin;
+mod bool;
+mod char;
+mod error;
 mod error_unwrap;
-mod is_bool;
-mod is_char;
-mod is_error;
-mod is_float;
-mod is_int;
-mod is_null;
-mod is_string;
+mod float;
+mod hex;
+mod int;
+mod null;
+mod oct;
+mod string;
 mod to_bool;
 mod to_char;
 mod to_float;
-mod to_hex;
 mod to_int;
-mod to_oct;
 mod to_string;
 
 use crate::interpreter::native::Module;
@@ -47,16 +47,16 @@ pub fn module() -> Module {
         .with_function("to_bool", to_bool::std_to_bool)
         .with_function("to_char", to_char::std_to_char)
         .with_function("to_float", to_float::std_to_float)
-        .with_function("to_hex", to_hex::std_to_hex)
+        .with_function("to_hex", hex::std_to_hex)
         .with_function("to_int", to_int::std_to_int)
-        .with_function("to_oct", to_oct::std_to_oct)
+        .with_function("to_oct", oct::std_to_oct)
         .with_function("to_string", to_string::std_to_string)
-        .with_function("is_bool", is_bool::std_is_bool)
-        .with_function("is_null", is_null::std_is_null)
-        .with_function("is_char", is_char::std_is_char)
-        .with_function("is_int", is_int::std_is_int)
-        .with_function("is_float", is_float::std_is_float)
-        .with_function("is_string", is_string::std_is_string)
-        .with_function("is_error", is_error::std_is_error)
+        .with_function("is_bool", bool::std_is_bool)
+        .with_function("is_null", null::std_is_null)
+        .with_function("is_char", char::std_is_char)
+        .with_function("is_int", int::std_is_int)
+        .with_function("is_float", float::std_is_float)
+        .with_function("is_string", string::std_is_string)
+        .with_function("is_error", error::std_is_error)
         .with_function("error_unwrap", error_unwrap::std_error_unwrap)
 }
