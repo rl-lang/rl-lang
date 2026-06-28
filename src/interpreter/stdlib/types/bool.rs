@@ -15,10 +15,7 @@ pub fn std_to_bool(_: &mut Evaluator, value: Value) -> Value {
         Value::Byte(i) => i != 0,
         Value::Float(f) => f != 0.0,
         Value::Null => false,
-        Value::String(s) => match s.trim() {
-            "false" | "0" | "" => false,
-            _ => true,
-        },
+        Value::String(s) => !matches!(s.trim(), "false" | "0" | ""),
 
         other => {
             return verr!(vs!(format!(
