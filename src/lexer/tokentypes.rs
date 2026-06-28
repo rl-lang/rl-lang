@@ -64,6 +64,8 @@ pub enum TokenType {
     // -- special operators --
     Hash,
     Arrow,
+    FatArrow,
+    Wildcard,
 
     // -- literals --
     /// A 64-bit signed integer e.g. `1000`
@@ -101,6 +103,7 @@ pub enum TokenType {
     As,
     Ok,
     Err,
+    Match,
 
     // -- type keywords --
     Int,

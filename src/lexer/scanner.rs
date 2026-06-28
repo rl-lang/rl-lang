@@ -85,6 +85,9 @@ impl Tokenizer {
                 if self.peek() == '=' {
                     self.advance();
                     self.add_token(TokenType::Compare);
+                } else if self.peek() == '>' {
+                    self.advance();
+                    self.add_token(TokenType::FatArrow);
                 } else {
                     self.add_token(TokenType::Assign);
                 }
