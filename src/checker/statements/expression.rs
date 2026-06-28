@@ -278,6 +278,12 @@ impl TypeChecker {
                 let inner_ann = Self::to_type_annotation(&self.check_expression(inner));
                 CheckType::Known(TypeAnnotation::Result(Box::new(inner_ann)))
             }
+
+            ExpressionKind::Propagate(inner) => {
+                self.check_expression(inner);
+                CheckType::Unknown
+            }
+
             _ => CheckType::Unknown,
         }
     }

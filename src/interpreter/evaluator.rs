@@ -647,6 +647,18 @@ impl Evaluator {
                 Value::Err(Box::new(val))
             }
 
+            ExpressionKind::Propagate(inner) => {
+                let val = self.evaluate(inner)?;
+                match val {
+                    Value::Ok(v) => *v,
+                    Value::Err(_) => {
+                        self.return_value = Some(val);
+                        return Ok(Value::Null);
+                    }
+                    other => other,
+                }
+            }
+
             _ => Value::Null,
         };
         Ok(value)

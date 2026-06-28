@@ -169,6 +169,10 @@ impl Resolver {
                 ExpressionKind::ErrLiteral(Box::new(self.resolve_expression(*inner)))
             }
 
+            ExpressionKind::Propagate(inner) => {
+                ExpressionKind::Propagate(Box::new(self.resolve_expression(*inner)))
+            }
+
             other => other,
         };
 
