@@ -5,6 +5,7 @@
 
 mod bin;
 mod bool;
+mod byte;
 mod char;
 mod error;
 mod float;
@@ -33,6 +34,8 @@ pub const KEYWORDS: &[&str] = &[
     "is_float",
     "is_error",
     "error_unwrap",
+    "to_byte",
+    "is_byte",
 ];
 
 pub fn module() -> Module {
@@ -53,4 +56,6 @@ pub fn module() -> Module {
         .with_function("is_string", string::std_is_string)
         .with_function("is_error", error::std_is_error)
         .with_function("error_unwrap", error::std_error_unwrap)
+        .with_function("to_byte", byte::std_to_byte)
+        .with_function("is_byte", byte::std_is_byte)
 }
