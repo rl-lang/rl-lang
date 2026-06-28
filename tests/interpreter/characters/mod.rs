@@ -42,7 +42,7 @@ fn char_to_string() {
     let ev = eval_program(
         r#"
 get to_string from std::types
-dec string x = to_string('q')
+dec string x = to_string('q')?
 "#,
     )
     .unwrap();
@@ -55,7 +55,7 @@ fn int_to_char() {
     let ev = eval_program(
         r#"
 get to_char from std::types
-dec char x = to_char(65)
+dec char x = to_char(65)?
 "#,
     )
     .unwrap();
