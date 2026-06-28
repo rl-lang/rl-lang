@@ -473,6 +473,24 @@ impl Evaluator {
                 operator,
                 right,
             } => {
+                if matches!(operator, TokenType::And) {
+                    let l = self.evaluate(left)?;
+                    if let Value::Bool(false) = l {
+                        return Ok(Value::Bool(false));
+                    }
+                    let r = self.evaluate(right)?;
+                    return Ok(Value::Bool(matches!(r, Value::Bool(true))));
+                }
+
+                if matches!(operator, TokenType::Or) {
+                    let l = self.evaluate(left)?;
+                    if let Value::Bool(true) = l {
+                        return Ok(Value::Bool(true));
+                    }
+                    let r = self.evaluate(right)?;
+                    return Ok(Value::Bool(matches!(r, Value::Bool(true))));
+                }
+
                 let left_val = self.evaluate(left)?;
                 let right_val = self.evaluate(right)?;
                 if matches!(operator, TokenType::Compare | TokenType::BangEqual)

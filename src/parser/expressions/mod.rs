@@ -29,7 +29,26 @@ impl Parser {
     ///
     /// [`parse_equality`]: Parser::parse_equality
     pub fn parse_expression(&mut self) -> Result<Expression, Error> {
-        self.parse_equality()
+        self.parse_logical()
+    }
+
+    pub fn parse_logical(&mut self) -> Result<Expression, Error> {
+        let mut left = self.parse_equality()?;
+        while self.match_type(&[TokenType::And, TokenType::Or]) {
+            let operator = self.previous();
+            let right = self.parse_equality()?;
+            let span = left.span.join(right.span);
+            left = Expression::new(
+                ExpressionKind::Binary {
+                    left: Box::new(left),
+                    operator,
+                    right: Box::new(right),
+                },
+                span,
+            );
+        }
+
+        Ok(left)
     }
 
     /// Parses `==` and `!=` binary expressions (lowest precedence).
