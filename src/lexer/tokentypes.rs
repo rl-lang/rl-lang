@@ -31,6 +31,7 @@ pub enum TokenType {
     ColonColon,
     Semicolon,
     Comma,
+    Question,
 
     // -- arithmetic --
     Plus,
