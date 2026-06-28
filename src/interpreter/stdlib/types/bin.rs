@@ -1,4 +1,8 @@
-use crate::interpreter::{evaluator::Evaluator, values::Value};
+use crate::interpreter::{
+    evaluator::Evaluator,
+    stdlib::common::{verr, vok, vs},
+    values::Value,
+};
 
 pub fn func(_: &mut Evaluator, value: Value) -> Value {
     let result = match value {
@@ -15,12 +19,12 @@ pub fn func(_: &mut Evaluator, value: Value) -> Value {
         Value::String(s) => s.bytes().map(|b| format!("{:b}", b)).collect::<String>(),
 
         other => {
-            return Value::Err(Box::new(Value::String(format!(
+            return verr!(vs!(format!(
                 "cannot parse \"{}\" as binary",
                 other.type_name()
-            ))));
+            )));
         }
     };
 
-    Value::Ok(Box::new(Value::String(result)))
+    vok!(vs!(result))
 }
