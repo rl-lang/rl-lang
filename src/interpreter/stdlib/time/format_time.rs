@@ -6,9 +6,10 @@
 //! `apply_pattern` performs simple string substitution on strftime-like tokens:
 //! `%Y` (4-digit year), `%m` (month), `%d` (day), `%H` (hour), `%M` (minute), `%S` (second).
 
-use crate::{
-    interpreter::{evaluator::Evaluator, values::Value},
-    utils::{errors::Error, span::Span},
+use crate::interpreter::{
+    evaluator::Evaluator,
+    stdlib::common::{verr, vok, vs},
+    values::Value,
 };
 
 fn unix_to_parts(timestamp: i64) -> (i32, u32, u32, u32, u32, u32) {
@@ -65,37 +66,32 @@ fn apply_pattern(
         .replace("%S", &format!("{:02}", second))
 }
 
-pub fn format_time(
-    eval: &mut Evaluator,
-    timestamp: i64,
-    pattern: String,
-    span: Span,
-) -> Result<Value, Error> {
+pub fn format_time(_: &mut Evaluator, timestamp: i64, pattern: String) -> Value {
     if timestamp < 0 {
-        return Err(eval.err("timestamp is negative".to_string(), span));
+        return verr!(vs!("timestamp is negative".to_string()));
     }
     let (year, month, day, hour, minute, second) = unix_to_parts(timestamp);
-    Ok(Value::String(apply_pattern(
+    vok!(vs!(apply_pattern(
         &pattern, year, month, day, hour, minute, second,
     )))
 }
 
-pub fn date_str(eval: &mut Evaluator, timestamp: i64, span: Span) -> Result<Value, Error> {
+pub fn date_str(_: &mut Evaluator, timestamp: i64) -> Value {
     if timestamp < 0 {
-        return Err(eval.err("timestamp is negative".to_string(), span));
+        return verr!(vs!("timestamp is negative".to_string()));
     }
     let (year, month, day, hour, minute, second) = unix_to_parts(timestamp);
-    Ok(Value::String(apply_pattern(
+    vok!(vs!(apply_pattern(
         "%Y-%m-%d", year, month, day, hour, minute, second,
     )))
 }
 
-pub fn time_str(eval: &mut Evaluator, timestamp: i64, span: Span) -> Result<Value, Error> {
+pub fn time_str(_: &mut Evaluator, timestamp: i64) -> Value {
     if timestamp < 0 {
-        return Err(eval.err("timestamp is negative".to_string(), span));
+        return verr!(vs!("timestamp is negative".to_string()));
     }
     let (year, month, day, hour, minute, second) = unix_to_parts(timestamp);
-    Ok(Value::String(apply_pattern(
+    vok!(vs!(apply_pattern(
         "%H:%M:%S", year, month, day, hour, minute, second,
     )))
 }
