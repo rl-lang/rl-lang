@@ -172,6 +172,29 @@ impl TypeChecker {
                 CheckType::Known(TypeAnnotation::Bool)
             }
 
+            TokenType::And | TokenType::Or => {
+                if !matches!(
+                    left,
+                    CheckType::Known(TypeAnnotation::Bool | TypeAnnotation::CBool)
+                ) {
+                    self.error(
+                        format!("expected bool on the left side of {}", op_str(op)),
+                        span,
+                    );
+                }
+                if !matches!(
+                    right,
+                    CheckType::Known(TypeAnnotation::Bool | TypeAnnotation::CBool)
+                ) {
+                    self.error(
+                        format!("expected bool on the right side of {}", op_str(op)),
+                        span,
+                    );
+                }
+
+                CheckType::Known(TypeAnnotation::Bool)
+            }
+
             // unknown operator
             _ => {
                 self.error(format!("unknown binary operator {:?}", op), span);
