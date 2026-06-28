@@ -1,7 +1,7 @@
 //! Statement evaluation - the main dispatch loop and control flow primitives.
 
 use crate::{
-    ast::statements::{Statement, StatementKind, TypeAnnotation},
+    ast::statements::{MatchPattern, Statement, StatementKind, TypeAnnotation},
     interpreter::{evaluator::Evaluator, values::Value},
     lexer::tokenizer::Tokenizer,
     parser::parser_logic::Parser,
@@ -588,6 +588,23 @@ impl Evaluator {
                         ));
                     }
                     self.insert_value(*slot, val, type_annotation.clone(), statement.span)?;
+                }
+            }
+
+            StatementKind::Match { value, arms } => {
+                let val = self.evaluate(value)?;
+                for (pattern, body) in arms {
+                    let matched = match pattern {
+                        MatchPattern::Wildcard => true,
+                        MatchPattern::Literal(expr) => {
+                            let pat_val = self.evaluate(expr)?;
+                            val == pat_val
+                        }
+                    };
+                    if matched {
+                        self.evaluate_block(body)?;
+                        break;
+                    }
                 }
             }
 
