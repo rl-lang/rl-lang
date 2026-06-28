@@ -48,6 +48,7 @@ impl Tokenizer {
             '#' => self.add_token(TokenType::Hash),
             ',' => self.add_token(TokenType::Comma),
             ';' => self.add_token(TokenType::Semicolon),
+            '?' => self.add_token(TokenType::Question),
 
             // multi character
             ':' => {
