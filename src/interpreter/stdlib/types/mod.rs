@@ -7,18 +7,12 @@ mod bin;
 mod bool;
 mod char;
 mod error;
-mod error_unwrap;
 mod float;
 mod hex;
 mod int;
 mod null;
 mod oct;
 mod string;
-mod to_bool;
-mod to_char;
-mod to_float;
-mod to_int;
-mod to_string;
 
 use crate::interpreter::native::Module;
 
@@ -44,13 +38,13 @@ pub const KEYWORDS: &[&str] = &[
 pub fn module() -> Module {
     Module::new("types")
         .with_function("to_bin", bin::func)
-        .with_function("to_bool", to_bool::std_to_bool)
-        .with_function("to_char", to_char::std_to_char)
-        .with_function("to_float", to_float::std_to_float)
+        .with_function("to_bool", bool::std_to_bool)
+        .with_function("to_char", char::std_to_char)
+        .with_function("to_float", float::std_to_float)
         .with_function("to_hex", hex::std_to_hex)
-        .with_function("to_int", to_int::std_to_int)
+        .with_function("to_int", int::std_to_int)
         .with_function("to_oct", oct::std_to_oct)
-        .with_function("to_string", to_string::std_to_string)
+        .with_function("to_string", string::std_to_string)
         .with_function("is_bool", bool::std_is_bool)
         .with_function("is_null", null::std_is_null)
         .with_function("is_char", char::std_is_char)
@@ -58,5 +52,5 @@ pub fn module() -> Module {
         .with_function("is_float", float::std_is_float)
         .with_function("is_string", string::std_is_string)
         .with_function("is_error", error::std_is_error)
-        .with_function("error_unwrap", error_unwrap::std_error_unwrap)
+        .with_function("error_unwrap", error::std_error_unwrap)
 }
