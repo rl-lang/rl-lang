@@ -12,7 +12,7 @@ use crate::interpreter::{
     values::Value,
 };
 
-fn unix_to_parts(timestamp: i64) -> (i32, u32, u32, u32, u32, u32) {
+pub fn unix_to_parts(timestamp: i64) -> (i32, u32, u32, u32, u32, u32) {
     let total_seconds = timestamp;
     let time_of_day = total_seconds % 86400;
     let hour = time_of_day / 3600;
