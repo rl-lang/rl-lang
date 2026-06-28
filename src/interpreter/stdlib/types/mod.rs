@@ -41,7 +41,7 @@ pub fn module() -> Module {
         .with_function("to_bool", bool::std_to_bool)
         .with_function("to_char", char::std_to_char)
         .with_function("to_float", float::std_to_float)
-        .with_function("to_hex", hex::std_to_hex)
+        .with_function("to_hex", hex::func)
         .with_function("to_int", int::std_to_int)
         .with_function("to_oct", oct::std_to_oct)
         .with_function("to_string", string::std_to_string)
