@@ -6,7 +6,7 @@ use crate::{
 
 pub fn std_args(eval: &mut Evaluator, _: Vec<Value>, _: Span) -> Result<Value, Error> {
     let args: Vec<Value> = std::env::args()
-        .skip(eval.user_args_offset) // skip the interpreter binary itself
+        .skip(eval.user_args_offset)
         .map(Value::String)
         .collect();
     Ok(Value::Values {
