@@ -3,6 +3,7 @@
 //! `is_*` functions check the runtime type of a value without conversion.
 //! `to_int` accepts hex strings prefixed with `0x`/`0X`.
 
+mod bin;
 mod error_unwrap;
 mod is_bool;
 mod is_char;
@@ -11,7 +12,6 @@ mod is_float;
 mod is_int;
 mod is_null;
 mod is_string;
-mod to_bin;
 mod to_bool;
 mod to_char;
 mod to_float;
@@ -43,7 +43,7 @@ pub const KEYWORDS: &[&str] = &[
 
 pub fn module() -> Module {
     Module::new("types")
-        .with_function("to_bin", to_bin::std_to_bin)
+        .with_function("to_bin", bin::func)
         .with_function("to_bool", to_bool::std_to_bool)
         .with_function("to_char", to_char::std_to_char)
         .with_function("to_float", to_float::std_to_float)

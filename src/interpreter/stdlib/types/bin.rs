@@ -1,6 +1,6 @@
 use crate::interpreter::{evaluator::Evaluator, values::Value};
 
-pub fn std_to_bin(_: &mut Evaluator, value: Value) -> Value {
+pub fn func(_: &mut Evaluator, value: Value) -> Value {
     let result = match value {
         Value::Byte(v) => format!("{:b}", v),
         Value::Integer(v) => format!("{:b}", v),
