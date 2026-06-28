@@ -138,4 +138,6 @@ pub enum ExpressionKind {
 
     OkLiteral(Box<Expression>),
     ErrLiteral(Box<Expression>),
+
+    Propagate(Box<Expression>),
 }
