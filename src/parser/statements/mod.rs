@@ -13,6 +13,7 @@ mod for_statement;
 mod function_declaration;
 mod if_statement;
 mod import_statement;
+mod match_statement;
 mod variable_declaration;
 mod while_statement;
 
@@ -141,6 +142,11 @@ impl Parser {
                 self.advance();
                 let span = start.join(self.previous_span());
                 Ok(Statement::new(StatementKind::Continue, span))
+            }
+
+            TokenType::Match => {
+                self.advance();
+                self.parse_match(start)
             }
 
             _ => {

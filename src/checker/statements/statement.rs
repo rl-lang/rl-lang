@@ -2,7 +2,7 @@
 //! declares names into scope, and validates control flow constraints.
 
 use crate::{
-    ast::statements::{StatementKind, TypeAnnotation},
+    ast::statements::{MatchPattern, StatementKind, TypeAnnotation},
     checker::structs::{CheckType, TypeChecker},
     lexer::tokenizer::Tokenizer,
     parser::parser_logic::Parser,
@@ -528,6 +528,22 @@ impl TypeChecker {
                             false,
                             statement.span,
                         );
+                    }
+                }
+            }
+
+            StatementKind::Match { value, arms } => {
+                let val_type = self.check_expression(value);
+                for (pattern, body) in arms {
+                    if let MatchPattern::Literal(expr) = pattern {
+                        let pat_type = self.check_expression(expr);
+                        if !pat_type.is_unknown() && !val_type.is_unknown() && pat_type != val_type
+                        {
+                            self.error("match pattern type does not match value type", expr.span);
+                        }
+                    }
+                    for stmt in body {
+                        self.check_statement(stmt);
                     }
                 }
             }

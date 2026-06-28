@@ -62,6 +62,8 @@ impl Tokenizer {
             "result" => self.add_token(TokenType::Result),
             "ok" => self.add_token(TokenType::Ok),
             "err" => self.add_token(TokenType::Err),
+            "match" => self.add_token(TokenType::Match),
+            "_" => self.add_token(TokenType::Wildcard),
 
             &_ => self.add_token(TokenType::Identifier(value)),
         }

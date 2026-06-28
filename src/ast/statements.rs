@@ -206,6 +206,17 @@ pub enum StatementKind {
         slots: Vec<usize>,
         value: Expression,
     },
+
+    Match {
+        value: Expression,
+        arms: Vec<(MatchPattern, Vec<Statement>)>,
+    },
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum MatchPattern {
+    Literal(Expression),
+    Wildcard,
 }
 
 /// The type of a variable, constant, or parameter binding.
