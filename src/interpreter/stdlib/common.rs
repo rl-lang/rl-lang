@@ -100,3 +100,59 @@ pub fn extract_number(value: Value, name: &str, span: Span) -> Result<u64, Error
         }
     }
 }
+
+macro_rules! vok {
+    ($e:expr) => {
+        Value::Ok(Box::new($e))
+    };
+}
+pub(crate) use vok;
+
+macro_rules! verr {
+    ($e:expr) => {
+        Value::Err(Box::new($e))
+    };
+}
+pub(crate) use verr;
+
+macro_rules! vb {
+    ($e:expr) => {
+        Value::Bool($e)
+    };
+}
+pub(crate) use vb;
+
+macro_rules! vi {
+    ($e:expr) => {
+        Value::Integer($e)
+    };
+}
+pub(crate) use vi;
+
+macro_rules! vf {
+    ($e:expr) => {
+        Value::Float($e)
+    };
+}
+pub(crate) use vf;
+
+macro_rules! vs {
+    ($e:expr) => {
+        Value::String($e)
+    };
+}
+pub(crate) use vs;
+
+macro_rules! vc {
+    ($e:expr) => {
+        Value::Char($e)
+    };
+}
+pub(crate) use vc;
+
+macro_rules! vby {
+    ($e:expr) => {
+        Value::Byte($e)
+    };
+}
+pub(crate) use vby;

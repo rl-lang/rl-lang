@@ -170,7 +170,7 @@ fn error_unwrap_value() {
         r#"
 get error_unwrap from std::types
 dec error e = error(99)
-dec int x = error_unwrap(e)
+dec int x = error_unwrap(e)?
 "#,
     )
     .unwrap();

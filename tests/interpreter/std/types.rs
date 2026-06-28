@@ -7,7 +7,7 @@ fn float_to_int() {
     let ev = eval_program(
         r#"
 get to_int from std::types
-dec int x = to_int(3.9)
+dec int x = to_int(3.9)?
 "#,
     )
     .unwrap();
@@ -19,7 +19,7 @@ fn string_to_int() {
     let ev = eval_program(
         r#"
 get to_int from std::types
-dec int x = to_int("42")
+dec int x = to_int("42")?
 "#,
     )
     .unwrap();
@@ -31,7 +31,7 @@ fn bool_true_to_int() {
     let ev = eval_program(
         r#"
 get to_int from std::types
-dec int x = to_int(true)
+dec int x = to_int(true)?
 "#,
     )
     .unwrap();
@@ -43,7 +43,7 @@ fn bool_false_to_int() {
     let ev = eval_program(
         r#"
 get to_int from std::types
-dec int x = to_int(false)
+dec int x = to_int(false)?
 "#,
     )
     .unwrap();
@@ -55,7 +55,7 @@ fn int_to_float() {
     let ev = eval_program(
         r#"
 get to_float from std::types
-dec float x = to_float(5)
+dec float x = to_float(5)?
 "#,
     )
     .unwrap();
@@ -67,7 +67,7 @@ fn string_to_float() {
     let ev = eval_program(
         r#"
 get to_float from std::types
-dec float x = to_float("4.14")
+dec float x = to_float("4.14")?
 "#,
     )
     .unwrap();
@@ -79,7 +79,7 @@ fn int_to_string() {
     let ev = eval_program(
         r#"
 get to_string from std::types
-dec string x = to_string(99)
+dec string x = to_string(99)?
 "#,
     )
     .unwrap();
@@ -91,7 +91,7 @@ fn bool_to_string() {
     let ev = eval_program(
         r#"
 get to_string from std::types
-dec string x = to_string(true)
+dec string x = to_string(true)?
 "#,
     )
     .unwrap();
@@ -106,7 +106,7 @@ fn float_to_string() {
     let ev = eval_program(
         r#"
 get to_string from std::types
-dec string x = to_string(1.5)
+dec string x = to_string(1.5)?
 "#,
     )
     .unwrap();
@@ -121,7 +121,7 @@ fn one_to_bool_true() {
     let ev = eval_program(
         r#"
 get to_bool from std::types
-dec bool x = to_bool(1)
+dec bool x = to_bool(1)?
 "#,
     )
     .unwrap();
@@ -133,7 +133,7 @@ fn zero_to_bool_false() {
     let ev = eval_program(
         r#"
 get to_bool from std::types
-dec bool x = to_bool(0)
+dec bool x = to_bool(0)?
 "#,
     )
     .unwrap();
@@ -145,7 +145,7 @@ fn is_int_true() {
     let ev = eval_program(
         r#"
 get is_int from std::types
-dec bool x = is_int(42)
+dec bool x = is_int(42)?
 "#,
     )
     .unwrap();
@@ -157,7 +157,7 @@ fn is_int_false_for_float() {
     let ev = eval_program(
         r#"
 get is_int from std::types
-dec bool x = is_int(1.0)
+dec bool x = is_int(1.0)?
 "#,
     )
     .unwrap();
@@ -169,7 +169,7 @@ fn is_float_true() {
     let ev = eval_program(
         r#"
 get is_float from std::types
-dec bool x = is_float(3.14)
+dec bool x = is_float(3.14)?
 "#,
     )
     .unwrap();
@@ -181,7 +181,7 @@ fn is_string_true() {
     let ev = eval_program(
         r#"
 get is_string from std::types
-dec bool x = is_string("hi")
+dec bool x = is_string("hi")?
 "#,
     )
     .unwrap();
@@ -193,7 +193,7 @@ fn is_bool_true() {
     let ev = eval_program(
         r#"
 get is_bool from std::types
-dec bool x = is_bool(false)
+dec bool x = is_bool(false)?
 "#,
     )
     .unwrap();
@@ -205,7 +205,7 @@ fn is_null_true() {
     let ev = eval_program(
         r#"
 get is_null from std::types
-dec bool x = is_null(null)
+dec bool x = is_null(null)?
 "#,
     )
     .unwrap();
@@ -217,7 +217,7 @@ fn is_null_false_for_int() {
     let ev = eval_program(
         r#"
 get is_null from std::types
-dec bool x = is_null(0)
+dec bool x = is_null(0)?
 "#,
     )
     .unwrap();
@@ -229,7 +229,7 @@ fn to_hex() {
     let ev = eval_program(
         r#"
 get to_hex from std::types
-dec string x = to_hex(255)
+dec string x = to_hex(255)?
 "#,
     )
     .unwrap();
@@ -241,7 +241,7 @@ fn to_bin() {
     let ev = eval_program(
         r#"
 get to_bin from std::types
-dec string x = to_bin(5)
+dec string x = to_bin(5)?
 "#,
     )
     .unwrap();
@@ -256,7 +256,7 @@ fn to_oct() {
     let ev = eval_program(
         r#"
 get to_oct from std::types
-dec string x = to_oct(8)
+dec string x = to_oct(8)?
 "#,
     )
     .unwrap();
@@ -268,7 +268,7 @@ fn to_bool_from_true_string() {
     let ev = eval_program(
         r#"
 get to_bool from std::types
-dec bool x = to_bool("true")
+dec bool x = to_bool("true")?
 "#,
     )
     .unwrap();
@@ -280,7 +280,7 @@ fn to_bool_from_int_one() {
     let ev = eval_program(
         r#"
 get to_bool from std::types
-dec bool x = to_bool(1)
+dec bool x = to_bool(1)?
 "#,
     )
     .unwrap();
@@ -292,7 +292,7 @@ fn to_bool_from_int_zero() {
     let ev = eval_program(
         r#"
 get to_bool from std::types
-dec bool x = to_bool(0)
+dec bool x = to_bool(0)?
 "#,
     )
     .unwrap();
@@ -304,7 +304,7 @@ fn to_string_from_int() {
     let ev = eval_program(
         r#"
 get to_string from std::types
-dec string x = to_string(42)
+dec string x = to_string(42)?
 "#,
     )
     .unwrap();
@@ -316,7 +316,7 @@ fn to_string_from_float() {
     let ev = eval_program(
         r#"
 get to_string from std::types
-dec string x = to_string(3.14)
+dec string x = to_string(3.14)?
 "#,
     )
     .unwrap();
@@ -331,7 +331,7 @@ fn to_string_from_bool() {
     let ev = eval_program(
         r#"
 get to_string from std::types
-dec string x = to_string(true)
+dec string x = to_string(true)?
 "#,
     )
     .unwrap();
@@ -346,7 +346,7 @@ fn to_hex_from_int() {
     let ev = eval_program(
         r#"
 get to_hex from std::types
-dec string x = to_hex(255)
+dec string x = to_hex(255)?
 "#,
     )
     .unwrap();
@@ -358,7 +358,7 @@ fn to_bin_from_int() {
     let ev = eval_program(
         r#"
 get to_bin from std::types
-dec string x = to_bin(5)
+dec string x = to_bin(5)?
 "#,
     )
     .unwrap();
@@ -373,7 +373,7 @@ fn to_oct_from_int() {
     let ev = eval_program(
         r#"
 get to_oct from std::types
-dec string x = to_oct(8)
+dec string x = to_oct(8)?
 "#,
     )
     .unwrap();
@@ -385,7 +385,7 @@ fn is_int_false() {
     let ev = eval_program(
         r#"
 get is_int from std::types
-dec bool x = is_int("hello")
+dec bool x = is_int("hello")?
 "#,
     )
     .unwrap();
@@ -397,7 +397,7 @@ fn is_null_false() {
     let ev = eval_program(
         r#"
 get is_null from std::types
-dec bool x = is_null(42)
+dec bool x = is_null(42)?
 "#,
     )
     .unwrap();
