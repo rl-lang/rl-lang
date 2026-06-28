@@ -1,18 +1,22 @@
-use crate::{
-    interpreter::{evaluator::Evaluator, values::Value},
-    utils::{errors::Error, span::Span},
+use crate::interpreter::{
+    evaluator::Evaluator,
+    stdlib::common::{verr, vok, vs},
+    values::Value,
 };
 
-pub fn std_to_oct(eval: &mut Evaluator, value: Value, span: Span) -> Result<String, Error> {
-    match value {
-        Value::Integer(v) => Ok(format!("{:o}", v)),
-        Value::Byte(v) => Ok(format!("{:o}", v)),
-        Value::Char(v) => Ok(format!("{:o}", v as u32)),
-        Value::String(s) => Ok(s.bytes().map(|b| format!("{:o}", b)).collect::<String>()),
+pub fn func(_: &mut Evaluator, value: Value) -> Value {
+    let result = match value {
+        Value::Integer(v) => format!("{:o}", v),
+        Value::Byte(v) => format!("{:o}", v),
+        Value::Char(v) => format!("{:o}", v as u32),
+        Value::String(s) => s.bytes().map(|b| format!("{:o}", b)).collect::<String>(),
 
-        other => Err(eval.err(
-            format!("cannot parse \"{}\" as octal", other.type_name()),
-            span,
-        )),
-    }
+        other => {
+            return verr!(vs!(format!(
+                "cannot parse \"{}\" as octal",
+                other.type_name()
+            )));
+        }
+    };
+    vok!(vs!(result))
 }
