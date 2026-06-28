@@ -1,25 +1,32 @@
-use crate::interpreter::{evaluator::Evaluator, values::Value};
+use crate::interpreter::{
+    evaluator::Evaluator,
+    stdlib::common::{vb, verr, vok, vs},
+    values::Value,
+};
 
 pub fn std_is_bool(_: &mut Evaluator, value: Value) -> bool {
     matches!(value, Value::Bool(_))
 }
 
-pub fn std_to_bool(eval: &mut Evaluator, value: Value, span: Span) -> Result<bool, Error> {
-    match value {
-        Value::Bool(b) => Ok(b),
-        Value::Integer(i) => Ok(i != 0),
-        Value::Byte(i) => Ok(i != 0),
-        Value::Float(f) => Ok(f != 0.0),
-        Value::Null => Ok(false),
+pub fn std_to_bool(_: &mut Evaluator, value: Value) -> Value {
+    let result = match value {
+        Value::Bool(b) => b,
+        Value::Integer(i) => i != 0,
+        Value::Byte(i) => i != 0,
+        Value::Float(f) => f != 0.0,
+        Value::Null => false,
         Value::String(s) => match s.trim() {
-            "true" | "1" => Ok(true),
-            "false" | "0" | "" => Ok(false),
-            _ => Ok(true),
+            "false" | "0" | "" => false,
+            _ => true,
         },
 
-        other => Err(eval.err(
-            format!("cannot parse \"{}\" as bool", other.type_name()),
-            span,
-        )),
-    }
+        other => {
+            return verr!(vs!(format!(
+                "cannot parse \"{}\" as bool",
+                other.type_name()
+            )));
+        }
+    };
+
+    vok!(vb!(result))
 }
