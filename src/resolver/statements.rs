@@ -263,6 +263,20 @@ impl Resolver {
                 }
             }
 
+            StatementKind::Match { value, arms } => {
+                let value = self.resolve_expression(value);
+                let arms = arms
+                    .into_iter()
+                    .map(|(pattern, body)| {
+                        self.push_scope();
+                        let body = self.resolve_statements(body);
+                        self.pop_scope();
+                        (pattern, body)
+                    })
+                    .collect();
+                StatementKind::Match { value, arms }
+            }
+
             other => other,
         };
         Statement::new(kind, span)
