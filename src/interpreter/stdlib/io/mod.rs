@@ -12,6 +12,7 @@ mod eprint;
 mod input;
 mod print;
 mod println;
+mod read_bytes;
 mod read_file;
 mod read_lines;
 mod write_file;
@@ -30,6 +31,7 @@ pub const KEYWORDS: &[&str] = &[
     "print",
     "println",
     "eprint",
+    "read_bytes",
 ];
 
 pub fn module() -> Module {
@@ -45,4 +47,5 @@ pub fn module() -> Module {
         .with_raw_function("print", print::std_print)
         .with_raw_function("println", println::std_println)
         .with_function("eprint", eprint::std_eprint)
+        .with_function("read_bytes", read_bytes::func)
 }
