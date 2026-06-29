@@ -16,6 +16,7 @@ use clap::{Parser, Subcommand};
 use rl_lang::docs;
 use rl_lang::tooling::new::create_project;
 use rl_lang::tooling::package::{find_embedded, package};
+use rl_lang::tooling::workflows::generate;
 use std::path::PathBuf;
 
 #[cfg(feature = "lsp")]
@@ -62,6 +63,14 @@ enum Commands {
     Check {
         /// Path to the .rl file
         file: PathBuf,
+    },
+
+    /// Scaffold Actions workflows
+    Workflows {
+        #[arg(long, help = "Generate check workflow")]
+        check: bool,
+        #[arg(long, help = "Generate package/release workflow")]
+        package: bool,
     },
 
     /// Print language reference and stdlib documentation
@@ -172,6 +181,14 @@ fn main() {
 
             #[cfg(not(feature = "eval"))]
             println!("ok");
+        }
+
+        Commands::Workflows { check, package } => {
+            if !check && !package {
+                eprintln!("error: specify at least --check or --package");
+                std::process::exit(1);
+            }
+            generate(check, package);
         }
 
         Commands::New { name, no_git } => {
