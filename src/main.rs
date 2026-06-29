@@ -54,6 +54,8 @@ enum Commands {
     New {
         /// Name for the project
         name: String,
+        #[arg(long, help = "skip git init")]
+        no_git: bool,
     },
 
     /// Checks the file for errors
@@ -172,8 +174,8 @@ fn main() {
             println!("ok");
         }
 
-        Commands::New { name } => {
-            create_project(&name);
+        Commands::New { name, no_git } => {
+            create_project(&name, no_git);
         }
 
         Commands::Docs { topic } => {
