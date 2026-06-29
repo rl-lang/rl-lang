@@ -12,16 +12,20 @@ on:
 
 jobs:
   rl-check:
-    name: Check src/main.rl
+    name: Check ${{ matrix.file }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        file:
+          - src/main.rl
     steps:
       - uses: actions/checkout@v4
 
       - name: Run RL check
         uses: rl-lang/rl-check@main
         with:
-          file:
-            - src/main.rl
+          file: ${{ matrix.file }}
 "#;
 
 const PACKAGE_YML: &str = r#"name: Release
@@ -34,13 +38,14 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
-
+        file:
+          - { path: src/main.rl, name: program }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: rl-lang/rl-package@main
         with:
-          file:
-            - { path: src/main.rl, name: program }
+          file: ${{ matrix.file.path }}
+          output: ${{ matrix.file.name }}
 
   release:
     needs: package
