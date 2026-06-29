@@ -5,3 +5,4 @@
 pub mod dev;
 pub mod new;
 pub mod package;
+pub mod workflows;
