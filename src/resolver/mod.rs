@@ -20,6 +20,7 @@ pub struct Resolver {
     /// Stack of scopes, each scope being an ordered list of declared names.
     /// Index in the list is the slot number; distance from the top is the depth.
     scopes: Vec<Vec<String>>,
+    pub current_dir: std::path::PathBuf,
 }
 
 impl Default for Resolver {
@@ -33,6 +34,7 @@ impl Resolver {
     pub fn new() -> Self {
         Self {
             scopes: vec![vec![]],
+            current_dir: std::path::PathBuf::new(),
         }
     }
 

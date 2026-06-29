@@ -64,8 +64,14 @@ pub fn eval_loop(source: SourceFile, statements: Vec<Statement>, user_args_offse
     info!("evaluating the ast tree...");
     let mut evaluator = Evaluator::default()
         .with_stdlib()
-        .with_source_file(source)
+        .with_source_file(source.clone())
         .with_user_args_offset(user_args_offset);
+
+    evaluator.resolver.current_dir = std::path::Path::new(source.name.as_ref())
+        .parent()
+        .unwrap_or(std::path::Path::new(""))
+        .to_path_buf();
+
     let statements = evaluator.resolver.resolve_statements(statements);
     if let Err(e) = evaluator.evaluate_program(&statements) {
         e.report_to_stderr();

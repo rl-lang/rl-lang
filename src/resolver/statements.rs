@@ -205,30 +205,42 @@ impl Resolver {
             StatementKind::Expression(expr) => {
                 StatementKind::Expression(self.resolve_expression(expr))
             }
+
             StatementKind::ImportFile { path } => {
                 let import_name = format!("{}.rl", path.join("/"));
-                let Ok(source_text) = std::fs::read_to_string(&import_name) else {
+                let file_path = self.current_dir.join(&import_name);
+                let Ok(source_text) = std::fs::read_to_string(&file_path) else {
                     return Statement::new(StatementKind::ImportFile { path }, span);
                 };
-                let source_file = SourceFile::new(import_name, source_text);
+                let source_file =
+                    SourceFile::new(file_path.to_string_lossy().as_ref(), source_text);
                 let Ok(tokens) = Tokenizer::lex(source_file.clone()) else {
                     return Statement::new(StatementKind::ImportFile { path }, span);
                 };
                 let Ok(stmts) = Parser::parse(tokens, source_file) else {
                     return Statement::new(StatementKind::ImportFile { path }, span);
                 };
+                let imported_dir = file_path
+                    .parent()
+                    .unwrap_or(std::path::Path::new(""))
+                    .to_path_buf();
+                let prev_dir = std::mem::replace(&mut self.current_dir, imported_dir);
                 let resolved = self.resolve_statements(stmts);
+                self.current_dir = prev_dir;
                 StatementKind::ResolvedImportFile {
                     path,
                     body: resolved,
                 }
             }
+
             StatementKind::ImportFileNamed { path, names } => {
                 let import_name = format!("{}.rl", path.join("/"));
-                let Ok(source_text) = std::fs::read_to_string(&import_name) else {
+                let file_path = self.current_dir.join(&import_name);
+                let Ok(source_text) = std::fs::read_to_string(&file_path) else {
                     return Statement::new(StatementKind::ImportFileNamed { path, names }, span);
                 };
-                let source_file = SourceFile::new(import_name, source_text);
+                let source_file =
+                    SourceFile::new(file_path.to_string_lossy().as_ref(), source_text);
                 let Ok(tokens) = Tokenizer::lex(source_file.clone()) else {
                     return Statement::new(StatementKind::ImportFileNamed { path, names }, span);
                 };
@@ -246,7 +258,13 @@ impl Resolver {
                         _ => false,
                     })
                     .collect();
+                let imported_dir = file_path
+                    .parent()
+                    .unwrap_or(std::path::Path::new(""))
+                    .to_path_buf();
+                let prev_dir = std::mem::replace(&mut self.current_dir, imported_dir);
                 let body = self.resolve_statements(stmts);
+                self.current_dir = prev_dir;
                 StatementKind::ResolvedImportFile { path, body }
             }
 
