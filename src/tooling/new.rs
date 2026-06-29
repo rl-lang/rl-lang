@@ -16,8 +16,8 @@ use std::io;
 /// A git repository is initialized automatically.
 ///
 /// Prints an error and exits with code `1` on any IO failure.
-pub fn create_project(name: &str) {
-    if let Err(e) = try_create_project(name) {
+pub fn create_project(name: &str, no_git: bool) {
+    if let Err(e) = try_create_project(name, no_git) {
         eprintln!("error: failed to create project '{}': {}", name, e);
         std::process::exit(1);
     }
@@ -27,7 +27,7 @@ pub fn create_project(name: &str) {
 /// Inner fallible implementation of [`create_project`].
 ///
 /// Returns [`io::Error`] if any filesystem operation or `git init` fails.
-fn try_create_project(name: &str) -> io::Result<()> {
+fn try_create_project(name: &str, no_git: bool) -> io::Result<()> {
     let toml = format!(
         r#"[project]
 name = "{}"
@@ -49,8 +49,10 @@ main()
     std::fs::write(format!("{}/rl.toml", name), toml)?;
     std::fs::write(format!("{}/src/main.rl", name), main)?;
     std::fs::write(format!("{}/.gitignore", name), "")?;
-    std::process::Command::new("git")
-        .args(["init", name])
-        .output()?;
+    if !no_git {
+        std::process::Command::new("git")
+            .args(["init", name])
+            .output()?;
+    }
     Ok(())
 }
