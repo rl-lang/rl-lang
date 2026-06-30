@@ -3,7 +3,7 @@
 //! | Operator | Operand         | Result |
 //! |----------|-----------------|--------|
 //! | `!`      | bool            | bool   |
-//! | `-`      | int / byte      | int    |
+//! | `-`      | int             | int    |
 //! | `-`      | float           | float  |
 
 use crate::{
@@ -25,7 +25,7 @@ impl TypeChecker {
             return CheckType::Unknown;
         }
         match op {
-            // is it corrent bang unary?
+            // is it correct bang unary?
             TokenType::Bang => match &operand {
                 CheckType::Known(TypeAnnotation::Bool | TypeAnnotation::CBool) => {
                     CheckType::Known(TypeAnnotation::Bool)
@@ -40,8 +40,6 @@ impl TypeChecker {
                 CheckType::Known(
                     TypeAnnotation::Int
                     | TypeAnnotation::CInt
-                    | TypeAnnotation::Byte
-                    | TypeAnnotation::CByte,
                 ) => CheckType::Known(TypeAnnotation::Int),
                 CheckType::Known(TypeAnnotation::Float | TypeAnnotation::CFloat) => {
                     CheckType::Known(TypeAnnotation::Float)
