@@ -26,10 +26,6 @@ impl Evaluator {
             } => {
                 let val = self.evaluate(value)?;
 
-                let val = match (type_annotation, &val) {
-                    (TypeAnnotation::CInt, Value::Byte(b)) => Value::Integer(*b as i64),
-                    _ => val,
-                };
                 let val_type = Self::infer_type(&val, false);
                 if !Self::types_compatible(&val_type, type_annotation)
                     && val_type != *type_annotation
@@ -53,10 +49,7 @@ impl Evaluator {
                 ..
             } => {
                 let val = self.evaluate(value)?;
-                let val = match (type_annotation, &val) {
-                    (TypeAnnotation::CInt, Value::Byte(b)) => Value::Integer(*b as i64),
-                    _ => val,
-                };
+               
                 let val_type = Self::infer_type(&val, true);
                 if !Self::types_compatible(&val_type, type_annotation)
                     && val_type != *type_annotation
