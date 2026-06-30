@@ -383,10 +383,13 @@ impl Parser {
 
         if self.match_type(&[TokenType::Error]) {
             let error_start = self.previous_span();
+            while self.match_type(&[TokenType::Newline]) {}
             if !self.match_type(&[TokenType::LeftParen]) {
                 return Err(self.err("expected `(` after `error`", self.peek_span()));
             }
+            while self.match_type(&[TokenType::Newline]) {}
             let inner = self.parse_expression()?;
+            while self.match_type(&[TokenType::Newline]) {}
             if !self.match_type(&[TokenType::RightParen]) {
                 return Err(self.err("expected `)` after error value", self.peek_span()));
             }
@@ -397,10 +400,13 @@ impl Parser {
 
         if self.match_type(&[TokenType::Ok]) {
             let kw_span = self.previous_span();
+            while self.match_type(&[TokenType::Newline]) {}
             if !self.match_type(&[TokenType::LeftParen]) {
                 return Err(self.err("expected `(` after `ok`", self.peek_span()));
             }
+            while self.match_type(&[TokenType::Newline]) {}
             let inner = self.parse_expression()?;
+            while self.match_type(&[TokenType::Newline]) {}
             if !self.match_type(&[TokenType::RightParen]) {
                 return Err(self.err("expected `)` after ok value", self.peek_span()));
             }
@@ -413,10 +419,13 @@ impl Parser {
 
         if self.match_type(&[TokenType::Err]) {
             let kw_span = self.previous_span();
+            while self.match_type(&[TokenType::Newline]) {}
             if !self.match_type(&[TokenType::LeftParen]) {
                 return Err(self.err("expected `(` after `err`", self.peek_span()));
             }
+            while self.match_type(&[TokenType::Newline]) {}
             let inner = self.parse_expression()?;
+            while self.match_type(&[TokenType::Newline]) {}
             if !self.match_type(&[TokenType::RightParen]) {
                 return Err(self.err("expected `)` after err value", self.peek_span()));
             }
@@ -436,6 +445,7 @@ impl Parser {
         if self.match_type(&[TokenType::LeftParen]) {
             #[cfg(feature = "debug")]
             log::debug!("found group start");
+            while self.match_type(&[TokenType::Newline]) {}
             let first = self.parse_expression()?;
             if self.match_type(&[TokenType::Comma]) {
                 // tuple literal: (expr, expr, ...)
@@ -451,6 +461,7 @@ impl Parser {
                         return Err(self.err("expected , between tuple elements", self.peek_span()));
                     }
                 }
+                while self.match_type(&[TokenType::Newline]) {}
                 if !self.match_type(&[TokenType::RightParen]) {
                     return Err(self.err("expected ) after tuple elements", self.peek_span()));
                 }
@@ -458,6 +469,7 @@ impl Parser {
                 let expr = Expression::new(ExpressionKind::TupleLiteral(items), span);
                 return self.parse_postfix(expr, start);
             }
+            while self.match_type(&[TokenType::Newline]) {}
             self.match_type(&[TokenType::RightParen]);
             let span = start.join(self.previous_span());
             let expr = Expression::new(ExpressionKind::Grouping(Box::new(first)), span);
@@ -466,11 +478,14 @@ impl Parser {
 
         if self.match_type(&[TokenType::Fn]) {
             let lambda_start = self.previous_span();
+            while self.match_type(&[TokenType::Newline]) {}
             self.match_type(&[TokenType::LeftParen]);
 
             let mut params: Vec<crate::ast::statements::Param> = Vec::new();
+            while self.match_type(&[TokenType::Newline]) {}
             while !self.match_type(&[TokenType::RightParen]) {
                 let param_type = self.parse_param_type()?;
+                while self.match_type(&[TokenType::Newline]) {}
                 let param_name = match self.peek() {
                     TokenType::Identifier(n) => {
                         self.advance();
@@ -482,18 +497,23 @@ impl Parser {
                     param_name,
                     param_type,
                 });
+                while self.match_type(&[TokenType::Newline]) {}
                 if !self.match_type(&[TokenType::Comma]) {
                     break;
                 }
             }
+            while self.match_type(&[TokenType::Newline]) {}
             self.match_type(&[TokenType::RightParen]);
 
+            while self.match_type(&[TokenType::Newline]) {}
             let return_type = if self.match_type(&[TokenType::Arrow]) {
+                while self.match_type(&[TokenType::Newline]) {}
                 Some(self.parse_param_type()?)
             } else {
                 None
             };
 
+            while self.match_type(&[TokenType::Newline]) {}
             let body = self.parse_block()?;
             let span = lambda_start.join(self.previous_span());
             let expr = Expression::new(
