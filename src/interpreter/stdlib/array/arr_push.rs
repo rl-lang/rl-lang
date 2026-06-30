@@ -21,7 +21,6 @@ pub fn std_arr_push(
                     span,
                 ));
             }
-            let value = Evaluator::coerce_array_type(value, &items_type);
             let mut v = items;
             v.push(value);
             Ok(Value::Values {
