@@ -1,7 +1,5 @@
 //! Binary operator evaluation for all supported operand type combinations.
 //!
-//! `byte op int` and `int op byte` always widen to `int`.
-//! `byte op byte` stays `byte` if the result fits in `0..=255`, otherwise widens to `int`.
 //! All type mismatches emit a labeled error pointing at both operands.
 
 use crate::{
@@ -39,14 +37,8 @@ impl Evaluator {
             TokenType::Plus => match (&left, &right) {
                 (Value::Integer(a), Value::Integer(b)) => Value::Integer(a + b),
                 (Value::Float(a), Value::Float(b)) => Value::Float(a + b),
-                (Value::Byte(a), Value::Byte(b)) => {
-                    let ab = *a as i64 + *b as i64;
-                    if !(0..=255).contains(&ab) {
-                        Value::Integer(ab)
-                    } else {
-                        Value::Byte(a + b)
-                    }
-                }
+                (Value::Byte(a), Value::Byte(b)) => Value::Byte(a + b),
+                
                 _ => {
                     return Err(
                         self.type_mismatch_binary("+", &left, left_span, &right, right_span, span)
@@ -56,14 +48,8 @@ impl Evaluator {
             TokenType::Minus => match (&left, &right) {
                 (Value::Integer(a), Value::Integer(b)) => Value::Integer(a - b),
                 (Value::Float(a), Value::Float(b)) => Value::Float(a - b),
-                (Value::Byte(a), Value::Byte(b)) => {
-                    let ab = *a as i64 - *b as i64;
-                    if !(0..=255).contains(&ab) {
-                        Value::Integer(ab)
-                    } else {
-                        Value::Byte(a - b)
-                    }
-                }
+                (Value::Byte(a), Value::Byte(b)) => Value::Byte(a - b),
+                
                 _ => {
                     return Err(
                         self.type_mismatch_binary("-", &left, left_span, &right, right_span, span)
@@ -73,14 +59,8 @@ impl Evaluator {
             TokenType::Star => match (&left, &right) {
                 (Value::Integer(a), Value::Integer(b)) => Value::Integer(a * b),
                 (Value::Float(a), Value::Float(b)) => Value::Float(a * b),
-                (Value::Byte(a), Value::Byte(b)) => {
-                    let ab = *a as i64 * *b as i64;
-                    if !(0..=255).contains(&ab) {
-                        Value::Integer(ab)
-                    } else {
-                        Value::Byte(a * b)
-                    }
-                }
+                (Value::Byte(a), Value::Byte(b)) => Value::Byte(a * b),
+                
                 _ => {
                     return Err(
                         self.type_mismatch_binary("*", &left, left_span, &right, right_span, span)
@@ -99,13 +79,9 @@ impl Evaluator {
                     if *b == 0 {
                         return Err(self.err("division by zero", span));
                     }
-                    let ab = *a as i64 / *b as i64;
-                    if !(0..=255).contains(&ab) {
-                        Value::Integer(ab)
-                    } else {
-                        Value::Byte(a / b)
-                    }
+                    Value::Byte(a / b)
                 }
+                
                 _ => {
                     return Err(
                         self.type_mismatch_binary("/", &left, left_span, &right, right_span, span)
