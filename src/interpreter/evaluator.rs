@@ -494,12 +494,7 @@ impl Evaluator {
                 depth, slot, value, ..
             } => {
                 let val = self.evaluate(value)?;
-                let val = match (self.get_declared_type(*depth, *slot), &val) {
-                    (Some(TypeAnnotation::Int | TypeAnnotation::CInt), Value::Byte(b)) => {
-                        Value::Integer(*b as i64)
-                    }
-                    _ => val,
-                };
+
                 let inferred_type = Self::infer_type(&val, false);
                 self.assign_value(*depth, *slot, val.clone(), inferred_type, expression.span)?;
                 val
