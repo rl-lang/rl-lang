@@ -135,8 +135,7 @@ impl Evaluator {
                 .with_module(stdlib::process::module())
                 .with_module(stdlib::result::module())
                 .with_module(stdlib::terminal::module())
-                .with_raw_function("eval", stdlib::eval::func)
-                .with_raw_function("eval_isolated", stdlib::eval_isolated::func),
+                .with_module(stdlib::rl::module()),
         )
     }
 
@@ -790,7 +789,7 @@ impl Evaluator {
                 .chain(stdlib::process::KEYWORDS)
                 .chain(stdlib::result::KEYWORDS)
                 .chain(stdlib::terminal::KEYWORDS)
-                .chain(&["eval", "eval_isolated"])
+                .chain(stdlib::rl::KEYWORDS)
                 .copied();
             if let Some(suggestion) = closest_match(last, candidates) {
                 err = err.with_help(format!("did you mean `{}`?", suggestion));
