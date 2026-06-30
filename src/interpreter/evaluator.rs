@@ -264,10 +264,6 @@ impl Evaluator {
             return true;
         }
         match (actual, expected) {
-            (TypeAnnotation::Byte, TypeAnnotation::Int)
-            | (TypeAnnotation::CByte, TypeAnnotation::CInt)
-            | (TypeAnnotation::Byte, TypeAnnotation::CInt)
-            | (TypeAnnotation::CByte, TypeAnnotation::Int) => true,
             (
                 TypeAnnotation::Array(a) | TypeAnnotation::CArray(a),
                 TypeAnnotation::Array(b) | TypeAnnotation::CArray(b),
@@ -290,33 +286,6 @@ impl Evaluator {
                 TypeAnnotation::Result(_) | TypeAnnotation::CResult(_),
             ) => true,
             _ => false,
-        }
-    }
-
-    /// Recursively coerces `value` to match `expected`, primarily widening
-    /// `Byte` elements to `Int` inside arrays when the declared element type is `Int`.
-    pub fn coerce_array_type(value: Value, expected: &TypeAnnotation) -> Value {
-        match (value, expected) {
-            (Value::Values { items, .. }, expected) => {
-                let inner_expected = match expected {
-                    TypeAnnotation::Array(inner) | TypeAnnotation::CArray(inner) => {
-                        inner.as_ref().clone()
-                    }
-                    other => other.clone(),
-                };
-                let coerced_items = items
-                    .into_iter()
-                    .map(|v| Self::coerce_array_type(v, &inner_expected))
-                    .collect();
-                Value::Values {
-                    items_type: inner_expected,
-                    items: coerced_items,
-                }
-            }
-            (Value::Byte(b), TypeAnnotation::Int | TypeAnnotation::CInt) => {
-                Value::Integer(b as i64)
-            }
-            (other, _) => other,
         }
     }
 
@@ -431,10 +400,9 @@ impl Evaluator {
                     .map(|v| Self::infer_type(v, false))
                     .unwrap_or(TypeAnnotation::Null);
 
-                // Validate and coerce every element after the first against items_type.
+                // Validate every element after the first against items_type.
                 if items_type != TypeAnnotation::Null {
-                    let mut coerced = Vec::with_capacity(values.len());
-                    for (i, v) in values.into_iter().enumerate() {
+                    for (i, v) in values.clone().into_iter().enumerate() {
                         let actual = Self::infer_type(&v, false);
                         if !Self::types_compatible(&actual, &items_type) {
                             return Err(self.err(
@@ -447,11 +415,10 @@ impl Evaluator {
                                 expression.span,
                             ));
                         }
-                        coerced.push(Self::coerce_array_type(v, &items_type));
                     }
                     Value::Values {
                         items_type,
-                        items: coerced,
+                        items: values,
                     }
                 } else {
                     Value::Values {
@@ -525,12 +492,7 @@ impl Evaluator {
                 depth, slot, value, ..
             } => {
                 let val = self.evaluate(value)?;
-                let val = match (self.get_declared_type(*depth, *slot), &val) {
-                    (Some(TypeAnnotation::Int | TypeAnnotation::CInt), Value::Byte(b)) => {
-                        Value::Integer(*b as i64)
-                    }
-                    _ => val,
-                };
+
                 let inferred_type = Self::infer_type(&val, false);
                 self.assign_value(*depth, *slot, val.clone(), inferred_type, expression.span)?;
                 val

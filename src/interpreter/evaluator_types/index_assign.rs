@@ -47,18 +47,15 @@ impl Evaluator {
                 ExpressionKind::ResolvedIdentifier { .. } => Ok(vec![]),
                 ExpressionKind::Index { target, index } => {
                     let mut indices = get_indices_as_vec(target, evaluator, span)?;
-                    match evaluator.evaluate(index)? {
-                        Value::Integer(i) => {
-                            if i < 0 {
-                                return Err(
-                                    evaluator.err(format!("index cannot be negative: {}", i), span)
-                                );
-                            }
-                            indices.push(i as usize);
+                    if let Value::Integer(i) = evaluator.evaluate(index)? {
+                        if i < 0 {
+                            return Err(
+                                evaluator.err(format!("index cannot be negative: {}", i), span)
+                            );
                         }
-                        Value::Byte(u) => indices.push(u as usize),
-                        _ => {}
+                        indices.push(i as usize);
                     }
+
                     Ok(indices)
                 }
                 _ => unreachable!(),
@@ -67,15 +64,11 @@ impl Evaluator {
 
         let (depth, slot) = get_root_addr(target);
         let mut indices = get_indices_as_vec(target, self, span)?;
-        match idx {
-            Value::Integer(i) => {
-                if i < 0 {
-                    return Err(self.err(format!("index cannot be negative: {}", i), span));
-                }
-                indices.push(i as usize);
+        if let Value::Integer(i) = idx {
+            if i < 0 {
+                return Err(self.err(format!("index cannot be negative: {}", i), span));
             }
-            Value::Byte(u) => indices.push(u as usize),
-            _ => {}
+            indices.push(i as usize);
         }
 
         let index_error = self.err("index assignment requires at least one index", span);
@@ -108,13 +101,7 @@ impl Evaluator {
                 }
                 if let Value::Values { items_type, items } = current {
                     let val_type = Self::infer_type(&val, false);
-                    if val_type != *items_type
-                        && val_type != TypeAnnotation::Null
-                        && !((val_type == TypeAnnotation::Byte
-                            || val_type == TypeAnnotation::CByte)
-                            && (*items_type == TypeAnnotation::Int
-                                || *items_type == TypeAnnotation::CInt))
-                    {
+                    if val_type != *items_type && val_type != TypeAnnotation::Null {
                         return Err(Error::at(
                             crate::utils::errors::Reason::Interpreter,
                             format!(

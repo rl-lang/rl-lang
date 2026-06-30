@@ -27,12 +27,7 @@ impl TypeChecker {
         // is the index int?
         if !matches!(
             index_type,
-            CheckType::Known(
-                TypeAnnotation::Int
-                    | TypeAnnotation::CInt
-                    | TypeAnnotation::Byte
-                    | TypeAnnotation::CByte
-            ) | CheckType::Unknown
+            CheckType::Known(TypeAnnotation::Int | TypeAnnotation::CInt) | CheckType::Unknown
         ) {
             self.error(
                 format!("index must be int, got {}", index_type.info()),
@@ -45,14 +40,8 @@ impl TypeChecker {
             CheckType::Known(TypeAnnotation::Array(inner))
             | CheckType::Known(TypeAnnotation::CArray(inner)) => {
                 let inner_ty = CheckType::Known((**inner).clone());
-                let widens = matches!(
-                    (inner.as_ref(), &value_type),
-                    (
-                        TypeAnnotation::Int | TypeAnnotation::CInt,
-                        CheckType::Known(TypeAnnotation::Byte | TypeAnnotation::CByte)
-                    )
-                );
-                if !widens && !value_type.matches(&inner_ty) && !value_type.is_null() {
+
+                if !value_type.matches(&inner_ty) && !value_type.is_null() {
                     self.error(
                         format!(
                             "type mismatch: array is {}, cannot assign {}",

@@ -31,9 +31,10 @@ pub fn run_pipeline(source: &str, uri: &Url) -> Vec<Diagnostic> {
 
     let mut checker = TypeChecker::new().with_source_file(file);
     if let Ok(doc_path) = uri.to_file_path()
-        && let Some(doc_dir) = doc_path.parent() {
-            checker = checker.with_base_dir(doc_dir.to_path_buf());
-        }
+        && let Some(doc_dir) = doc_path.parent()
+    {
+        checker = checker.with_base_dir(doc_dir.to_path_buf());
+    }
     checker.check(&statements);
 
     checker

@@ -20,9 +20,7 @@ pub fn std_arr_concat(
                 items: i2,
             },
         ) => {
-            if !Evaluator::types_compatible(&it_2, &it_1)
-                && !Evaluator::types_compatible(&it_1, &it_2)
-            {
+            if it_1 != it_2 {
                 return Err(eval.err(
                     format!(
                         "type mismatch: array type {:?}, cannot concat {:?}",
@@ -31,22 +29,10 @@ pub fn std_arr_concat(
                     span,
                 ));
             }
-            // pick whichever side is the "wider" type to coerce both into
-            let target_type = if Evaluator::types_compatible(&it_1, &it_2) {
-                it_2
-            } else {
-                it_1
-            };
-            let mut v: Vec<Value> = i1
-                .into_iter()
-                .map(|item| Evaluator::coerce_array_type(item, &target_type))
-                .collect();
-            v.extend(
-                i2.into_iter()
-                    .map(|item| Evaluator::coerce_array_type(item, &target_type)),
-            );
+            let mut v = i1;
+            v.extend(i2);
             Ok(Value::Values {
-                items_type: target_type,
+                items_type: it_1,
                 items: v,
             })
         }

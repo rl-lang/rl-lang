@@ -51,10 +51,7 @@ dec int x = bit_not(0)
     )
     .unwrap();
 
-    assert_eq!(
-        evaluator.get_value_raw("x"),
-        Some(Value::Integer(!0i64 ))
-    );
+    assert_eq!(evaluator.get_value_raw("x"), Some(Value::Integer(!0i64)));
 }
 
 #[test]
