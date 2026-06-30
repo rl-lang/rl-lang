@@ -47,11 +47,14 @@ impl Parser {
         // -- tuple: CONST (T, T, ...) NAME = (...) --
         if self.peek() == TokenType::LeftParen {
             self.advance();
+            while self.match_type(&[TokenType::Newline]) {}
             let first_type = self.parse_type(false)?;
 
+            while self.match_type(&[TokenType::Newline]) {}
             if self.peek() == TokenType::Comma || self.peek() == TokenType::RightParen {
                 let mut types = vec![first_type];
                 while self.match_type(&[TokenType::Comma]) {
+                    while self.match_type(&[TokenType::Newline]) {}
                     if self.peek() == TokenType::RightParen {
                         break;
                     }
@@ -60,6 +63,7 @@ impl Parser {
                 if !self.match_type(&[TokenType::RightParen]) {
                     return Err(self.err("expected ) after tuple types", self.peek_span()));
                 }
+                while self.match_type(&[TokenType::Newline]) {}
                 let name = match self.peek() {
                     TokenType::Identifier(n) => {
                         self.advance();
@@ -67,6 +71,7 @@ impl Parser {
                     }
                     _ => return Err(self.err("expected name after tuple type", self.peek_span())),
                 };
+                while self.match_type(&[TokenType::Newline]) {}
                 if !self.match_type(&[TokenType::Assign]) {
                     return Err(self.err("expected = after name", self.peek_span()));
                 }
@@ -251,6 +256,7 @@ impl Parser {
 
     fn parse_const_declartion_scalar(&mut self, start: Span) -> Result<Statement, Error> {
         let const_type = self.parse_type(false)?;
+        while self.match_type(&[TokenType::Newline]) {}
         let name = match self.peek() {
             TokenType::Identifier(n) => {
                 self.advance();
@@ -259,10 +265,12 @@ impl Parser {
             _ => return Err(self.err("expected name after type", self.peek_span())),
         };
 
+        while self.match_type(&[TokenType::Newline]) {}
         if !self.match_type(&[TokenType::Assign]) {
             return Err(self.err("expected `=` after name", self.peek_span()));
         }
 
+        while self.match_type(&[TokenType::Newline]) {}
         let value = self.parse_expression()?;
         let span = start.join(value.span);
 
