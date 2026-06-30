@@ -56,7 +56,6 @@ impl Evaluator {
                             }
                             indices.push(i as usize);
                         }
-                        Value::Byte(u) => indices.push(u as usize),
                         _ => {}
                     }
                     Ok(indices)
@@ -74,7 +73,6 @@ impl Evaluator {
                 }
                 indices.push(i as usize);
             }
-            Value::Byte(u) => indices.push(u as usize),
             _ => {}
         }
 
@@ -110,8 +108,6 @@ impl Evaluator {
                     let val_type = Self::infer_type(&val, false);
                     if val_type != *items_type
                         && val_type != TypeAnnotation::Null
-                        && !((val_type == TypeAnnotation::Byte
-                            || val_type == TypeAnnotation::CByte)
                             && (*items_type == TypeAnnotation::Int
                                 || *items_type == TypeAnnotation::CInt))
                     {
