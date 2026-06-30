@@ -402,7 +402,7 @@ impl Evaluator {
 
                 // Validate every element after the first against items_type.
                 if items_type != TypeAnnotation::Null {
-                    for (i, v) in values.into_iter().enumerate() {
+                    for (i, v) in values.clone().into_iter().enumerate() {
                         let actual = Self::infer_type(&v, false);
                         if !Self::types_compatible(&actual, &items_type) {
                             return Err(self.err(
