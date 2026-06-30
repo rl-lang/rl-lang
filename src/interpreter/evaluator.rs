@@ -264,8 +264,7 @@ impl Evaluator {
             return true;
         }
         match (actual, expected) {
-            (TypeAnnotation::Byte, TypeAnnotation::Int)
-            | (TypeAnnotation::CByte, TypeAnnotation::CInt)
+            (TypeAnnotation::CByte, TypeAnnotation::CInt)
             | (TypeAnnotation::Byte, TypeAnnotation::CInt)
             | (TypeAnnotation::CByte, TypeAnnotation::Int) => true,
             (
@@ -313,9 +312,7 @@ impl Evaluator {
                     items: coerced_items,
                 }
             }
-            (Value::Byte(b), TypeAnnotation::Int | TypeAnnotation::CInt) => {
-                Value::Integer(b as i64)
-            }
+            (Value::Byte(b), TypeAnnotation::CInt) => Value::Integer(b as i64),
             (other, _) => other,
         }
     }

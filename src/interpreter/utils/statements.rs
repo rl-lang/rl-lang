@@ -27,9 +27,7 @@ impl Evaluator {
                 let val = self.evaluate(value)?;
 
                 let val = match (type_annotation, &val) {
-                    (TypeAnnotation::Int | TypeAnnotation::CInt, Value::Byte(b)) => {
-                        Value::Integer(*b as i64)
-                    }
+                    (TypeAnnotation::CInt, Value::Byte(b)) => Value::Integer(*b as i64),
                     _ => val,
                 };
                 let val_type = Self::infer_type(&val, false);
@@ -56,9 +54,7 @@ impl Evaluator {
             } => {
                 let val = self.evaluate(value)?;
                 let val = match (type_annotation, &val) {
-                    (TypeAnnotation::Int | TypeAnnotation::CInt, Value::Byte(b)) => {
-                        Value::Integer(*b as i64)
-                    }
+                    (TypeAnnotation::CInt, Value::Byte(b)) => Value::Integer(*b as i64),
                     _ => val,
                 };
                 let val_type = Self::infer_type(&val, true);

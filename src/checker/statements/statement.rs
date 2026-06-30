@@ -25,15 +25,7 @@ impl TypeChecker {
                 let value_type = self.check_expression(value);
                 let declared = CheckType::Known(type_annotation.clone());
 
-                let widens = matches!(
-                    (type_annotation, &value_type),
-                    (
-                        TypeAnnotation::Int | TypeAnnotation::CInt,
-                        CheckType::Known(TypeAnnotation::Byte | TypeAnnotation::CByte)
-                    )
-                );
-
-                if !widens && !value_type.matches(&declared) {
+                if !value_type.matches(&declared) {
                     self.error(
                         format!(
                             "type mismatch: expected {}, got {}",
@@ -57,15 +49,7 @@ impl TypeChecker {
                 let value_type = self.check_expression(value).into_const();
                 let declared = CheckType::Known(type_annotation.clone());
 
-                let widens = matches!(
-                    (type_annotation, &value_type),
-                    (
-                        TypeAnnotation::Int | TypeAnnotation::CInt,
-                        CheckType::Known(TypeAnnotation::Byte | TypeAnnotation::CByte)
-                    )
-                );
-
-                if !widens && !value_type.matches(&declared) {
+                if !value_type.matches(&declared) {
                     self.error(
                         format!(
                             "type mismatch: expected {}, got {}",
@@ -90,18 +74,7 @@ impl TypeChecker {
                     let item_type = self.check_expression(item);
                     let expected = CheckType::Known(type_annotation.clone());
 
-                    let widens = matches!(
-                        (type_annotation, &item_type),
-                        (
-                            TypeAnnotation::Int | TypeAnnotation::CInt,
-                            CheckType::Known(TypeAnnotation::Byte | TypeAnnotation::CByte)
-                        ) | (
-                            TypeAnnotation::Array(_) | TypeAnnotation::CArray(_),
-                            CheckType::Known(TypeAnnotation::Array(_) | TypeAnnotation::CArray(_))
-                        )
-                    );
-
-                    if !widens && !item_type.matches(&expected) {
+                    if !item_type.matches(&expected) {
                         self.error(
                             format!(
                                 "type mismatch: array expects {}, got {}",
@@ -127,18 +100,7 @@ impl TypeChecker {
                     let item_type = self.check_expression(item);
                     let expected = CheckType::Known(type_annotation.clone());
 
-                    let widens = matches!(
-                        (type_annotation, &item_type),
-                        (
-                            TypeAnnotation::Int | TypeAnnotation::CInt,
-                            CheckType::Known(TypeAnnotation::Byte | TypeAnnotation::CByte)
-                        ) | (
-                            TypeAnnotation::Array(_) | TypeAnnotation::CArray(_),
-                            CheckType::Known(TypeAnnotation::Array(_) | TypeAnnotation::CArray(_))
-                        )
-                    );
-
-                    if !widens && !item_type.matches(&expected) {
+                    if !item_type.matches(&expected) {
                         self.error(
                             format!(
                                 "type mismatch: array expects {}, got {}",
