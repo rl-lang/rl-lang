@@ -42,7 +42,9 @@ impl Parser {
     ///
     /// [`parse_block`]: Parser::parse_block
     pub fn parse_if(&mut self, start: Span) -> Result<Statement, Error> {
+        while self.match_type(&[TokenType::Newline]) {}
         let if_condition = self.parse_expression()?;
+        while self.match_type(&[TokenType::Newline]) {}
         let if_body = self.parse_block()?;
         let if_branch_span = start.join(self.previous_span());
         let if_branch = Statement::new(
@@ -54,9 +56,7 @@ impl Parser {
         );
 
         // skip any blank lines between `}` and `else`
-        while matches!(self.peek(), TokenType::Newline) {
-            self.advance();
-        }
+        while self.match_type(&[TokenType::Newline]) {}
 
         let else_branch = if self.peek() == TokenType::Else {
             let branch_start = self.peek_span();
