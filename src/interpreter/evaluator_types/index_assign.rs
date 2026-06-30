@@ -47,17 +47,15 @@ impl Evaluator {
                 ExpressionKind::ResolvedIdentifier { .. } => Ok(vec![]),
                 ExpressionKind::Index { target, index } => {
                     let mut indices = get_indices_as_vec(target, evaluator, span)?;
-                    match evaluator.evaluate(index)? {
-                        Value::Integer(i) => {
-                            if i < 0 {
-                                return Err(
-                                    evaluator.err(format!("index cannot be negative: {}", i), span)
-                                );
-                            }
-                            indices.push(i as usize);
-                        }
-                        _ => {}
-                    }
+                    if let Value::Integer(i) = evaluator.evaluate(index)? {
+                         if i < 0 {
+                             return Err(
+                               evaluator.err(format!("index cannot be negative: {}", i), span)
+                           );
+                         }
+                         indices.push(i as usize);
+                     }
+
                     Ok(indices)
                 }
                 _ => unreachable!(),
@@ -66,15 +64,13 @@ impl Evaluator {
 
         let (depth, slot) = get_root_addr(target);
         let mut indices = get_indices_as_vec(target, self, span)?;
-        match idx {
-            Value::Integer(i) => {
-                if i < 0 {
-                    return Err(self.err(format!("index cannot be negative: {}", i), span));
-                }
-                indices.push(i as usize);
+        if let Value::Integer(i) = idx {
+            if i < 0 {
+                return Err(self.err(format!("index cannot be negative: {}", i), span));
             }
-            _ => {}
+            indices.push(i as usize);
         }
+
 
         let index_error = self.err("index assignment requires at least one index", span);
         let out_of_bounds_err = |i: usize| {
