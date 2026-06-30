@@ -49,13 +49,20 @@ impl Parser {
         if matches!(self.peek(), TokenType::LeftBracket) {
             // C-style: for [T i = init, cond, incr] { … }
             self.advance();
+            while self.match_type(&[TokenType::Newline]) {}
             let init_start = self.peek_span();
             let initializer = Box::new(self.parse_variable_declartion(init_start)?);
+            while self.match_type(&[TokenType::Newline]) {}
             self.match_type(&[TokenType::Comma]);
+            while self.match_type(&[TokenType::Newline]) {}
             let condition = self.parse_expression()?;
+            while self.match_type(&[TokenType::Newline]) {}
             self.match_type(&[TokenType::Comma]);
+            while self.match_type(&[TokenType::Newline]) {}
             let increment = self.parse_expression()?;
+            while self.match_type(&[TokenType::Newline]) {}
             self.match_type(&[TokenType::RightBracket]);
+            while self.match_type(&[TokenType::Newline]) {}
             let body = self.parse_block()?;
             let span = start.join(self.previous_span());
             Ok(Statement::new(
@@ -69,18 +76,22 @@ impl Parser {
             ))
         } else if matches!(self.peek(), TokenType::Identifier(_)) {
             // range or foreach: for <ident> in …
+            while self.match_type(&[TokenType::Newline]) {}
             let ident_expr = self.parse_expression()?;
             let variable_name = match ident_expr.kind {
                 ExpressionKind::Identifier(name) => name,
                 _ => return Err(self.err("for-range expects identifier", ident_expr.span)),
             };
+            while self.match_type(&[TokenType::Newline]) {}
             self.match_type(&[TokenType::In]);
 
+            while self.match_type(&[TokenType::Newline]) {}
             let range = if (matches!(self.peek(), TokenType::NumberLiteral(_))
                 || (matches!(self.peek(), TokenType::ByteLiteral(_))))
             {
                 // literal range: N..M  (integers or bytes, evaluated at parse time)
                 let start_expr = self.parse_expression()?;
+                while self.match_type(&[TokenType::Newline]) {}
                 let range_start = match start_expr.kind {
                     ExpressionKind::Integer(i) => i,
                     ExpressionKind::Byte(b) => b as i64,
@@ -99,16 +110,20 @@ impl Parser {
             } else if self.match_type(&[TokenType::LeftBracket]) {
                 // inline array literal: [1, 2, 3] (integers only, evaluated at parse time)
                 let mut items = Vec::new();
+                while self.match_type(&[TokenType::Newline]) {}
                 while self.peek() != TokenType::RightBracket {
                     let value = self.parse_expression()?;
                     items.push(value);
+                    while self.match_type(&[TokenType::Newline]) {}
                     if self.peek() == TokenType::RightBracket {
                         break;
                     }
+                    while self.match_type(&[TokenType::Newline]) {}
                     if !self.match_type(&[TokenType::Comma]) {
                         return Err(self.err("expected ',' between list items", self.peek_span()));
                     }
                 }
+                while self.match_type(&[TokenType::Newline]) {}
                 self.match_type(&[TokenType::RightBracket]);
                 let mut iterable_list = Vec::new();
                 for item in items {
@@ -123,7 +138,9 @@ impl Parser {
             } else {
                 if matches!(self.peek(), TokenType::Identifier(_)) {
                     // foreach: for item in some_array_var_or_expr
+                    while self.match_type(&[TokenType::Newline]) {}
                     let iterable_expression = self.parse_expression()?;
+                    while self.match_type(&[TokenType::Newline]) {}
                     let body = self.parse_block()?;
                     let span = start.join(self.previous_span());
                     return Ok(Statement::new(
@@ -141,6 +158,7 @@ impl Parser {
                 ));
             };
 
+            while self.match_type(&[TokenType::Newline]) {}
             let body = self.parse_block()?;
             let span = start.join(self.previous_span());
             Ok(Statement::new(

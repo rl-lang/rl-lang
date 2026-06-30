@@ -9,8 +9,10 @@ use crate::{
 
 impl Parser {
     pub fn parse_match(&mut self, start: Span) -> Result<Statement, Error> {
+        while self.match_type(&[TokenType::Newline]) {}
         let value = self.parse_expression()?;
 
+        while self.match_type(&[TokenType::Newline]) {}
         if !self.match_type(&[TokenType::LeftBrace]) {
             return Err(self.err("expected { after match value", self.peek_span()));
         }
@@ -29,6 +31,7 @@ impl Parser {
                 MatchPattern::Literal(self.parse_expression()?)
             };
 
+            while self.match_type(&[TokenType::Newline]) {}
             if !self.match_type(&[TokenType::FatArrow]) {
                 return Err(self.err("expected => after match pattern", self.peek_span()));
             }

@@ -8,6 +8,7 @@
 
 use crate::{
     ast::statements::{Statement, StatementKind},
+    lexer::tokentypes::TokenType,
     parser::parser_logic::Parser,
     utils::{errors::Error, span::Span},
 };
@@ -21,7 +22,9 @@ impl Parser {
     ///
     /// [`parse_block`]: Parser::parse_block
     pub fn parse_while(&mut self, start: Span) -> Result<Statement, Error> {
+        while self.match_type(&[TokenType::Newline]) {}
         let condition = self.parse_expression()?;
+        while self.match_type(&[TokenType::Newline]) {}
         let body = self.parse_block()?;
         let span = start.join(self.previous_span());
         Ok(Statement::new(

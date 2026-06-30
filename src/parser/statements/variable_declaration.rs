@@ -42,11 +42,14 @@ impl Parser {
         // -- tuple: dec (T, T, ...) name = (...) --
         if self.peek() == TokenType::LeftParen {
             self.advance();
+            while self.match_type(&[TokenType::Newline]) {}
             let first_type = self.parse_type(true)?;
 
+            while self.match_type(&[TokenType::Newline]) {}
             if self.peek() == TokenType::Comma || self.peek() == TokenType::RightParen {
                 let mut types = vec![first_type];
                 while self.match_type(&[TokenType::Comma]) {
+                    while self.match_type(&[TokenType::Newline]) {}
                     if self.peek() == TokenType::RightParen {
                         break;
                     }
@@ -55,6 +58,7 @@ impl Parser {
                 if !self.match_type(&[TokenType::RightParen]) {
                     return Err(self.err("expected `)` after tuple types", self.peek_span()));
                 }
+                while self.match_type(&[TokenType::Newline]) {}
                 let name = match self.peek() {
                     TokenType::Identifier(n) => {
                         self.advance();
@@ -62,6 +66,7 @@ impl Parser {
                     }
                     _ => return Err(self.err("expected name after tuple type", self.peek_span())),
                 };
+                while self.match_type(&[TokenType::Newline]) {}
                 if !self.match_type(&[TokenType::Assign]) {
                     return Err(self.err("expected `=` after name", self.peek_span()));
                 }
@@ -93,7 +98,9 @@ impl Parser {
                 | TokenType::Error
         ) {
             let saved = self.current;
+            while self.match_type(&[TokenType::Newline]) {}
             let first_type = self.parse_type(true)?;
+            while self.match_type(&[TokenType::Newline]) {}
             let first_name = match self.peek() {
                 TokenType::Identifier(n) => {
                     self.advance();
@@ -104,10 +111,13 @@ impl Parser {
                     return self.parse_variable_declartion_scalar(start);
                 }
             };
+            while self.match_type(&[TokenType::Newline]) {}
             if self.peek() == TokenType::Comma {
                 let mut bindings = vec![(first_type, first_name)];
                 while self.match_type(&[TokenType::Comma]) {
+                    while self.match_type(&[TokenType::Newline]) {}
                     let t = self.parse_type(true)?;
+                    while self.match_type(&[TokenType::Newline]) {}
                     let n = match self.peek() {
                         TokenType::Identifier(n) => {
                             self.advance();
@@ -121,11 +131,13 @@ impl Parser {
                     };
                     bindings.push((t, n));
                 }
+                while self.match_type(&[TokenType::Newline]) {}
                 if !self.match_type(&[TokenType::Assign]) {
                     return Err(
                         self.err("expected `=` after destructure bindings", self.peek_span())
                     );
                 }
+                while self.match_type(&[TokenType::Newline]) {}
                 let value = self.parse_expression()?;
                 let span = start.join(value.span);
                 return Ok(Statement::new(
@@ -133,9 +145,11 @@ impl Parser {
                     span,
                 ));
             } else {
+                while self.match_type(&[TokenType::Newline]) {}
                 if !self.match_type(&[TokenType::Assign]) {
                     return Err(self.err("expected `=` after name", self.peek_span()));
                 }
+                while self.match_type(&[TokenType::Newline]) {}
                 let value = self.parse_expression()?;
                 let span = start.join(value.span);
                 return Ok(Statement::new(
@@ -152,12 +166,15 @@ impl Parser {
         // -- array: dec array[T] name = [...] --
         if self.match_type(&[TokenType::Array]) && self.peek() == TokenType::LeftBracket {
             self.advance();
+            while self.match_type(&[TokenType::Newline]) {}
             let annoation_type = self.parse_param_type()?;
 
+            while self.match_type(&[TokenType::Newline]) {}
             if !self.match_type(&[TokenType::RightBracket]) {
                 return Err(self.err("expected `]` after type", self.peek_span()));
             }
 
+            while self.match_type(&[TokenType::Newline]) {}
             let name = match self.peek() {
                 TokenType::Identifier(n) => {
                     self.advance();
@@ -166,10 +183,12 @@ impl Parser {
                 _ => return Err(self.err("expected name after array type", self.peek_span())),
             };
 
+            while self.match_type(&[TokenType::Newline]) {}
             if !self.match_type(&[TokenType::Assign]) {
                 return Err(self.err("expected `=` after name", self.peek_span()));
             }
 
+            while self.match_type(&[TokenType::Newline]) {}
             if self.peek() == TokenType::LeftBracket {
                 self.advance();
                 let mut items = Vec::new();
@@ -198,6 +217,7 @@ impl Parser {
                     span,
                 ));
             } else {
+                while self.match_type(&[TokenType::Newline]) {}
                 let value = self.parse_expression()?;
                 let span = start.join(value.span);
                 return Ok(Statement::new(
@@ -216,6 +236,7 @@ impl Parser {
 
     fn parse_variable_declartion_scalar(&mut self, start: Span) -> Result<Statement, Error> {
         let var_type = self.parse_type(true)?;
+        while self.match_type(&[TokenType::Newline]) {}
         let name = match self.peek() {
             TokenType::Identifier(n) => {
                 self.advance();
@@ -224,10 +245,12 @@ impl Parser {
             _ => return Err(self.err("expected name after type", self.peek_span())),
         };
 
+        while self.match_type(&[TokenType::Newline]) {}
         if !self.match_type(&[TokenType::Assign]) {
             return Err(self.err("expected `=` after name", self.peek_span()));
         }
 
+        while self.match_type(&[TokenType::Newline]) {}
         let value = self.parse_expression()?;
         let span = start.join(value.span);
 
