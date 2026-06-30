@@ -34,7 +34,10 @@ use crate::{
         span::Span,
     },
 };
-use std::collections::HashMap;
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+};
 pub use structs::TypeChecker;
 
 impl Default for TypeChecker {
@@ -59,6 +62,9 @@ impl TypeChecker {
             loop_depth: 0,
             stdlib_fn_names,
             hovers: Vec::new(),
+            base_dir: None,
+            importing: Vec::new(),
+            imported: HashSet::new(),
         }
     }
 
@@ -69,6 +75,11 @@ impl TypeChecker {
     }
     pub fn set_source_file(&mut self, file: SourceFile) {
         self.source_file = Some(file);
+    }
+
+    pub fn with_base_dir(mut self, dir: impl Into<PathBuf>) -> Self {
+        self.base_dir = Some(dir.into());
+        self
     }
 
     // runs check on every ast statement in the list and returns errors as list
