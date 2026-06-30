@@ -103,7 +103,9 @@ impl Parser {
                 | TokenType::Error
         ) {
             let saved = self.current;
+            while self.match_type(&[TokenType::Newline]) {}
             let first_type = self.parse_type(false)?;
+            while self.match_type(&[TokenType::Newline]) {}
             let first_name = match self.peek() {
                 TokenType::Identifier(n) => {
                     self.advance();
@@ -114,10 +116,13 @@ impl Parser {
                     return self.parse_const_declartion_scalar(start);
                 }
             };
+            while self.match_type(&[TokenType::Newline]) {}
             if self.peek() == TokenType::Comma {
                 let mut bindings = vec![(first_type, first_name)];
                 while self.match_type(&[TokenType::Comma]) {
+                    while self.match_type(&[TokenType::Newline]) {}
                     let t = self.parse_type(false)?;
+                    while self.match_type(&[TokenType::Newline]) {}
                     let n = match self.peek() {
                         TokenType::Identifier(n) => {
                             self.advance();
@@ -131,9 +136,11 @@ impl Parser {
                     };
                     bindings.push((t, n));
                 }
+                while self.match_type(&[TokenType::Newline]) {}
                 if !self.match_type(&[TokenType::Assign]) {
                     return Err(self.err("expected = after destructure bindings", self.peek_span()));
                 }
+                while self.match_type(&[TokenType::Newline]) {}
                 let value = self.parse_expression()?;
                 let span = start.join(value.span);
                 return Ok(Statement::new(
@@ -141,9 +148,11 @@ impl Parser {
                     span,
                 ));
             } else {
+                while self.match_type(&[TokenType::Newline]) {}
                 if !self.match_type(&[TokenType::Assign]) {
                     return Err(self.err("expected = after name", self.peek_span()));
                 }
+                while self.match_type(&[TokenType::Newline]) {}
                 let value = self.parse_expression()?;
                 let span = start.join(value.span);
                 return Ok(Statement::new(
@@ -160,6 +169,7 @@ impl Parser {
         // -- array: CONST array[T] NAME = [...] --
         if self.match_type(&[TokenType::Array]) && self.peek() == TokenType::LeftBracket {
             self.advance();
+            while self.match_type(&[TokenType::Newline]) {}
             let annoation_type = match self.peek() {
                 TokenType::Int => {
                     self.advance();
@@ -194,10 +204,12 @@ impl Parser {
                 }
                 _ => return Err(self.err("expected type after `CONST`", self.peek_span())),
             };
+            while self.match_type(&[TokenType::Newline]) {}
             if !self.match_type(&[TokenType::RightBracket]) {
                 return Err(self.err("expected `]` after type", self.peek_span()));
             }
 
+            while self.match_type(&[TokenType::Newline]) {}
             let name = match self.peek() {
                 TokenType::Identifier(n) => {
                     self.advance();
@@ -206,10 +218,12 @@ impl Parser {
                 _ => return Err(self.err("expected name after array type", self.peek_span())),
             };
 
+            while self.match_type(&[TokenType::Newline]) {}
             if !self.match_type(&[TokenType::Assign]) {
                 return Err(self.err("expected `=` after name", self.peek_span()));
             }
 
+            while self.match_type(&[TokenType::Newline]) {}
             if self.peek() == TokenType::LeftBracket {
                 self.advance();
                 let mut items = Vec::new();
@@ -238,6 +252,7 @@ impl Parser {
                     span,
                 ));
             } else {
+                while self.match_type(&[TokenType::Newline]) {}
                 let value = self.parse_expression()?;
                 let span = start.join(value.span);
                 return Ok(Statement::new(
