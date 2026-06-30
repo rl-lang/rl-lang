@@ -33,7 +33,7 @@ pub fn std_arr_concat(
             let mut v = i1;
             v.extend(i2);
             Ok(Value::Values {
-                items_type: target_type,
+                items_type: it_1,
                 items: v,
             })
         }
