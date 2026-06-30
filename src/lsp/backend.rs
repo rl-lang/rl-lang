@@ -85,7 +85,7 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
 
-        Ok(run_hover(source, position))
+        Ok(run_hover(source, position, uri))
     }
 
     // do nothing when the editor shuts down
@@ -105,7 +105,7 @@ impl Backend {
 
     /// Runs the rl pipeline on `source` and publishes the resulting diagnostics to the editor.
     async fn publish(&self, uri: &Url, source: &str) {
-        let diagnostics = run_pipeline(source);
+        let diagnostics = run_pipeline(source, uri);
 
         self.client
             .publish_diagnostics(uri.clone(), diagnostics, None)

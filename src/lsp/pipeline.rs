@@ -8,7 +8,7 @@ use crate::{
     checker::TypeChecker, lexer::tokenizer::Tokenizer, lsp::to_diagnostic::error_to_diagnostic,
     parser::parser_logic::Parser, utils::source::SourceFile,
 };
-use tower_lsp::lsp_types::Diagnostic;
+use tower_lsp::lsp_types::{Diagnostic, Url};
 
 /// lex -> parse -> type-check the given source string and return LSP diagnostics.
 ///
@@ -16,7 +16,7 @@ use tower_lsp::lsp_types::Diagnostic;
 /// caused the LSP to hang on infinite loops (e.g. `while true {}`). The
 /// [`TypeChecker`] walks the same AST without executing anything, so it is
 /// always safe to run on in-progress or even non-terminating source.
-pub fn run_pipeline(source: &str) -> Vec<Diagnostic> {
+pub fn run_pipeline(source: &str, uri: &Url) -> Vec<Diagnostic> {
     let file = SourceFile::new("buffer", source.to_string());
 
     let tokens = match Tokenizer::lex(file.clone()) {
@@ -30,6 +30,10 @@ pub fn run_pipeline(source: &str) -> Vec<Diagnostic> {
     };
 
     let mut checker = TypeChecker::new().with_source_file(file);
+    if let Ok(doc_path) = uri.to_file_path()
+        && let Some(doc_dir) = doc_path.parent() {
+            checker = checker.with_base_dir(doc_dir.to_path_buf());
+        }
     checker.check(&statements);
 
     checker

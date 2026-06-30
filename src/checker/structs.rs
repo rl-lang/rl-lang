@@ -1,6 +1,9 @@
 //! Core data structures for the type checker.
 //!
-use std::collections::HashMap;
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+};
 
 use crate::{
     ast::statements::TypeAnnotation,
@@ -27,6 +30,9 @@ pub struct TypeChecker {
     /// `(span, markdown)` pairs collected at every declaration and usage site,
     /// consumed by the LSP hover provider.
     pub hovers: Vec<(Span, String)>,
+    pub base_dir: Option<PathBuf>,
+    pub importing: Vec<PathBuf>,
+    pub imported: HashSet<PathBuf>,
 }
 
 /// A single entry in a type checker scope.

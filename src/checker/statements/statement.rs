@@ -1,12 +1,14 @@
 //! Statement type checking - walks every [`StatementKind`] variant,
 //! declares names into scope, and validates control flow constraints.
 
+use std::path::PathBuf;
+
 use crate::{
     ast::statements::{MatchPattern, StatementKind, TypeAnnotation},
     checker::structs::{CheckType, TypeChecker},
     lexer::tokenizer::Tokenizer,
     parser::parser_logic::Parser,
-    utils::source::SourceFile,
+    utils::{source::SourceFile, span::Span},
 };
 
 impl TypeChecker {
@@ -388,90 +390,7 @@ impl TypeChecker {
 
             // runtime job maybe revisting later
             StatementKind::ImportFile { path } | StatementKind::ImportFileNamed { path, .. } => {
-                let import_name = format!("{}.rl", path.join("/"));
-                let Ok(source_text) = std::fs::read_to_string(&import_name) else {
-                    return;
-                };
-                let source_file = SourceFile::new(import_name, source_text);
-                let Ok(tokens) = Tokenizer::lex(source_file.clone()) else {
-                    return;
-                };
-                let Ok(stmts) = Parser::parse(tokens, source_file) else {
-                    return;
-                };
-                for stmt in &stmts {
-                    match &stmt.kind {
-                        StatementKind::FunctionDeclaration {
-                            name,
-                            params,
-                            return_type,
-                            ..
-                        } => {
-                            self.declare(
-                                name.clone(),
-                                CheckType::Function {
-                                    params: params.iter().map(|p| p.param_type.clone()).collect(),
-                                    return_type: return_type.clone(),
-                                },
-                                false,
-                                stmt.span,
-                            );
-                        }
-                        StatementKind::VariableDeclaration {
-                            name,
-                            type_annotation,
-                            ..
-                        } => {
-                            self.declare(
-                                name.clone(),
-                                CheckType::Known(type_annotation.clone()),
-                                false,
-                                stmt.span,
-                            );
-                        }
-                        StatementKind::ConstantDeclaration {
-                            name,
-                            type_annotation,
-                            ..
-                        } => {
-                            self.declare(
-                                name.clone(),
-                                CheckType::Known(type_annotation.clone()),
-                                true,
-                                stmt.span,
-                            );
-                        }
-                        StatementKind::Array {
-                            name,
-                            type_annotation,
-                            ..
-                        } => {
-                            self.declare(
-                                name.clone(),
-                                CheckType::Known(TypeAnnotation::Array(Box::new(
-                                    type_annotation.clone(),
-                                ))),
-                                false,
-                                stmt.span,
-                            );
-                        }
-                        StatementKind::ConstantArray {
-                            name,
-                            type_annotation,
-                            ..
-                        } => {
-                            self.declare(
-                                name.clone(),
-                                CheckType::Known(TypeAnnotation::CArray(Box::new(
-                                    type_annotation.clone(),
-                                ))),
-                                true,
-                                stmt.span,
-                            );
-                        }
-                        _ => {}
-                    }
-                }
+                self.import_module(path, statement.span);
             }
             StatementKind::Import { .. } => {}
 
@@ -550,5 +469,141 @@ impl TypeChecker {
 
             _ => {}
         }
+    }
+
+    fn import_module(&mut self, path: &[String], span: Span) {
+        let import_name = format!("{}.rl", path.join("/"));
+        let import_path = match &self.base_dir {
+            Some(dir) => dir.join(&import_name),
+            None => PathBuf::from(&import_name),
+        };
+
+        let canonical = import_path
+            .canonicalize()
+            .unwrap_or_else(|_| import_path.clone());
+
+        if self.importing.contains(&canonical) {
+            self.error(format!("import cycle detected: {}", path.join("::")), span);
+            return;
+        }
+        if self.imported.contains(&canonical) {
+            return;
+        }
+
+        let Ok(source_text) = std::fs::read_to_string(&import_path) else {
+            self.error(
+                format!(
+                    "cannot find module `{}` ({})",
+                    path.join("::"),
+                    import_path.display()
+                ),
+                span,
+            );
+            return;
+        };
+
+        let source_file = SourceFile::new(import_path.display().to_string(), source_text);
+        let Ok(tokens) = Tokenizer::lex(source_file.clone()) else {
+            self.error(
+                format!(
+                    "module `{}` has syntax error and could not be lexed",
+                    path.join("::")
+                ),
+                span,
+            );
+            return;
+        };
+
+        let Ok(stmts) = Parser::parse(tokens, source_file) else {
+            self.error(
+                format!(
+                    "module `{}` has syntax error and could not be parsed",
+                    path.join("::")
+                ),
+                span,
+            );
+            return;
+        };
+
+        self.importing.push(canonical.clone());
+
+        for stmt in &stmts {
+            match &stmt.kind {
+                StatementKind::FunctionDeclaration {
+                    name,
+                    params,
+                    return_type,
+                    ..
+                } => {
+                    self.declare(
+                        name.clone(),
+                        CheckType::Function {
+                            params: params.iter().map(|p| p.param_type.clone()).collect(),
+                            return_type: return_type.clone(),
+                        },
+                        false,
+                        stmt.span,
+                    );
+                }
+                StatementKind::VariableDeclaration {
+                    name,
+                    type_annotation,
+                    ..
+                } => {
+                    self.declare(
+                        name.clone(),
+                        CheckType::Known(type_annotation.clone()),
+                        false,
+                        stmt.span,
+                    );
+                }
+                StatementKind::ConstantDeclaration {
+                    name,
+                    type_annotation,
+                    ..
+                } => {
+                    self.declare(
+                        name.clone(),
+                        CheckType::Known(type_annotation.clone()),
+                        true,
+                        stmt.span,
+                    );
+                }
+                StatementKind::Array {
+                    name,
+                    type_annotation,
+                    ..
+                } => {
+                    self.declare(
+                        name.clone(),
+                        CheckType::Known(TypeAnnotation::Array(Box::new(type_annotation.clone()))),
+                        false,
+                        stmt.span,
+                    );
+                }
+                StatementKind::ConstantArray {
+                    name,
+                    type_annotation,
+                    ..
+                } => {
+                    self.declare(
+                        name.clone(),
+                        CheckType::Known(TypeAnnotation::CArray(Box::new(type_annotation.clone()))),
+                        true,
+                        stmt.span,
+                    );
+                }
+
+                StatementKind::ImportFile { path: nested }
+                | StatementKind::ImportFileNamed { path: nested, .. } => {
+                    self.import_module(nested, stmt.span);
+                }
+
+                _ => {}
+            }
+        }
+
+        self.importing.pop();
+        self.imported.insert(canonical);
     }
 }

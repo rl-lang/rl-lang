@@ -12,14 +12,14 @@ use crate::{
     parser::parser_logic::Parser,
     utils::{source::SourceFile, span::Span},
 };
-use tower_lsp::lsp_types::{Hover, HoverContents, MarkupContent, MarkupKind, Position, Range};
+use tower_lsp::lsp_types::{Hover, HoverContents, MarkupContent, MarkupKind, Position, Range, Url};
 
 /// Runs the full pipeline on `source` and returns a [`Hover`] for `position`,
 /// or `None` if the cursor is not over a hoverable token.
 ///
 /// Only [`TokenType::Identifier`] tokens carry hover info - non-identifier
 /// positions short-circuit early before running the parser and type-checker.
-pub fn run_hover(source: &str, position: Position) -> Option<Hover> {
+pub fn run_hover(source: &str, position: Position, uri: &Url) -> Option<Hover> {
     let offset = position_to_offset(source, position);
     let file = SourceFile::new("buffer", source.to_string());
 
@@ -31,6 +31,10 @@ pub fn run_hover(source: &str, position: Position) -> Option<Hover> {
 
     let statements = Parser::parse(tokens, file.clone()).ok()?;
     let mut checker = TypeChecker::new().with_source_file(file);
+    if let Ok(doc_path) = uri.to_file_path()
+        && let Some(doc_dir) = doc_path.parent() {
+            checker = checker.with_base_dir(doc_dir.to_path_buf());
+        }
     checker.check(&statements);
 
     // since several spans can exists on same line
