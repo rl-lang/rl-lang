@@ -1,7 +1,6 @@
 //! Assignment type checking - validates reassignment against the declared type.
 
 use crate::{
-    ast::statements::TypeAnnotation,
     checker::structs::{CheckType, TypeChecker},
     utils::{span::Span, suggest::closest_match},
 };
