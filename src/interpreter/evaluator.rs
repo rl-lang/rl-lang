@@ -264,9 +264,6 @@ impl Evaluator {
             return true;
         }
         match (actual, expected) {
-            (TypeAnnotation::CByte, TypeAnnotation::CInt)
-            | (TypeAnnotation::Byte, TypeAnnotation::CInt)
-            | (TypeAnnotation::CByte, TypeAnnotation::Int) => true,
             (
                 TypeAnnotation::Array(a) | TypeAnnotation::CArray(a),
                 TypeAnnotation::Array(b) | TypeAnnotation::CArray(b),
@@ -289,31 +286,6 @@ impl Evaluator {
                 TypeAnnotation::Result(_) | TypeAnnotation::CResult(_),
             ) => true,
             _ => false,
-        }
-    }
-
-    /// Recursively coerces `value` to match `expected`, primarily widening
-    /// `Byte` elements to `Int` inside arrays when the declared element type is `Int`.
-    pub fn coerce_array_type(value: Value, expected: &TypeAnnotation) -> Value {
-        match (value, expected) {
-            (Value::Values { items, .. }, expected) => {
-                let inner_expected = match expected {
-                    TypeAnnotation::Array(inner) | TypeAnnotation::CArray(inner) => {
-                        inner.as_ref().clone()
-                    }
-                    other => other.clone(),
-                };
-                let coerced_items = items
-                    .into_iter()
-                    .map(|v| Self::coerce_array_type(v, &inner_expected))
-                    .collect();
-                Value::Values {
-                    items_type: inner_expected,
-                    items: coerced_items,
-                }
-            }
-            (Value::Byte(b), TypeAnnotation::CInt) => Value::Integer(b as i64),
-            (other, _) => other,
         }
     }
 
