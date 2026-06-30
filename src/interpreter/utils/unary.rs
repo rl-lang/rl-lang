@@ -3,7 +3,7 @@
 //! | Operator | Operand       | Result                  |
 //! |----------|---------------|-------------------------|
 //! | `!`      | `bool`        | `bool`                  |
-//! | `-`      | `int` / `byte`| `int` (byte is widened) |
+//! | `-`      | `int`         | `int`                   |
 //! | `-`      | `float`       | `float`                 |
 
 use crate::{
@@ -39,7 +39,6 @@ impl Evaluator {
             },
             TokenType::Minus => match &operand {
                 Value::Integer(i) => Value::Integer(-i),
-                Value::Byte(b) => Value::Integer(-(*b as i64)),
                 Value::Float(f) => Value::Float(-f),
                 _ => return Err(self.type_mismatch_unary("-", &operand, operand_span, span)),
             },
