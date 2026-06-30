@@ -400,9 +400,8 @@ impl Evaluator {
                     .map(|v| Self::infer_type(v, false))
                     .unwrap_or(TypeAnnotation::Null);
 
-                // Validate and coerce every element after the first against items_type.
+                // Validate every element after the first against items_type.
                 if items_type != TypeAnnotation::Null {
-                    let mut coerced = Vec::with_capacity(values.len());
                     for (i, v) in values.into_iter().enumerate() {
                         let actual = Self::infer_type(&v, false);
                         if !Self::types_compatible(&actual, &items_type) {
@@ -416,11 +415,10 @@ impl Evaluator {
                                 expression.span,
                             ));
                         }
-                        coerced.push(Self::coerce_array_type(v, &items_type));
                     }
                     Value::Values {
                         items_type,
-                        items: coerced,
+                        items: values,
                     }
                 } else {
                     Value::Values {
