@@ -10,9 +10,8 @@ pub fn std_arr_index_of(
     span: Span,
 ) -> Result<Value, Error> {
     match array {
-        Value::Values { items_type, items } => {
-            let needle = Evaluator::coerce_array_type(value, &items_type);
-            match items.iter().position(|item| *item == needle) {
+        Value::Values { items, .. } => {
+            match items.iter().position(|item| *item == value) {
                 Some(pos) => Ok(Value::Integer(pos as i64)),
                 None => Ok(Value::Integer(-1)),
             }
