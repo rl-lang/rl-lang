@@ -108,8 +108,6 @@ impl Evaluator {
                     let val_type = Self::infer_type(&val, false);
                     if val_type != *items_type
                         && val_type != TypeAnnotation::Null
-                            && (*items_type == TypeAnnotation::Int
-                                || *items_type == TypeAnnotation::CInt))
                     {
                         return Err(Error::at(
                             crate::utils::errors::Reason::Interpreter,
