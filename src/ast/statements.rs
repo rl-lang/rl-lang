@@ -159,7 +159,7 @@ pub enum StatementKind {
         return_type: TypeAnnotation,
         body: Vec<Statement>,
         /// `true` when the function is marked with `!#[entry]`.
-        is_entry: bool,
+        attribute: FunctionAttribute,
     },
     /// Resolver-annotated function declaration. `slot` is the function's
     /// index in the current environment frame.
@@ -169,7 +169,7 @@ pub enum StatementKind {
         params: Vec<Param>,
         return_type: TypeAnnotation,
         body: Vec<Statement>,
-        is_entry: bool,
+        attribute: FunctionAttribute,
     },
     /// A `return expr` or bare `return` statement.
     Return(Option<Expression>),
@@ -217,6 +217,14 @@ pub enum StatementKind {
 pub enum MatchPattern {
     Literal(Expression),
     Wildcard,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum FunctionAttribute {
+    Entry,
+    Init,
+    Final,
+    Test,
 }
 
 /// The type of a variable, constant, or parameter binding.
