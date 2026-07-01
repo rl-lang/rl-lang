@@ -1,5 +1,6 @@
 //! Core evaluator - expression evaluation, function calls, and the runtime state.
 
+use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::interpreter::stdlib::random::xoshiro::Xoshiro256;
@@ -548,8 +549,8 @@ impl Evaluator {
                 let captured_env: Vec<Vec<EnvironmentItem>> = self.environment[start..].to_vec();
 
                 Value::Function {
-                    params: params.clone(),
-                    body: body.clone(),
+                    params: Rc::new(params.clone()),
+                    body: Rc::new(body.clone()),
                     return_type: return_type.clone(),
                     captured_env,
                 }
@@ -667,7 +668,7 @@ impl Evaluator {
                 self.insert_value(slot, arg, arg_type, span)?;
             }
 
-            for statement in &body {
+            for statement in &*body {
                 self.evaluate_statement(statement)?;
                 if self.return_value.is_some() {
                     break;
