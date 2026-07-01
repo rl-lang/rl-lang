@@ -15,6 +15,18 @@ pub fn get_root_addr(expression: &Expression) -> (usize, usize) {
     }
 }
 
+/// Non-panicking variant of `get_root_addr`, for call sites (like Index
+/// reads) where the target may not be addressable - e.g. foo()[0].
+/// Returns `None` instead of panicking so the caller can fall back to
+/// normal evaluation.
+pub fn try_get_root_addr(expression: &Expression) -> Option<(usize, usize)> {
+    match &expression.kind {
+        ExpressionKind::ResolvedIdentifier { depth, slot, .. } => Some((*depth, *slot)),
+        ExpressionKind::Index { target, .. } => try_get_root_addr(target),
+        _ => None,
+    }
+}
+
 pub fn get_indices_as_vec(
     expression: &Expression,
     evaluator: &mut Evaluator,
