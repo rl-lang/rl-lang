@@ -43,7 +43,10 @@ pub enum EnvironmentItem {
 
 /// The tree-walking interpreter, carrying all runtime state.
 pub struct Evaluator {
+    /// Global scope, addressed at the outermost depth
+    pub globals: Vec<EnvironmentItem>,
     /// The environment stack - each frame is a scope; innermost is last.
+    /// Holds only local call frames
     pub environment: Vec<Vec<EnvironmentItem>>,
     /// Source file for Ariadne error rendering; `None` in embedded/test contexts.
     pub source_file: Option<SourceFile>,
@@ -76,7 +79,8 @@ impl Default for Evaluator {
 impl Evaluator {
     pub fn new() -> Self {
         Self {
-            environment: vec![vec![]],
+            globals: vec![],
+            environment: vec![],
             source_file: None,
             root_module: Module::new(""),
             return_value: None,
@@ -645,7 +649,7 @@ impl Evaluator {
             if params.len() != args.len() {
                 return Err(self.err(
                     format!(
-                        "function '' expects {} argument(s), got {}",
+                        "function expects {} argument(s), got {}",
                         params.len(),
                         args.len()
                     ),
@@ -653,14 +657,9 @@ impl Evaluator {
                 ));
             }
 
-            let saved_env = std::mem::take(&mut self.environment);
+            let saved_env = std::mem::replace(&mut self.environment, captured_env);
             let saved_return = self.return_value.take();
 
-            if captured_env.is_empty() {
-                self.environment = vec![saved_env[0].clone()]
-            } else {
-                self.environment = captured_env;
-            }
             self.push_scope();
 
             for (slot, (_, arg)) in params.iter().zip(args).enumerate() {
@@ -677,9 +676,7 @@ impl Evaluator {
 
             let result = self.return_value.take().unwrap_or(Value::Null);
 
-            let updated_global = self.environment[0].clone();
             self.environment = saved_env;
-            self.environment[0] = updated_global;
             self.return_value = saved_return;
 
             if let Some(expected) = &return_type
@@ -689,7 +686,7 @@ impl Evaluator {
                 if !Self::types_compatible(&actual, expected) {
                     return Err(self.err(
                         format!(
-                            "function '' declared to return {:?} but returned {:?}",
+                            "function declared to return {:?} but returned {:?}",
                             expected, actual
                         ),
                         span,
