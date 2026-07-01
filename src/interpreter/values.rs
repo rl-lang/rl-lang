@@ -4,7 +4,7 @@ use crate::{
     ast::statements::{Param, Statement, TypeAnnotation},
     interpreter::evaluator::EnvironmentItem,
 };
-use std::fmt;
+use std::{fmt, rc::Rc};
 
 /// A runtime value produced by evaluating an rl expression.
 #[derive(Debug, Clone, PartialEq)]
@@ -29,15 +29,17 @@ pub enum Value {
     },
     /// The absence of a value - equivalent to `null` in rl source.
     Null,
+
     /// A first-class function or lambda value, carrying its closure environment.
     Function {
-        params: Vec<Param>,
-        body: Vec<Statement>,
+        params: Rc<Vec<Param>>,
+        body: Rc<Vec<Statement>>,
         /// Declared return type; `None` for lambdas without an annotation.
         return_type: Option<TypeAnnotation>,
         /// The captured environment frames at the point of lambda definition.
         captured_env: Vec<Vec<EnvironmentItem>>,
     },
+
     /// A heterogeneous tuple of values.
     Tuple(Vec<Value>),
     /// An error value wrapping any non-error value.
@@ -90,7 +92,7 @@ impl fmt::Display for Value {
             Value::Null => write!(f, "null"),
             Value::Function { params, .. } => {
                 let mut params_name = vec![];
-                for param in params {
+                for param in params.iter() {
                     params_name.push(param.param_name.clone());
                 }
                 write!(f, "<fn({})>", params_name.join(", "))
