@@ -1,7 +1,7 @@
 //! Statement evaluation - the main dispatch loop and control flow primitives.
 
 use crate::{
-    ast::statements::{MatchPattern, Statement, StatementKind, TypeAnnotation},
+    ast::statements::{FunctionAttribute, MatchPattern, Statement, StatementKind, TypeAnnotation},
     interpreter::{evaluator::Evaluator, values::Value},
     lexer::tokenizer::Tokenizer,
     parser::parser_logic::Parser,
@@ -673,25 +673,41 @@ impl Evaluator {
         let mut main_entry: Option<(Span, usize)> = None;
 
         for statement in statements {
-            if let StatementKind::FunctionDeclaration { name, is_entry, .. }
-            | StatementKind::ResolvedFunctionDeclaration { name, is_entry, .. } = &statement.kind
+            if let StatementKind::FunctionDeclaration {
+                name, attribute, ..
+            }
+            | StatementKind::ResolvedFunctionDeclaration {
+                name, attribute, ..
+            } = &statement.kind
             {
                 let slot = match &statement.kind {
                     StatementKind::ResolvedFunctionDeclaration { slot, .. } => Some(*slot),
                     _ => None,
                 };
-                if *is_entry {
-                    if explicit_entry.is_some() {
-                        return Err(self.err("multiple !#[entry] functions found", statement.span));
+
+                match attribute {
+                    Some(FunctionAttribute::Entry) => {
+                        if explicit_entry.is_some() {
+                            return Err(
+                                self.err("multiple !#[entry] functions found", statement.span)
+                            );
+                        }
+                        if let Some(s) = slot {
+                            explicit_entry = Some((statement.span, s));
+                        }
                     }
-                    if let Some(s) = slot {
-                        explicit_entry = Some((statement.span, s));
+
+                    Some(FunctionAttribute::Init) => {}
+                    Some(FunctionAttribute::Final) => {}
+                    Some(FunctionAttribute::Test) => {}
+
+                    &None => {
+                        if name == "main"
+                            && let Some(s) = slot
+                        {
+                            main_entry = Some((statement.span, s));
+                        }
                     }
-                }
-                if name == "main"
-                    && let Some(s) = slot
-                {
-                    main_entry = Some((statement.span, s));
                 }
             }
         }
