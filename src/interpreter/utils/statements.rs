@@ -7,8 +7,8 @@ use crate::{
     parser::parser_logic::Parser,
     utils::{errors::Error, source::SourceFile, span::Span},
 };
-use std::path::Path;
 use std::sync::Arc;
+use std::{path::Path, rc::Rc};
 
 impl Evaluator {
     /// Evaluates a single statement, mutating the environment and control-flow flags.
@@ -495,8 +495,8 @@ impl Evaluator {
                 ..
             } => {
                 let func = Value::Function {
-                    params: params.clone(),
-                    body: body.clone(),
+                    params: Rc::new(params.clone()),
+                    body: Rc::new(body.clone()),
                     return_type: Some(return_type.clone()),
                     captured_env: vec![],
                 };
