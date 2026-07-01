@@ -59,6 +59,15 @@
       "contributions": [
         "code"
       ]
+    },
+    {
+      "login": "theroguevigilante",
+      "name": "Naimish",
+      "avatar_url": "https://avatars.githubusercontent.com/u/206333897?v=4",
+      "profile": "https://naimish.xyz",
+      "contributions": [
+        "code"
+      ]
     }
   ],
   "commitType": "docs",
