@@ -49,3 +49,48 @@ pub fn get_indices_as_vec(
     }
 }
 
+impl Evaluator {
+    pub fn slot_ref(&self, depth: usize, slot: usize) -> Option<&EnvironmentItem> {
+        if depth >= self.environment.len() {
+            self.globals.get(slot)
+        } else {
+            let idx = self.environment.len() - 1 - depth;
+            self.environment.get(idx)?.get(slot)
+        }
+    }
+    pub fn slot_mut(&mut self, depth: usize, slot: usize) -> Option<&mut EnvironmentItem> {
+        if depth >= self.environment.len() {
+            self.globals.get_mut(slot)
+        } else {
+            let idx = self.environment.len() - 1 - depth;
+            self.environment.get_mut(idx)?.get_mut(slot)
+        }
+    }
+
+    /// Reads a `value` by walking indices from the root `(depth, slot)`,
+    /// borrowing at every step and cloning only the single final element
+    /// avoids cloning the whole container just to read one item out of it.
+    pub fn index_read(
+        &self,
+        depth: usize,
+        slot: usize,
+        indices: &[usize],
+        span: Span,
+    ) -> Result<Value, Error> {
+        let entry = self.slot_ref(depth, slot).ok_or_else(|| {
+            self.err(format!("undefined variable at ({}, {})", depth, slot), span)
+        })?;
+        let EnvironmentItem::PItem(p) = entry;
+
+        let mut current = &p.value;
+        for &i in indices {
+            current = match current {
+                Value::Values { items, .. } => items.get(i),
+                Value::Tuple(items) => items.get(i),
+                _ => None,
+            }
+            .ok_or_else(|| self.err(format!("index {} out of bounds", i), span))?;
+        }
+        Ok(current.clone())
+    }
+}
