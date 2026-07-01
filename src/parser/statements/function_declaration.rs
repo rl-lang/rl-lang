@@ -13,7 +13,7 @@
 //! preceded by a `!#[entry]` attribute, marking it as the program entry point.
 
 use crate::{
-    ast::statements::{Param, Statement, StatementKind, TypeAnnotation},
+    ast::statements::{FunctionAttribute, Param, Statement, StatementKind, TypeAnnotation},
     lexer::tokentypes::TokenType,
     parser::parser_logic::Parser,
     utils::{errors::Error, span::Span},
@@ -44,7 +44,11 @@ impl Parser {
     /// [`parse_statement_to_ast`]: Parser::parse_statement_to_ast
     /// [`parse_entry_attribute`]: Parser::parse_entry_attribute
     /// [`parse_block`]: Parser::parse_block
-    pub fn parse_function(&mut self, start: Span, is_entry: bool) -> Result<Statement, Error> {
+    pub fn parse_function(
+        &mut self,
+        start: Span,
+        attribute: Option<FunctionAttribute>,
+    ) -> Result<Statement, Error> {
         let name = match self.peek() {
             TokenType::Identifier(n) => {
                 self.advance();
@@ -93,7 +97,7 @@ impl Parser {
                 params,
                 return_type,
                 body,
-                is_entry,
+                attribute,
             },
             span,
         ))

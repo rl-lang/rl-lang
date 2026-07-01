@@ -20,7 +20,7 @@ mod while_statement;
 use crate::{
     ast::{
         nodes::{Expression, ExpressionKind},
-        statements::{Statement, StatementKind},
+        statements::{FunctionAttribute, Statement, StatementKind},
     },
     lexer::tokentypes::TokenType,
     parser::parser_logic::Parser,
@@ -110,7 +110,7 @@ impl Parser {
                 self.advance();
                 #[cfg(feature = "debug")]
                 log::info!("found 'fn' while parsing");
-                self.parse_function(start, false)
+                self.parse_function(start, None)
             }
 
             TokenType::BangHash => {
@@ -205,22 +205,43 @@ impl Parser {
         if !self.match_type(&[TokenType::LeftBracket]) {
             return Err(self.err("expected `[` after `!#`", self.peek_span()));
         }
-        match self.peek() {
+
+        while self.match_type(&[TokenType::Newline]) {}
+
+        let attribute = match self.peek() {
             TokenType::Identifier(name) if name == "entry" => {
                 self.advance();
+                FunctionAttribute::Entry
             }
-            _ => return Err(self.err("expected `entry` attribute", self.peek_span())),
-        }
+            TokenType::Identifier(name) if name == "init" => {
+                self.advance();
+                FunctionAttribute::Init
+            }
+            TokenType::Identifier(name) if name == "final" => {
+                self.advance();
+                FunctionAttribute::Final
+            }
+            TokenType::Identifier(name) if name == "test" => {
+                self.advance();
+                FunctionAttribute::Test
+            }
+            _ => return Err(self.err("expected valid attribute", self.peek_span())),
+        };
+
+        while self.match_type(&[TokenType::Newline]) {}
+
         if !self.match_type(&[TokenType::RightBracket]) {
             return Err(self.err("expected `]` after entry attribute", self.peek_span()));
         }
+
         while self.match_type(&[TokenType::Newline]) {}
+
         if !self.match_type(&[TokenType::Fn]) {
             return Err(self.err(
-                "expected function declaration after `!#[entry]`",
+                "expected function declaration after `!#[<attribute>]`",
                 self.peek_span(),
             ));
         }
-        self.parse_function(start, true)
+        self.parse_function(start, Some(attribute))
     }
 }

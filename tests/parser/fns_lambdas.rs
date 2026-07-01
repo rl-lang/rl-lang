@@ -1,7 +1,7 @@
 use rl_lang::{
     ast::{
         nodes::{Expression, ExpressionKind},
-        statements::{Param, Statement, StatementKind, TypeAnnotation},
+        statements::{FunctionAttribute, Param, Statement, StatementKind, TypeAnnotation},
     },
     utils::span::Span,
 };
@@ -19,7 +19,7 @@ fn fn_simple() {
                 param_type: TypeAnnotation::Int,
             }],
             return_type: TypeAnnotation::Null,
-            is_entry: false,
+            attribute: None,
             body: vec![Statement::new(
                 StatementKind::Return(Some(Expression::new(
                     ExpressionKind::Identifier("x".to_string()),
@@ -50,7 +50,7 @@ fn fn_fn_param() {
                 },
             ],
             return_type: TypeAnnotation::Null,
-            is_entry: false,
+            attribute: None,
             body: vec![Statement::new(
                 StatementKind::Return(Some(Expression::new(
                     ExpressionKind::Call {
@@ -104,9 +104,11 @@ fn dec_fn_lambda() {
 fn entry_attribute_marks_function() {
     let statements = common::parse("!#[entry]\nfn start () {return 1}");
     match &statements[0].kind {
-        StatementKind::FunctionDeclaration { name, is_entry, .. } => {
+        StatementKind::FunctionDeclaration {
+            name, attribute, ..
+        } => {
             assert_eq!(name, "start");
-            assert!(*is_entry);
+            assert_eq!(*attribute, Some(FunctionAttribute::Entry));
         }
         other => panic!("expected function declaration, got {:?}", other),
     }

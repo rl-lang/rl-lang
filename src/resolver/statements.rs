@@ -105,7 +105,7 @@ impl Resolver {
                 params,
                 return_type,
                 body,
-                is_entry,
+                attribute,
             } => {
                 let slot = self.declare(name.clone());
                 self.push_scope();
@@ -120,7 +120,7 @@ impl Resolver {
                     params,
                     return_type,
                     body,
-                    is_entry,
+                    attribute,
                 }
             }
             StatementKind::ForEach {
