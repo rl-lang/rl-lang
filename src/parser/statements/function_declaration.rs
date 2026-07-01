@@ -47,7 +47,7 @@ impl Parser {
     pub fn parse_function(
         &mut self,
         start: Span,
-        attribute: FunctionAttribute,
+        attribute: Option<FunctionAttribute>,
     ) -> Result<Statement, Error> {
         let name = match self.peek() {
             TokenType::Identifier(n) => {
