@@ -80,11 +80,19 @@ impl Evaluator {
             )
         };
 
-        let env_idx = self.environment.len().saturating_sub(1 + depth);
-        let e = self.err(format!("no scope at depth {}", depth), span);
-        let e2 = self.err(format!("undefined slot {} at depth {}", slot, depth), span);
-        let frame = self.environment.get_mut(env_idx).ok_or(e)?;
-        let entry = frame.get_mut(slot).ok_or(e2)?;
+        // `depth >= environment.len()` means the target lives in the global
+        // scope, addressed via `self.globals` rather than the local frame
+        // stack. See `scopes.rs` for the same convention.
+        let entry: &mut EnvironmentItem = if depth >= self.environment.len() {
+            let e2 = self.err(format!("undefined slot {} at depth {}", slot, depth), span);
+            self.globals.get_mut(slot).ok_or(e2)?
+        } else {
+            let env_idx = self.environment.len() - 1 - depth;
+            let e = self.err(format!("no scope at depth {}", depth), span);
+            let e2 = self.err(format!("undefined slot {} at depth {}", slot, depth), span);
+            let frame = self.environment.get_mut(env_idx).ok_or(e)?;
+            frame.get_mut(slot).ok_or(e2)?
+        };
 
         match entry {
             EnvironmentItem::PItem(p) => {
