@@ -11,6 +11,7 @@ use crate::{
         nodes::{Expression, ExpressionKind},
         statements::TypeAnnotation,
     },
+    interpreter::evaluator_types::addressing::{get_indices_as_vec, try_get_root_addr},
     interpreter::{
         native::{IntoNativeFn, Module},
         stdlib,
@@ -313,85 +314,90 @@ impl Evaluator {
             ExpressionKind::Float(f) => Value::Float(*f),
             ExpressionKind::Character(c) => Value::Char(*c),
             ExpressionKind::Index { target, index } => {
-                let arr = self.evaluate(target)?;
-                self.check_not_null(&arr, target.span)?;
-                let idx = self.evaluate(index)?;
-                self.check_not_null(&idx, index.span)?;
-                match (&arr, &idx) {
-                    (Value::Values { items, .. }, Value::Integer(i)) => {
-                        let i_usize = *i as usize;
-                        if i_usize >= items.len() {
-                            return Err(self
-                                .err(
-                                    format!("index {} out of bounds (len {})", i, items.len()),
-                                    expression.span,
-                                )
-                                .with_label(
-                                    target.span,
-                                    format!("this array has length {}", items.len()),
-                                ));
+                if let Some((depth, slot)) = try_get_root_addr(expression) {
+                    let indices = get_indices_as_vec(expression, self, expression.span)?;
+                    self.index_read(depth, slot, &indices, expression.span)?
+                } else {
+                    let arr = self.evaluate(target)?;
+                    self.check_not_null(&arr, target.span)?;
+                    let idx = self.evaluate(index)?;
+                    self.check_not_null(&idx, index.span)?;
+                    match (&arr, &idx) {
+                        (Value::Values { items, .. }, Value::Integer(i)) => {
+                            let i_usize = *i as usize;
+                            if i_usize >= items.len() {
+                                return Err(self
+                                    .err(
+                                        format!("index {} out of bounds (len {})", i, items.len()),
+                                        expression.span,
+                                    )
+                                    .with_label(
+                                        target.span,
+                                        format!("this array has length {}", items.len()),
+                                    ));
+                            }
+                            items[i_usize].clone()
                         }
-                        items[i_usize].clone()
-                    }
-                    (Value::Values { items, .. }, Value::Byte(b)) => {
-                        let b_usize = *b as usize;
-                        if b_usize >= items.len() {
-                            return Err(self
-                                .err(
-                                    format!("index {} out of bounds (len {})", b, items.len()),
-                                    expression.span,
-                                )
-                                .with_label(
-                                    target.span,
-                                    format!("this array has length {}", items.len()),
-                                ));
+                        (Value::Values { items, .. }, Value::Byte(b)) => {
+                            let b_usize = *b as usize;
+                            if b_usize >= items.len() {
+                                return Err(self
+                                    .err(
+                                        format!("index {} out of bounds (len {})", b, items.len()),
+                                        expression.span,
+                                    )
+                                    .with_label(
+                                        target.span,
+                                        format!("this array has length {}", items.len()),
+                                    ));
+                            }
+                            items[b_usize].clone()
                         }
-                        items[b_usize].clone()
-                    }
 
-                    (Value::Tuple(items), Value::Integer(i)) => {
-                        let i_usize = *i as usize;
-                        if i_usize >= items.len() {
-                            return Err(self
-                                .err(
-                                    format!(
-                                        "tuple index {} out of bounds (len {})",
-                                        i,
-                                        items.len()
-                                    ),
-                                    expression.span,
-                                )
-                                .with_label(
-                                    target.span,
-                                    format!("this tuple has {} elements", items.len()),
-                                ));
+                        (Value::Tuple(items), Value::Integer(i)) => {
+                            let i_usize = *i as usize;
+                            if i_usize >= items.len() {
+                                return Err(self
+                                    .err(
+                                        format!(
+                                            "tuple index {} out of bounds (len {})",
+                                            i,
+                                            items.len()
+                                        ),
+                                        expression.span,
+                                    )
+                                    .with_label(
+                                        target.span,
+                                        format!("this tuple has {} elements", items.len()),
+                                    ));
+                            }
+                            items[i_usize].clone()
                         }
-                        items[i_usize].clone()
-                    }
-                    (Value::Tuple(items), Value::Byte(b)) => {
-                        let b_usize = *b as usize;
-                        if b_usize >= items.len() {
-                            return Err(self
-                                .err(
-                                    format!(
-                                        "tuple index {} out of bounds (len {})",
-                                        b,
-                                        items.len()
-                                    ),
-                                    expression.span,
-                                )
-                                .with_label(
-                                    target.span,
-                                    format!("this tuple has {} elements", items.len()),
-                                ));
+                        (Value::Tuple(items), Value::Byte(b)) => {
+                            let b_usize = *b as usize;
+                            if b_usize >= items.len() {
+                                return Err(self
+                                    .err(
+                                        format!(
+                                            "tuple index {} out of bounds (len {})",
+                                            b,
+                                            items.len()
+                                        ),
+                                        expression.span,
+                                    )
+                                    .with_label(
+                                        target.span,
+                                        format!("this tuple has {} elements", items.len()),
+                                    ));
+                            }
+                            items[b_usize].clone()
                         }
-                        items[b_usize].clone()
-                    }
-                    _ => {
-                        return Err(self
-                            .err("invalid index operation", expression.span)
-                            .with_label(target.span, format!("this is {}", arr.type_name()))
-                            .with_label(index.span, format!("this is {}", idx.type_name())));
+                        _ => {
+                            return Err(self
+                                .err("invalid index operation", expression.span)
+                                .with_label(target.span, format!("this is {}", arr.type_name()))
+                                .with_label(index.span, format!("this is {}", idx.type_name())));
+                        }
                     }
                 }
             }
