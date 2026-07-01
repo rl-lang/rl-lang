@@ -671,6 +671,9 @@ impl Evaluator {
     pub fn evaluate_program(&mut self, statements: &[Statement]) -> Result<(), Error> {
         let mut explicit_entry: Option<(Span, usize)> = None;
         let mut main_entry: Option<(Span, usize)> = None;
+        let mut inits: Vec<(Span, usize)> = vec![];
+        let mut finals: Vec<(Span, usize)> = vec![];
+        let mut tests: Vec<(Span, usize)> = vec![];
 
         for statement in statements {
             if let StatementKind::FunctionDeclaration {
@@ -697,9 +700,21 @@ impl Evaluator {
                         }
                     }
 
-                    Some(FunctionAttribute::Init) => {}
-                    Some(FunctionAttribute::Final) => {}
-                    Some(FunctionAttribute::Test) => {}
+                    Some(FunctionAttribute::Init) => {
+                        if let Some(s) = slot {
+                            inits.push((statement.span, s))
+                        }
+                    }
+                    Some(FunctionAttribute::Final) => {
+                        if let Some(s) = slot {
+                            finals.push((statement.span, s))
+                        }
+                    }
+                    Some(FunctionAttribute::Test) => {
+                        if let Some(s) = slot {
+                            tests.push((statement.span, s))
+                        }
+                    }
 
                     &None => {
                         if name == "main"
@@ -713,6 +728,10 @@ impl Evaluator {
         }
 
         let entry = explicit_entry.or(main_entry);
+        let has_tests = !tests.is_empty();
+        let has_inits = !inits.is_empty();
+        let has_finals = !finals.is_empty();
+
         let Some((entry_span, entry_slot)) = entry else {
             for statement in statements {
                 self.evaluate_statement(statement)?;
@@ -737,8 +756,35 @@ impl Evaluator {
                 _ => {}
             }
         }
+
+        // order goes tests -> inits -> entry -> finals
+        if has_tests {
+            for test_func in tests {
+                let (func_span, func_slot) = test_func;
+                let func = self.get_value(0, func_slot, func_span)?;
+                self.call_value(func, vec![], func_span)?;
+            }
+        }
+
+        if has_inits {
+            for init_func in inits {
+                let (func_span, func_slot) = init_func;
+                let func = self.get_value(0, func_slot, func_span)?;
+                self.call_value(func, vec![], func_span)?;
+            }
+        }
+
         let func = self.get_value(0, entry_slot, entry_span)?;
         self.call_value(func, vec![], entry_span)?;
+
+        if has_finals {
+            for final_func in finals {
+                let (func_span, func_slot) = final_func;
+                let func = self.get_value(0, func_slot, func_span)?;
+                self.call_value(func, vec![], func_span)?;
+            }
+        }
+
         Ok(())
     }
 
