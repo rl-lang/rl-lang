@@ -8,12 +8,10 @@
 //! structure mutably to perform the assignment, enforcing type compatibility and bounds.
 
 use crate::{
-    ast::{
-        nodes::{Expression, ExpressionKind},
-        statements::TypeAnnotation,
-    },
+    ast::{nodes::Expression, statements::TypeAnnotation},
     interpreter::{
         evaluator::{EnvironmentItem, Evaluator},
+        evaluator_types::addressing::{get_indices_as_vec, get_root_addr},
         values::Value,
     },
     utils::{errors::Error, span::Span},
@@ -29,39 +27,6 @@ impl Evaluator {
     ) -> Result<Value, Error> {
         let idx = self.evaluate(index)?;
         let val = self.evaluate(value)?;
-
-        fn get_root_addr(expression: &Expression) -> (usize, usize) {
-            match &expression.kind {
-                ExpressionKind::ResolvedIdentifier { depth, slot, .. } => (*depth, *slot),
-                ExpressionKind::Index { target, .. } => get_root_addr(target),
-                _ => unreachable!("index_assign: unexpected root expression"),
-            }
-        }
-
-        fn get_indices_as_vec(
-            expression: &Expression,
-            evaluator: &mut Evaluator,
-            span: Span,
-        ) -> Result<Vec<usize>, Error> {
-            match &expression.kind {
-                ExpressionKind::ResolvedIdentifier { .. } => Ok(vec![]),
-                ExpressionKind::Index { target, index } => {
-                    let mut indices = get_indices_as_vec(target, evaluator, span)?;
-                    if let Value::Integer(i) = evaluator.evaluate(index)? {
-                        if i < 0 {
-                            return Err(
-                                evaluator.err(format!("index cannot be negative: {}", i), span)
-                            );
-                        }
-                        indices.push(i as usize);
-                    }
-
-                    Ok(indices)
-                }
-                _ => unreachable!(),
-            }
-        }
-
         let (depth, slot) = get_root_addr(target);
         let mut indices = get_indices_as_vec(target, self, span)?;
         if let Value::Integer(i) = idx {
