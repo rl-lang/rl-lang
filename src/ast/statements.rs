@@ -15,7 +15,6 @@
 //! bindings at the type level via separate variants (`Int` vs `CInt`, etc.).
 //!
 //! [`Resolver`]: crate::resolver
-use crate::ast::nodes::Expression;
 use crate::ast::{ExprId, StmtId};
 use crate::utils::span::Span;
 
@@ -92,7 +91,7 @@ pub enum StatementKind {
     },
     /// A bare expression used as a statement (e.g. a function call whose
     /// return value is discarded, or a newline placeholder).
-    Expression(Expression),
+    Expression(ExprId),
     /// A `while condition { body }` loop.
     While {
         condition: ExprId,

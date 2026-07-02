@@ -10,7 +10,10 @@
 //! ```
 
 use crate::{
-    ast::statements::{Statement, StatementKind, TypeAnnotation},
+    ast::{
+        StmtId,
+        statements::{StatementKind, TypeAnnotation},
+    },
     lexer::tokentypes::TokenType,
     parser::parser_logic::Parser,
     utils::{errors::Error, span::Span},
@@ -33,7 +36,7 @@ impl Parser {
     /// # Errors
     /// Returns an error if the type, name, `=`, or initialiser expression is
     /// missing or malformed.
-    pub fn parse_variable_declartion(&mut self, start: Span) -> Result<Statement, Error> {
+    pub fn parse_variable_declartion(&mut self, start: Span) -> Result<StmtId, Error> {
         #[cfg(feature = "debug")]
         log::debug!("{:?}", self.peek());
         #[cfg(feature = "debug")]

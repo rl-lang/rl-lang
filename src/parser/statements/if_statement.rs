@@ -19,7 +19,7 @@
 //! ```
 
 use crate::{
-    ast::statements::{Statement, StatementKind},
+    ast::{StmtId, statements::StatementKind},
     lexer::tokentypes::TokenType,
     parser::parser_logic::Parser,
     utils::{errors::Error, span::Span},
@@ -41,7 +41,7 @@ impl Parser {
     /// [`StatementKind::ConditionalBranch`] children.
     ///
     /// [`parse_block`]: Parser::parse_block
-    pub fn parse_if(&mut self, start: Span) -> Result<Statement, Error> {
+    pub fn parse_if(&mut self, start: Span) -> Result<StmtId, Error> {
         while self.match_type(&[TokenType::Newline]) {}
         let if_condition = self.parse_expression()?;
         while self.match_type(&[TokenType::Newline]) {}

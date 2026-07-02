@@ -12,7 +12,10 @@
 //! ```
 
 use crate::{
-    ast::statements::{Statement, StatementKind, TypeAnnotation},
+    ast::{
+        StmtId,
+        statements::{StatementKind, TypeAnnotation},
+    },
     lexer::tokentypes::TokenType,
     parser::parser_logic::Parser,
     utils::{errors::Error, span::Span},
@@ -38,7 +41,7 @@ impl Parser {
     /// missing or malformed.
     ///
     /// [`parse_type`]: Parser::parse_type
-    pub fn parse_const_declartion(&mut self, start: Span) -> Result<Statement, Error> {
+    pub fn parse_const_declartion(&mut self, start: Span) -> Result<StmtId, Error> {
         #[cfg(feature = "debug")]
         log::debug!("{:?}", self.peek());
         #[cfg(feature = "debug")]

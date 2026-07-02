@@ -19,8 +19,9 @@ mod while_statement;
 
 use crate::{
     ast::{
-        nodes::{Expression, ExpressionKind},
-        statements::{FunctionAttribute, Statement, StatementKind},
+        StmtId,
+        nodes::ExpressionKind,
+        statements::{FunctionAttribute, StatementKind},
     },
     lexer::tokentypes::TokenType,
     parser::parser_logic::Parser,
@@ -55,7 +56,7 @@ impl Parser {
     /// [`parse_function`]: Parser::parse_function
     /// [`parse_entry_attribute`]: Parser::parse_entry_attribute
     /// [`parse_expression`]: Parser::parse_expression
-    pub fn parse_statement_to_ast(&mut self) -> Result<Statement, Error> {
+    pub fn parse_statement_to_ast(&mut self) -> Result<StmtId, Error> {
         let start = self.peek_span();
         match self.peek() {
             TokenType::Newline => {
@@ -63,10 +64,11 @@ impl Parser {
                 #[cfg(feature = "debug")]
                 log::info!("found newline while parsing... skipping");
                 let span = self.previous_span();
-                Ok(Statement::new(
-                    StatementKind::Expression(Expression::new(ExpressionKind::Integer(0), span)),
-                    span,
-                ))
+                let stmt = StatementKind::Expression(
+                    self.ast.alloc_expr(ExpressionKind::Integer(0), span),
+                );
+
+                Ok(self.ast.alloc_stmt(stmt, span))
             }
 
             TokenType::Get => {
@@ -129,19 +131,19 @@ impl Parser {
                     None
                 };
                 let span = start.join(self.previous_span());
-                Ok(Statement::new(StatementKind::Return(expr), span))
+                Ok(self.ast.alloc_stmt(StatementKind::Return(expr), span))
             }
 
             TokenType::Break => {
                 self.advance();
                 let span = start.join(self.previous_span());
-                Ok(Statement::new(StatementKind::Break, span))
+                Ok(self.ast.alloc_stmt(StatementKind::Break, span))
             }
 
             TokenType::Continue => {
                 self.advance();
                 let span = start.join(self.previous_span());
-                Ok(Statement::new(StatementKind::Continue, span))
+                Ok(self.ast.alloc_stmt(StatementKind::Continue, span))
             }
 
             TokenType::Match => {
@@ -153,8 +155,8 @@ impl Parser {
                 #[cfg(feature = "debug")]
                 log::info!("parsing the current tokens as expression");
                 let expr = self.parse_expression()?;
-                let span = expr.span;
-                Ok(Statement::new(StatementKind::Expression(expr), span))
+                let span = self.expr_span(expr);
+                Ok(self.ast.alloc_stmt(StatementKind::Expression(expr), span))
             }
         }
     }
@@ -169,7 +171,7 @@ impl Parser {
     /// Returns an error if the opening `{` is missing.
     ///
     /// [`parse_statement_to_ast`]: Parser::parse_statement_to_ast
-    pub fn parse_block(&mut self) -> Result<Vec<Statement>, Error> {
+    pub fn parse_block(&mut self) -> Result<Vec<StmtId>, Error> {
         if !self.match_type(&[TokenType::LeftBrace]) {
             return Err(self.err("expected `{`", self.peek_span()));
         }
@@ -198,10 +200,7 @@ impl Parser {
     /// or in the wrong order.
     ///
     /// [`parse_function`]: Parser::parse_function
-    fn parse_entry_attribute(
-        &mut self,
-        start: crate::utils::span::Span,
-    ) -> Result<Statement, Error> {
+    fn parse_entry_attribute(&mut self, start: crate::utils::span::Span) -> Result<StmtId, Error> {
         if !self.match_type(&[TokenType::LeftBracket]) {
             return Err(self.err("expected `[` after `!#`", self.peek_span()));
         }

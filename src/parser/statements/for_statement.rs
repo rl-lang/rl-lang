@@ -19,10 +19,7 @@
 //! - anything else -> error
 
 use crate::{
-    ast::{
-        nodes::ExpressionKind,
-        statements::{Statement, StatementKind},
-    },
+    ast::{StmtId, nodes::ExpressionKind, statements::StatementKind},
     lexer::tokentypes::TokenType,
     parser::parser_logic::Parser,
     utils::errors::Error,
@@ -45,7 +42,7 @@ impl Parser {
     /// # Errors
     /// Returns an error for invalid range elements (non-integer), missing
     /// commas in C-style headers, or unrecognised `for` syntax.
-    pub fn parse_for(&mut self, start: crate::utils::span::Span) -> Result<Statement, Error> {
+    pub fn parse_for(&mut self, start: crate::utils::span::Span) -> Result<StmtId, Error> {
         if matches!(self.peek(), TokenType::LeftBracket) {
             // C-style: for [T i = init, cond, incr] { … }
             self.advance();

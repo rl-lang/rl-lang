@@ -29,7 +29,7 @@
 //! | `get fn, fn from mod::sub` | [`StatementKind::ImportFileNamed`] |
 
 use crate::{
-    ast::statements::{Statement, StatementKind},
+    ast::{StmtId, statements::StatementKind},
     lexer::tokentypes::TokenType,
     parser::parser_logic::Parser,
     utils::errors::Error,
@@ -56,7 +56,7 @@ impl Parser {
     /// # Errors
     /// Returns an error if an identifier is missing after `get`, `::`, `,`, or
     /// `from`, or if `from` itself is absent in the named-import form.
-    pub fn parse_import(&mut self, start: crate::utils::span::Span) -> Result<Statement, Error> {
+    pub fn parse_import(&mut self, start: crate::utils::span::Span) -> Result<StmtId, Error> {
         let first = match self.peek() {
             TokenType::Identifier(name) => name,
             _ => return Err(self.err("expected identifier after 'get'", self.peek_span())),
