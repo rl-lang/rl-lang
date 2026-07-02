@@ -82,13 +82,13 @@ pub const KEYWORDS: &[&str] = &[
 pub fn module() -> Module {
     Module::new("term")
         // enter / leave
-        .with_raw_function("term_enter", enter::func)
-        .with_raw_function("term_leave", leave::func)
+        .with_function("term_enter", enter::func)
+        .with_function("term_leave", leave::func)
         // clear
         .with_function("term_clear", clear::func)
         .with_function("term_clear_line", clear_line::func)
         // absolute cursor
-        .with_raw_function("term_move", move_cursor::func)
+        .with_function("term_move", move_cursor::func)
         .with_function("term_move_to_col", cursor_col::func)
         .with_function("term_move_to_row", cursor_row::func)
         // relative cursor
@@ -102,7 +102,7 @@ pub fn module() -> Module {
         .with_raw_function("term_save_cursor", save_cursor::func)
         .with_raw_function("term_restore_cursor", restore_cursor::func)
         // show / hide
-        .with_raw_function("term_hide_cursor", hide_cursor::func)
+        .with_function("term_hide_cursor", hide_cursor::func)
         .with_raw_function("term_show_cursor", show_cursor::func)
         // size / title
         .with_raw_function("term_get_size", size::std_term_get_size)
@@ -113,7 +113,7 @@ pub fn module() -> Module {
         .with_raw_function("term_scroll_down", scroll::std_term_scroll_down)
         // output
         .with_raw_function("term_print", print::func)
-        .with_raw_function("term_flush", flush::func)
+        .with_function("term_flush", flush::func)
         // rgb color
         .with_raw_function("term_set_fg", set_fg::func)
         .with_raw_function("term_set_bg", set_bg::func)
@@ -137,8 +137,8 @@ pub fn module() -> Module {
         .with_raw_function("term_begin_sync", sync_output::std_term_begin_sync)
         .with_raw_function("term_end_sync", sync_output::std_term_end_sync)
         // mouse
-        .with_raw_function("term_enable_mouse", mouse::std_term_enable_mouse)
-        .with_raw_function("term_disable_mouse", mouse::std_term_disable_mouse)
+        .with_function("term_enable_mouse", mouse::std_term_enable_mouse)
+        .with_function("term_disable_mouse", mouse::std_term_disable_mouse)
         // input
         .with_raw_function("term_read_key", read_key::func)
         .with_raw_function("term_poll", poll::func)
