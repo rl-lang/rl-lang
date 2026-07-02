@@ -1,5 +1,5 @@
 use crate::{
-    ast::nodes::{Expression, ExpressionKind},
+    ast::{ExprId, nodes::ExpressionKind},
     lexer::tokentypes::TokenType,
     parser::parser_logic::Parser,
     utils::errors::Error,
@@ -12,16 +12,16 @@ impl Parser {
     /// Falls through to [`parse_primary`] when no prefix operator is present.
     ///
     /// [`parse_primary`]: Parser::parse_primary
-    pub fn parse_unary(&mut self) -> Result<Expression, Error> {
+    pub fn parse_unary(&mut self) -> Result<ExprId, Error> {
         let start = self.peek_span();
         if self.match_type(&[TokenType::Bang, TokenType::Minus]) {
             let operator = self.previous();
             let operand = self.parse_unary()?;
-            let span = start.join(operand.span);
-            return Ok(Expression::new(
+            let span = start.join(self.expr_span(operand));
+            return Ok(self.ast.alloc_expr(
                 ExpressionKind::Unary {
                     operator,
-                    operand: Box::new(operand),
+                    operand: operand,
                 },
                 span,
             ));
