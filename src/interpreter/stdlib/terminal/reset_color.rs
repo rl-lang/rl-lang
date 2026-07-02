@@ -1,13 +1,13 @@
-use crate::interpreter::stdlib::common::check_arity;
-use crate::interpreter::{evaluator::Evaluator, values::Value};
-use crate::utils::{errors::Error, span::Span};
+use crate::interpreter::{
+    evaluator::Evaluator,
+    stdlib::common::{verr, vnl, vok, vs},
+    values::Value,
+};
 use crossterm::{execute, style::ResetColor};
 use std::io::stdout;
 
-pub fn func(eval: &mut Evaluator, args: Vec<Value>, span: Span) -> Result<Value, Error> {
-    check_arity(&args, 0, "term_reset_color", span)?;
-
+pub fn func(_: &mut Evaluator) -> Value {
     execute!(stdout(), ResetColor)
-        .map_err(|e| eval.err(format!("term_reset_color(): {}", e), span))?;
-    Ok(Value::Ok(Box::new(Value::Null)))
+        .map_err(|e| return verr!(vs!(format!("term_reset_color(): {}", e))));
+    vok!(vnl!())
 }
