@@ -89,8 +89,8 @@ pub fn module() -> Module {
         .with_function("term_clear_line", clear_line::func)
         // absolute cursor
         .with_raw_function("term_move", move_cursor::func)
-        .with_raw_function("term_move_to_col", cursor_col::func)
-        .with_raw_function("term_move_to_row", cursor_row::func)
+        .with_function("term_move_to_col", cursor_col::func)
+        .with_function("term_move_to_row", cursor_row::func)
         // relative cursor
         .with_raw_function("term_move_up", move_rel::std_term_move_up)
         .with_raw_function("term_move_down", move_rel::std_term_move_down)

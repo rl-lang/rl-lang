@@ -19,7 +19,7 @@ pub fn check_arity(args: &[Value], expected: usize, name: &str, span: Span) -> R
     Ok(())
 }
 
-pub fn check_type(value: &Value, expected: &str, name: &str, span: Span) -> Result<(), Error> {
+pub fn check_type(value: &Value, expected: &str, name: &str) -> Result<(), String> {
     match (value, expected) {
         (Value::Bool(_), "bool")
         | (Value::String(_), "string")
@@ -34,62 +34,38 @@ pub fn check_type(value: &Value, expected: &str, name: &str, span: Span) -> Resu
         | (Value::Tuple(_), "tuple" | "()")
         | (Value::Values { .. }, "arr") => Ok(()),
 
-        (other_val, other_exp) => {
-            let message = format!(
-                "{}: expected {} type, got {}",
-                name,
-                other_exp,
-                other_val.type_name()
-            );
-
-            Err(Error::at(Reason::Runtime, message, span))
-        }
+        (other_val, other_exp) => Err(format!(
+            "{}: expected {} type, got {}",
+            name,
+            other_exp,
+            other_val.type_name()
+        )),
     }
 }
 
-pub fn extract_string(value: Value, name: &str, span: Span) -> Result<String, Error> {
-    check_type(&value, "string", name, span)?;
-    match value {
-        Value::String(s) => Ok(s),
-        _ => {
-            unreachable!()
-        }
-    }
+pub fn extract_string(value: Value, name: &str) -> Result<String, String> {
+    check_type(&value, "string", name)?;
+    let Value::String(v) = value else {
+        unreachable!()
+    };
+    Ok(v)
 }
 
-pub fn extract_int(value: Value, name: &str, span: Span) -> Result<i64, Error> {
-    check_type(&value, "int", name, span)?;
-    match value {
-        Value::Integer(i) => Ok(i),
-        _ => {
-            unreachable!()
-        }
-    }
+pub fn extract_int(value: Value, name: &str) -> Result<i64, String> {
+    check_type(&value, "int", name)?;
+    let Value::Integer(v) = value else {
+        unreachable!()
+    };
+    Ok(v)
 }
 
-/*
-pub fn extract_byte(value: Value, name: &str, span: Span) -> Result<u8, Error> {
-    check_type(&value, "byte", name, span)?;
-    match value {
-        Value::Byte(b) => Ok(b),
-        _ => {
-            unreachable!()
-        }
-    }
-}
-*/
-
-pub fn extract_number(value: Value, name: &str, span: Span) -> Result<u64, Error> {
-    if check_type(&value, "int", name, span).is_err()
-        && check_type(&value, "byte", name, span).is_err()
-    {
-        let message = format!(
+pub fn extract_number(value: Value, name: &str) -> Result<u64, String> {
+    if check_type(&value, "int", name).is_err() && check_type(&value, "byte", name).is_err() {
+        return Err(format!(
             "{}: expected int or byte type, got {}",
             name,
             value.type_name()
-        );
-
-        return Err(Error::at(Reason::Runtime, message, span));
+        ));
     }
 
     match value {
