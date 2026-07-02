@@ -571,7 +571,7 @@ impl TypeChecker {
 
                 StatementKind::ImportFile { path: nested }
                 | StatementKind::ImportFileNamed { path: nested, .. } => {
-                    self.import_module(&nested, self.stmt_span(*stmt));
+                    self.import_module(nested, self.stmt_span(*stmt));
                 }
 
                 _ => {}

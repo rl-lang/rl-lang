@@ -98,7 +98,7 @@ impl Parser {
                     let span = start.join(self.expr_span(value));
                     let expr = self
                         .ast
-                        .alloc_expr(ExpressionKind::Assign { name, value: value }, span);
+                        .alloc_expr(ExpressionKind::Assign { name, value }, span);
                     return self.parse_postfix(expr, start);
                 }
                 if self.match_type(&[TokenType::LeftBracket]) {
@@ -163,7 +163,7 @@ impl Parser {
                                 ExpressionKind::IndexAssign {
                                     target,
                                     index,
-                                    value: value,
+                                    value,
                                 },
                                 span,
                             );

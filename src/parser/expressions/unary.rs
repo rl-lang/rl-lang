@@ -21,7 +21,7 @@ impl Parser {
             return Ok(self.ast.alloc_expr(
                 ExpressionKind::Unary {
                     operator,
-                    operand: operand,
+                    operand,
                 },
                 span,
             ));
