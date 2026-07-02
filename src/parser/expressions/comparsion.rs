@@ -1,5 +1,5 @@
 use crate::{
-    ast::nodes::{Expression, ExpressionKind},
+    ast::{ExprId, nodes::ExpressionKind},
     lexer::tokentypes::TokenType,
     parser::parser_logic::Parser,
     utils::errors::Error,
@@ -15,7 +15,7 @@ impl Parser {
     /// [`ExpressionKind::Binary`]. If the LHS is not a simple identifier the
     /// operator is treated as a plain binary expression (the checker will reject
     /// it later if needed).
-    pub fn parse_comparsion(&mut self) -> Result<Expression, Error> {
+    pub fn parse_comparsion(&mut self) -> Result<ExprId, Error> {
         let mut left = self.parse_term()?;
         while self.match_type(&[
             TokenType::Less,
@@ -31,16 +31,16 @@ impl Parser {
             let operator = self.previous();
             while self.match_type(&[TokenType::Newline]) {}
             let right = self.parse_term()?;
-            let span = left.span.join(right.span);
+            let span = self.expr_span(left).join(self.expr_span(right));
 
             match operator {
                 TokenType::PlusEqual
                 | TokenType::MinusEqual
                 | TokenType::StarEqual
                 | TokenType::SlashEqual => {
-                    if let ExpressionKind::Identifier(name) = &left.kind {
+                    if let ExpressionKind::Identifier(name) = &self.expr_kind(left) {
                         let name = name.clone();
-                        let lhs_span = left.span;
+                        let lhs_span = self.expr_span(left);
                         let operator = match operator {
                             TokenType::PlusEqual => TokenType::Plus,
                             TokenType::MinusEqual => TokenType::Minus,
@@ -48,41 +48,42 @@ impl Parser {
                             TokenType::SlashEqual => TokenType::Slash,
                             _ => unreachable!(),
                         };
-                        let binary = Expression::new(
+                        let l = self
+                            .ast
+                            .alloc_expr(ExpressionKind::Identifier(name.clone()), lhs_span);
+
+                        let binary = self.ast.alloc_expr(
                             ExpressionKind::Binary {
-                                left: Box::new(Expression::new(
-                                    ExpressionKind::Identifier(name.clone()),
-                                    lhs_span,
-                                )),
+                                left: l,
                                 operator,
-                                right: Box::new(right),
+                                right,
                             },
                             span,
                         );
-                        left = Expression::new(
+                        left = self.ast.alloc_expr(
                             ExpressionKind::Assign {
                                 name,
-                                value: Box::new(binary),
+                                value: binary,
                             },
                             span,
                         );
                     } else {
-                        left = Expression::new(
+                        left = self.ast.alloc_expr(
                             ExpressionKind::Binary {
-                                left: Box::new(left),
+                                left,
                                 operator,
-                                right: Box::new(right),
+                                right,
                             },
                             span,
                         );
                     }
                 }
                 _ => {
-                    left = Expression::new(
+                    left = self.ast.alloc_expr(
                         ExpressionKind::Binary {
-                            left: Box::new(left),
+                            left,
                             operator,
-                            right: Box::new(right),
+                            right,
                         },
                         span,
                     );
