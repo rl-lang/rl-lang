@@ -4,7 +4,7 @@
 //! the methods defined here. Nothing in this file produces AST nodes directly;
 //! it only provides the machinery for navigating the token stream.
 use crate::{
-    ast::statements::Statement,
+    ast::{Ast, ExprId, nodes::ExpressionKind, statements::Statement},
     lexer::tokentypes::Token,
     utils::{
         errors::{Error, Reason},
@@ -32,6 +32,7 @@ pub struct Parser {
     pub tokens: Vec<Token>,
     /// index of the token currently being examined (the "read head")
     pub current: usize,
+    pub ast: Ast,
 }
 
 impl Parser {
@@ -44,11 +45,15 @@ impl Parser {
     /// Returns the first [`Error`] encountered; parsing stops immediately.
     ///
     /// [`parse_statement_to_ast`]: Parser::parse_statement_to_ast
-    pub fn parse(tokens: Vec<Token>, source_file: SourceFile) -> Result<Vec<Statement>, Error> {
+    pub fn parse(
+        tokens: Vec<Token>,
+        source_file: SourceFile,
+    ) -> Result<(Ast, Vec<Statement>), Error> {
         let mut parser = Parser {
             source_file,
             tokens,
             current: 0,
+            ast: Ast::new(),
         };
 
         #[cfg(feature = "debug")]
@@ -61,12 +66,19 @@ impl Parser {
 
         #[cfg(feature = "debug")]
         log::info!("parsing complete");
-        Ok(statements)
+        Ok((parser.ast, statements))
     }
 
     /// Constructs a [`Reason::Parse`] error anchored at `span` with the source
     /// file already attached, ready to be returned from any parse method.
     pub fn err(&self, message: impl Into<String>, span: Span) -> Error {
         Error::at(Reason::Parse, message, span).with_source_file(&self.source_file)
+    }
+
+    pub fn expr_span(&self, id: ExprId) -> Span {
+        self.ast.exprs.get(id).span
+    }
+    pub fn expr_kind(&self, id: ExprId) -> ExpressionKind {
+        self.ast.exprs.get(id).kind
     }
 }
