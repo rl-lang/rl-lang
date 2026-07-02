@@ -85,7 +85,7 @@ impl Parser {
                 let name = segments
                     .pop()
                     .ok_or_else(|| self.err("expected function name after '::'", start))?;
-                Ok(Statement::new(
+                Ok(self.ast.alloc_stmt(
                     StatementKind::Import {
                         names: vec![name],
                         path: segments,
@@ -93,20 +93,18 @@ impl Parser {
                     span,
                 ))
             } else {
-                Ok(Statement::new(
-                    StatementKind::ImportFile { path: segments },
-                    span,
-                ))
+                Ok(self
+                    .ast
+                    .alloc_stmt(StatementKind::ImportFile { path: segments }, span))
             };
         }
 
         // single-segment file import: get mymodule
         if !matches!(self.peek(), TokenType::Comma | TokenType::From) {
             let span = start.join(self.previous_span());
-            return Ok(Statement::new(
-                StatementKind::ImportFile { path: vec![first] },
-                span,
-            ));
+            return Ok(self
+                .ast
+                .alloc_stmt(StatementKind::ImportFile { path: vec![first] }, span));
         }
 
         // named imports: get add, sub from …
@@ -148,12 +146,13 @@ impl Parser {
         let is_std = path.first().map(|s| s == "std").unwrap_or(false);
 
         if is_std {
-            Ok(Statement::new(StatementKind::Import { names, path }, span))
+            Ok(self
+                .ast
+                .alloc_stmt(StatementKind::Import { names, path }, span))
         } else {
-            Ok(Statement::new(
-                StatementKind::ImportFileNamed { path, names },
-                span,
-            ))
+            Ok(self
+                .ast
+                .alloc_stmt(StatementKind::ImportFileNamed { path, names }, span))
         }
     }
 }
