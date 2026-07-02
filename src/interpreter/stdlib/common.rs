@@ -156,3 +156,10 @@ macro_rules! vby {
     };
 }
 pub(crate) use vby;
+
+macro_rules! vnl {
+    () => {
+        Value::Null
+    };
+}
+pub(crate) use vnl;
