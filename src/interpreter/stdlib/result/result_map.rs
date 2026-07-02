@@ -1,5 +1,4 @@
 use crate::{
-    ast::Ast,
     interpreter::{evaluator::Evaluator, stdlib::common::check_arity, values::Value},
     utils::{errors::Error, span::Span},
 };
@@ -8,7 +7,7 @@ pub fn std_result_map(eval: &mut Evaluator, args: Vec<Value>, span: Span) -> Res
     check_arity(&args, 2, "result_map", span)?;
     match args[0].clone() {
         Value::Ok(inner) => {
-            let mapped = eval.call_value(&Ast::new(), args[1].clone(), vec![*inner], span)?;
+            let mapped = eval.call_value(args[1].clone(), vec![*inner], span)?;
             Ok(Value::Ok(Box::new(mapped)))
         }
         // pass error as is
@@ -28,7 +27,7 @@ pub fn std_result_map_err(
     check_arity(&args, 2, "result_map_err", span)?;
     match args[0].clone() {
         Value::Err(inner) => {
-            let mapped = eval.call_value(&Ast::new(), args[1].clone(), vec![*inner], span)?;
+            let mapped = eval.call_value(args[1].clone(), vec![*inner], span)?;
             Ok(Value::Err(Box::new(mapped)))
         }
         // pass ok as is

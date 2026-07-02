@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Ast, statements::TypeAnnotation},
+    ast::statements::TypeAnnotation,
     interpreter::{evaluator::Evaluator, values::Value},
     utils::{errors::Error, span::Span},
 };
@@ -47,7 +47,7 @@ pub fn std_arr_for_each(
     }
 
     for item in items {
-        eval.call_value(&Ast::new(), function.clone(), vec![item.clone()], span)?;
+        eval.call_value(function.clone(), vec![item.clone()], span)?;
     }
 
     Ok(Value::Null)

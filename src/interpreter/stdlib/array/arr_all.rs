@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Ast, statements::TypeAnnotation},
+    ast::statements::TypeAnnotation,
     interpreter::{evaluator::Evaluator, values::Value},
     utils::{errors::Error, span::Span},
 };
@@ -43,8 +43,7 @@ pub fn std_arr_all(
     }
 
     for item in items.clone() {
-        let mapped_item =
-            eval.call_value(&Ast::new(), function.clone(), vec![item.clone()], span)?;
+        let mapped_item = eval.call_value(function.clone(), vec![item.clone()], span)?;
         if let Value::Bool(false) = mapped_item {
             return Ok(Value::Bool(false));
         }

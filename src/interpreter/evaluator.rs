@@ -9,7 +9,6 @@ use crate::lexer::tokentypes::TokenType;
 use crate::resolver::Resolver;
 use crate::{
     ast::{nodes::ExpressionKind, statements::TypeAnnotation},
-    interpreter::evaluator_types::addressing::{get_indices_as_vec, try_get_root_addr},
     interpreter::{
         native::{IntoNativeFn, Module},
         stdlib,
@@ -64,6 +63,7 @@ pub struct Evaluator {
     pub rng: Xoshiro256,
     /// The resolver, kept alive so import statements can resolve newly loaded files inline.
     pub resolver: Resolver,
+    pub arena: Ast,
     /// Maps top-level function names to their environment slot for `call_path` shortcut.
     pub fn_names: std::collections::HashMap<String, usize>,
     // for diffrent calls
@@ -91,6 +91,7 @@ impl Evaluator {
             resolver: Resolver::new(),
             fn_names: std::collections::HashMap::new(),
             user_args_offset: 1,
+            arena: Ast::new(),
         }
     }
 
@@ -108,6 +109,11 @@ impl Evaluator {
     /// Registers a [`Module`] as a submodule of the root module.
     pub fn with_module(mut self, m: Module) -> Self {
         self.root_module.submodules.insert(m.name.clone(), m);
+        self
+    }
+
+    pub fn with_arena(mut self, arena: Ast) -> Self {
+        self.arena = arena;
         self
     }
 
@@ -302,8 +308,8 @@ impl Evaluator {
         }
     }
 
-    pub fn evaluate(&mut self, ast: &Ast, expression: &ExprId) -> Result<Value, Error> {
-        let value = match &ast.exprs.get(*expression).kind {
+    pub fn evaluate(&mut self, expression: &ExprId) -> Result<Value, Error> {
+        let value = match &self.arena.exprs.get(*expression).kind.clone() {
             ExpressionKind::Null => Value::Null,
             ExpressionKind::Integer(i) => Value::Integer(*i),
             ExpressionKind::Byte(b) => Value::Byte(*b),
@@ -312,15 +318,20 @@ impl Evaluator {
             ExpressionKind::Float(f) => Value::Float(*f),
             ExpressionKind::Character(c) => Value::Char(*c),
             ExpressionKind::Index { target, index } => {
-                if let Some((depth, slot)) = try_get_root_addr(ast, expression) {
-                    let indices =
-                        get_indices_as_vec(ast, expression, self, ast.exprs.get(*expression).span)?;
-                    self.index_read(depth, slot, &indices, ast.exprs.get(*expression).span)?
+                if let Some((depth, slot)) = self.try_get_root_addr(expression) {
+                    let indices = self
+                        .get_indices_as_vec(expression, self.arena.exprs.get(*expression).span)?;
+                    self.index_read(
+                        depth,
+                        slot,
+                        &indices,
+                        self.arena.exprs.get(*expression).span,
+                    )?
                 } else {
-                    let arr = self.evaluate(ast, target)?;
-                    self.check_not_null(&arr, ast.exprs.get(*target).span)?;
-                    let idx = self.evaluate(ast, index)?;
-                    self.check_not_null(&idx, ast.exprs.get(*index).span)?;
+                    let arr = self.evaluate(target)?;
+                    self.check_not_null(&arr, self.arena.exprs.get(*target).span)?;
+                    let idx = self.evaluate(index)?;
+                    self.check_not_null(&idx, self.arena.exprs.get(*index).span)?;
                     match (&arr, &idx) {
                         (Value::Values { items, .. }, Value::Integer(i)) => {
                             let i_usize = *i as usize;
@@ -328,10 +339,10 @@ impl Evaluator {
                                 return Err(self
                                     .err(
                                         format!("index {} out of bounds (len {})", i, items.len()),
-                                        ast.exprs.get(*expression).span,
+                                        self.arena.exprs.get(*expression).span,
                                     )
                                     .with_label(
-                                        ast.exprs.get(*target).span,
+                                        self.arena.exprs.get(*target).span,
                                         format!("this array has length {}", items.len()),
                                     ));
                             }
@@ -343,10 +354,10 @@ impl Evaluator {
                                 return Err(self
                                     .err(
                                         format!("index {} out of bounds (len {})", b, items.len()),
-                                        ast.exprs.get(*expression).span,
+                                        self.arena.exprs.get(*expression).span,
                                     )
                                     .with_label(
-                                        ast.exprs.get(*target).span,
+                                        self.arena.exprs.get(*target).span,
                                         format!("this array has length {}", items.len()),
                                     ));
                             }
@@ -363,10 +374,10 @@ impl Evaluator {
                                             i,
                                             items.len()
                                         ),
-                                        ast.exprs.get(*expression).span,
+                                        self.arena.exprs.get(*expression).span,
                                     )
                                     .with_label(
-                                        ast.exprs.get(*target).span,
+                                        self.arena.exprs.get(*target).span,
                                         format!("this tuple has {} elements", items.len()),
                                     ));
                             }
@@ -382,10 +393,10 @@ impl Evaluator {
                                             b,
                                             items.len()
                                         ),
-                                        ast.exprs.get(*expression).span,
+                                        self.arena.exprs.get(*expression).span,
                                     )
                                     .with_label(
-                                        ast.exprs.get(*target).span,
+                                        self.arena.exprs.get(*target).span,
                                         format!("this tuple has {} elements", items.len()),
                                     ));
                             }
@@ -393,13 +404,16 @@ impl Evaluator {
                         }
                         _ => {
                             return Err(self
-                                .err("invalid index operation", ast.exprs.get(*expression).span)
+                                .err(
+                                    "invalid index operation",
+                                    self.arena.exprs.get(*expression).span,
+                                )
                                 .with_label(
-                                    ast.exprs.get(*target).span,
+                                    self.arena.exprs.get(*target).span,
                                     format!("this is {}", arr.type_name()),
                                 )
                                 .with_label(
-                                    ast.exprs.get(*index).span,
+                                    self.arena.exprs.get(*index).span,
                                     format!("this is {}", idx.type_name()),
                                 ));
                         }
@@ -409,7 +423,7 @@ impl Evaluator {
             ExpressionKind::ArrayLiteral(items) => {
                 let mut values = Vec::with_capacity(items.len());
                 for e in items {
-                    values.push(self.evaluate(ast, e)?);
+                    values.push(self.evaluate(e)?);
                 }
                 let items_type = values
                     .first()
@@ -428,7 +442,7 @@ impl Evaluator {
                                     actual,
                                     items_type,
                                 ),
-                                ast.exprs.get(*expression).span,
+                                self.arena.exprs.get(*expression).span,
                             ));
                         }
                     }
@@ -448,33 +462,33 @@ impl Evaluator {
                 target,
                 index,
                 value,
-            } => self.index_assign(ast, target, index, value, ast.exprs.get(*expression).span)?,
-            ExpressionKind::Grouping(inner) => self.evaluate(ast, inner)?,
+            } => self.index_assign(target, index, value, self.arena.exprs.get(*expression).span)?,
+            ExpressionKind::Grouping(inner) => self.evaluate(inner)?,
             ExpressionKind::Binary {
                 left,
                 operator,
                 right,
             } => {
                 if matches!(operator, TokenType::And) {
-                    let l = self.evaluate(ast, left)?;
+                    let l = self.evaluate(left)?;
                     if let Value::Bool(false) = l {
                         return Ok(Value::Bool(false));
                     }
-                    let r = self.evaluate(ast, right)?;
+                    let r = self.evaluate(right)?;
                     return Ok(Value::Bool(matches!(r, Value::Bool(true))));
                 }
 
                 if matches!(operator, TokenType::Or) {
-                    let l = self.evaluate(ast, left)?;
+                    let l = self.evaluate(left)?;
                     if let Value::Bool(true) = l {
                         return Ok(Value::Bool(true));
                     }
-                    let r = self.evaluate(ast, right)?;
+                    let r = self.evaluate(right)?;
                     return Ok(Value::Bool(matches!(r, Value::Bool(true))));
                 }
 
-                let left_val = self.evaluate(ast, left)?;
-                let right_val = self.evaluate(ast, right)?;
+                let left_val = self.evaluate(left)?;
+                let right_val = self.evaluate(right)?;
                 if matches!(operator, TokenType::Compare | TokenType::BangEqual)
                     && (matches!(left_val, Value::Null) || matches!(right_val, Value::Null))
                 {
@@ -485,34 +499,34 @@ impl Evaluator {
                         Value::Bool(!result)
                     });
                 }
-                self.check_not_null(&left_val, ast.exprs.get(*left).span)?;
-                self.check_not_null(&right_val, ast.exprs.get(*right).span)?;
+                self.check_not_null(&left_val, self.arena.exprs.get(*left).span)?;
+                self.check_not_null(&right_val, self.arena.exprs.get(*right).span)?;
                 self.match_binary_operator(
                     left_val,
-                    ast.exprs.get(*left).span,
+                    self.arena.exprs.get(*left).span,
                     right_val,
-                    ast.exprs.get(*right).span,
+                    self.arena.exprs.get(*right).span,
                     operator,
-                    ast.exprs.get(*expression).span,
+                    self.arena.exprs.get(*expression).span,
                 )?
             }
             ExpressionKind::Unary { operator, operand } => {
-                let operand_val = self.evaluate(ast, operand)?;
-                self.check_not_null(&operand_val, ast.exprs.get(*operand).span)?;
+                let operand_val = self.evaluate(operand)?;
+                self.check_not_null(&operand_val, self.arena.exprs.get(*operand).span)?;
                 self.match_unary_operator(
                     operand_val,
-                    ast.exprs.get(*operand).span,
+                    self.arena.exprs.get(*operand).span,
                     operator,
-                    ast.exprs.get(*expression).span,
+                    self.arena.exprs.get(*expression).span,
                 )?
             }
             ExpressionKind::ResolvedIdentifier { depth, slot, .. } => {
-                self.get_value(*depth, *slot, ast.exprs.get(*expression).span)?
+                self.get_value(*depth, *slot, self.arena.exprs.get(*expression).span)?
             }
             ExpressionKind::ResolvedAssign {
                 depth, slot, value, ..
             } => {
-                let val = self.evaluate(ast, value)?;
+                let val = self.evaluate(value)?;
 
                 let inferred_type = Self::infer_type(&val, false);
                 self.assign_value(
@@ -520,31 +534,30 @@ impl Evaluator {
                     *slot,
                     val.clone(),
                     inferred_type,
-                    ast.exprs.get(*expression).span,
+                    self.arena.exprs.get(*expression).span,
                 )?;
                 val
             }
             ExpressionKind::Call { path, args } => {
                 let mut evaluated_args = Vec::with_capacity(args.len());
                 for arg in args {
-                    let val = self.evaluate(ast, arg)?;
+                    let val = self.evaluate(arg)?;
                     evaluated_args.push(val);
                 }
-                self.call_path(ast, path, evaluated_args, ast.exprs.get(*expression).span)?
+                self.call_path(path, evaluated_args, self.arena.exprs.get(*expression).span)?
             }
 
             ExpressionKind::CallExpr { callee, args } => {
-                let func_val = self.evaluate(ast, callee)?;
+                let func_val = self.evaluate(callee)?;
                 let mut evaluated_args = Vec::with_capacity(args.len());
                 for arg in args {
-                    let val = self.evaluate(ast, arg)?;
+                    let val = self.evaluate(arg)?;
                     evaluated_args.push(val);
                 }
                 self.call_value(
-                    ast,
                     func_val,
                     evaluated_args,
-                    ast.exprs.get(*expression).span,
+                    self.arena.exprs.get(*expression).span,
                 )?
             }
 
@@ -553,13 +566,17 @@ impl Evaluator {
                 method,
                 args,
             } => {
-                let first_arg = self.evaluate(ast, caller)?;
+                let first_arg = self.evaluate(caller)?;
                 let mut evaluated_args = vec![first_arg];
                 // elevate and push the args
                 for arg in args {
-                    evaluated_args.push(self.evaluate(ast, arg)?);
+                    evaluated_args.push(self.evaluate(arg)?);
                 }
-                self.call_path(ast, method, evaluated_args, ast.exprs.get(*expression).span)?
+                self.call_path(
+                    method,
+                    evaluated_args,
+                    self.arena.exprs.get(*expression).span,
+                )?
             }
             ExpressionKind::ResolvedLambda {
                 params,
@@ -586,19 +603,19 @@ impl Evaluator {
             ExpressionKind::Identifier(name) => {
                 return Err(self.err(
                     format!("undefined variable '{}'", name),
-                    ast.exprs.get(*expression).span,
+                    self.arena.exprs.get(*expression).span,
                 ));
             }
             ExpressionKind::Assign { name, .. } => {
                 return Err(self.err(
                     format!("undefined variable '{}'", name),
-                    ast.exprs.get(*expression).span,
+                    self.arena.exprs.get(*expression).span,
                 ));
             }
 
             ExpressionKind::Cast { value, target_type } => {
-                let val = self.evaluate(ast, value)?;
-                self.check_not_null(&val, ast.exprs.get(*value).span)?;
+                let val = self.evaluate(value)?;
+                self.check_not_null(&val, self.arena.exprs.get(*value).span)?;
                 match (&val, target_type) {
                     (Value::Integer(n), TypeAnnotation::Float) => Value::Float(*n as f64),
                     (Value::Integer(n), TypeAnnotation::Byte) => Value::Byte(*n as u8),
@@ -617,7 +634,7 @@ impl Evaluator {
                                 val.type_name(),
                                 target_type
                             ),
-                            ast.exprs.get(*expression).span,
+                            self.arena.exprs.get(*expression).span,
                         ));
                     }
                 }
@@ -626,31 +643,31 @@ impl Evaluator {
             ExpressionKind::TupleLiteral(items) => {
                 let mut values = Vec::with_capacity(items.len());
                 for e in items {
-                    values.push(self.evaluate(ast, e)?);
+                    values.push(self.evaluate(e)?);
                 }
                 Value::Tuple(values)
             }
             ExpressionKind::ErrorLiteral(inner) => {
-                let val = self.evaluate(ast, inner)?;
+                let val = self.evaluate(inner)?;
                 if matches!(val, Value::Error(_)) {
                     return Err(self.err(
                         "error cannot wrap another error",
-                        ast.exprs.get(*expression).span,
+                        self.arena.exprs.get(*expression).span,
                     ));
                 }
                 Value::Error(Box::new(val))
             }
             ExpressionKind::OkLiteral(inner) => {
-                let val = self.evaluate(ast, inner)?;
+                let val = self.evaluate(inner)?;
                 Value::Ok(Box::new(val))
             }
             ExpressionKind::ErrLiteral(inner) => {
-                let val = self.evaluate(ast, inner)?;
+                let val = self.evaluate(inner)?;
                 Value::Err(Box::new(val))
             }
 
             ExpressionKind::Propagate(inner) => {
-                let val = self.evaluate(ast, inner)?;
+                let val = self.evaluate(inner)?;
                 match val {
                     Value::Ok(v) => *v,
                     Value::Err(_) => {
@@ -672,7 +689,6 @@ impl Evaluator {
     /// Global scope mutations made inside the call are propagated back to the caller.
     pub fn call_value(
         &mut self,
-        ast: &Ast,
         func: Value,
         args: Vec<Value>,
         span: Span,
@@ -706,7 +722,7 @@ impl Evaluator {
             }
 
             for statement in &*body {
-                self.evaluate_statement(ast, statement)?;
+                self.evaluate_statement(statement)?;
                 if self.return_value.is_some() {
                     break;
                 }
@@ -747,7 +763,6 @@ impl Evaluator {
     /// 3. Error with "did you mean?" suggestion from stdlib keywords
     pub fn call_path(
         &mut self,
-        ast: &Ast,
         path: &[String],
         args: Vec<Value>,
         span: Span,
@@ -767,7 +782,7 @@ impl Evaluator {
             && let Some(&slot) = self.fn_names.get(&path[0])
         {
             let func = self.get_value(0, slot, span)?;
-            return self.call_value(ast, func, args, span);
+            return self.call_value(func, args, span);
         }
         let mut err = self.err(format!("undefined function {}", path.join("::")), span);
         // suggest a stdlib leaf name if the last segment is a close typo

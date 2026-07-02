@@ -1,5 +1,4 @@
 use crate::{
-    ast::Ast,
     interpreter::{evaluator::Evaluator, values::Value},
     utils::{errors::Error, span::Span},
 };
@@ -37,7 +36,6 @@ pub fn std_arr_sort_by(
         let mut j = i;
         while j > 0 {
             let result = eval.call_value(
-                &Ast::new(),
                 function.clone(),
                 vec![items[j - 1].clone(), items[j].clone()],
                 span,

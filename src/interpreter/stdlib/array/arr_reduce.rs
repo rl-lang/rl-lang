@@ -1,5 +1,4 @@
 use crate::{
-    ast::Ast,
     interpreter::{evaluator::Evaluator, values::Value},
     utils::{errors::Error, span::Span},
 };
@@ -37,7 +36,7 @@ pub fn std_arr_reduce(
     let mut result = initial;
 
     for item in items {
-        result = eval.call_value(&Ast::new(), function.clone(), vec![result, item], span)?;
+        result = eval.call_value(function.clone(), vec![result, item], span)?;
     }
 
     Ok(result)

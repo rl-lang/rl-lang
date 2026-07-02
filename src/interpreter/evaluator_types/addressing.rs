@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Ast, ExprId, nodes::ExpressionKind},
+    ast::{ExprId, nodes::ExpressionKind},
     interpreter::{
         evaluator::{EnvironmentItem, Evaluator},
         values::Value,
@@ -7,50 +7,50 @@ use crate::{
     utils::{errors::Error, span::Span},
 };
 
-pub fn get_root_addr(ast: &Ast, expression: &ExprId) -> (usize, usize) {
-    match &ast.exprs.get(*expression).kind {
-        ExpressionKind::ResolvedIdentifier { depth, slot, .. } => (*depth, *slot),
-        ExpressionKind::Index { target, .. } => get_root_addr(ast, target),
-        _ => unreachable!("index_assign: unexpected root expression"),
-    }
-}
-
-/// Non-panicking variant of `get_root_addr`, for call sites (like Index
-/// reads) where the target may not be addressable - e.g. foo()[0].
-/// Returns `None` instead of panicking so the caller can fall back to
-/// normal evaluation.
-pub fn try_get_root_addr(ast: &Ast, expression: &ExprId) -> Option<(usize, usize)> {
-    match &ast.exprs.get(*expression).kind {
-        ExpressionKind::ResolvedIdentifier { depth, slot, .. } => Some((*depth, *slot)),
-        ExpressionKind::Index { target, .. } => try_get_root_addr(&ast, target),
-        _ => None,
-    }
-}
-
-pub fn get_indices_as_vec(
-    ast: &Ast,
-    expression: &ExprId,
-    evaluator: &mut Evaluator,
-    span: Span,
-) -> Result<Vec<usize>, Error> {
-    match &ast.exprs.get(*expression).kind {
-        ExpressionKind::ResolvedIdentifier { .. } => Ok(vec![]),
-        ExpressionKind::Index { target, index } => {
-            let mut indices = get_indices_as_vec(ast, target, evaluator, span)?;
-            if let Value::Integer(i) = evaluator.evaluate(ast, index)? {
-                if i < 0 {
-                    return Err(evaluator.err(format!("index cannot be negative: {}", i), span));
-                }
-                indices.push(i as usize);
-            }
-
-            Ok(indices)
-        }
-        _ => unreachable!(),
-    }
-}
-
 impl Evaluator {
+    pub fn get_root_addr(&self, expression: &ExprId) -> (usize, usize) {
+        match &self.arena.exprs.get(*expression).kind {
+            ExpressionKind::ResolvedIdentifier { depth, slot, .. } => (*depth, *slot),
+            ExpressionKind::Index { target, .. } => self.get_root_addr(target),
+            _ => unreachable!("index_assign: unexpected root expression"),
+        }
+    }
+
+    /// Non-panicking variant of `get_root_addr`, for call sites (like Index
+    /// reads) where the target may not be addressable - e.g. foo()[0].
+    /// Returns `None` instead of panicking so the caller can fall back to
+    /// normal evaluation.
+    pub fn try_get_root_addr(&self, expression: &ExprId) -> Option<(usize, usize)> {
+        match &self.arena.exprs.get(*expression).kind {
+            ExpressionKind::ResolvedIdentifier { depth, slot, .. } => Some((*depth, *slot)),
+            ExpressionKind::Index { target, .. } => self.try_get_root_addr(target),
+            _ => None,
+        }
+    }
+
+    pub fn get_indices_as_vec(
+        &mut self,
+        expression: &ExprId,
+        span: Span,
+    ) -> Result<Vec<usize>, Error> {
+        let kind = &self.arena.exprs.get(*expression).kind.clone();
+        match kind {
+            ExpressionKind::ResolvedIdentifier { .. } => Ok(vec![]),
+            ExpressionKind::Index { target, index } => {
+                let mut indices = self.get_indices_as_vec(target, span)?;
+                if let Value::Integer(i) = self.evaluate(index)? {
+                    if i < 0 {
+                        return Err(self.err(format!("index cannot be negative: {}", i), span));
+                    }
+                    indices.push(i as usize);
+                }
+
+                Ok(indices)
+            }
+            _ => unreachable!(),
+        }
+    }
+
     pub fn slot_ref(&self, depth: usize, slot: usize) -> Option<&EnvironmentItem> {
         if depth >= self.environment.len() {
             self.globals.get(slot)

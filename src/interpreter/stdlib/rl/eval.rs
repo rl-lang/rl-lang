@@ -26,19 +26,24 @@ pub fn func(eval: &mut Evaluator, value: Value) -> Value {
     };
 
     let (ast, stmts) = ast;
+
     let mut resolver = std::mem::take(&mut eval.resolver);
-    let resolved = resolver.resolve_statements(stmts);
+
+    let (arena, resolved) = resolver.resolve(ast, stmts);
     eval.resolver = resolver;
+
+    let old_arena = std::mem::replace(&mut eval.arena, arena);
 
     let prev_buffer = eval.output_buffer.take();
     eval.output_buffer = Some(String::new());
     eval.environment.push(vec![]);
 
-    let result = eval.evaluate_block(&ast, &resolved);
+    let result = eval.evaluate_block(&resolved);
 
     eval.environment.pop();
     let captured = eval.output_buffer.take().unwrap_or_default();
     eval.output_buffer = prev_buffer;
+    eval.arena = old_arena;
 
     match result {
         Ok(_) => vok!(vs!(captured)),

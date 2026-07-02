@@ -1,5 +1,4 @@
 use crate::{
-    ast::Ast,
     interpreter::{evaluator::Evaluator, values::Value},
     utils::{errors::Error, span::Span},
 };
@@ -33,7 +32,7 @@ pub fn std_arr_map(
     let mut result = Vec::with_capacity(items.len());
 
     for item in items {
-        let mapped_item = eval.call_value(&Ast::new(), function.clone(), vec![item], span)?;
+        let mapped_item = eval.call_value(function.clone(), vec![item], span)?;
         result.push(mapped_item);
     }
 
