@@ -119,8 +119,8 @@ pub fn module() -> Module {
         .with_raw_function("term_set_bg", set_bg::func)
         .with_raw_function("term_reset_color", reset_color::func)
         // named color
-        .with_raw_function("term_fg", named_color::std_term_fg)
-        .with_raw_function("term_bg", named_color::std_term_bg)
+        .with_function("term_fg", named_color::std_term_fg)
+        .with_function("term_bg", named_color::std_term_bg)
         // attributes
         .with_function("term_bold", attr::std_term_bold)
         .with_function("term_dim", attr::std_term_dim)

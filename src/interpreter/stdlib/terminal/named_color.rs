@@ -1,6 +1,5 @@
-use crate::interpreter::stdlib::common::{check_arity, extract_string};
+use crate::interpreter::stdlib::common::{extract_string, verr, vs};
 use crate::interpreter::{evaluator::Evaluator, values::Value};
-use crate::utils::{errors::Error, span::Span};
 use crossterm::{
     execute,
     style::{Color, SetBackgroundColor, SetForegroundColor},
@@ -29,26 +28,36 @@ fn parse_color(s: &str) -> Option<Color> {
     }
 }
 
-pub fn std_term_fg(eval: &mut Evaluator, args: Vec<Value>, span: Span) -> Result<Value, Error> {
-    check_arity(&args, 1, "term_fg", span)?;
+pub fn std_term_fg(_: &mut Evaluator, arg: Value) -> Value {
+    let name = match extract_string(arg, "term_fg") {
+        Ok(v) => v,
+        Err(e) => return verr!(vs!(e)),
+    };
 
-    let name = extract_string(args[0].clone(), "term_fg", span)?;
+    let color = match parse_color(&name) {
+        Some(v) => v,
+        None => return verr!(vs!(format!("term_fg(): unknown color \"{}\"", name))),
+    };
 
-    let color = parse_color(&name)
-        .ok_or_else(|| eval.err(format!("term_fg(): unknown color \"{}\"", name), span))?;
     execute!(stdout(), SetForegroundColor(color))
-        .map_err(|e| eval.err(format!("term_fg(): {}", e), span))?;
-    Ok(Value::Ok(Box::new(Value::Null)))
+        .map_err(|e| return verr!(vs!(format!("term_fg(): {}", e))));
+
+    Value::Ok(Box::new(Value::Null))
 }
 
-pub fn std_term_bg(eval: &mut Evaluator, args: Vec<Value>, span: Span) -> Result<Value, Error> {
-    check_arity(&args, 1, "term_bg", span)?;
+pub fn std_term_bg(_: &mut Evaluator, arg: Value) -> Value {
+    let name = match extract_string(arg, "term_fg") {
+        Ok(v) => v,
+        Err(e) => return verr!(vs!(e)),
+    };
 
-    let name = extract_string(args[0].clone(), "term_bg", span)?;
+    let color = match parse_color(&name) {
+        Some(v) => v,
+        None => return verr!(vs!(format!("term_fg(): unknown color \"{}\"", name))),
+    };
 
-    let color = parse_color(&name)
-        .ok_or_else(|| eval.err(format!("term_bg(): unknown color \"{}\"", name), span))?;
     execute!(stdout(), SetBackgroundColor(color))
-        .map_err(|e| eval.err(format!("term_bg(): {}", e), span))?;
-    Ok(Value::Ok(Box::new(Value::Null)))
+        .map_err(|e| return verr!(vs!(format!("term_bg(): {}", e))));
+
+    Value::Ok(Box::new(Value::Null))
 }
