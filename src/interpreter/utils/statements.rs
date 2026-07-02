@@ -1,7 +1,10 @@
 //! Statement evaluation - the main dispatch loop and control flow primitives.
 
 use crate::{
-    ast::statements::{FunctionAttribute, MatchPattern, Statement, StatementKind, TypeAnnotation},
+    ast::{
+        Ast, StmtId,
+        statements::{FunctionAttribute, MatchPattern, Statement, StatementKind, TypeAnnotation},
+    },
     interpreter::{evaluator::Evaluator, values::Value},
     lexer::tokenizer::Tokenizer,
     parser::parser_logic::Parser,
@@ -668,7 +671,7 @@ impl Evaluator {
     /// If no entry point exists, all statements are evaluated top-to-bottom (script mode).
     ///
     /// Returns an error if multiple `!#[entry]` functions are found.
-    pub fn evaluate_program(&mut self, statements: &[Statement]) -> Result<(), Error> {
+    pub fn evaluate_program(&mut self, ast: &Ast, statements: &[StmtId]) -> Result<(), Error> {
         let mut explicit_entry: Option<(Span, usize)> = None;
         let mut main_entry: Option<(Span, usize)> = None;
         let mut inits: Vec<(Span, usize)> = vec![];

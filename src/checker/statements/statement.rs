@@ -4,7 +4,10 @@
 use std::path::PathBuf;
 
 use crate::{
-    ast::statements::{MatchPattern, StatementKind, TypeAnnotation},
+    ast::{
+        StmtId,
+        statements::{MatchPattern, StatementKind, TypeAnnotation},
+    },
     checker::structs::{CheckType, TypeChecker},
     lexer::tokenizer::Tokenizer,
     parser::parser_logic::Parser,
@@ -13,7 +16,7 @@ use crate::{
 
 impl TypeChecker {
     // checks the current statement and push errors via error() if any found
-    pub fn check_statement(&mut self, statement: &crate::ast::statements::Statement) {
+    pub fn check_statement(&mut self, statement: &StmtId) {
         match &statement.kind {
             // checks if the type null or same type then declare it as variable
             // otherwise pushs error

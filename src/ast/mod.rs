@@ -35,6 +35,12 @@ pub struct Ast {
 pub type ExprId = Id<Expression>;
 pub type StmtId = Id<Statement>;
 
+impl Default for Ast {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Ast {
     pub fn new() -> Self {
         Self {

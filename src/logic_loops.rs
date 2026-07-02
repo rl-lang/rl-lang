@@ -22,7 +22,6 @@ use crate::ast::{Ast, StmtId};
 use super::interpreter::evaluator::Evaluator;
 
 use super::{
-    ast::statements::Statement,
     lexer::{tokenizer::Tokenizer, tokentypes::Token},
     parser::parser_logic::Parser,
     utils::source::SourceFile,
@@ -69,14 +68,16 @@ pub fn eval_loop(source: SourceFile, ast: Ast, statements: Vec<StmtId>, user_arg
         .with_source_file(source.clone())
         .with_user_args_offset(user_args_offset);
 
-    evaluator.resolver.with_ast(ast);
+    evaluator.resolver = evaluator.resolver.with_ast(ast);
     evaluator.resolver.current_dir = std::path::Path::new(source.name.as_ref())
         .parent()
         .unwrap_or(std::path::Path::new(""))
         .to_path_buf();
 
     let statements = evaluator.resolver.resolve_statements(statements);
-    if let Err(e) = evaluator.evaluate_program(&statements) {
+    let ast = evaluator.resolver.into_ast();
+
+    if let Err(e) = evaluator.evaluate_program(&ast, &statements) {
         e.report_to_stderr();
         std::process::exit(1);
     }

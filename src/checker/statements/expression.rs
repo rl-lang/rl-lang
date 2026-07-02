@@ -2,16 +2,13 @@
 //! returns the static [`CheckType`] of the expression.
 
 use crate::{
-    ast::{
-        nodes::{Expression, ExpressionKind},
-        statements::TypeAnnotation,
-    },
+    ast::{ExprId, nodes::ExpressionKind, statements::TypeAnnotation},
     checker::{TypeChecker, structs::CheckType},
     utils::span::Span,
 };
 
 impl TypeChecker {
-    pub fn check_expression(&mut self, expression: &Expression) -> CheckType {
+    pub fn check_expression(&mut self, expression: &ExprId) -> CheckType {
         match &expression.kind {
             // returns as type
             ExpressionKind::Null => CheckType::Known(TypeAnnotation::Null),

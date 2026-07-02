@@ -98,4 +98,8 @@ impl Resolver {
     pub fn stmt_kind(&self, id: StmtId) -> StatementKind {
         self.ast.stmts.get(id).kind.clone()
     }
+
+    pub fn into_ast(&mut self) -> Ast {
+        std::mem::take(&mut self.ast)
+    }
 }
