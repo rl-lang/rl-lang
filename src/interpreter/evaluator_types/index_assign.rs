@@ -8,7 +8,7 @@
 //! structure mutably to perform the assignment, enforcing type compatibility and bounds.
 
 use crate::{
-    ast::{nodes::Expression, statements::TypeAnnotation},
+    ast::{Ast, ExprId, statements::TypeAnnotation},
     interpreter::{
         evaluator::{EnvironmentItem, Evaluator},
         evaluator_types::addressing::{get_indices_as_vec, get_root_addr},
@@ -20,15 +20,16 @@ use crate::{
 impl Evaluator {
     pub fn index_assign(
         &mut self,
-        target: &Expression,
-        index: &Expression,
-        value: &Expression,
+        ast: &Ast,
+        target: &ExprId,
+        index: &ExprId,
+        value: &ExprId,
         span: Span,
     ) -> Result<Value, Error> {
-        let idx = self.evaluate(index)?;
-        let val = self.evaluate(value)?;
-        let (depth, slot) = get_root_addr(target);
-        let mut indices = get_indices_as_vec(target, self, span)?;
+        let idx = self.evaluate(ast, index)?;
+        let val = self.evaluate(ast, value)?;
+        let (depth, slot) = get_root_addr(ast, target);
+        let mut indices = get_indices_as_vec(ast, target, self, span)?;
         if let Value::Integer(i) = idx {
             if i < 0 {
                 return Err(self.err(format!("index cannot be negative: {}", i), span));

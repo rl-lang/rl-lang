@@ -1,5 +1,5 @@
 use crate::{
-    ast::nodes::{Expression, ExpressionKind},
+    ast::{Ast, ExprId, nodes::ExpressionKind},
     interpreter::{
         evaluator::{EnvironmentItem, Evaluator},
         values::Value,
@@ -7,10 +7,10 @@ use crate::{
     utils::{errors::Error, span::Span},
 };
 
-pub fn get_root_addr(expression: &Expression) -> (usize, usize) {
-    match &expression.kind {
+pub fn get_root_addr(ast: &Ast, expression: &ExprId) -> (usize, usize) {
+    match &ast.exprs.get(*expression).kind {
         ExpressionKind::ResolvedIdentifier { depth, slot, .. } => (*depth, *slot),
-        ExpressionKind::Index { target, .. } => get_root_addr(target),
+        ExpressionKind::Index { target, .. } => get_root_addr(ast, target),
         _ => unreachable!("index_assign: unexpected root expression"),
     }
 }
@@ -19,24 +19,25 @@ pub fn get_root_addr(expression: &Expression) -> (usize, usize) {
 /// reads) where the target may not be addressable - e.g. foo()[0].
 /// Returns `None` instead of panicking so the caller can fall back to
 /// normal evaluation.
-pub fn try_get_root_addr(expression: &Expression) -> Option<(usize, usize)> {
-    match &expression.kind {
+pub fn try_get_root_addr(ast: &Ast, expression: &ExprId) -> Option<(usize, usize)> {
+    match &ast.exprs.get(*expression).kind {
         ExpressionKind::ResolvedIdentifier { depth, slot, .. } => Some((*depth, *slot)),
-        ExpressionKind::Index { target, .. } => try_get_root_addr(target),
+        ExpressionKind::Index { target, .. } => try_get_root_addr(&ast, target),
         _ => None,
     }
 }
 
 pub fn get_indices_as_vec(
-    expression: &Expression,
+    ast: &Ast,
+    expression: &ExprId,
     evaluator: &mut Evaluator,
     span: Span,
 ) -> Result<Vec<usize>, Error> {
-    match &expression.kind {
+    match &ast.exprs.get(*expression).kind {
         ExpressionKind::ResolvedIdentifier { .. } => Ok(vec![]),
         ExpressionKind::Index { target, index } => {
-            let mut indices = get_indices_as_vec(target, evaluator, span)?;
-            if let Value::Integer(i) = evaluator.evaluate(index)? {
+            let mut indices = get_indices_as_vec(ast, target, evaluator, span)?;
+            if let Value::Integer(i) = evaluator.evaluate(ast, index)? {
                 if i < 0 {
                     return Err(evaluator.err(format!("index cannot be negative: {}", i), span));
                 }

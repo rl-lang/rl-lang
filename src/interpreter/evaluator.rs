@@ -303,7 +303,8 @@ impl Evaluator {
     }
 
     pub fn evaluate(&mut self, ast: &Ast, expression: &ExprId) -> Result<Value, Error> {
-        let value = match &expression.kind {
+        let ast = *ast;
+        let value = match &ast.exprs.get(*expression).kind {
             ExpressionKind::Null => Value::Null,
             ExpressionKind::Integer(i) => Value::Integer(*i),
             ExpressionKind::Byte(b) => Value::Byte(*b),
