@@ -1,10 +1,11 @@
 use rl_lang::{
-    ast::{
-        nodes::{Expression, ExpressionKind},
-        statements::{Statement, StatementKind, TypeAnnotation},
-    },
+    arraydecl, assign, assignexpr,
+    ast::statements::{StatementKind, TypeAnnotation},
+    bin, call, constdecl, exprstmt, flt, grp, id, idx, import, int,
     lexer::tokentypes::TokenType,
+    nl, sn, un,
     utils::span::Span,
+    vardecl,
 };
 
 use crate::common;
@@ -21,132 +22,46 @@ dec float x = pow(pi, pi)
 
 println(x, y)",
     );
+
     let expected = vec![
-        Statement::new(
-            StatementKind::Import {
-                names: vec!["println".to_string()],
-                path: vec!["std".to_string(), "io".to_string()],
-            },
-            Span::new(0, 24),
+        import!(["println"], ["std", "io"], 0, 24),
+        nl!(24, 25),
+        import!(["pow"], ["std", "math"], 25, 47),
+        nl!(47, 48),
+        import!(["PI"], ["std", "math", "consts"], 48, 73),
+        nl!(73, 74),
+        nl!(74, 75),
+        constdecl!(
+            "pi",
+            TypeAnnotation::CFloat,
+            call!(["PI"], [], 92, 96),
+            75,
+            96
         ),
-        Statement::new(
-            StatementKind::Expression(Expression::new(
-                ExpressionKind::Integer(0),
-                Span::new(24, 25),
-            )),
-            Span::new(24, 25),
+        nl!(96, 97),
+        vardecl!(
+            "x",
+            TypeAnnotation::Float,
+            call!(
+                ["pow"],
+                [id!("pi", 115, 117), id!("pi", 119, 121)],
+                111,
+                122
+            ),
+            97,
+            122
         ),
-        Statement::new(
-            StatementKind::Import {
-                names: vec!["pow".to_string()],
-                path: vec!["std".to_string(), "math".to_string()],
-            },
-            Span::new(25, 47),
-        ),
-        Statement::new(
-            StatementKind::Expression(Expression::new(
-                ExpressionKind::Integer(0),
-                Span::new(47, 48),
-            )),
-            Span::new(47, 48),
-        ),
-        Statement::new(
-            StatementKind::Import {
-                names: vec!["PI".to_string()],
-                path: vec!["std".to_string(), "math".to_string(), "consts".to_string()],
-            },
-            Span::new(48, 73),
-        ),
-        Statement::new(
-            StatementKind::Expression(Expression::new(
-                ExpressionKind::Integer(0),
-                Span::new(73, 74),
-            )),
-            Span::new(73, 74),
-        ),
-        Statement::new(
-            StatementKind::Expression(Expression::new(
-                ExpressionKind::Integer(0),
-                Span::new(74, 75),
-            )),
-            Span::new(74, 75),
-        ),
-        Statement::new(
-            StatementKind::ConstantDeclaration {
-                name: "pi".to_string(),
-                type_annotation: TypeAnnotation::CFloat,
-                value: Expression::new(
-                    ExpressionKind::Call {
-                        path: vec!["PI".to_string()],
-                        args: vec![],
-                    },
-                    Span::new(92, 96),
-                ),
-            },
-            Span::new(75, 96),
-        ),
-        Statement::new(
-            StatementKind::Expression(Expression::new(
-                ExpressionKind::Integer(0),
-                Span::new(96, 97),
-            )),
-            Span::new(96, 97),
-        ),
-        Statement::new(
-            StatementKind::VariableDeclaration {
-                name: "x".to_string(),
-                type_annotation: TypeAnnotation::Float,
-                value: Expression::new(
-                    ExpressionKind::Call {
-                        path: vec!["pow".to_string()],
-                        args: vec![
-                            Expression::new(
-                                ExpressionKind::Identifier("pi".to_string()),
-                                Span::new(115, 117),
-                            ),
-                            Expression::new(
-                                ExpressionKind::Identifier("pi".to_string()),
-                                Span::new(119, 121),
-                            ),
-                        ],
-                    },
-                    Span::new(111, 122),
-                ),
-            },
-            Span::new(97, 122),
-        ),
-        Statement::new(
-            StatementKind::Expression(Expression::new(
-                ExpressionKind::Integer(0),
-                Span::new(122, 123),
-            )),
-            Span::new(122, 123),
-        ),
-        Statement::new(
-            StatementKind::Expression(Expression::new(
-                ExpressionKind::Integer(0),
-                Span::new(123, 124),
-            )),
-            Span::new(123, 124),
-        ),
-        Statement::new(
-            StatementKind::Expression(Expression::new(
-                ExpressionKind::Call {
-                    path: vec!["println".to_string()],
-                    args: vec![
-                        Expression::new(
-                            ExpressionKind::Identifier("x".to_string()),
-                            Span::new(132, 133),
-                        ),
-                        Expression::new(
-                            ExpressionKind::Identifier("y".to_string()),
-                            Span::new(135, 136),
-                        ),
-                    ],
-                },
-                Span::new(124, 137),
-            )),
-            Span::new(124, 137),
+        nl!(122, 123),
+        nl!(123, 124),
+        exprstmt!(
+            call!(
+                ["println"],
+                [id!("x", 132, 133), id!("y", 135, 136)],
+                124,
+                137
+            ),
+            124,
+            137
         ),
     ];
     assert_eq!(statements, expected);
@@ -181,462 +96,163 @@ dec bool big = lg > TAU()
 println(hyp, is_right, prime, big)",
     );
     let expected = vec![
-        Statement::new(
-            StatementKind::Import {
-                names: vec!["println".to_string()],
-                path: vec!["std".to_string(), "io".to_string()],
-            },
-            Span::new(0, 24),
+        import!(["println"], ["std", "io"], 0, 24),
+        nl!(24, 25),
+        import!(
+            ["sin", "cos", "hypot", "is_prime", "log2", "factorial"],
+            ["std", "math"],
+            25,
+            86
         ),
-        Statement::new(
-            StatementKind::Expression(Expression::new(
-                ExpressionKind::Integer(0),
-                Span::new(24, 25),
-            )),
-            Span::new(24, 25),
+        nl!(86, 87),
+        import!(["PI", "TAU", "PHI"], ["std", "math", "consts"], 87, 126),
+        nl!(126, 127),
+        nl!(127, 128),
+        vardecl!(
+            "angle",
+            TypeAnnotation::Float,
+            call!(["PI"], [], 146, 150),
+            128,
+            150
         ),
-        Statement::new(
-            StatementKind::Import {
-                names: vec![
-                    "sin".to_string(),
-                    "cos".to_string(),
-                    "hypot".to_string(),
-                    "is_prime".to_string(),
-                    "log2".to_string(),
-                    "factorial".to_string(),
+        nl!(150, 151),
+        assign!(
+            "angle",
+            bin!(
+                id!("angle", 151, 156),
+                TokenType::Star,
+                call!(["PHI"], [], 160, 165),
+                151,
+                165
+            ),
+            151,
+            165
+        ),
+        nl!(165, 166),
+        nl!(166, 167),
+        vardecl!(
+            "opp",
+            TypeAnnotation::Float,
+            call!(["sin"], [id!("angle", 187, 192)], 183, 193),
+            167,
+            193
+        ),
+        nl!(193, 194),
+        vardecl!(
+            "adj",
+            TypeAnnotation::Float,
+            call!(["cos"], [id!("angle", 214, 219)], 210, 220),
+            194,
+            220
+        ),
+        nl!(220, 221),
+        vardecl!(
+            "hyp",
+            TypeAnnotation::Float,
+            call!(
+                ["hypot"],
+                [id!("opp", 243, 246), id!("adj", 248, 251)],
+                237,
+                252
+            ),
+            221,
+            252
+        ),
+        nl!(252, 253),
+        nl!(253, 254),
+        vardecl!(
+            "is_right",
+            TypeAnnotation::Bool,
+            bin!(
+                id!("hyp", 274, 277),
+                TokenType::Compare,
+                flt!(1.0, 281, 284),
+                274,
+                284
+            ),
+            254,
+            284
+        ),
+        nl!(284, 285),
+        vardecl!(
+            "not_right",
+            TypeAnnotation::Bool,
+            un!(TokenType::Bang, id!("is_right", 307, 315), 306, 315),
+            285,
+            315
+        ),
+        nl!(315, 316),
+        nl!(316, 317),
+        vardecl!("n", TypeAnnotation::Int, int!(7, 329, 330), 317, 330),
+        nl!(330, 331),
+        vardecl!(
+            "prime",
+            TypeAnnotation::Bool,
+            call!(["is_prime"], [id!("n", 357, 358)], 348, 359),
+            331,
+            359
+        ),
+        nl!(359, 360),
+        vardecl!(
+            "fact",
+            TypeAnnotation::Float,
+            call!(["factorial"], [id!("n", 387, 388)], 377, 389),
+            360,
+            389
+        ),
+        nl!(389, 390),
+        vardecl!(
+            "lg",
+            TypeAnnotation::Float,
+            call!(["log2"], [id!("fact", 410, 414)], 405, 415),
+            390,
+            415
+        ),
+        nl!(415, 416),
+        nl!(416, 417),
+        assign!(
+            "lg",
+            bin!(
+                id!("lg", 417, 419),
+                TokenType::Minus,
+                flt!(1.0, 423, 426),
+                417,
+                426
+            ),
+            417,
+            426
+        ),
+        nl!(426, 427),
+        nl!(427, 428),
+        vardecl!(
+            "big",
+            TypeAnnotation::Bool,
+            bin!(
+                id!("lg", 443, 445),
+                TokenType::Greater,
+                call!(["TAU"], [], 448, 453),
+                443,
+                453
+            ),
+            428,
+            453
+        ),
+        nl!(453, 454),
+        nl!(454, 455),
+        exprstmt!(
+            call!(
+                ["println"],
+                [
+                    id!("hyp", 463, 466),
+                    id!("is_right", 468, 476),
+                    id!("prime", 478, 483),
+                    id!("big", 485, 488)
                 ],
-                path: vec!["std".to_string(), "math".to_string()],
-            },
-            Span::new(25, 86),
-        ),
-        Statement::new(
-            StatementKind::Expression(Expression::new(
-                ExpressionKind::Integer(0),
-                Span::new(86, 87),
-            )),
-            Span::new(86, 87),
-        ),
-        Statement::new(
-            StatementKind::Import {
-                names: vec!["PI".to_string(), "TAU".to_string(), "PHI".to_string()],
-                path: vec!["std".to_string(), "math".to_string(), "consts".to_string()],
-            },
-            Span::new(87, 126),
-        ),
-        Statement::new(
-            StatementKind::Expression(Expression::new(
-                ExpressionKind::Integer(0),
-                Span::new(126, 127),
-            )),
-            Span::new(126, 127),
-        ),
-        Statement::new(
-            StatementKind::Expression(Expression::new(
-                ExpressionKind::Integer(0),
-                Span::new(127, 128),
-            )),
-            Span::new(127, 128),
-        ),
-        Statement::new(
-            StatementKind::VariableDeclaration {
-                name: "angle".to_string(),
-                type_annotation: TypeAnnotation::Float,
-                value: Expression::new(
-                    ExpressionKind::Call {
-                        path: vec!["PI".to_string()],
-                        args: vec![],
-                    },
-                    Span::new(146, 150),
-                ),
-            },
-            Span::new(128, 150),
-        ),
-        Statement::new(
-            StatementKind::Expression(Expression::new(
-                ExpressionKind::Integer(0),
-                Span::new(150, 151),
-            )),
-            Span::new(150, 151),
-        ),
-        Statement::new(
-            StatementKind::Expression(Expression::new(
-                ExpressionKind::Assign {
-                    name: "angle".to_string(),
-                    value: Box::new(Expression::new(
-                        ExpressionKind::Binary {
-                            left: Box::new(Expression::new(
-                                ExpressionKind::Identifier("angle".to_string()),
-                                Span::new(151, 156),
-                            )),
-                            operator: TokenType::Star,
-                            right: Box::new(Expression::new(
-                                ExpressionKind::Call {
-                                    path: vec!["PHI".to_string()],
-                                    args: vec![],
-                                },
-                                Span::new(160, 165),
-                            )),
-                        },
-                        Span::new(151, 165),
-                    )),
-                },
-                Span::new(151, 165),
-            )),
-            Span::new(151, 165),
-        ),
-        Statement::new(
-            StatementKind::Expression(Expression::new(
-                ExpressionKind::Integer(0),
-                Span::new(165, 166),
-            )),
-            Span::new(165, 166),
-        ),
-        Statement::new(
-            StatementKind::Expression(Expression::new(
-                ExpressionKind::Integer(0),
-                Span::new(166, 167),
-            )),
-            Span::new(166, 167),
-        ),
-        Statement::new(
-            StatementKind::VariableDeclaration {
-                name: "opp".to_string(),
-                type_annotation: TypeAnnotation::Float,
-                value: Expression::new(
-                    ExpressionKind::Call {
-                        path: vec!["sin".to_string()],
-                        args: vec![Expression::new(
-                            ExpressionKind::Identifier("angle".to_string()),
-                            Span::new(187, 192),
-                        )],
-                    },
-                    Span::new(183, 193),
-                ),
-            },
-            Span::new(167, 193),
-        ),
-        Statement::new(
-            StatementKind::Expression(Expression::new(
-                ExpressionKind::Integer(0),
-                Span::new(193, 194),
-            )),
-            Span::new(193, 194),
-        ),
-        Statement::new(
-            StatementKind::VariableDeclaration {
-                name: "adj".to_string(),
-                type_annotation: TypeAnnotation::Float,
-                value: Expression::new(
-                    ExpressionKind::Call {
-                        path: vec!["cos".to_string()],
-                        args: vec![Expression::new(
-                            ExpressionKind::Identifier("angle".to_string()),
-                            Span::new(214, 219),
-                        )],
-                    },
-                    Span::new(210, 220),
-                ),
-            },
-            Span::new(194, 220),
-        ),
-        Statement::new(
-            StatementKind::Expression(Expression::new(
-                ExpressionKind::Integer(0),
-                Span::new(220, 221),
-            )),
-            Span::new(220, 221),
-        ),
-        Statement::new(
-            StatementKind::VariableDeclaration {
-                name: "hyp".to_string(),
-                type_annotation: TypeAnnotation::Float,
-                value: Expression::new(
-                    ExpressionKind::Call {
-                        path: vec!["hypot".to_string()],
-                        args: vec![
-                            Expression::new(
-                                ExpressionKind::Identifier("opp".to_string()),
-                                Span::new(243, 246),
-                            ),
-                            Expression::new(
-                                ExpressionKind::Identifier("adj".to_string()),
-                                Span::new(248, 251),
-                            ),
-                        ],
-                    },
-                    Span::new(237, 252),
-                ),
-            },
-            Span::new(221, 252),
-        ),
-        Statement::new(
-            StatementKind::Expression(Expression::new(
-                ExpressionKind::Integer(0),
-                Span::new(252, 253),
-            )),
-            Span::new(252, 253),
-        ),
-        Statement::new(
-            StatementKind::Expression(Expression::new(
-                ExpressionKind::Integer(0),
-                Span::new(253, 254),
-            )),
-            Span::new(253, 254),
-        ),
-        Statement::new(
-            StatementKind::VariableDeclaration {
-                name: "is_right".to_string(),
-                type_annotation: TypeAnnotation::Bool,
-                value: Expression::new(
-                    ExpressionKind::Binary {
-                        left: Box::new(Expression::new(
-                            ExpressionKind::Identifier("hyp".to_string()),
-                            Span::new(274, 277),
-                        )),
-                        operator: TokenType::Compare,
-                        right: Box::new(Expression::new(
-                            ExpressionKind::Float(1.0),
-                            Span::new(281, 284),
-                        )),
-                    },
-                    Span::new(274, 284),
-                ),
-            },
-            Span::new(254, 284),
-        ),
-        Statement::new(
-            StatementKind::Expression(Expression::new(
-                ExpressionKind::Integer(0),
-                Span::new(284, 285),
-            )),
-            Span::new(284, 285),
-        ),
-        Statement::new(
-            StatementKind::VariableDeclaration {
-                name: "not_right".to_string(),
-                type_annotation: TypeAnnotation::Bool,
-                value: Expression::new(
-                    ExpressionKind::Unary {
-                        operator: TokenType::Bang,
-                        operand: Box::new(Expression::new(
-                            ExpressionKind::Identifier("is_right".to_string()),
-                            Span::new(307, 315),
-                        )),
-                    },
-                    Span::new(306, 315),
-                ),
-            },
-            Span::new(285, 315),
-        ),
-        Statement::new(
-            StatementKind::Expression(Expression::new(
-                ExpressionKind::Integer(0),
-                Span::new(315, 316),
-            )),
-            Span::new(315, 316),
-        ),
-        Statement::new(
-            StatementKind::Expression(Expression::new(
-                ExpressionKind::Integer(0),
-                Span::new(316, 317),
-            )),
-            Span::new(316, 317),
-        ),
-        Statement::new(
-            StatementKind::VariableDeclaration {
-                name: "n".to_string(),
-                type_annotation: TypeAnnotation::Int,
-                value: Expression::new(ExpressionKind::Integer(7), Span::new(329, 330)),
-            },
-            Span::new(317, 330),
-        ),
-        Statement::new(
-            StatementKind::Expression(Expression::new(
-                ExpressionKind::Integer(0),
-                Span::new(330, 331),
-            )),
-            Span::new(330, 331),
-        ),
-        Statement::new(
-            StatementKind::VariableDeclaration {
-                name: "prime".to_string(),
-                type_annotation: TypeAnnotation::Bool,
-                value: Expression::new(
-                    ExpressionKind::Call {
-                        path: vec!["is_prime".to_string()],
-                        args: vec![Expression::new(
-                            ExpressionKind::Identifier("n".to_string()),
-                            Span::new(357, 358),
-                        )],
-                    },
-                    Span::new(348, 359),
-                ),
-            },
-            Span::new(331, 359),
-        ),
-        Statement::new(
-            StatementKind::Expression(Expression::new(
-                ExpressionKind::Integer(0),
-                Span::new(359, 360),
-            )),
-            Span::new(359, 360),
-        ),
-        Statement::new(
-            StatementKind::VariableDeclaration {
-                name: "fact".to_string(),
-                type_annotation: TypeAnnotation::Float,
-                value: Expression::new(
-                    ExpressionKind::Call {
-                        path: vec!["factorial".to_string()],
-                        args: vec![Expression::new(
-                            ExpressionKind::Identifier("n".to_string()),
-                            Span::new(387, 388),
-                        )],
-                    },
-                    Span::new(377, 389),
-                ),
-            },
-            Span::new(360, 389),
-        ),
-        Statement::new(
-            StatementKind::Expression(Expression::new(
-                ExpressionKind::Integer(0),
-                Span::new(389, 390),
-            )),
-            Span::new(389, 390),
-        ),
-        Statement::new(
-            StatementKind::VariableDeclaration {
-                name: "lg".to_string(),
-                type_annotation: TypeAnnotation::Float,
-                value: Expression::new(
-                    ExpressionKind::Call {
-                        path: vec!["log2".to_string()],
-                        args: vec![Expression::new(
-                            ExpressionKind::Identifier("fact".to_string()),
-                            Span::new(410, 414),
-                        )],
-                    },
-                    Span::new(405, 415),
-                ),
-            },
-            Span::new(390, 415),
-        ),
-        Statement::new(
-            StatementKind::Expression(Expression::new(
-                ExpressionKind::Integer(0),
-                Span::new(415, 416),
-            )),
-            Span::new(415, 416),
-        ),
-        Statement::new(
-            StatementKind::Expression(Expression::new(
-                ExpressionKind::Integer(0),
-                Span::new(416, 417),
-            )),
-            Span::new(416, 417),
-        ),
-        Statement::new(
-            StatementKind::Expression(Expression::new(
-                ExpressionKind::Assign {
-                    name: "lg".to_string(),
-                    value: Box::new(Expression::new(
-                        ExpressionKind::Binary {
-                            left: Box::new(Expression::new(
-                                ExpressionKind::Identifier("lg".to_string()),
-                                Span::new(417, 419),
-                            )),
-                            operator: TokenType::Minus,
-                            right: Box::new(Expression::new(
-                                ExpressionKind::Float(1.0),
-                                Span::new(423, 426),
-                            )),
-                        },
-                        Span::new(417, 426),
-                    )),
-                },
-                Span::new(417, 426),
-            )),
-            Span::new(417, 426),
-        ),
-        Statement::new(
-            StatementKind::Expression(Expression::new(
-                ExpressionKind::Integer(0),
-                Span::new(426, 427),
-            )),
-            Span::new(426, 427),
-        ),
-        Statement::new(
-            StatementKind::Expression(Expression::new(
-                ExpressionKind::Integer(0),
-                Span::new(427, 428),
-            )),
-            Span::new(427, 428),
-        ),
-        Statement::new(
-            StatementKind::VariableDeclaration {
-                name: "big".to_string(),
-                type_annotation: TypeAnnotation::Bool,
-                value: Expression::new(
-                    ExpressionKind::Binary {
-                        left: Box::new(Expression::new(
-                            ExpressionKind::Identifier("lg".to_string()),
-                            Span::new(443, 445),
-                        )),
-                        operator: TokenType::Greater,
-                        right: Box::new(Expression::new(
-                            ExpressionKind::Call {
-                                path: vec!["TAU".to_string()],
-                                args: vec![],
-                            },
-                            Span::new(448, 453),
-                        )),
-                    },
-                    Span::new(443, 453),
-                ),
-            },
-            Span::new(428, 453),
-        ),
-        Statement::new(
-            StatementKind::Expression(Expression::new(
-                ExpressionKind::Integer(0),
-                Span::new(453, 454),
-            )),
-            Span::new(453, 454),
-        ),
-        Statement::new(
-            StatementKind::Expression(Expression::new(
-                ExpressionKind::Integer(0),
-                Span::new(454, 455),
-            )),
-            Span::new(454, 455),
-        ),
-        Statement::new(
-            StatementKind::Expression(Expression::new(
-                ExpressionKind::Call {
-                    path: vec!["println".to_string()],
-                    args: vec![
-                        Expression::new(
-                            ExpressionKind::Identifier("hyp".to_string()),
-                            Span::new(463, 466),
-                        ),
-                        Expression::new(
-                            ExpressionKind::Identifier("is_right".to_string()),
-                            Span::new(468, 476),
-                        ),
-                        Expression::new(
-                            ExpressionKind::Identifier("prime".to_string()),
-                            Span::new(478, 483),
-                        ),
-                        Expression::new(
-                            ExpressionKind::Identifier("big".to_string()),
-                            Span::new(485, 488),
-                        ),
-                    ],
-                },
-                Span::new(455, 489),
-            )),
-            Span::new(455, 489),
+                455,
+                489
+            ),
+            455,
+            489
         ),
     ];
     assert_eq!(statements, expected);
@@ -668,243 +284,161 @@ for [int i = 0, i < 2, i += 1] {
 }",
     );
     let expected = vec![
-            Statement::new(
-                StatementKind::Import {
-                    names: vec!["println".to_string()],
-                    path: vec!["std".to_string(), "io".to_string()],
-                },
-                Span::new(0, 24),
-            ),
-            Statement::new(
-                StatementKind::Expression(Expression::new(ExpressionKind::Integer(0), Span::new(24, 25))),
-                Span::new(24, 25),
-            ),
-            Statement::new(
-                StatementKind::Import {
-                    names: vec!["is_prime".to_string(), "factorial".to_string(), "fibonacci".to_string()],
-                    path: vec!["std".to_string(), "math".to_string()],
-                },
-                Span::new(25, 74),
-            ),
-            Statement::new(
-                StatementKind::Expression(Expression::new(ExpressionKind::Integer(0), Span::new(74, 75))),
-                Span::new(74, 75),
-            ),
-            Statement::new(
-                StatementKind::Expression(Expression::new(ExpressionKind::Integer(0), Span::new(75, 76))),
-                Span::new(75, 76),
-            ),
-            Statement::new(
-                StatementKind::VariableDeclaration {
-                    name: "n".to_string(),
-                    type_annotation: TypeAnnotation::Int,
-                    value: Expression::new(ExpressionKind::Integer(10), Span::new(88, 90)),
-                },
-                Span::new(76, 90),
-            ),
-            Statement::new(
-                StatementKind::Expression(Expression::new(ExpressionKind::Integer(0), Span::new(90, 91))),
-                Span::new(90, 91),
-            ),
-            Statement::new(
-                StatementKind::Array {
-                    name: "ops".to_string(),
-                    type_annotation: TypeAnnotation::Fn,
-                    value: vec![
-                        Expression::new(ExpressionKind::Identifier("factorial".to_string()), Span::new(110, 119)),
-                        Expression::new(ExpressionKind::Identifier("fibonacci".to_string()), Span::new(121, 130)),
-                    ],
-                },
-                Span::new(91, 131),
-            ),
-            Statement::new(
-                StatementKind::Expression(Expression::new(ExpressionKind::Integer(0), Span::new(131, 132))),
-                Span::new(131, 132),
-            ),
-            Statement::new(
-                StatementKind::Expression(Expression::new(ExpressionKind::Integer(0), Span::new(132, 133))),
-                Span::new(132, 133),
-            ),
-            Statement::new(
-                StatementKind::VariableDeclaration {
-                    name: "i".to_string(),
-                    type_annotation: TypeAnnotation::Int,
-                    value: Expression::new(ExpressionKind::Integer(0), Span::new(145, 146)),
-                },
-                Span::new(133, 146),
-            ),
-            Statement::new(
-                StatementKind::Expression(Expression::new(ExpressionKind::Integer(0), Span::new(146, 147))),
-                Span::new(146, 147),
-            ),
-            Statement::new(
-                StatementKind::For {
-                    initializer: Box::new(Statement::new(
-                        StatementKind::VariableDeclaration {
-                            name: "i".to_string(),
-                            type_annotation: TypeAnnotation::Int,
-                            value: Expression::new(ExpressionKind::Integer(0), Span::new(160, 161)),
-                        },
-                        Span::new(152, 161),
-                    )),
-                    condition: Expression::new(
-                        ExpressionKind::Binary {
-                            left: Box::new(Expression::new(ExpressionKind::Identifier("i".to_string()), Span::new(163, 164))),
-                            operator: TokenType::Less,
-                            right: Box::new(Expression::new(ExpressionKind::Integer(2), Span::new(167, 168))),
-                        },
-                        Span::new(163, 168),
+        import!(["println"], ["std", "io"], 0, 24),
+        nl!(24, 25),
+        import!(
+            ["is_prime", "factorial", "fibonacci"],
+            ["std", "math"],
+            25,
+            74
+        ),
+        nl!(74, 75),
+        nl!(75, 76),
+        vardecl!("n", TypeAnnotation::Int, int!(10, 88, 90), 76, 90),
+        nl!(90, 91),
+        arraydecl!(
+            "ops",
+            TypeAnnotation::Fn,
+            [id!("factorial", 110, 119), id!("fibonacci", 121, 130)],
+            91,
+            131
+        ),
+        nl!(131, 132),
+        nl!(132, 133),
+        vardecl!("i", TypeAnnotation::Int, int!(0, 145, 146), 133, 146),
+        nl!(146, 147),
+        sn!(
+            StatementKind::For {
+                initializer: Box::new(vardecl!(
+                    "i",
+                    TypeAnnotation::Int,
+                    int!(0, 160, 161),
+                    152,
+                    161
+                )),
+                condition: bin!(
+                    id!("i", 163, 164),
+                    TokenType::Less,
+                    int!(2, 167, 168),
+                    163,
+                    168
+                ),
+                increment: assignexpr!(
+                    "i",
+                    bin!(
+                        id!("i", 170, 171),
+                        TokenType::Plus,
+                        int!(1, 175, 176),
+                        170,
+                        176
                     ),
-                    increment: Expression::new(
-                        ExpressionKind::Assign {
-                            name: "i".to_string(),
-                            value: Box::new(Expression::new(
-                                ExpressionKind::Binary {
-                                    left: Box::new(Expression::new(ExpressionKind::Identifier("i".to_string()), Span::new(170, 171))),
-                                    operator: TokenType::Plus,
-                                    right: Box::new(Expression::new(ExpressionKind::Integer(1), Span::new(175, 176))),
-                                },
-                                Span::new(170, 176),
-                            )),
-                        },
-                        Span::new(170, 176),
+                    170,
+                    176
+                ),
+                body: vec![
+                    vardecl!(
+                        "op",
+                        TypeAnnotation::Fn,
+                        idx!(id!("ops", 196, 199), id!("i", 200, 201), 196, 202),
+                        184,
+                        202
                     ),
-                    body: vec![
-                        Statement::new(
-                            StatementKind::VariableDeclaration {
-                                name: "op".to_string(),
-                                type_annotation: TypeAnnotation::Fn,
-                                value: Expression::new(
-                                    ExpressionKind::Index {
-                                        target: Box::new(Expression::new(ExpressionKind::Identifier("ops".to_string()), Span::new(196, 199))),
-                                        index: Box::new(Expression::new(ExpressionKind::Identifier("i".to_string()), Span::new(200, 201))),
+                    vardecl!("j", TypeAnnotation::Int, int!(1, 219, 220), 207, 220),
+                    sn!(
+                        StatementKind::While {
+                            condition: grp!(
+                                bin!(
+                                    id!("j", 232, 233),
+                                    TokenType::Less,
+                                    id!("n", 236, 237),
+                                    232,
+                                    237
+                                ),
+                                231,
+                                238
+                            ),
+                            body: vec![
+                                vardecl!(
+                                    "_resul",
+                                    TypeAnnotation::Int,
+                                    call!(["op"], [id!("j", 269, 270)], 266, 271),
+                                    249,
+                                    271
+                                ),
+                                sn!(
+                                    StatementKind::Conditional {
+                                        if_branch: Box::new(sn!(
+                                            StatementKind::ConditionalBranch {
+                                                condition: Some(grp!(
+                                                    call!(
+                                                        ["is_prime"],
+                                                        [id!("_resul", 293, 299)],
+                                                        284,
+                                                        300
+                                                    ),
+                                                    283,
+                                                    301
+                                                )),
+                                                body: vec![
+                                                    exprstmt!(
+                                                        call!(
+                                                            ["println"],
+                                                            [id!("_resul", 324, 330)],
+                                                            316,
+                                                            331
+                                                        ),
+                                                        316,
+                                                        331
+                                                    ),
+                                                    assign!(
+                                                        "j",
+                                                        bin!(
+                                                            id!("j", 344, 345),
+                                                            TokenType::Plus,
+                                                            int!(1, 349, 350),
+                                                            344,
+                                                            350
+                                                        ),
+                                                        344,
+                                                        350
+                                                    ),
+                                                ],
+                                            },
+                                            Span::new(280, 360)
+                                        )),
+                                        else_branch: Some(Box::new(sn!(
+                                            StatementKind::ConditionalBranch {
+                                                condition: None,
+                                                body: vec![sn!(
+                                                    StatementKind::Break,
+                                                    Span::new(380, 385)
+                                                )],
+                                            },
+                                            Span::new(361, 395)
+                                        ))),
                                     },
-                                    Span::new(196, 202),
+                                    Span::new(280, 395)
                                 ),
-                            },
-                            Span::new(184, 202),
+                            ],
+                        },
+                        Span::new(225, 401)
+                    ),
+                    assign!(
+                        "i",
+                        bin!(
+                            id!("i", 406, 407),
+                            TokenType::Plus,
+                            int!(1, 411, 412),
+                            406,
+                            412
                         ),
-                        Statement::new(
-                            StatementKind::VariableDeclaration {
-                                name: "j".to_string(),
-                                type_annotation: TypeAnnotation::Int,
-                                value: Expression::new(ExpressionKind::Integer(1), Span::new(219, 220)),
-                            },
-                            Span::new(207, 220),
-                        ),
-                        Statement::new(
-                            StatementKind::While {
-                                condition: Expression::new(
-                                    ExpressionKind::Grouping(Box::new(Expression::new(
-                                        ExpressionKind::Binary {
-                                            left: Box::new(Expression::new(ExpressionKind::Identifier("j".to_string()), Span::new(232, 233))),
-                                            operator: TokenType::Less,
-                                            right: Box::new(Expression::new(ExpressionKind::Identifier("n".to_string()), Span::new(236, 237))),
-                                        },
-                                        Span::new(232, 237),
-                                    ))),
-                                    Span::new(231, 238),
-                                ),
-                                body: vec![
-                                    Statement::new(
-                                        StatementKind::VariableDeclaration {
-                                            name: "_resul".to_string(),
-                                            type_annotation: TypeAnnotation::Int,
-                                            value: Expression::new(
-                                                ExpressionKind::Call {
-                                                    path: vec!["op".to_string()],
-                                                    args: vec![Expression::new(ExpressionKind::Identifier("j".to_string()), Span::new(269, 270))],
-                                                },
-                                                Span::new(266, 271),
-                                            ),
-                                        },
-                                        Span::new(249, 271),
-                                    ),
-                                    Statement::new(
-                                        StatementKind::Conditional {
-                                            if_branch: Box::new(Statement::new(
-                                                StatementKind::ConditionalBranch {
-                                                    condition: Some(Expression::new(
-                                                        ExpressionKind::Grouping(Box::new(Expression::new(
-                                                            ExpressionKind::Call {
-                                                                path: vec!["is_prime".to_string()],
-                                                                args: vec![Expression::new(ExpressionKind::Identifier("_resul".to_string()), Span::new(293, 299))],
-                                                            },
-                                                            Span::new(284, 300),
-                                                        ))),
-                                                        Span::new(283, 301),
-                                                    )),
-                                                    body: vec![
-                                                        Statement::new(
-                                                            StatementKind::Expression(Expression::new(
-                                                                ExpressionKind::Call {
-                                                                    path: vec!["println".to_string()],
-                                                                    args: vec![Expression::new(ExpressionKind::Identifier("_resul".to_string()), Span::new(324, 330))],
-                                                                },
-                                                                Span::new(316, 331),
-                                                            )),
-                                                            Span::new(316, 331),
-                                                        ),
-                                                        Statement::new(
-                                                            StatementKind::Expression(Expression::new(
-                                                                ExpressionKind::Assign {
-                                                                    name: "j".to_string(),
-                                                                    value: Box::new(Expression::new(
-                                                                        ExpressionKind::Binary {
-                                                                            left: Box::new(Expression::new(ExpressionKind::Identifier("j".to_string()), Span::new(344, 345))),
-                                                                            operator: TokenType::Plus,
-                                                                            right: Box::new(Expression::new(ExpressionKind::Integer(1), Span::new(349, 350))),
-                                                                        },
-                                                                        Span::new(344, 350),
-                                                                    )),
-                                                                },
-                                                                Span::new(344, 350),
-                                                            )),
-                                                            Span::new(344, 350),
-                                                        ),
-                                                    ],
-                                                },
-                                                Span::new(280, 360),
-                                            )),
-
-                                            else_branch: Some(Box::new(Statement::new(
-                                                StatementKind::ConditionalBranch {
-                                                    condition: None,
-                                                    body: vec![Statement::new(
-                                                        StatementKind::Break,
-                                                        Span::new(380, 385),
-                                                    )],
-                                                },
-                                                Span::new(361, 395),
-                                            ))),
-                                        },
-                                        Span::new(280, 395),
-                                    ),
-                                ],
-                            },
-                            Span::new(225, 401),
-                        ),
-                        Statement::new(
-                            StatementKind::Expression(Expression::new(
-                                ExpressionKind::Assign {
-                                    name: "i".to_string(),
-                                    value: Box::new(Expression::new(
-                                        ExpressionKind::Binary {
-                                            left: Box::new(Expression::new(ExpressionKind::Identifier("i".to_string()), Span::new(406, 407))),
-                                            operator: TokenType::Plus,
-                                            right: Box::new(Expression::new(ExpressionKind::Integer(1), Span::new(411, 412))),
-                                        },
-                                        Span::new(406, 412),
-                                    )),
-                                },
-                                Span::new(406, 412),
-                            )),
-                            Span::new(406, 412),
-                        ),
-                    ],
-                },
-                Span::new(147, 414),
-            ),
-        ];
+                        406,
+                        412
+                    ),
+                ],
+            },
+            Span::new(147, 414)
+        ),
+    ];
     assert_eq!(statements, expected);
 }
