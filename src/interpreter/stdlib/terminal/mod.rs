@@ -86,7 +86,7 @@ pub fn module() -> Module {
         .with_raw_function("term_leave", leave::func)
         // clear
         .with_function("term_clear", clear::func)
-        .with_raw_function("term_clear_line", clear_line::func)
+        .with_function("term_clear_line", clear_line::func)
         // absolute cursor
         .with_raw_function("term_move", move_cursor::func)
         .with_raw_function("term_move_to_col", cursor_col::func)
