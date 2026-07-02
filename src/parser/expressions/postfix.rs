@@ -1,5 +1,5 @@
 use crate::{
-    ast::nodes::{Expression, ExpressionKind},
+    ast::{ExprId, nodes::ExpressionKind},
     lexer::tokentypes::TokenType,
     parser::parser_logic::Parser,
     utils::{errors::Error, span::Span},
@@ -18,11 +18,7 @@ impl Parser {
     /// # Errors
     /// Returns an error if `.` is not followed by a valid identifier, or if the
     /// argument list is not opened with `(`.
-    pub fn parse_postfix(
-        &mut self,
-        mut expr: Expression,
-        start: Span,
-    ) -> Result<Expression, Error> {
+    pub fn parse_postfix(&mut self, mut expr: ExprId, start: Span) -> Result<ExprId, Error> {
         loop {
             if self.match_type(&[TokenType::Dot]) {
                 if !self.match_type(&[TokenType::Identifier(String::new())]) {
@@ -64,9 +60,9 @@ impl Parser {
                 while self.match_type(&[TokenType::Newline]) {}
                 self.match_type(&[TokenType::RightParen]);
                 let span = start.join(self.previous_span());
-                expr = Expression::new(
+                expr = self.ast.alloc_expr(
                     ExpressionKind::MethodCall {
-                        caller: Box::new(expr),
+                        caller: expr,
                         method,
                         args,
                     },
@@ -78,16 +74,16 @@ impl Parser {
                     .parse_type(true)
                     .map_err(|_| self.err("expected type after `as`", span))?;
                 let span = start.join(self.previous_span());
-                expr = Expression::new(
+                expr = self.ast.alloc_expr(
                     ExpressionKind::Cast {
-                        value: Box::new(expr),
+                        value: expr,
                         target_type,
                     },
                     span,
                 )
             } else if self.match_type(&[TokenType::Question]) {
                 let span = start.join(self.previous_span());
-                expr = Expression::new(ExpressionKind::Propagate(Box::new(expr)), span)
+                expr = self.ast.alloc_expr(ExpressionKind::Propagate(expr), span);
             } else {
                 break;
             }
