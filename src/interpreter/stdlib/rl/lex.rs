@@ -6,12 +6,12 @@ use crate::interpreter::{
     values::Value,
 };
 use crate::lexer::tokenizer::Tokenizer;
-use crate::utils::{source::SourceFile, span::Span};
+use crate::utils::source::SourceFile;
 
 pub fn func(_: &mut Evaluator, value: Value) -> Value {
-    let code = match extract_string(value, "lex", Span::dummy()) {
+    let code = match extract_string(value, "lex") {
         Ok(s) => s,
-        Err(e) => return verr!(vs!(e.message().to_string())),
+        Err(e) => return verr!(vs!(e)),
     };
 
     let source = SourceFile::new("<lex>", code);
