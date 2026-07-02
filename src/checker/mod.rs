@@ -25,7 +25,7 @@ pub mod structs;
 pub mod types;
 
 use crate::{
-    ast::statements::{Statement, StatementKind},
+    ast::{Ast, ExprId, StmtId, nodes::ExpressionKind, statements::StatementKind},
     checker::structs::CheckType,
     interpreter::evaluator::Evaluator,
     utils::{
@@ -65,6 +65,7 @@ impl TypeChecker {
             base_dir: None,
             importing: Vec::new(),
             imported: HashSet::new(),
+            ast: Ast::new(),
         }
     }
 
@@ -83,20 +84,22 @@ impl TypeChecker {
     }
 
     // runs check on every ast statement in the list and returns errors as list
-    pub fn check(&mut self, statements: &[Statement]) -> &[Error] {
+    pub fn check(&mut self, ast: Ast, statements: &[StmtId]) -> &[Error] {
+        self.ast = ast;
+
         for statement in statements {
             if let StatementKind::FunctionDeclaration {
                 name,
                 params,
                 return_type,
                 ..
-            } = &statement.kind
+            } = &self.stmt_kind(*statement)
             {
                 let fn_type = CheckType::Function {
                     params: params.iter().map(|p| p.param_type.clone()).collect(),
                     return_type: return_type.clone(),
                 };
-                self.declare(name.clone(), fn_type, false, statement.span);
+                self.declare(name.clone(), fn_type, false, self.stmt_span(*statement));
             }
         }
         for statement in statements {
@@ -161,6 +164,20 @@ impl TypeChecker {
         };
 
         self.push_hover(span, text);
+    }
+
+    pub fn expr_span(&self, id: ExprId) -> Span {
+        self.ast.exprs.get(id).span
+    }
+    pub fn expr_kind(&self, id: ExprId) -> ExpressionKind {
+        self.ast.exprs.get(id).kind.clone()
+    }
+
+    pub fn stmt_span(&self, id: StmtId) -> Span {
+        self.ast.stmts.get(id).span
+    }
+    pub fn stmt_kind(&self, id: StmtId) -> StatementKind {
+        self.ast.stmts.get(id).kind.clone()
     }
 }
 

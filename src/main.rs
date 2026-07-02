@@ -251,7 +251,7 @@ fn main() {
             {
                 use rl_lang::checker::TypeChecker;
                 let mut checker = TypeChecker::new().with_source_file(source);
-                let errors = checker.check(&ast, &statements);
+                let errors = checker.check(ast, &statements);
                 if errors.is_empty() {
                     println!("ok");
                 } else {

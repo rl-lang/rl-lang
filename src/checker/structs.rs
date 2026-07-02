@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    ast::statements::TypeAnnotation,
+    ast::{Ast, statements::TypeAnnotation},
     interpreter::native::Module,
     utils::{errors::Error, source::SourceFile, span::Span},
 };
@@ -33,6 +33,7 @@ pub struct TypeChecker {
     pub base_dir: Option<PathBuf>,
     pub importing: Vec<PathBuf>,
     pub imported: HashSet<PathBuf>,
+    pub ast: Ast,
 }
 
 /// A single entry in a type checker scope.
