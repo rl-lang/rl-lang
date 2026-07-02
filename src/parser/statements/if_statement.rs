@@ -47,7 +47,7 @@ impl Parser {
         while self.match_type(&[TokenType::Newline]) {}
         let if_body = self.parse_block()?;
         let if_branch_span = start.join(self.previous_span());
-        let if_branch = Statement::new(
+        let if_branch = self.ast.alloc_stmt(
             StatementKind::ConditionalBranch {
                 condition: Some(if_condition),
                 body: if_body,
@@ -65,27 +65,27 @@ impl Parser {
                 // `else if` - recurse to produce a nested Conditional
                 let elif_start = self.peek_span();
                 self.advance();
-                Some(Box::new(self.parse_if(elif_start)?))
+                Some(self.parse_if(elif_start)?)
             } else {
                 // plain `else { … }` - condition is None
                 let else_body = self.parse_block()?;
                 let span = branch_start.join(self.previous_span());
-                Some(Box::new(Statement::new(
+                Some(self.ast.alloc_stmt(
                     StatementKind::ConditionalBranch {
                         condition: None,
                         body: else_body,
                     },
                     span,
-                )))
+                ))
             }
         } else {
             None
         };
 
         let span = start.join(self.previous_span());
-        Ok(Statement::new(
+        Ok(self.ast.alloc_stmt(
             StatementKind::Conditional {
-                if_branch: Box::new(if_branch),
+                if_branch,
                 else_branch,
             },
             span,
