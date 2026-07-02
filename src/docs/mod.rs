@@ -12,6 +12,9 @@
 
 pub mod entries;
 pub mod entry;
+use serde::Serialize;
+use serde_json::to_string_pretty;
+
 use crate::docs::entry::{ConceptEntry, FnEntry, StdEntry};
 
 /// Searches all stdlib entries for a function whose signature starts with `fn_name(`.
@@ -90,4 +93,25 @@ pub fn concept_to_markdown(entries: &[&ConceptEntry]) -> String {
 /// Renders tutorial entries into a Markdown step-by-step tutorial document.
 pub fn tutorial_to_markdown(entries: &[&ConceptEntry]) -> String {
     entries_to_markdown("rl tutorial", entries)
+}
+
+#[derive(Serialize)]
+pub struct DocsJson<'a> {
+    stdlib: &'a [&'static StdEntry],
+    concepts: &'a [&'static ConceptEntry],
+    tutorial: &'a [&'static ConceptEntry],
+}
+
+pub fn docs_to_json(
+    stdlib: &[&'static StdEntry],
+    concepts: &[&'static ConceptEntry],
+    tutorial: &[&'static ConceptEntry],
+) -> Result<String, String> {
+    let doc = DocsJson {
+        stdlib,
+        concepts,
+        tutorial,
+    };
+
+    to_string_pretty(&doc).map_err(|e| e.to_string())
 }
