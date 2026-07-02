@@ -24,10 +24,10 @@ pub fn func(eval: &mut Evaluator, value: Value) -> Value {
         Ok(s) => s,
         Err(e) => return verr!(vs!(e.message().to_string())),
     };
-    let (_, stmts) = ast;
+    let (ast, stmts) = ast;
 
     let mut resolver = std::mem::take(&mut eval.resolver);
-    resolver.resolve_statements(stmts);
+    resolver.resolve(ast, stmts);
     eval.resolver = resolver;
 
     vok!(Value::Null)

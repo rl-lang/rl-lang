@@ -500,7 +500,8 @@ impl TypeChecker {
 
         self.importing.push(canonical.clone());
 
-        let (_, stmts) = stmts;
+        let (ast, stmts) = stmts;
+        let previous_ast = std::mem::replace(&mut self.ast, ast);
         for stmt in &stmts {
             match &self.stmt_kind(*stmt) {
                 StatementKind::FunctionDeclaration {
@@ -579,5 +580,6 @@ impl TypeChecker {
 
         self.importing.pop();
         self.imported.insert(canonical);
+        self.ast = previous_ast;
     }
 }

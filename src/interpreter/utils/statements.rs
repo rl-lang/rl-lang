@@ -364,19 +364,25 @@ impl Evaluator {
                     SourceFile::new(file_path.to_string_lossy().as_ref(), source_text);
                 let tokens = Tokenizer::lex(source_file.clone())?;
                 let stmts = Parser::parse(tokens, source_file.clone())?;
-                let (_, stmts) = stmts;
-                let stmts = self.resolver.resolve_statements(stmts);
+                let (ast, stmts) = stmts;
+                let (resolved_arena, stmts) = self.resolver.resolve(ast, stmts);
+                let previous_arena = std::mem::replace(&mut self.arena, resolved_arena);
 
                 let previous_source = self.source_file.clone();
                 self.source_file = Some(source_file);
 
                 for stmt in &stmts {
-                    self.evaluate_statement(stmt)?;
+                    if let Err(e) = self.evaluate_statement(stmt) {
+                        self.source_file = previous_source;
+                        self.arena = previous_arena;
+                        return Err(e);
+                    }
                 }
 
                 let exported = self.environment.last().cloned().unwrap_or_default();
 
                 self.source_file = previous_source;
+                self.arena = previous_arena;
 
                 // ImportFileNamed can't filter by name anymore without a name->slot map
                 // For now merge all exported slots - named filtering requires ScopeMap
