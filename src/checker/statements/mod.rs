@@ -4,7 +4,7 @@ mod expression;
 mod statement;
 
 use crate::{
-    ast::statements::TypeAnnotation,
+    ast::{StmtId, statements::TypeAnnotation},
     checker::structs::{CheckType, TypeChecker},
     utils::span::Span,
 };
@@ -34,7 +34,7 @@ impl TypeChecker {
         self.loop_depth = self.loop_depth.saturating_sub(1);
     }
     /// Checks all statements in `statements` inside a fresh scope.
-    pub fn check_block(&mut self, statements: &[crate::ast::statements::Statement]) {
+    pub fn check_block(&mut self, statements: &[StmtId]) {
         self.push_scope();
         for stmt in statements {
             self.check_statement(stmt);

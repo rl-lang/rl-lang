@@ -17,7 +17,7 @@ use crate::{
 impl TypeChecker {
     // checks the current statement and push errors via error() if any found
     pub fn check_statement(&mut self, statement: &StmtId) {
-        match &statement.kind {
+        match &self.stmt_kind(*statement) {
             // checks if the type null or same type then declare it as variable
             // otherwise pushs error
             StatementKind::VariableDeclaration {
@@ -35,11 +35,11 @@ impl TypeChecker {
                             declared.info(),
                             value_type.info()
                         ),
-                        statement.span,
+                        self.stmt_span(*statement),
                     );
                 }
 
-                self.declare(name.clone(), declared, false, statement.span);
+                self.declare(name.clone(), declared, false, self.stmt_span(*statement));
             }
 
             // checks if the type is null or same type and declares it as
@@ -59,11 +59,11 @@ impl TypeChecker {
                             declared.info(),
                             value_type.info()
                         ),
-                        statement.span,
+                        self.stmt_span(*statement),
                     );
                 }
 
-                self.declare(name.clone(), declared, true, statement.span);
+                self.declare(name.clone(), declared, true, self.stmt_span(*statement));
             }
 
             // checks the array if valid or not and declares it with correct
@@ -84,7 +84,7 @@ impl TypeChecker {
                                 expected.info(),
                                 item_type.info()
                             ),
-                            item.span,
+                            self.expr_span(*item),
                         );
                     }
                 }
@@ -92,7 +92,7 @@ impl TypeChecker {
                 let array_type =
                     CheckType::Known(TypeAnnotation::Array(Box::new(type_annotation.clone())));
 
-                self.declare(name.clone(), array_type, false, statement.span);
+                self.declare(name.clone(), array_type, false, self.stmt_span(*statement));
             }
             StatementKind::ConstantArray {
                 name,
@@ -110,7 +110,7 @@ impl TypeChecker {
                                 expected.info(),
                                 item_type.info()
                             ),
-                            item.span,
+                            self.expr_span(*item),
                         );
                     }
                 }
@@ -118,7 +118,7 @@ impl TypeChecker {
                 let array_type =
                     CheckType::Known(TypeAnnotation::CArray(Box::new(type_annotation.clone())));
 
-                self.declare(name.clone(), array_type, true, statement.span);
+                self.declare(name.clone(), array_type, true, self.stmt_span(*statement));
             }
 
             // offloads to expression checker
@@ -140,7 +140,7 @@ impl TypeChecker {
                             "while condition must be bool, got {}",
                             condition_type.info()
                         ),
-                        condition.span,
+                        self.expr_span(*condition),
                     );
                 }
                 // add loop depth
@@ -170,7 +170,7 @@ impl TypeChecker {
                 ) {
                     self.error(
                         format!("for condition must be bool, got {}", condition_type.info()),
-                        condition.span,
+                        self.expr_span(*condition),
                     );
                 }
                 // is the increment correct?
@@ -203,7 +203,7 @@ impl TypeChecker {
                     variable.clone(),
                     CheckType::Known(TypeAnnotation::Int),
                     false,
-                    statement.span,
+                    self.stmt_span(*statement),
                 );
                 // is the body correct?
                 for stmt in body {
@@ -232,7 +232,7 @@ impl TypeChecker {
                     other => {
                         self.error(
                             format!("for-each: expected an array, got {}", other.info()),
-                            iterable.span,
+                            self.expr_span(*iterable),
                         );
                         CheckType::Unknown
                     }
@@ -242,7 +242,12 @@ impl TypeChecker {
                 // add scope depth
                 self.push_scope();
                 // declares the iterable variable
-                self.declare(variable.clone(), item_type, false, statement.span);
+                self.declare(
+                    variable.clone(),
+                    item_type,
+                    false,
+                    self.stmt_span(*statement),
+                );
                 // is body correct?
                 for stmt in body {
                     self.check_statement(stmt);
@@ -268,7 +273,7 @@ impl TypeChecker {
                     ) {
                         self.error(
                             format!("condition must be bool, got {}", condition_type.info()),
-                            cond.span,
+                            self.expr_span(*cond),
                         );
                     }
                 }
@@ -301,7 +306,7 @@ impl TypeChecker {
                         param.param_name.clone(),
                         CheckType::Known(param.param_type.clone()),
                         false,
-                        statement.span,
+                        self.stmt_span(*statement),
                     );
                 }
                 self.push_return_type(return_type.clone());
@@ -335,27 +340,27 @@ impl TypeChecker {
                                     expected_type.info(),
                                     actual_type.info()
                                 ),
-                                statement.span,
+                                self.stmt_span(*statement),
                             );
                         }
                     }
                 } else {
                     // return outside a function
-                    self.error("return outside of function", statement.span);
+                    self.error("return outside of function", self.stmt_span(*statement));
                 }
             }
 
             // checks weather break or continue used outside of loops
             StatementKind::Break if self.loop_depth() == 0 => {
-                self.error("break outside of loop", statement.span);
+                self.error("break outside of loop", self.stmt_span(*statement));
             }
             StatementKind::Continue if self.loop_depth() == 0 => {
-                self.error("continue outside of loop", statement.span);
+                self.error("continue outside of loop", self.stmt_span(*statement));
             }
 
             // runtime job maybe revisting later
             StatementKind::ImportFile { path } | StatementKind::ImportFileNamed { path, .. } => {
-                self.import_module(path, statement.span);
+                self.import_module(path, self.stmt_span(*statement));
             }
             StatementKind::Import { .. } => {}
 
@@ -372,7 +377,7 @@ impl TypeChecker {
                                 "expected tuple on right side of destructure, got {}",
                                 other.info()
                             ),
-                            statement.span,
+                            self.stmt_span(*statement),
                         );
                         None
                     }
@@ -385,7 +390,7 @@ impl TypeChecker {
                                 bindings.len(),
                                 types.len()
                             ),
-                            statement.span,
+                            self.stmt_span(*statement),
                         );
                     } else {
                         for ((type_annotation, name), actual) in bindings.iter().zip(types.iter()) {
@@ -398,10 +403,10 @@ impl TypeChecker {
                                         declared.info(),
                                         actual.info()
                                     ),
-                                    statement.span,
+                                    self.stmt_span(*statement),
                                 );
                             }
-                            self.declare(name.clone(), declared, false, statement.span);
+                            self.declare(name.clone(), declared, false, self.stmt_span(*statement));
                         }
                     }
                 } else {
@@ -410,7 +415,7 @@ impl TypeChecker {
                             name.clone(),
                             CheckType::Known(type_annotation.clone()),
                             false,
-                            statement.span,
+                            self.stmt_span(*statement),
                         );
                     }
                 }
@@ -423,7 +428,10 @@ impl TypeChecker {
                         let pat_type = self.check_expression(expr);
                         if !pat_type.is_unknown() && !val_type.is_unknown() && pat_type != val_type
                         {
-                            self.error("match pattern type does not match value type", expr.span);
+                            self.error(
+                                "match pattern type does not match value type",
+                                self.expr_span(*expr),
+                            );
                         }
                     }
                     for stmt in body {
@@ -492,8 +500,9 @@ impl TypeChecker {
 
         self.importing.push(canonical.clone());
 
+        let (_, stmts) = stmts;
         for stmt in &stmts {
-            match &stmt.kind {
+            match &self.stmt_kind(*stmt) {
                 StatementKind::FunctionDeclaration {
                     name,
                     params,
@@ -507,7 +516,7 @@ impl TypeChecker {
                             return_type: return_type.clone(),
                         },
                         false,
-                        stmt.span,
+                        self.stmt_span(*stmt),
                     );
                 }
                 StatementKind::VariableDeclaration {
@@ -519,7 +528,7 @@ impl TypeChecker {
                         name.clone(),
                         CheckType::Known(type_annotation.clone()),
                         false,
-                        stmt.span,
+                        self.stmt_span(*stmt),
                     );
                 }
                 StatementKind::ConstantDeclaration {
@@ -531,7 +540,7 @@ impl TypeChecker {
                         name.clone(),
                         CheckType::Known(type_annotation.clone()),
                         true,
-                        stmt.span,
+                        self.stmt_span(*stmt),
                     );
                 }
                 StatementKind::Array {
@@ -543,7 +552,7 @@ impl TypeChecker {
                         name.clone(),
                         CheckType::Known(TypeAnnotation::Array(Box::new(type_annotation.clone()))),
                         false,
-                        stmt.span,
+                        self.stmt_span(*stmt),
                     );
                 }
                 StatementKind::ConstantArray {
@@ -555,13 +564,13 @@ impl TypeChecker {
                         name.clone(),
                         CheckType::Known(TypeAnnotation::CArray(Box::new(type_annotation.clone()))),
                         true,
-                        stmt.span,
+                        self.stmt_span(*stmt),
                     );
                 }
 
                 StatementKind::ImportFile { path: nested }
                 | StatementKind::ImportFileNamed { path: nested, .. } => {
-                    self.import_module(nested, stmt.span);
+                    self.import_module(&nested, self.stmt_span(*stmt));
                 }
 
                 _ => {}

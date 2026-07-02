@@ -9,7 +9,7 @@ use crate::{
 
 impl TypeChecker {
     pub fn check_expression(&mut self, expression: &ExprId) -> CheckType {
-        match &expression.kind {
+        match &self.expr_kind(*expression) {
             // returns as type
             ExpressionKind::Null => CheckType::Known(TypeAnnotation::Null),
             ExpressionKind::Integer(_) => CheckType::Known(TypeAnnotation::Int),
@@ -21,14 +21,14 @@ impl TypeChecker {
             // returns the inner type
             ExpressionKind::Grouping(inner) => self.check_expression(inner),
             // does this identifier exist?
-            ExpressionKind::Identifier(name) => self.lookup(name, expression.span),
+            ExpressionKind::Identifier(name) => self.lookup(name, self.expr_span(*expression)),
             // checks array items
             ExpressionKind::ArrayLiteral(items) => {
                 // checks every item type in items then push it to the new
                 // item_types vec
                 let mut item_types = Vec::with_capacity(items.len());
                 for item in items {
-                    item_types.push((self.check_expression(item), item.span));
+                    item_types.push((self.check_expression(item), self.expr_span(*item)));
                 }
                 // sets the items types to same first item type otherwise null
                 let items_type = item_types
@@ -61,10 +61,10 @@ impl TypeChecker {
             ExpressionKind::Index { target, index } => {
                 // is the target (array) null?
                 let target_type = self.check_expression(target);
-                self.check_is_null(&target_type, target.span);
+                self.check_is_null(&target_type, self.expr_span(*target));
                 // is the index null??
                 let index_type = self.check_expression(index);
-                self.check_is_null(&index_type, index.span);
+                self.check_is_null(&index_type, self.expr_span(*index));
 
                 // is it integer?
                 if !matches!(
@@ -78,7 +78,7 @@ impl TypeChecker {
                 ) {
                     self.error(
                         format!("invalid index operation: index is {}", index_type.info()),
-                        expression.span,
+                        self.expr_span(*expression),
                     );
                 }
 
@@ -98,7 +98,7 @@ impl TypeChecker {
                     other => {
                         self.error(
                             format!("invalid index operation: this is {}", other.info()),
-                            expression.span,
+                            self.expr_span(*expression),
                         );
                         CheckType::Unknown
                     }
@@ -110,7 +110,7 @@ impl TypeChecker {
                 target,
                 index,
                 value,
-            } => self.check_index_assign(target, index, value, expression.span),
+            } => self.check_index_assign(target, index, value, self.expr_span(*expression)),
 
             // offloads to binary
             ExpressionKind::Binary {
@@ -120,27 +120,37 @@ impl TypeChecker {
             } => {
                 // is the left operand null?
                 let left_type = self.check_expression(left);
-                self.check_is_null(&left_type, left.span);
+                self.check_is_null(&left_type, self.expr_span(*left));
                 // is the right operand null?
                 let right_type = self.check_expression(right);
-                self.check_is_null(&right_type, right.span);
+                self.check_is_null(&right_type, self.expr_span(*right));
                 // is the binary correct?
-                self.check_binary_operator(left_type, right_type, operator, expression.span)
+                self.check_binary_operator(
+                    left_type,
+                    right_type,
+                    operator,
+                    self.expr_span(*expression),
+                )
             }
 
             // offloads to unary
             ExpressionKind::Unary { operator, operand } => {
                 // is the operand null?
                 let operand_type = self.check_expression(operand);
-                self.check_is_null(&operand_type, operand.span);
+                self.check_is_null(&operand_type, self.expr_span(*operand));
                 // is the unary correct?
-                self.check_unary_operator(operand_type, operand.span, operator, expression.span)
+                self.check_unary_operator(
+                    operand_type,
+                    self.expr_span(*operand),
+                    operator,
+                    self.expr_span(*expression),
+                )
             }
 
             // assigns the value to the variable then returns it
             ExpressionKind::Assign { name, value } => {
                 let value_type = self.check_expression(value);
-                self.assign(name, value_type.clone(), expression.span);
+                self.assign(name, value_type.clone(), self.expr_span(*expression));
                 value_type
             }
 
@@ -148,9 +158,9 @@ impl TypeChecker {
             ExpressionKind::Call { path, args } => {
                 let arg_types: Vec<(CheckType, Span)> = args
                     .iter()
-                    .map(|a| (self.check_expression(a), a.span))
+                    .map(|a| (self.check_expression(a), self.expr_span(*a)))
                     .collect();
-                self.check_call_path(path, &arg_types, expression.span)
+                self.check_call_path(path, &arg_types, self.expr_span(*expression))
             }
 
             // checks the call of the function
@@ -158,9 +168,9 @@ impl TypeChecker {
                 let callee_type = self.check_expression(callee);
                 let arg_types: Vec<(CheckType, Span)> = args
                     .iter()
-                    .map(|a| (self.check_expression(a), a.span))
+                    .map(|a| (self.check_expression(a), self.expr_span(*a)))
                     .collect();
-                self.check_call_value(callee_type, &arg_types, expression.span)
+                self.check_call_value(callee_type, &arg_types, self.expr_span(*expression))
             }
 
             // checks the method call
@@ -170,11 +180,12 @@ impl TypeChecker {
                 args,
             } => {
                 let caller_type = self.check_expression(caller);
-                let mut arg_types: Vec<(CheckType, Span)> = vec![(caller_type, caller.span)];
+                let mut arg_types: Vec<(CheckType, Span)> =
+                    vec![(caller_type, self.expr_span(*caller))];
                 for arg in args {
-                    arg_types.push((self.check_expression(arg), arg.span));
+                    arg_types.push((self.check_expression(arg), self.expr_span(*arg)));
                 }
-                self.check_call_path(method, &arg_types, expression.span)
+                self.check_call_path(method, &arg_types, self.expr_span(*expression))
             }
 
             // checks the lambda and transforms it to function type
@@ -193,7 +204,7 @@ impl TypeChecker {
                         param.param_name.clone(),
                         CheckType::Known(param.param_type.clone()),
                         false,
-                        expression.span,
+                        self.expr_span(*expression),
                     );
                 }
                 // add the resolved return type as the expected return
@@ -215,7 +226,7 @@ impl TypeChecker {
 
             ExpressionKind::Cast { value, target_type } => {
                 let value_type = self.check_expression(value);
-                self.check_is_null(&value_type, value.span);
+                self.check_is_null(&value_type, self.expr_span(*value));
 
                 let castable = matches!(
                     &value_type,
@@ -241,7 +252,7 @@ impl TypeChecker {
                             value_type.info(),
                             target_type
                         ),
-                        expression.span,
+                        self.expr_span(*expression),
                     );
                 }
                 CheckType::Unknown
@@ -263,7 +274,10 @@ impl TypeChecker {
                     inner_type,
                     CheckType::Known(TypeAnnotation::Error | TypeAnnotation::CError)
                 ) {
-                    self.error("error cannot wrap another error", expression.span);
+                    self.error(
+                        "error cannot wrap another error",
+                        self.expr_span(*expression),
+                    );
                 }
                 CheckType::Known(TypeAnnotation::Error)
             }
