@@ -19,9 +19,9 @@ impl Parser {
             let span = self.expr_span(left).join(self.expr_span(right));
             left = self.ast.alloc_expr(
                 ExpressionKind::Binary {
-                    left: left,
+                    left,
                     operator,
-                    right: right,
+                    right,
                 },
                 span,
             );
