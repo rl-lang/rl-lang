@@ -94,7 +94,7 @@ impl Parser {
         let body = self.parse_block()?;
 
         let span = start.join(self.previous_span());
-        Ok(Statement::new(
+        Ok(self.ast.alloc_stmt(
             StatementKind::FunctionDeclaration {
                 name,
                 params,
