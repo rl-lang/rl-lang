@@ -45,11 +45,6 @@ impl Resolver {
         }
     }
 
-    pub fn with_ast(mut self, ast: Ast) -> Self {
-        self.ast = ast;
-        self
-    }
-
     /// Pushes a new empty scope onto the scope stack.
     pub fn push_scope(&mut self) {
         self.scopes.push(vec![]);
@@ -99,7 +94,9 @@ impl Resolver {
         self.ast.stmts.get(id).kind.clone()
     }
 
-    pub fn into_ast(&mut self) -> Ast {
-        std::mem::take(&mut self.ast)
+    pub fn resolve(&mut self, arena: Ast, statements: Vec<StmtId>) -> (Ast, Vec<StmtId>) {
+        self.ast = arena;
+        let resolved = self.resolve_statements(statements);
+        (std::mem::take(&mut self.ast), resolved)
     }
 }

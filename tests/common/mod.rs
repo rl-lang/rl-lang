@@ -19,19 +19,23 @@ pub fn eval_program(source: &str) -> Result<Evaluator, Error> {
     let tokens = rl_lang::lexer::tokenizer::Tokenizer::lex(file.clone())?;
 
     let (ast, stmts) = rl_lang::parser::parser_logic::Parser::parse(tokens, file.clone())?;
-    let mut evaluator = Evaluator::default()
-        .with_stdlib()
-        .with_source_file(file.clone());
 
-    evaluator.resolver = evaluator.resolver.with_ast(ast);
-    evaluator.resolver.current_dir = std::path::Path::new(file.name.as_ref())
+    let mut resolver = rl_lang::resolver::Resolver::default(); // or Evaluator::default().resolver;
+    resolver.current_dir = std::path::Path::new(file.name.as_ref())
         .parent()
         .unwrap_or(std::path::Path::new(""))
         .to_path_buf();
-    let resolved_stmts = evaluator.resolver.resolve_statements(stmts);
-    let resolved_ast = evaluator.resolver.into_ast();
 
-    evaluator.evaluate_program(&resolved_ast, &resolved_stmts)?;
+    let (arena, resolved_stmts) = resolver.resolve(ast, stmts);
+
+    let mut evaluator = Evaluator::default()
+        .with_stdlib()
+        .with_source_file(file)
+        .with_arena(arena);
+
+    evaluator.resolver = resolver;
+
+    evaluator.evaluate_program(&resolved_stmts)?;
 
     Ok(evaluator)
 }

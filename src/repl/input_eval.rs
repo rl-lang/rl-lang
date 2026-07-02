@@ -42,11 +42,12 @@ pub fn eval_input(input: &str, evaluator: &mut Evaluator, output: &mut Vec<Outpu
     let mut success = true;
 
     let (ast, statements) = statements;
+    let (resolved_ast, statements) = evaluator.resolver.resolve(ast, statements);
+    evaluator.arena = resolved_ast;
     for statement in &statements {
-        if let crate::ast::statements::StatementKind::Expression(expr) =
-            &ast.stmts.get(*statement).kind
-        {
-            match evaluator.evaluate(expr) {
+        let kind = evaluator.arena.stmts.get(*statement).kind.clone();
+        if let crate::ast::statements::StatementKind::Expression(expr) = kind {
+            match evaluator.evaluate(&expr) {
                 Ok(val) => {
                     if !matches!(val, crate::interpreter::values::Value::Null) {
                         let val_str = format!("{}", val);

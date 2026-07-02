@@ -123,17 +123,25 @@ fn lex_and_parse(text: &str) {
 
 fn full_pipeline(text: &str) {
     let sf = src("bench", black_box(text));
+
     let tokens = match Tokenizer::lex(sf.clone()) {
         Ok(t) => t,
         Err(_) => return,
     };
-    let stmts = match Parser::parse(tokens, sf.clone()) {
+
+    let (ast, stmts) = match Parser::parse(tokens, sf.clone()) {
         Ok(s) => s,
         Err(_) => return,
     };
-    let mut ev = Evaluator::default().with_stdlib().with_source_file(sf);
-    let stmts = ev.resolver.resolve_statements(stmts);
-    let _ = ev.evaluate_program(&stmts);
+
+    let mut evaluator = Evaluator::default().with_stdlib().with_source_file(sf);
+
+    let mut resolver = evaluator.resolver;
+    let (arena, stmts) = resolver.resolve(ast, stmts);
+    evaluator.resolver = resolver;
+    let mut evaluator = evaluator.with_arena(arena);
+
+    let _ = evaluator.evaluate_program(&stmts);
 }
 
 // ===== benchmark groups =====

@@ -190,7 +190,9 @@ pub fn handle_command(
                     };
                     evaluator.set_source_file(source);
                     let mut ok = true;
-                    let (_, stmts) = stmts;
+                    let (ast, stmts) = stmts;
+                    let (resolved_ast, stmts) = evaluator.resolver.resolve(ast, stmts);
+                    evaluator.arena = resolved_ast;
                     for stmt in &stmts {
                         if let Err(e) = evaluator.evaluate_statement(stmt) {
                             push_error(output, &e);
