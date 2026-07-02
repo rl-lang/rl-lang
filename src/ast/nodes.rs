@@ -11,7 +11,7 @@
 //! environment lookup, eliminating runtime name searches.
 //!
 //! [`Resolver`]: crate::resolver
-use crate::ast::statements::{Param, Statement, TypeAnnotation};
+use crate::ast::statements::{Param, TypeAnnotation};
 use crate::ast::{ExprId, StmtId};
 use crate::lexer::tokentypes::TokenType;
 use crate::utils::span::Span;
@@ -110,7 +110,7 @@ pub enum ExpressionKind {
     Lambda {
         params: Vec<Param>,
         return_type: Option<TypeAnnotation>,
-        body: Vec<Statement>,
+        body: Vec<StmtId>,
     },
     /// A lexically-resolved lambda. `capture_depth` is the scope depth at the
     /// point of definition, used to correctly capture the enclosing environment.

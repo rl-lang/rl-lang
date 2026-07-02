@@ -4,7 +4,7 @@
 //! the methods defined here. Nothing in this file produces AST nodes directly;
 //! it only provides the machinery for navigating the token stream.
 use crate::{
-    ast::{Ast, ExprId, nodes::ExpressionKind, statements::Statement},
+    ast::{Ast, ExprId, StmtId, nodes::ExpressionKind},
     lexer::tokentypes::Token,
     utils::{
         errors::{Error, Reason},
@@ -45,10 +45,7 @@ impl Parser {
     /// Returns the first [`Error`] encountered; parsing stops immediately.
     ///
     /// [`parse_statement_to_ast`]: Parser::parse_statement_to_ast
-    pub fn parse(
-        tokens: Vec<Token>,
-        source_file: SourceFile,
-    ) -> Result<(Ast, Vec<Statement>), Error> {
+    pub fn parse(tokens: Vec<Token>, source_file: SourceFile) -> Result<(Ast, Vec<StmtId>), Error> {
         let mut parser = Parser {
             source_file,
             tokens,
@@ -79,6 +76,6 @@ impl Parser {
         self.ast.exprs.get(id).span
     }
     pub fn expr_kind(&self, id: ExprId) -> ExpressionKind {
-        self.ast.exprs.get(id).kind
+        self.ast.exprs.get(id).kind.clone()
     }
 }

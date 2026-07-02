@@ -74,8 +74,8 @@ impl Parser {
                     return Err(self.err("expected `=` after name", self.peek_span()));
                 }
                 let value = self.parse_expression()?;
-                let span = start.join(value.span);
-                return Ok(Statement::new(
+                let span = start.join(self.expr_span(value));
+                return Ok(self.ast.alloc_stmt(
                     StatementKind::VariableDeclaration {
                         name,
                         type_annotation: TypeAnnotation::Tuple(types),
@@ -142,8 +142,8 @@ impl Parser {
                 }
                 while self.match_type(&[TokenType::Newline]) {}
                 let value = self.parse_expression()?;
-                let span = start.join(value.span);
-                return Ok(Statement::new(
+                let span = start.join(self.expr_span(value));
+                return Ok(self.ast.alloc_stmt(
                     StatementKind::DestructureDeclaration { bindings, value },
                     span,
                 ));
@@ -154,8 +154,8 @@ impl Parser {
                 }
                 while self.match_type(&[TokenType::Newline]) {}
                 let value = self.parse_expression()?;
-                let span = start.join(value.span);
-                return Ok(Statement::new(
+                let span = start.join(self.expr_span(value));
+                return Ok(self.ast.alloc_stmt(
                     StatementKind::VariableDeclaration {
                         name: first_name,
                         type_annotation: first_type,
@@ -211,7 +211,7 @@ impl Parser {
                 }
                 self.match_type(&[TokenType::RightBracket]);
                 let span = start.join(self.previous_span());
-                return Ok(Statement::new(
+                return Ok(self.ast.alloc_stmt(
                     StatementKind::Array {
                         name,
                         type_annotation: annoation_type,
@@ -222,8 +222,8 @@ impl Parser {
             } else {
                 while self.match_type(&[TokenType::Newline]) {}
                 let value = self.parse_expression()?;
-                let span = start.join(value.span);
-                return Ok(Statement::new(
+                let span = start.join(self.expr_span(value));
+                return Ok(self.ast.alloc_stmt(
                     StatementKind::VariableDeclaration {
                         name,
                         type_annotation: TypeAnnotation::Array(Box::new(annoation_type)),
@@ -237,7 +237,7 @@ impl Parser {
         self.parse_variable_declartion_scalar(start)
     }
 
-    fn parse_variable_declartion_scalar(&mut self, start: Span) -> Result<Statement, Error> {
+    fn parse_variable_declartion_scalar(&mut self, start: Span) -> Result<StmtId, Error> {
         let var_type = self.parse_type(true)?;
         while self.match_type(&[TokenType::Newline]) {}
         let name = match self.peek() {
@@ -255,9 +255,9 @@ impl Parser {
 
         while self.match_type(&[TokenType::Newline]) {}
         let value = self.parse_expression()?;
-        let span = start.join(value.span);
+        let span = start.join(self.expr_span(value));
 
-        Ok(Statement::new(
+        Ok(self.ast.alloc_stmt(
             StatementKind::VariableDeclaration {
                 name,
                 type_annotation: var_type,
