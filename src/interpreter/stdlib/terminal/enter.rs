@@ -10,10 +10,13 @@ use crossterm::{
 use std::io::stdout;
 
 pub fn func(_: &mut Evaluator) -> Value {
-    enable_raw_mode().map_err(|e| verr!(vs!(format!("term_enter(): {}", e))));
+    if let Err(e) = enable_raw_mode() {
+        return verr!(vs!(format!("term_enter(): {}", e)));
+    }
 
-    execute!(stdout(), EnterAlternateScreen)
-        .map_err(|e| verr!(vs!(format!("term_enter(): {}", e))));
+    if let Err(e) = execute!(stdout(), EnterAlternateScreen) {
+        return verr!(vs!(format!("term_enter(): {}", e)));
+    }
 
     vok!(vnl!())
 }

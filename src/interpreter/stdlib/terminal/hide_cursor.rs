@@ -7,7 +7,9 @@ use crossterm::{cursor::Hide, execute};
 use std::io::stdout;
 
 pub fn func(_: &mut Evaluator) -> Value {
-    execute!(stdout(), Hide).map_err(|e| verr!(vs!(format!("term_hide_cursor(): {}", e))));
+    if let Err(e) = execute!(stdout(), Hide) {
+        return verr!(vs!(format!("term_hide_cursor(): {}", e)));
+    };
 
     vok!(vnl!())
 }

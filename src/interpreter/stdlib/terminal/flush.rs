@@ -3,9 +3,9 @@ use crate::interpreter::{evaluator::Evaluator, values::Value};
 use std::io::{Write, stdout};
 
 pub fn func(_: &mut Evaluator) -> Value {
-    stdout()
-        .flush()
-        .map_err(|e| verr!(vs!(format!("term_flush(): {}", e))));
+    if let Err(e) = stdout().flush() {
+        return verr!(vs!(format!("term_flush(): {}", e)));
+    };
 
     vok!(vnl!())
 }
