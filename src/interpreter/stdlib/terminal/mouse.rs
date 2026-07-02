@@ -8,12 +8,12 @@ use std::io::stdout;
 
 pub fn std_term_enable_mouse(_: &mut Evaluator) -> Value {
     execute!(stdout(), EnableMouseCapture)
-        .map_err(|e| return verr!(vs!(format!("term_enable_mouse(): {}", e))));
+        .map_err(|e| verr!(vs!(format!("term_enable_mouse(): {}", e))));
     vok!(vnl!())
 }
 
 pub fn std_term_disable_mouse(_: &mut Evaluator) -> Value {
     execute!(stdout(), DisableMouseCapture)
-        .map_err(|e| return verr!(vs!(format!("term_disable_mouse(): {}", e))));
+        .map_err(|e| verr!(vs!(format!("term_disable_mouse(): {}", e))));
     vok!(vnl!())
 }

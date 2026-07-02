@@ -5,7 +5,7 @@ use std::io::{Write, stdout};
 pub fn func(_: &mut Evaluator) -> Value {
     stdout()
         .flush()
-        .map_err(|e| return verr!(vs!(format!("term_flush(): {}", e))));
+        .map_err(|e| verr!(vs!(format!("term_flush(): {}", e))));
 
     vok!(vnl!())
 }

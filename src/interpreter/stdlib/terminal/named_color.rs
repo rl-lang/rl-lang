@@ -40,7 +40,7 @@ pub fn std_term_fg(_: &mut Evaluator, arg: Value) -> Value {
     };
 
     execute!(stdout(), SetForegroundColor(color))
-        .map_err(|e| return verr!(vs!(format!("term_fg(): {}", e))));
+        .map_err(|e| verr!(vs!(format!("term_fg(): {}", e))));
 
     Value::Ok(Box::new(Value::Null))
 }
@@ -57,7 +57,7 @@ pub fn std_term_bg(_: &mut Evaluator, arg: Value) -> Value {
     };
 
     execute!(stdout(), SetBackgroundColor(color))
-        .map_err(|e| return verr!(vs!(format!("term_bg(): {}", e))));
+        .map_err(|e| verr!(vs!(format!("term_bg(): {}", e))));
 
     Value::Ok(Box::new(Value::Null))
 }

@@ -22,6 +22,6 @@ pub fn func(_: &mut Evaluator, r: Value, g: Value, b: Value) -> Value {
     };
 
     execute!(stdout(), SetForegroundColor(Color::Rgb { r, g, b }))
-        .map_err(|e| return verr!(vs!(format!("term_set_fg(): {}", e))));
+        .map_err(|e| verr!(vs!(format!("term_set_fg(): {}", e))));
     vok!(vnl!())
 }

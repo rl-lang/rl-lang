@@ -17,7 +17,7 @@ pub fn std_term_move_up(_: &mut Evaluator, arg: Value) -> Value {
         Ok(v) => v,
         Err(e) => return verr!(vs!(e)),
     };
-    execute!(stdout(), MoveUp(n)).map_err(|e| return verr!(vs!(format!("term_move_up(): {}", e))));
+    execute!(stdout(), MoveUp(n)).map_err(|e| verr!(vs!(format!("term_move_up(): {}", e))));
 
     vok!(vnl!())
 }
@@ -28,7 +28,7 @@ pub fn std_term_move_down(_: &mut Evaluator, arg: Value) -> Value {
         Err(e) => return verr!(vs!(e)),
     };
     execute!(stdout(), MoveDown(n))
-        .map_err(|e| return verr!(vs!(format!("term_move_down(): {}", e))));
+        .map_err(|e| verr!(vs!(format!("term_move_down(): {}", e))));
 
     vok!(vnl!())
 }
@@ -39,7 +39,7 @@ pub fn std_term_move_left(_: &mut Evaluator, arg: Value) -> Value {
         Err(e) => return verr!(vs!(e)),
     };
     execute!(stdout(), MoveLeft(n))
-        .map_err(|e| return verr!(vs!(format!("term_move_left(): {}", e))));
+        .map_err(|e| verr!(vs!(format!("term_move_left(): {}", e))));
 
     vok!(vnl!())
 }
@@ -60,7 +60,7 @@ pub fn std_term_next_line(_: &mut Evaluator, arg: Value) -> Value {
         Err(e) => return verr!(vs!(e)),
     };
     execute!(stdout(), MoveToNextLine(n))
-        .map_err(|e| return verr!(vs!(format!("term_next_line(): {}", e))));
+        .map_err(|e| verr!(vs!(format!("term_next_line(): {}", e))));
 
     vok!(vnl!())
 }
@@ -71,7 +71,7 @@ pub fn std_term_prev_line(_: &mut Evaluator, arg: Value) -> Value {
         Err(e) => return verr!(vs!(e)),
     };
     execute!(stdout(), MoveToPreviousLine(n))
-        .map_err(|e| return verr!(vs!(format!("term_prev_line(): {}", e))));
+        .map_err(|e| verr!(vs!(format!("term_prev_line(): {}", e))));
 
     vok!(vnl!())
 }

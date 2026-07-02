@@ -14,7 +14,7 @@ pub fn func(_: &mut Evaluator, x: Value, y: Value) -> Value {
         Err(e) => return verr!(vs!(e)),
     };
 
-    execute!(stdout(), MoveTo(x, y)).map_err(|e| return verr!(vs!(format!("term_move(): {}", e))));
+    execute!(stdout(), MoveTo(x, y)).map_err(|e| verr!(vs!(format!("term_move(): {}", e))));
 
     vok!(vnl!())
 }

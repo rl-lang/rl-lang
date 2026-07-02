@@ -11,6 +11,6 @@ pub fn func(_: &mut Evaluator, arg: Value) -> Value {
     };
 
     execute!(stdout(), SetTitle(title))
-        .map_err(|e| return verr!(vs!(format!("term_set_title(): {}", e))));
+        .map_err(|e| verr!(vs!(format!("term_set_title(): {}", e))));
     vok!(vnl!())
 }

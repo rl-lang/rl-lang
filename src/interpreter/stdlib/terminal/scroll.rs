@@ -14,7 +14,7 @@ pub fn std_term_scroll_up(_: &mut Evaluator, arg: Value) -> Value {
     };
 
     execute!(stdout(), ScrollUp(n))
-        .map_err(|e| return verr!(vs!(format!("term_scroll_up(): {}", e))));
+        .map_err(|e| verr!(vs!(format!("term_scroll_up(): {}", e))));
     vok!(vnl!())
 }
 
@@ -25,6 +25,6 @@ pub fn std_term_scroll_down(_: &mut Evaluator, arg: Value) -> Value {
     };
 
     execute!(stdout(), ScrollDown(n))
-        .map_err(|e| return verr!(vs!(format!("term_scroll_down(): {}", e))));
+        .map_err(|e| verr!(vs!(format!("term_scroll_down(): {}", e))));
     vok!(vnl!())
 }

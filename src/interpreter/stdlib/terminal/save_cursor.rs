@@ -8,6 +8,6 @@ use std::io::stdout;
 
 pub fn func(_: &mut Evaluator) -> Value {
     execute!(stdout(), SavePosition)
-        .map_err(|e| return verr!(vs!(format!("term_save_cursor(): {}", e))));
+        .map_err(|e| verr!(vs!(format!("term_save_cursor(): {}", e))));
     vok!(vnl!())
 }

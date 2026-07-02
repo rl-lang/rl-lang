@@ -10,10 +10,10 @@ use std::io::{Write, stderr, stdout};
 pub fn func(_: &mut Evaluator) -> Value {
     let _ = stdout().flush();
     let _ = stderr().flush();
-    disable_raw_mode().map_err(|e| return verr!(vs!(format!("term_leave(): {}", e))));
+    disable_raw_mode().map_err(|e| verr!(vs!(format!("term_leave(): {}", e))));
 
     execute!(stdout(), Show, LeaveAlternateScreen)
-        .map_err(|e| return verr!(vs!(format!("term_leave(): {}", e))));
+        .map_err(|e| verr!(vs!(format!("term_leave(): {}", e))));
     let _ = stdout().flush();
 
     vok!(vnl!())

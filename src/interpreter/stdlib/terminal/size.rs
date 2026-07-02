@@ -31,6 +31,6 @@ pub fn std_term_set_size(_: &mut Evaluator, cols: Value, rows: Value) -> Value {
     };
 
     execute!(stdout(), SetSize(cols, rows))
-        .map_err(|e| return verr!(vs!(format!("term_set_size(): {}", e))));
+        .map_err(|e| verr!(vs!(format!("term_set_size(): {}", e))));
     vok!(vnl!())
 }
