@@ -63,21 +63,24 @@ pub fn parsing_loop(source: SourceFile, tokens: Vec<Token>) -> (Ast, Vec<StmtId>
 pub fn eval_loop(source: SourceFile, ast: Ast, statements: Vec<StmtId>, user_args_offset: usize) {
     #[cfg(feature = "debug")]
     info!("evaluating the ast tree...");
+
     let mut evaluator = Evaluator::default()
         .with_stdlib()
         .with_source_file(source.clone())
         .with_user_args_offset(user_args_offset);
 
-    evaluator.resolver = evaluator.resolver.with_ast(ast);
-    evaluator.resolver.current_dir = std::path::Path::new(source.name.as_ref())
+    let mut resolver = evaluator.resolver;
+    resolver.current_dir = std::path::Path::new(source.name.as_ref())
         .parent()
         .unwrap_or(std::path::Path::new(""))
         .to_path_buf();
 
-    let statements = evaluator.resolver.resolve_statements(statements);
-    let ast = evaluator.resolver.into_ast();
+    let (arena, statements) = resolver.resolve(ast, statements);
 
-    if let Err(e) = evaluator.evaluate_program(&ast, &statements) {
+    evaluator.resolver = resolver;
+    let mut evaluator = evaluator.with_arena(arena);
+
+    if let Err(e) = evaluator.evaluate_program(&statements) {
         e.report_to_stderr();
         std::process::exit(1);
     }
