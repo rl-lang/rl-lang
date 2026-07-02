@@ -71,7 +71,15 @@ impl<T> Arena<T> {
     }
 
     pub fn get(&self, id: Id<T>) -> &T {
-        &self.items[id.index()]
+        let index = id.index();
+        if index >= self.items.len() {
+            panic!(
+                "Arena index out of bounds: trying to access index {} but arena only has {} items.",
+                index,
+                self.items.len()
+            );
+        }
+        &self.items[index]
     }
 
     pub fn get_mut(&mut self, id: Id<T>) -> &mut T {
