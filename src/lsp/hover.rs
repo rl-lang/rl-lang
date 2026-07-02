@@ -30,13 +30,14 @@ pub fn run_hover(source: &str, position: Position, uri: &Url) -> Option<Hover> {
     let token_span = find_identifier_span_at(&tokens, offset)?;
 
     let statements = Parser::parse(tokens, file.clone()).ok()?;
+    let (ast, statements) = statements;
     let mut checker = TypeChecker::new().with_source_file(file);
     if let Ok(doc_path) = uri.to_file_path()
         && let Some(doc_dir) = doc_path.parent()
     {
         checker = checker.with_base_dir(doc_dir.to_path_buf());
     }
-    checker.check(&statements);
+    checker.check(ast, &statements);
 
     // since several spans can exists on same line
     // pick the smallest span

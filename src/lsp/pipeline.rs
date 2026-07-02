@@ -28,6 +28,7 @@ pub fn run_pipeline(source: &str, uri: &Url) -> Vec<Diagnostic> {
         Ok(s) => s,
         Err(e) => return vec![error_to_diagnostic(source, &e)],
     };
+    let (ast, statements) = statements;
 
     let mut checker = TypeChecker::new().with_source_file(file);
     if let Ok(doc_path) = uri.to_file_path()
@@ -35,7 +36,7 @@ pub fn run_pipeline(source: &str, uri: &Url) -> Vec<Diagnostic> {
     {
         checker = checker.with_base_dir(doc_dir.to_path_buf());
     }
-    checker.check(&statements);
+    checker.check(ast, &statements);
 
     checker
         .errors
