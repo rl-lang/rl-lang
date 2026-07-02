@@ -19,7 +19,7 @@ impl Evaluator {
     /// Loop control (`break`, `continue`) and function return (`return`) are signalled
     /// via `is_breaking`, `is_continuing`, and `return_value` flags on [`Evaluator`]
     /// rather than exceptions, so callers must check these flags after each statement.
-    pub fn evaluate_statement(&mut self, statement: &Statement) -> Result<(), Error> {
+    pub fn evaluate_statement(&mut self, ast: &Ast, statement: &StmtId) -> Result<(), Error> {
         match &statement.kind {
             StatementKind::ResolvedVariableDeclaration {
                 slot,

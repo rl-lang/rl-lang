@@ -3,14 +3,12 @@
 use std::rc::Rc;
 use std::sync::Arc;
 
+use crate::ast::{Ast, ExprId};
 use crate::interpreter::stdlib::random::xoshiro::Xoshiro256;
 use crate::lexer::tokentypes::TokenType;
 use crate::resolver::Resolver;
 use crate::{
-    ast::{
-        nodes::{Expression, ExpressionKind},
-        statements::TypeAnnotation,
-    },
+    ast::{nodes::ExpressionKind, statements::TypeAnnotation},
     interpreter::evaluator_types::addressing::{get_indices_as_vec, try_get_root_addr},
     interpreter::{
         native::{IntoNativeFn, Module},
@@ -304,7 +302,7 @@ impl Evaluator {
         }
     }
 
-    pub fn evaluate(&mut self, expression: &Expression) -> Result<Value, Error> {
+    pub fn evaluate(&mut self, ast: &Ast, expression: &ExprId) -> Result<Value, Error> {
         let value = match &expression.kind {
             ExpressionKind::Null => Value::Null,
             ExpressionKind::Integer(i) => Value::Integer(*i),
