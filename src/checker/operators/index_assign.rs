@@ -7,7 +7,7 @@
 //! - Assigning `null` is always allowed (absence of value)
 
 use crate::{
-    ast::{nodes::Expression, statements::TypeAnnotation},
+    ast::{ExprId, statements::TypeAnnotation},
     checker::structs::{CheckType, TypeChecker},
     utils::span::Span,
 };
@@ -15,9 +15,9 @@ use crate::{
 impl TypeChecker {
     pub fn check_index_assign(
         &mut self,
-        target: &Expression,
-        index: &Expression,
-        value: &Expression,
+        target: &ExprId,
+        index: &ExprId,
+        value: &ExprId,
         span: Span,
     ) -> CheckType {
         let target_type = self.check_expression(target);
@@ -31,7 +31,7 @@ impl TypeChecker {
         ) {
             self.error(
                 format!("index must be int, got {}", index_type.info()),
-                index.span,
+                self.expr_span(*index),
             );
         }
 
