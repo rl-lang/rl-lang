@@ -182,9 +182,9 @@ fn main() {
     if let Some(source) = find_embedded() {
         let sf = SourceFile::new("program", source);
         let tokens = lexing_loop(sf.clone());
-        let statements = parsing_loop(sf.clone(), tokens);
+        let (ast, statements) = parsing_loop(sf.clone(), tokens);
         if cfg!(feature = "eval") {
-            eval_loop(sf, statements, 1);
+            eval_loop(sf, ast, statements, 1);
         }
         return;
     }
@@ -206,9 +206,9 @@ fn main() {
             });
             let source = SourceFile::new(&*path, source_text);
             let tokens = lexing_loop(source.clone());
-            let statements = parsing_loop(source.clone(), tokens);
+            let (ast, statements) = parsing_loop(source.clone(), tokens);
             if cfg!(feature = "eval") {
-                eval_loop(source, statements, 3);
+                eval_loop(source, ast, statements, 3);
             }
         }
 
@@ -225,9 +225,9 @@ fn main() {
             println!("[{}] v{}", config.project.name, config.project.version);
             let source = SourceFile::new(&*config.project.entry, source_text);
             let tokens = lexing_loop(source.clone());
-            let statements = parsing_loop(source.clone(), tokens);
+            let (ast, statements) = parsing_loop(source.clone(), tokens);
             if cfg!(feature = "eval") {
-                eval_loop(source, statements, 3);
+                eval_loop(source, ast, statements, 3);
             }
         }
 
@@ -245,13 +245,13 @@ fn main() {
             });
             let source = SourceFile::new(&*path, source_text);
             let tokens = lexing_loop(source.clone());
-            let statements = parsing_loop(source.clone(), tokens);
+            let (ast, statements) = parsing_loop(source.clone(), tokens);
 
             #[cfg(feature = "eval")]
             {
                 use rl_lang::checker::TypeChecker;
                 let mut checker = TypeChecker::new().with_source_file(source);
-                let errors = checker.check(&statements);
+                let errors = checker.check(&ast, &statements);
                 if errors.is_empty() {
                     println!("ok");
                 } else {
