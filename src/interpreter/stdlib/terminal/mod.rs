@@ -92,12 +92,12 @@ pub fn module() -> Module {
         .with_function("term_move_to_col", cursor_col::func)
         .with_function("term_move_to_row", cursor_row::func)
         // relative cursor
-        .with_raw_function("term_move_up", move_rel::std_term_move_up)
-        .with_raw_function("term_move_down", move_rel::std_term_move_down)
-        .with_raw_function("term_move_left", move_rel::std_term_move_left)
-        .with_raw_function("term_move_right", move_rel::std_term_move_right)
-        .with_raw_function("term_next_line", move_rel::std_term_next_line)
-        .with_raw_function("term_prev_line", move_rel::std_term_prev_line)
+        .with_function("term_move_up", move_rel::std_term_move_up)
+        .with_function("term_move_down", move_rel::std_term_move_down)
+        .with_function("term_move_left", move_rel::std_term_move_left)
+        .with_function("term_move_right", move_rel::std_term_move_right)
+        .with_function("term_next_line", move_rel::std_term_next_line)
+        .with_function("term_prev_line", move_rel::std_term_prev_line)
         // save / restore
         .with_raw_function("term_save_cursor", save_cursor::func)
         .with_raw_function("term_restore_cursor", restore_cursor::func)

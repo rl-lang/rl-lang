@@ -15,7 +15,3 @@ pub fn extract_u16(v: Value, name: &str) -> Result<u16, String> {
         v => Err(format!("{} must be >= 0, got {}", name, v)),
     }
 }
-
-pub fn extract_u16_one_arg(v: Value) -> Result<u16, String> {
-    extract_u16(v, "n")
-}

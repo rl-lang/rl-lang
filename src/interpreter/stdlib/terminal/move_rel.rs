@@ -1,73 +1,77 @@
-use crate::interpreter::stdlib::terminal::common::extract_u16_one_arg;
-use crate::interpreter::{evaluator::Evaluator, values::Value};
-use crate::utils::{errors::Error, span::Span};
+use crate::interpreter::{
+    evaluator::Evaluator,
+    stdlib::{
+        common::{verr, vnl, vok, vs},
+        terminal::common::extract_u16,
+    },
+    values::Value,
+};
 use crossterm::{
     cursor::{MoveDown, MoveLeft, MoveRight, MoveToNextLine, MoveToPreviousLine, MoveUp},
     execute,
 };
 use std::io::stdout;
 
-pub fn std_term_move_up(
-    eval: &mut Evaluator,
-    args: Vec<Value>,
-    span: Span,
-) -> Result<Value, Error> {
-    let n = extract_u16_one_arg("term_move_up()", eval, args, span)?;
-    execute!(stdout(), MoveUp(n)).map_err(|e| eval.err(format!("term_move_up(): {}", e), span))?;
-    Ok(Value::Ok(Box::new(Value::Null)))
+pub fn std_term_move_up(_: &mut Evaluator, arg: Value) -> Value {
+    let n = match extract_u16(arg, "n") {
+        Ok(v) => v,
+        Err(e) => return verr!(vs!(e)),
+    };
+    execute!(stdout(), MoveUp(n)).map_err(|e| return verr!(vs!(format!("term_move_up(): {}", e))));
+
+    vok!(vnl!())
 }
 
-pub fn std_term_move_down(
-    eval: &mut Evaluator,
-    args: Vec<Value>,
-    span: Span,
-) -> Result<Value, Error> {
-    let n = extract_u16_one_arg("term_move_down()", eval, args, span)?;
+pub fn std_term_move_down(_: &mut Evaluator, arg: Value) -> Value {
+    let n = match extract_u16(arg, "n") {
+        Ok(v) => v,
+        Err(e) => return verr!(vs!(e)),
+    };
     execute!(stdout(), MoveDown(n))
-        .map_err(|e| eval.err(format!("term_move_down(): {}", e), span))?;
-    Ok(Value::Ok(Box::new(Value::Null)))
+        .map_err(|e| return verr!(vs!(format!("term_move_down(): {}", e))));
+
+    vok!(vnl!())
 }
 
-pub fn std_term_move_left(
-    eval: &mut Evaluator,
-    args: Vec<Value>,
-    span: Span,
-) -> Result<Value, Error> {
-    let n = extract_u16_one_arg("term_move_left()", eval, args, span)?;
+pub fn std_term_move_left(_: &mut Evaluator, arg: Value) -> Value {
+    let n = match extract_u16(arg, "n") {
+        Ok(v) => v,
+        Err(e) => return verr!(vs!(e)),
+    };
     execute!(stdout(), MoveLeft(n))
-        .map_err(|e| eval.err(format!("term_move_left(): {}", e), span))?;
-    Ok(Value::Ok(Box::new(Value::Null)))
+        .map_err(|e| return verr!(vs!(format!("term_move_left(): {}", e))));
+
+    vok!(vnl!())
 }
 
-pub fn std_term_move_right(
-    eval: &mut Evaluator,
-    args: Vec<Value>,
-    span: Span,
-) -> Result<Value, Error> {
-    let n = extract_u16_one_arg("term_move_right()", eval, args, span)?;
-    execute!(stdout(), MoveRight(n))
-        .map_err(|e| eval.err(format!("term_move_right(): {}", e), span))?;
-    Ok(Value::Ok(Box::new(Value::Null)))
+pub fn std_term_move_right(_: &mut Evaluator, arg: Value) -> Value {
+    let n = match extract_u16(arg, "n") {
+        Ok(v) => v,
+        Err(e) => return verr!(vs!(e)),
+    };
+    execute!(stdout(), MoveRight(n)).map_err(|e| verr!(vs!(format!("term_move_right(): {}", e))));
+
+    vok!(vnl!())
 }
 
-pub fn std_term_next_line(
-    eval: &mut Evaluator,
-    args: Vec<Value>,
-    span: Span,
-) -> Result<Value, Error> {
-    let n = extract_u16_one_arg("term_next_line()", eval, args, span)?;
+pub fn std_term_next_line(_: &mut Evaluator, arg: Value) -> Value {
+    let n = match extract_u16(arg, "n") {
+        Ok(v) => v,
+        Err(e) => return verr!(vs!(e)),
+    };
     execute!(stdout(), MoveToNextLine(n))
-        .map_err(|e| eval.err(format!("term_next_line(): {}", e), span))?;
-    Ok(Value::Ok(Box::new(Value::Null)))
+        .map_err(|e| return verr!(vs!(format!("term_next_line(): {}", e))));
+
+    vok!(vnl!())
 }
 
-pub fn std_term_prev_line(
-    eval: &mut Evaluator,
-    args: Vec<Value>,
-    span: Span,
-) -> Result<Value, Error> {
-    let n = extract_u16_one_arg("term_prev_line()", eval, args, span)?;
+pub fn std_term_prev_line(_: &mut Evaluator, arg: Value) -> Value {
+    let n = match extract_u16(arg, "n") {
+        Ok(v) => v,
+        Err(e) => return verr!(vs!(e)),
+    };
     execute!(stdout(), MoveToPreviousLine(n))
-        .map_err(|e| eval.err(format!("term_prev_line(): {}", e), span))?;
-    Ok(Value::Ok(Box::new(Value::Null)))
+        .map_err(|e| return verr!(vs!(format!("term_prev_line(): {}", e))));
+
+    vok!(vnl!())
 }
