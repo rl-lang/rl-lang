@@ -139,3 +139,12 @@ macro_rules! vnl {
     };
 }
 pub(crate) use vnl;
+
+macro_rules! try_fn {
+    ($s:expr, $e:expr) => {
+        if let Err(e) = $e {
+            return verr!(vs!(format!("{}: {}", $s, e)));
+        }
+    };
+}
+pub(crate) use try_fn;

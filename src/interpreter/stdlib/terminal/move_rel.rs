@@ -1,7 +1,7 @@
 use crate::interpreter::{
     evaluator::Evaluator,
     stdlib::{
-        common::{verr, vnl, vok, vs},
+        common::{try_fn, verr, vnl, vok, vs},
         terminal::common::extract_u16,
     },
     values::Value,
@@ -17,7 +17,7 @@ pub fn std_term_move_up(_: &mut Evaluator, arg: Value) -> Value {
         Ok(v) => v,
         Err(e) => return verr!(vs!(e)),
     };
-    execute!(stdout(), MoveUp(n)).map_err(|e| verr!(vs!(format!("term_move_up(): {}", e))));
+    try_fn!("term_move_up", execute!(stdout(), MoveUp(n)));
 
     vok!(vnl!())
 }
@@ -27,8 +27,7 @@ pub fn std_term_move_down(_: &mut Evaluator, arg: Value) -> Value {
         Ok(v) => v,
         Err(e) => return verr!(vs!(e)),
     };
-    execute!(stdout(), MoveDown(n))
-        .map_err(|e| verr!(vs!(format!("term_move_down(): {}", e))));
+    try_fn!("term_move_down", execute!(stdout(), MoveDown(n)));
 
     vok!(vnl!())
 }
@@ -38,8 +37,7 @@ pub fn std_term_move_left(_: &mut Evaluator, arg: Value) -> Value {
         Ok(v) => v,
         Err(e) => return verr!(vs!(e)),
     };
-    execute!(stdout(), MoveLeft(n))
-        .map_err(|e| verr!(vs!(format!("term_move_left(): {}", e))));
+    try_fn!("term_move_left", execute!(stdout(), MoveLeft(n)));
 
     vok!(vnl!())
 }
@@ -49,7 +47,7 @@ pub fn std_term_move_right(_: &mut Evaluator, arg: Value) -> Value {
         Ok(v) => v,
         Err(e) => return verr!(vs!(e)),
     };
-    execute!(stdout(), MoveRight(n)).map_err(|e| verr!(vs!(format!("term_move_right(): {}", e))));
+    try_fn!("term_move_right", execute!(stdout(), MoveRight(n)));
 
     vok!(vnl!())
 }
@@ -59,8 +57,7 @@ pub fn std_term_next_line(_: &mut Evaluator, arg: Value) -> Value {
         Ok(v) => v,
         Err(e) => return verr!(vs!(e)),
     };
-    execute!(stdout(), MoveToNextLine(n))
-        .map_err(|e| verr!(vs!(format!("term_next_line(): {}", e))));
+    try_fn!("term_next_line", execute!(stdout(), MoveToNextLine(n)));
 
     vok!(vnl!())
 }
@@ -70,8 +67,8 @@ pub fn std_term_prev_line(_: &mut Evaluator, arg: Value) -> Value {
         Ok(v) => v,
         Err(e) => return verr!(vs!(e)),
     };
-    execute!(stdout(), MoveToPreviousLine(n))
-        .map_err(|e| verr!(vs!(format!("term_prev_line(): {}", e))));
+
+    try_fn!("term_prev_line", execute!(stdout(), MoveToPreviousLine(n)));
 
     vok!(vnl!())
 }

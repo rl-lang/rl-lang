@@ -1,4 +1,4 @@
-use crate::interpreter::stdlib::common::{verr, vnl, vok, vs};
+use crate::interpreter::stdlib::common::{try_fn, verr, vnl, vok, vs};
 use crate::interpreter::stdlib::terminal::common::extract_u16;
 use crate::interpreter::{evaluator::Evaluator, values::Value};
 use crossterm::{cursor::MoveTo, execute};
@@ -14,7 +14,7 @@ pub fn func(_: &mut Evaluator, x: Value, y: Value) -> Value {
         Err(e) => return verr!(vs!(e)),
     };
 
-    execute!(stdout(), MoveTo(x, y)).map_err(|e| verr!(vs!(format!("term_move(): {}", e))));
+    try_fn!("term_move", execute!(stdout(), MoveTo(x, y)));
 
     vok!(vnl!())
 }
