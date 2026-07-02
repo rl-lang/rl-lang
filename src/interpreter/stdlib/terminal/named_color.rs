@@ -1,4 +1,4 @@
-use crate::interpreter::stdlib::common::{extract_string, verr, vs};
+use crate::interpreter::stdlib::common::{extract_string, try_fn, verr, vs};
 use crate::interpreter::{evaluator::Evaluator, values::Value};
 use crossterm::{
     execute,
@@ -39,8 +39,7 @@ pub fn std_term_fg(_: &mut Evaluator, arg: Value) -> Value {
         None => return verr!(vs!(format!("term_fg(): unknown color \"{}\"", name))),
     };
 
-    execute!(stdout(), SetForegroundColor(color))
-        .map_err(|e| verr!(vs!(format!("term_fg(): {}", e))));
+    try_fn!("term_fg", execute!(stdout(), SetForegroundColor(color)));
 
     Value::Ok(Box::new(Value::Null))
 }
@@ -56,8 +55,7 @@ pub fn std_term_bg(_: &mut Evaluator, arg: Value) -> Value {
         None => return verr!(vs!(format!("term_fg(): unknown color \"{}\"", name))),
     };
 
-    execute!(stdout(), SetBackgroundColor(color))
-        .map_err(|e| verr!(vs!(format!("term_bg(): {}", e))));
+    try_fn!("term_bg", execute!(stdout(), SetBackgroundColor(color)));
 
     Value::Ok(Box::new(Value::Null))
 }

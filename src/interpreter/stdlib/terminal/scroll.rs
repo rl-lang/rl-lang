@@ -1,4 +1,4 @@
-use crate::interpreter::stdlib::common::{verr, vnl, vok, vs};
+use crate::interpreter::stdlib::common::{try_fn, verr, vnl, vok, vs};
 use crate::interpreter::stdlib::terminal::common::extract_u16;
 use crate::interpreter::{evaluator::Evaluator, values::Value};
 use crossterm::{
@@ -13,8 +13,7 @@ pub fn std_term_scroll_up(_: &mut Evaluator, arg: Value) -> Value {
         Err(e) => return verr!(vs!(e)),
     };
 
-    execute!(stdout(), ScrollUp(n))
-        .map_err(|e| verr!(vs!(format!("term_scroll_up(): {}", e))));
+    try_fn!("term_scroll_up", execute!(stdout(), ScrollUp(n)));
     vok!(vnl!())
 }
 
@@ -24,7 +23,6 @@ pub fn std_term_scroll_down(_: &mut Evaluator, arg: Value) -> Value {
         Err(e) => return verr!(vs!(e)),
     };
 
-    execute!(stdout(), ScrollDown(n))
-        .map_err(|e| verr!(vs!(format!("term_scroll_down(): {}", e))));
+    try_fn!("term_scroll_down", execute!(stdout(), ScrollDown(n)));
     vok!(vnl!())
 }

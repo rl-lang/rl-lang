@@ -1,4 +1,4 @@
-use crate::interpreter::stdlib::common::{verr, vnl, vok, vs};
+use crate::interpreter::stdlib::common::{try_fn, verr, vnl, vok, vs};
 use crate::interpreter::stdlib::terminal::common::extract_byte;
 use crate::interpreter::{evaluator::Evaluator, values::Value};
 use crossterm::{
@@ -21,7 +21,9 @@ pub fn func(_: &mut Evaluator, r: Value, g: Value, b: Value) -> Value {
         Err(e) => return verr!(vs!(e)),
     };
 
-    execute!(stdout(), SetForegroundColor(Color::Rgb { r, g, b }))
-        .map_err(|e| verr!(vs!(format!("term_set_fg(): {}", e))));
+    try_fn!(
+        "term_set_fg",
+        execute!(stdout(), SetForegroundColor(Color::Rgb { r, g, b }))
+    );
     vok!(vnl!())
 }

@@ -1,4 +1,4 @@
-use crate::interpreter::stdlib::common::{verr, vnl, vok, vs};
+use crate::interpreter::stdlib::common::{try_fn, verr, vnl, vok, vs};
 use crate::interpreter::stdlib::terminal::common::extract_byte;
 use crate::interpreter::{evaluator::Evaluator, values::Value};
 use crossterm::{execute, terminal::SetTitle};
@@ -10,7 +10,6 @@ pub fn func(_: &mut Evaluator, arg: Value) -> Value {
         Err(e) => return verr!(vs!(e)),
     };
 
-    execute!(stdout(), SetTitle(title))
-        .map_err(|e| verr!(vs!(format!("term_set_title(): {}", e))));
+    try_fn!("term_set_title", execute!(stdout(), SetTitle(title)));
     vok!(vnl!())
 }

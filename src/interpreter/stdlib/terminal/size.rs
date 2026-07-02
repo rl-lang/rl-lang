@@ -1,5 +1,5 @@
 use crate::ast::statements::TypeAnnotation;
-use crate::interpreter::stdlib::common::{verr, vi, vnl, vok, vs};
+use crate::interpreter::stdlib::common::{try_fn, verr, vi, vnl, vok, vs};
 use crate::interpreter::stdlib::terminal::common::extract_u16;
 use crate::interpreter::{evaluator::Evaluator, values::Value};
 use crossterm::{
@@ -30,7 +30,6 @@ pub fn std_term_set_size(_: &mut Evaluator, cols: Value, rows: Value) -> Value {
         Err(e) => return verr!(vs!(e)),
     };
 
-    execute!(stdout(), SetSize(cols, rows))
-        .map_err(|e| verr!(vs!(format!("term_set_size(): {}", e))));
+    try_fn!("term_set_size", execute!(stdout(), SetSize(cols, rows)));
     vok!(vnl!())
 }

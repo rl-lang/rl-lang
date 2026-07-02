@@ -1,4 +1,4 @@
-use crate::interpreter::stdlib::common::{verr, vnl, vok, vs};
+use crate::interpreter::stdlib::common::{try_fn, verr, vnl, vok, vs};
 use crate::interpreter::{evaluator::Evaluator, values::Value};
 
 use crossterm::{
@@ -8,13 +8,11 @@ use crossterm::{
 use std::io::stdout;
 
 pub fn std_term_enable_wrap(_: &mut Evaluator) -> Value {
-    execute!(stdout(), EnableLineWrap)
-        .map_err(|e| verr!(vs!(format!("term_enable_wrap(): {}", e))));
+    try_fn!("term_enable_wrap", execute!(stdout(), EnableLineWrap));
     vok!(vnl!())
 }
 
 pub fn std_term_disable_wrap(_: &mut Evaluator) -> Value {
-    execute!(stdout(), DisableLineWrap)
-        .map_err(|e| verr!(vs!(format!("term_disable_wrap(): {}", e))));
+    try_fn!("term_disable_wrap", execute!(stdout(), DisableLineWrap));
     vok!(vnl!())
 }
