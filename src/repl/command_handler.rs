@@ -190,9 +190,9 @@ pub fn handle_command(
                     };
                     evaluator.set_source_file(source);
                     let mut ok = true;
-                    let (ast, stmts) = stmts;
+                    let (_, stmts) = stmts;
                     for stmt in &stmts {
-                        if let Err(e) = evaluator.evaluate_statement(&ast, stmt) {
+                        if let Err(e) = evaluator.evaluate_statement(stmt) {
                             push_error(output, &e);
                             ok = false;
                             break;

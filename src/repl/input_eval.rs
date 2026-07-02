@@ -46,7 +46,7 @@ pub fn eval_input(input: &str, evaluator: &mut Evaluator, output: &mut Vec<Outpu
         if let crate::ast::statements::StatementKind::Expression(expr) =
             &ast.stmts.get(*statement).kind
         {
-            match evaluator.evaluate(&ast, expr) {
+            match evaluator.evaluate(expr) {
                 Ok(val) => {
                     if !matches!(val, crate::interpreter::values::Value::Null) {
                         let val_str = format!("{}", val);
@@ -65,7 +65,7 @@ pub fn eval_input(input: &str, evaluator: &mut Evaluator, output: &mut Vec<Outpu
                     break;
                 }
             }
-        } else if let Err(e) = evaluator.evaluate_statement(&ast, statement) {
+        } else if let Err(e) = evaluator.evaluate_statement(statement) {
             output.push(OutputLine::Error(format!("error: {}", e.message())));
             success = false;
             break;
