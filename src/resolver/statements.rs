@@ -16,7 +16,7 @@
 //!   Both silently return the original unresolved statement on any IO/parse failure
 
 use crate::{
-    ast::{ExprId, StmtId, nodes::ExpressionKind, statements::StatementKind},
+    ast::{StmtId, nodes::ExpressionKind, statements::StatementKind},
     lexer::tokenizer::Tokenizer,
     parser::parser_logic::Parser,
     resolver::Resolver,
@@ -32,8 +32,9 @@ impl Resolver {
     }
 
     fn resolve_statement(&mut self, stmt: StmtId) -> StmtId {
-        let span = stmt.span;
-        let kind = match stmt.kind {
+        let span = self.stmt_span(stmt);
+        let kind = self.stmt_kind(stmt);
+        let kind = match kind {
             StatementKind::VariableDeclaration {
                 name,
                 type_annotation,
@@ -77,7 +78,9 @@ impl Resolver {
                     name,
                     slot,
                     type_annotation,
-                    value: Expression::new(ExpressionKind::ArrayLiteral(value), span),
+                    value: self
+                        .ast
+                        .alloc_expr(ExpressionKind::ArrayLiteral(value), span),
                 }
             }
             StatementKind::ConstantArray {
@@ -94,7 +97,9 @@ impl Resolver {
                     name,
                     slot,
                     type_annotation,
-                    value: Expression::new(ExpressionKind::ArrayLiteral(value), span),
+                    value: self
+                        .ast
+                        .alloc_expr(ExpressionKind::ArrayLiteral(value), span),
                 }
             }
             StatementKind::FunctionDeclaration {
@@ -142,7 +147,7 @@ impl Resolver {
                 range,
                 body,
             } => {
-                let range = Box::new(self.resolve_statement(*range));
+                let range = self.resolve_statement(range);
                 self.push_scope();
                 let slot = self.declare(variable.clone());
                 let body = self.resolve_statements(body);
@@ -160,7 +165,7 @@ impl Resolver {
                 increment,
                 body,
             } => {
-                let initializer = Box::new(self.resolve_statement(*initializer));
+                let initializer = self.resolve_statement(initializer);
                 let condition = self.resolve_expression(condition);
                 let increment = self.resolve_expression(increment);
                 let body = self.resolve_statements(body);
@@ -182,8 +187,8 @@ impl Resolver {
                 if_branch,
                 else_branch,
             } => {
-                let if_branch = Box::new(self.resolve_statement(*if_branch));
-                let else_branch = else_branch.map(|e| Box::new(self.resolve_statement(*e)));
+                let if_branch = self.resolve_statement(if_branch);
+                let else_branch = else_branch.map(|e| self.resolve_statement(e));
                 StatementKind::Conditional {
                     if_branch,
                     else_branch,
@@ -207,21 +212,28 @@ impl Resolver {
                 let import_name = format!("{}.rl", path.join("/"));
                 let file_path = self.current_dir.join(&import_name);
                 let Ok(source_text) = std::fs::read_to_string(&file_path) else {
-                    return Statement::new(StatementKind::ImportFile { path }, span);
+                    return self
+                        .ast
+                        .alloc_stmt(StatementKind::ImportFile { path }, span);
                 };
                 let source_file =
                     SourceFile::new(file_path.to_string_lossy().as_ref(), source_text);
                 let Ok(tokens) = Tokenizer::lex(source_file.clone()) else {
-                    return Statement::new(StatementKind::ImportFile { path }, span);
+                    return self
+                        .ast
+                        .alloc_stmt(StatementKind::ImportFile { path }, span);
                 };
                 let Ok(stmts) = Parser::parse(tokens, source_file) else {
-                    return Statement::new(StatementKind::ImportFile { path }, span);
+                    return self
+                        .ast
+                        .alloc_stmt(StatementKind::ImportFile { path }, span);
                 };
                 let imported_dir = file_path
                     .parent()
                     .unwrap_or(std::path::Path::new(""))
                     .to_path_buf();
                 let prev_dir = std::mem::replace(&mut self.current_dir, imported_dir);
+                let (_, stmts) = stmts;
                 let resolved = self.resolve_statements(stmts);
                 self.current_dir = prev_dir;
                 StatementKind::ResolvedImportFile {
@@ -234,19 +246,26 @@ impl Resolver {
                 let import_name = format!("{}.rl", path.join("/"));
                 let file_path = self.current_dir.join(&import_name);
                 let Ok(source_text) = std::fs::read_to_string(&file_path) else {
-                    return Statement::new(StatementKind::ImportFileNamed { path, names }, span);
+                    return self
+                        .ast
+                        .alloc_stmt(StatementKind::ImportFileNamed { path, names }, span);
                 };
                 let source_file =
                     SourceFile::new(file_path.to_string_lossy().as_ref(), source_text);
                 let Ok(tokens) = Tokenizer::lex(source_file.clone()) else {
-                    return Statement::new(StatementKind::ImportFileNamed { path, names }, span);
+                    return self
+                        .ast
+                        .alloc_stmt(StatementKind::ImportFileNamed { path, names }, span);
                 };
                 let Ok(stmts) = Parser::parse(tokens, source_file) else {
-                    return Statement::new(StatementKind::ImportFileNamed { path, names }, span);
+                    return self
+                        .ast
+                        .alloc_stmt(StatementKind::ImportFileNamed { path, names }, span);
                 };
+                let (_, stmts) = stmts;
                 let stmts: Vec<_> = stmts
                     .into_iter()
-                    .filter(|s| match &s.kind {
+                    .filter(|s| match &self.stmt_kind(*s) {
                         StatementKind::FunctionDeclaration { name, .. }
                         | StatementKind::VariableDeclaration { name, .. }
                         | StatementKind::ConstantDeclaration { name, .. } => names.contains(name),
@@ -294,6 +313,6 @@ impl Resolver {
 
             other => other,
         };
-        Statement::new(kind, span)
+        self.ast.alloc_stmt(kind, span)
     }
 }

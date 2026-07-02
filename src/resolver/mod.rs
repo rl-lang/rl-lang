@@ -13,7 +13,7 @@
 //! Import statements are read from disk, lexed, parsed, and resolved inline.
 
 use crate::{
-    ast::{Ast, ExprId, nodes::ExpressionKind},
+    ast::{Ast, ExprId, StmtId, nodes::ExpressionKind, statements::StatementKind},
     utils::span::Span,
 };
 
@@ -90,5 +90,12 @@ impl Resolver {
     }
     pub fn expr_kind(&self, id: ExprId) -> ExpressionKind {
         self.ast.exprs.get(id).kind.clone()
+    }
+
+    pub fn stmt_span(&self, id: StmtId) -> Span {
+        self.ast.stmts.get(id).span
+    }
+    pub fn stmt_kind(&self, id: StmtId) -> StatementKind {
+        self.ast.stmts.get(id).kind.clone()
     }
 }
