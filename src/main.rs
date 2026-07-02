@@ -39,57 +39,140 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// Run a .rl source file
+    #[command(
+        long_about = "Lex, parse, and evaluate a single .rl source file.\n\n\
+                       Any arguments after the file path are passed through to the \
+                       script as its argv, so flags meant for `rl` itself must come \
+                       before the file path.",
+        after_help = "EXAMPLES:\n    \
+                       rl run script.rl\n    \
+                       rl run script.rl -- --verbose input.txt"
+    )]
     Run {
-        /// Path to the .rl file
+        /// Path to the .rl file to run
+        #[arg(value_name = "FILE")]
         file: PathBuf,
+
+        /// Arguments forwarded to the script (accessible as argv inside .rl)
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         extra_args: Vec<String>,
     },
-    /// Start the REPL
+
+    /// Start the interactive TUI REPL
+    #[command(long_about = "Start an interactive read-eval-print loop with syntax \
+                             highlighting and history, running in the terminal.")]
     Repl,
 
-    /// Run the project directory
+    /// Run the current project (reads rl.toml)
+    #[command(
+        long_about = "Read `rl.toml` in the current directory and run the project's \
+                       configured entry file.\n\n\
+                       Use `rl new` first if you don't have an rl.toml yet."
+    )]
     Dev,
 
-    /// Create a new project directory
+    /// Scaffold a new project directory
+    #[command(after_help = "EXAMPLES:\n    rl new my_project\n    rl new my_project --no-git")]
     New {
-        /// Name for the project
+        /// Name for the new project directory
+        #[arg(value_name = "NAME")]
         name: String,
-        #[arg(long, help = "skip git init")]
+
+        /// Skip running `git init` in the new project
+        #[arg(long)]
         no_git: bool,
     },
 
-    /// Checks the file for errors
+    /// Type-check a .rl file and report errors without running it
+    #[command(after_help = "EXAMPLES:\n    rl check script.rl")]
     Check {
-        /// Path to the .rl file
+        /// Path to the .rl file to check
+        #[arg(value_name = "FILE")]
         file: PathBuf,
     },
 
-    /// Scaffold Actions workflows
+    /// Scaffold GitHub Actions workflow files
+    #[command(
+        long_about = "Generate GitHub Actions workflow YAML for this project.\n\n\
+                       At least one of --check or --package must be given.",
+        after_help = "EXAMPLES:\n    \
+                       rl workflows --check\n    \
+                       rl workflows --package\n    \
+                       rl workflows --check --package"
+    )]
     Workflows {
-        #[arg(long, help = "Generate check workflow")]
+        /// Generate a workflow that runs `rl check` on push/PR
+        #[arg(long)]
         check: bool,
-        #[arg(long, help = "Generate package/release workflow")]
+
+        /// Generate a workflow that packages and releases a binary
+        #[arg(long)]
         package: bool,
     },
 
     /// Print language reference and stdlib documentation
-    // will be useful for multi use hehehe
+    #[command(
+        long_about = "Print rl's language reference, stdlib docs, and tutorials.\n\n\
+                       With no TOPIC, prints everything. With a TOPIC, searches names \
+                       across all categories for a match (narrow with --stdlib, \
+                       --concept, or --tutorial).",
+        after_help = "EXAMPLES:\n    \
+                       rl docs\n    \
+                       rl docs print\n    \
+                       rl docs io --stdlib\n    \
+                       rl docs loops --concept --json\n    \
+                       rl docs --output docs.md"
+    )]
     Docs {
-        /// Topic to show (WIP)
+        /// Name to search for (matches stdlib functions, concepts, or tutorial steps)
+        #[arg(value_name = "TOPIC")]
         topic: Option<String>,
+
+        /// Print output as JSON instead of Markdown
+        #[arg(long)]
+        json: bool,
+
+        /// Restrict search to stdlib docs
+        #[arg(long)]
+        stdlib: bool,
+
+        /// Restrict search to concept docs
+        #[arg(long)]
+        concept: bool,
+
+        /// Restrict search to tutorial docs
+        #[arg(long)]
+        tutorial: bool,
+
+        /// Write output to a file instead of stdout
+        #[arg(long)]
+        output: bool,
+
+        /// Custom path for --output (implies --output)
+        #[arg(long, value_name = "PATH")]
+        out_file: Option<PathBuf>,
     },
 
-    /// Start the LSP server
+    /// Start the LSP server over stdio
     #[cfg(feature = "lsp")]
+    #[command(
+        long_about = "Start the Language Server Protocol server, communicating \
+                             over stdio. Intended to be launched by an editor, not run \
+                             directly by hand."
+    )]
     Lsp,
 
     /// Package a .rl file into a self-contained binary
+    #[command(after_help = "EXAMPLES:\n    \
+                             rl package script.rl\n    \
+                             rl package script.rl --output myprogram")]
     Package {
-        /// Path to the .rl source file
+        /// Path to the .rl source file to package
+        #[arg(value_name = "FILE")]
         file: PathBuf,
+
         /// Output binary path
-        #[arg(short, long, default_value = "program")]
+        #[arg(short, long, value_name = "PATH", default_value = "program")]
         output: String,
     },
 }
@@ -195,38 +278,76 @@ fn main() {
             create_project(&name, no_git);
         }
 
-        Commands::Docs { topic } => {
+        Commands::Docs {
+            topic,
+            json,
+            concept,
+            tutorial,
+            stdlib,
+            output,
+            out_file,
+        } => {
             let std_entries = docs::entries::stdlib_entries();
             let concept_entries = docs::entries::concept_entries();
             let tutorial_entries = docs::entries::tutorial_entries();
 
-            match topic.as_deref() {
-                None => {
-                    println!("{}", docs::std_to_markdown(&std_entries));
-                    println!("{}", docs::concept_to_markdown(&concept_entries));
-                    println!("{}", docs::tutorial_to_markdown(&tutorial_entries));
-                }
+            let any_category = stdlib || concept || tutorial;
+            let want_std = !any_category || stdlib;
+            let want_concept = !any_category || concept;
+            let want_tutorial = !any_category || tutorial;
+
+            let (matched_std, matched_concepts, matched_tutorial): (
+                Vec<&docs::entry::StdEntry>,
+                Vec<&docs::entry::ConceptEntry>,
+                Vec<&docs::entry::ConceptEntry>,
+            ) = match topic.as_deref() {
+                None => (
+                    if want_std {
+                        std_entries.to_vec()
+                    } else {
+                        Vec::new()
+                    },
+                    if want_concept {
+                        concept_entries.to_vec()
+                    } else {
+                        Vec::new()
+                    },
+                    if want_tutorial {
+                        tutorial_entries.to_vec()
+                    } else {
+                        Vec::new()
+                    },
+                ),
                 Some(query) => {
-                    // search stdlib entries
-                    let matched_std: Vec<&docs::entry::StdEntry> = std_entries
-                        .iter()
-                        .copied()
-                        .filter(|e| e.name.contains(query))
-                        .collect();
+                    let matched_std = if want_std {
+                        std_entries
+                            .iter()
+                            .copied()
+                            .filter(|e| e.name.contains(query))
+                            .collect()
+                    } else {
+                        Vec::new()
+                    };
 
-                    // search concept entries
-                    let matched_concepts: Vec<&docs::entry::ConceptEntry> = concept_entries
-                        .iter()
-                        .copied()
-                        .filter(|e| e.name.contains(query))
-                        .collect();
+                    let matched_concepts = if want_concept {
+                        concept_entries
+                            .iter()
+                            .copied()
+                            .filter(|e| e.name.contains(query))
+                            .collect()
+                    } else {
+                        Vec::new()
+                    };
 
-                    // search tutorial entries
-                    let matched_tutorial: Vec<&docs::entry::ConceptEntry> = tutorial_entries
-                        .iter()
-                        .copied()
-                        .filter(|e| e.name.contains(query))
-                        .collect();
+                    let matched_tutorial = if want_tutorial {
+                        tutorial_entries
+                            .iter()
+                            .copied()
+                            .filter(|e| e.name.contains(query))
+                            .collect()
+                    } else {
+                        Vec::new()
+                    };
 
                     if matched_std.is_empty()
                         && matched_concepts.is_empty()
@@ -236,16 +357,45 @@ fn main() {
                         std::process::exit(1);
                     }
 
-                    if !matched_std.is_empty() {
-                        println!("{}", docs::std_to_markdown(&matched_std));
-                    }
-                    if !matched_concepts.is_empty() {
-                        println!("{}", docs::concept_to_markdown(&matched_concepts));
-                    }
-                    if !matched_tutorial.is_empty() {
-                        println!("{}", docs::tutorial_to_markdown(&matched_tutorial));
+                    (matched_std, matched_concepts, matched_tutorial)
+                }
+            };
+
+            let rendered = if json {
+                match docs::docs_to_json(&matched_std, &matched_concepts, &matched_tutorial) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("error: failed to serialize docs to json: {}", e);
+                        std::process::exit(1);
                     }
                 }
+            } else {
+                let mut out = String::new();
+                if !matched_std.is_empty() {
+                    out.push_str(&docs::std_to_markdown(&matched_std));
+                }
+                if !matched_concepts.is_empty() {
+                    out.push_str(&docs::concept_to_markdown(&matched_concepts));
+                }
+                if !matched_tutorial.is_empty() {
+                    out.push_str(&docs::tutorial_to_markdown(&matched_tutorial));
+                }
+                out
+            };
+
+            let write_to_file = output || out_file.is_some();
+
+            if write_to_file {
+                let ext = if json { "json" } else { "md" };
+                let filename =
+                    out_file.unwrap_or_else(|| PathBuf::from(format!("docs_output.{}", ext)));
+                if let Err(e) = std::fs::write(&filename, &rendered) {
+                    eprintln!("error: failed to write '{}': {}", filename.display(), e);
+                    std::process::exit(1);
+                }
+                println!("docs written to '{}'", filename.display());
+            } else {
+                println!("{}", rendered);
             }
         }
 
