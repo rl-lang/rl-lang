@@ -27,9 +27,8 @@ impl Parser {
         while self.match_type(&[TokenType::Newline]) {}
         let body = self.parse_block()?;
         let span = start.join(self.previous_span());
-        Ok(Statement::new(
-            StatementKind::While { condition, body },
-            span,
-        ))
+        Ok(self
+            .ast
+            .alloc_stmt(StatementKind::While { condition, body }, span))
     }
 }

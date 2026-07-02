@@ -20,7 +20,7 @@ impl Parser {
             return Err(self.err("expected { after match value", self.peek_span()));
         }
 
-        let mut arms: Vec<(MatchPattern, Vec<Statement>)> = Vec::new();
+        let mut arms: Vec<(MatchPattern, Vec<StmtId>)> = Vec::new();
 
         while !self.match_type(&[TokenType::RightBrace, TokenType::Eof]) {
             while self.match_type(&[TokenType::Newline]) {}
@@ -45,6 +45,8 @@ impl Parser {
         }
 
         let span = start.join(self.previous_span());
-        Ok(Statement::new(StatementKind::Match { value, arms }, span))
+        Ok(self
+            .ast
+            .alloc_stmt(StatementKind::Match { value, arms }, span))
     }
 }
