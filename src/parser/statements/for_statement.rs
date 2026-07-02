@@ -48,7 +48,7 @@ impl Parser {
             self.advance();
             while self.match_type(&[TokenType::Newline]) {}
             let init_start = self.peek_span();
-            let initializer = Box::new(self.parse_variable_declartion(init_start)?);
+            let initializer = self.parse_variable_declartion(init_start)?;
             while self.match_type(&[TokenType::Newline]) {}
             self.match_type(&[TokenType::Comma]);
             while self.match_type(&[TokenType::Newline]) {}
@@ -62,7 +62,7 @@ impl Parser {
             while self.match_type(&[TokenType::Newline]) {}
             let body = self.parse_block()?;
             let span = start.join(self.previous_span());
-            Ok(Statement::new(
+            Ok(self.ast.alloc_stmt(
                 StatementKind::For {
                     initializer,
                     condition,
@@ -75,9 +75,13 @@ impl Parser {
             // range or foreach: for <ident> in …
             while self.match_type(&[TokenType::Newline]) {}
             let ident_expr = self.parse_expression()?;
-            let variable_name = match ident_expr.kind {
+            let variable_name = match self.expr_kind(ident_expr) {
                 ExpressionKind::Identifier(name) => name,
-                _ => return Err(self.err("for-range expects identifier", ident_expr.span)),
+                _ => {
+                    return Err(
+                        self.err("for-range expects identifier", self.expr_span(ident_expr))
+                    );
+                }
             };
             while self.match_type(&[TokenType::Newline]) {}
             self.match_type(&[TokenType::In]);
@@ -89,21 +93,29 @@ impl Parser {
                 // literal range: N..M  (integers or bytes, evaluated at parse time)
                 let start_expr = self.parse_expression()?;
                 while self.match_type(&[TokenType::Newline]) {}
-                let range_start = match start_expr.kind {
+                let range_start = match self.expr_kind(start_expr) {
                     ExpressionKind::Integer(i) => i,
                     ExpressionKind::Byte(b) => b as i64,
-                    _ => return Err(self.err("range should be integers only", start_expr.span)),
+                    _ => {
+                        return Err(
+                            self.err("range should be integers only", self.expr_span(start_expr))
+                        );
+                    }
                 };
                 self.match_type(&[TokenType::DotDot]);
                 let end_expr = self.parse_expression()?;
-                let range_end = match end_expr.kind {
+                let range_end = match self.expr_kind(end_expr) {
                     ExpressionKind::Integer(i) => i,
                     ExpressionKind::Byte(b) => b as i64,
-                    _ => return Err(self.err("range should be integers only", end_expr.span)),
+                    _ => {
+                        return Err(
+                            self.err("range should be integers only", self.expr_span(end_expr))
+                        );
+                    }
                 };
                 let range_vec: Vec<i64> = (range_start..range_end).collect();
                 let span = start.join(self.previous_span());
-                Box::new(Statement::new(StatementKind::Range(range_vec), span))
+                self.ast.alloc_stmt(StatementKind::Range(range_vec), span)
             } else if self.match_type(&[TokenType::LeftBracket]) {
                 // inline array literal: [1, 2, 3] (integers only, evaluated at parse time)
                 let mut items = Vec::new();
@@ -124,14 +136,20 @@ impl Parser {
                 self.match_type(&[TokenType::RightBracket]);
                 let mut iterable_list = Vec::new();
                 for item in items {
-                    match item.kind {
+                    match self.expr_kind(item) {
                         ExpressionKind::Integer(i) => iterable_list.push(i),
                         ExpressionKind::Byte(b) => iterable_list.push(b as i64),
-                        _ => return Err(self.err("list items must be integers", item.span)),
+                        _ => {
+                            return Err(
+                                self.err("list items must be integers", self.expr_span(item))
+                            );
+                        }
                     }
                 }
                 let span = start.join(self.previous_span());
-                Box::new(Statement::new(StatementKind::Range(iterable_list), span))
+
+                self.ast
+                    .alloc_stmt(StatementKind::Range(iterable_list), span)
             } else {
                 if matches!(self.peek(), TokenType::Identifier(_)) {
                     // foreach: for item in some_array_var_or_expr
@@ -140,7 +158,7 @@ impl Parser {
                     while self.match_type(&[TokenType::Newline]) {}
                     let body = self.parse_block()?;
                     let span = start.join(self.previous_span());
-                    return Ok(Statement::new(
+                    return Ok(self.ast.alloc_stmt(
                         StatementKind::ForEach {
                             variable: variable_name,
                             iterable: iterable_expression,
@@ -158,7 +176,7 @@ impl Parser {
             while self.match_type(&[TokenType::Newline]) {}
             let body = self.parse_block()?;
             let span = start.join(self.previous_span());
-            Ok(Statement::new(
+            Ok(self.ast.alloc_stmt(
                 StatementKind::ForRange {
                     variable: variable_name,
                     range,
