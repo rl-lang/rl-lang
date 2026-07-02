@@ -16,10 +16,7 @@
 //!   Both silently return the original unresolved statement on any IO/parse failure
 
 use crate::{
-    ast::{
-        nodes::{Expression, ExpressionKind},
-        statements::{Statement, StatementKind},
-    },
+    ast::{ExprId, StmtId, nodes::ExpressionKind, statements::StatementKind},
     lexer::tokenizer::Tokenizer,
     parser::parser_logic::Parser,
     resolver::Resolver,
@@ -27,14 +24,14 @@ use crate::{
 };
 
 impl Resolver {
-    pub fn resolve_statements(&mut self, statements: Vec<Statement>) -> Vec<Statement> {
+    pub fn resolve_statements(&mut self, statements: Vec<StmtId>) -> Vec<StmtId> {
         statements
             .into_iter()
             .map(|statement| self.resolve_statement(statement))
             .collect()
     }
 
-    fn resolve_statement(&mut self, stmt: Statement) -> Statement {
+    fn resolve_statement(&mut self, stmt: StmtId) -> StmtId {
         let span = stmt.span;
         let kind = match stmt.kind {
             StatementKind::VariableDeclaration {

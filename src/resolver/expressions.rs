@@ -12,21 +12,22 @@
 //!   callee if the name is in scope; left as `Call` for stdlib paths
 //! - All other variants recurse into their sub-expressions unchanged
 use crate::{
-    ast::nodes::{Expression, ExpressionKind},
+    ast::{ExprId, nodes::ExpressionKind},
     resolver::Resolver,
 };
 
 impl Resolver {
-    pub fn resolve_expression(&mut self, expression: Expression) -> Expression {
-        let span = expression.span;
-        let kind = match expression.kind {
+    pub fn resolve_expression(&mut self, expression: ExprId) -> ExprId {
+        let span = self.expr_span(expression);
+        let kind = self.expr_kind(expression);
+        let kind = match kind {
             ExpressionKind::Identifier(name) => match self.resolve_name(&name) {
                 Some((depth, slot)) => ExpressionKind::ResolvedIdentifier { name, depth, slot },
                 None => ExpressionKind::Identifier(name),
             },
 
             ExpressionKind::Assign { name, value } => {
-                let value = Box::new(self.resolve_expression(*value));
+                let value = self.resolve_expression(value);
                 match self.resolve_name(&name) {
                     Some((depth, slot)) => ExpressionKind::ResolvedAssign {
                         name,
@@ -65,17 +66,17 @@ impl Resolver {
                 operator,
                 right,
             } => ExpressionKind::Binary {
-                left: Box::new(self.resolve_expression(*left)),
+                left: self.resolve_expression(left),
                 operator,
-                right: Box::new(self.resolve_expression(*right)),
+                right: self.resolve_expression(right),
             },
             ExpressionKind::Unary { operator, operand } => ExpressionKind::Unary {
                 operator,
-                operand: Box::new(self.resolve_expression(*operand)),
+                operand: self.resolve_expression(operand),
             },
 
             ExpressionKind::Grouping(inner) => {
-                ExpressionKind::Grouping(Box::new(self.resolve_expression(*inner)))
+                ExpressionKind::Grouping(self.resolve_expression(inner))
             }
             ExpressionKind::ArrayLiteral(items) => ExpressionKind::ArrayLiteral(
                 items
@@ -85,17 +86,17 @@ impl Resolver {
             ),
 
             ExpressionKind::Index { target, index } => ExpressionKind::Index {
-                target: Box::new(self.resolve_expression(*target)),
-                index: Box::new(self.resolve_expression(*index)),
+                target: self.resolve_expression(target),
+                index: self.resolve_expression(index),
             },
             ExpressionKind::IndexAssign {
                 target,
                 index,
                 value,
             } => ExpressionKind::IndexAssign {
-                target: Box::new(self.resolve_expression(*target)),
-                index: Box::new(self.resolve_expression(*index)),
-                value: Box::new(self.resolve_expression(*value)),
+                target: self.resolve_expression(target),
+                index: self.resolve_expression(index),
+                value: self.resolve_expression(value),
             },
 
             ExpressionKind::Call { path, args } => {
@@ -106,26 +107,24 @@ impl Resolver {
                 if path.len() == 1
                     && let Some((depth, slot)) = self.resolve_name(&path[0])
                 {
-                    return Expression::new(
-                        ExpressionKind::CallExpr {
-                            callee: Box::new(Expression::new(
-                                ExpressionKind::ResolvedIdentifier {
-                                    name: path[0].clone(),
-                                    depth,
-                                    slot,
-                                },
-                                span,
-                            )),
-                            args,
+                    let callee = self.ast.alloc_expr(
+                        ExpressionKind::ResolvedIdentifier {
+                            name: path[0].clone(),
+                            depth,
+                            slot,
                         },
                         span,
                     );
+
+                    return self
+                        .ast
+                        .alloc_expr(ExpressionKind::CallExpr { callee, args }, span);
                 }
                 // stdlib path - leave as Call
                 ExpressionKind::Call { path, args }
             }
             ExpressionKind::CallExpr { callee, args } => ExpressionKind::CallExpr {
-                callee: Box::new(self.resolve_expression(*callee)),
+                callee: self.resolve_expression(callee),
                 args: args
                     .into_iter()
                     .map(|arg| self.resolve_expression(arg))
@@ -137,7 +136,7 @@ impl Resolver {
                 method,
                 args,
             } => ExpressionKind::MethodCall {
-                caller: Box::new(self.resolve_expression(*caller)),
+                caller: self.resolve_expression(caller),
                 method,
                 args: args
                     .into_iter()
@@ -146,12 +145,12 @@ impl Resolver {
             },
 
             ExpressionKind::Cast { value, target_type } => ExpressionKind::Cast {
-                value: Box::new(self.resolve_expression(*value)),
+                value: self.resolve_expression(value),
                 target_type,
             },
 
             ExpressionKind::ErrorLiteral(inner) => {
-                ExpressionKind::ErrorLiteral(Box::new(self.resolve_expression(*inner)))
+                ExpressionKind::ErrorLiteral(self.resolve_expression(inner))
             }
 
             ExpressionKind::TupleLiteral(items) => ExpressionKind::TupleLiteral(
@@ -162,20 +161,20 @@ impl Resolver {
             ),
 
             ExpressionKind::OkLiteral(inner) => {
-                ExpressionKind::OkLiteral(Box::new(self.resolve_expression(*inner)))
+                ExpressionKind::OkLiteral(self.resolve_expression(inner))
             }
 
             ExpressionKind::ErrLiteral(inner) => {
-                ExpressionKind::ErrLiteral(Box::new(self.resolve_expression(*inner)))
+                ExpressionKind::ErrLiteral(self.resolve_expression(inner))
             }
 
             ExpressionKind::Propagate(inner) => {
-                ExpressionKind::Propagate(Box::new(self.resolve_expression(*inner)))
+                ExpressionKind::Propagate(self.resolve_expression(inner))
             }
 
             other => other,
         };
 
-        Expression::new(kind, span)
+        self.ast.alloc_expr(kind, span)
     }
 }

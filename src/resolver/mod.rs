@@ -12,6 +12,11 @@
 //! Function and lambda bodies are resolved in their own pushed scope.
 //! Import statements are read from disk, lexed, parsed, and resolved inline.
 
+use crate::{
+    ast::{Ast, ExprId, nodes::ExpressionKind},
+    utils::span::Span,
+};
+
 mod expressions;
 mod statements;
 
@@ -21,6 +26,7 @@ pub struct Resolver {
     /// Index in the list is the slot number; distance from the top is the depth.
     scopes: Vec<Vec<String>>,
     pub current_dir: std::path::PathBuf,
+    pub ast: Ast,
 }
 
 impl Default for Resolver {
@@ -35,7 +41,13 @@ impl Resolver {
         Self {
             scopes: vec![vec![]],
             current_dir: std::path::PathBuf::new(),
+            ast: Ast::new(),
         }
+    }
+
+    pub fn with_ast(mut self, ast: Ast) -> Self {
+        self.ast = ast;
+        self
     }
 
     /// Pushes a new empty scope onto the scope stack.
@@ -71,5 +83,12 @@ impl Resolver {
             }
         }
         None
+    }
+
+    pub fn expr_span(&self, id: ExprId) -> Span {
+        self.ast.exprs.get(id).span
+    }
+    pub fn expr_kind(&self, id: ExprId) -> ExpressionKind {
+        self.ast.exprs.get(id).kind.clone()
     }
 }
