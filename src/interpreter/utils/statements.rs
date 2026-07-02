@@ -3,7 +3,7 @@
 use crate::{
     ast::{
         Ast, StmtId,
-        statements::{FunctionAttribute, MatchPattern, Statement, StatementKind, TypeAnnotation},
+        statements::{FunctionAttribute, MatchPattern, StatementKind, TypeAnnotation},
     },
     interpreter::{evaluator::Evaluator, values::Value},
     lexer::tokenizer::Tokenizer,
@@ -20,14 +20,14 @@ impl Evaluator {
     /// via `is_breaking`, `is_continuing`, and `return_value` flags on [`Evaluator`]
     /// rather than exceptions, so callers must check these flags after each statement.
     pub fn evaluate_statement(&mut self, ast: &Ast, statement: &StmtId) -> Result<(), Error> {
-        match &statement.kind {
+        match &ast.stmts.get(*statement).kind {
             StatementKind::ResolvedVariableDeclaration {
                 slot,
                 value,
                 type_annotation,
                 ..
             } => {
-                let val = self.evaluate(value)?;
+                let val = self.evaluate(ast, value)?;
 
                 let val_type = Self::infer_type(&val, false);
                 if !Self::types_compatible(&val_type, type_annotation)
@@ -39,10 +39,15 @@ impl Evaluator {
                             "type mismatch: expected {:?}, got {:?}",
                             type_annotation, val_type
                         ),
-                        statement.span,
+                        ast.stmts.get(*statement).span,
                     ));
                 }
-                self.insert_value(*slot, val, type_annotation.clone(), statement.span)?;
+                self.insert_value(
+                    *slot,
+                    val,
+                    type_annotation.clone(),
+                    ast.stmts.get(*statement).span,
+                )?;
             }
 
             StatementKind::ResolvedConstantDeclaration {
@@ -51,7 +56,7 @@ impl Evaluator {
                 type_annotation,
                 ..
             } => {
-                let val = self.evaluate(value)?;
+                let val = self.evaluate(ast, value)?;
 
                 let val_type = Self::infer_type(&val, true);
                 if !Self::types_compatible(&val_type, type_annotation)
@@ -63,10 +68,15 @@ impl Evaluator {
                             "type mismatch: expected {:?}, got {:?}",
                             type_annotation, val_type
                         ),
-                        statement.span,
+                        ast.stmts.get(*statement).span,
                     ));
                 }
-                self.insert_const(*slot, val, type_annotation.clone(), statement.span)?;
+                self.insert_const(
+                    *slot,
+                    val,
+                    type_annotation.clone(),
+                    ast.stmts.get(*statement).span,
+                )?;
             }
 
             StatementKind::ResolvedArray {
@@ -75,7 +85,7 @@ impl Evaluator {
                 type_annotation,
                 ..
             } => {
-                let val = self.evaluate(value)?;
+                let val = self.evaluate(ast, value)?;
                 let val = match val {
                     Value::Values { items, .. } => {
                         for item in &items {
@@ -86,7 +96,7 @@ impl Evaluator {
                                         "array element type mismatch: expected {:?}, found {:?}",
                                         type_annotation, actual
                                     ),
-                                    statement.span,
+                                    ast.stmts.get(*statement).span,
                                 ));
                             }
                         }
@@ -98,12 +108,12 @@ impl Evaluator {
                     other => {
                         return Err(self.err(
                             format!("expected array value found {}", other.type_name()),
-                            statement.span,
+                            ast.stmts.get(*statement).span,
                         ));
                     }
                 };
                 let declared_type = TypeAnnotation::Array(Box::new(type_annotation.clone()));
-                self.insert_value(*slot, val, declared_type, statement.span)?;
+                self.insert_value(*slot, val, declared_type, ast.stmts.get(*statement).span)?;
             }
 
             StatementKind::ResolvedConstantArray {
@@ -112,7 +122,7 @@ impl Evaluator {
                 type_annotation,
                 ..
             } => {
-                let val = self.evaluate(value)?;
+                let val = self.evaluate(ast, value)?;
                 let val = match val {
                     Value::Values { items, .. } => {
                         for item in &items {
@@ -123,7 +133,7 @@ impl Evaluator {
                                         "array element type mismatch: expected {:?}, found {:?}",
                                         type_annotation, actual
                                     ),
-                                    statement.span,
+                                    ast.stmts.get(*statement).span,
                                 ));
                             }
                         }
@@ -135,35 +145,38 @@ impl Evaluator {
                     other => {
                         return Err(self.err(
                             format!("expected array value found {}", other.type_name()),
-                            statement.span,
+                            ast.stmts.get(*statement).span,
                         ));
                     }
                 };
                 let declared_type = TypeAnnotation::CArray(Box::new(type_annotation.clone()));
-                self.insert_value(*slot, val, declared_type, statement.span)?;
+                self.insert_value(*slot, val, declared_type, ast.stmts.get(*statement).span)?;
             }
 
             StatementKind::Expression(expr) => {
-                self.evaluate(expr)?;
+                self.evaluate(ast, expr)?;
             }
 
             StatementKind::While { condition, body } => loop {
-                let v = self.evaluate(condition)?;
+                let v = self.evaluate(ast, condition)?;
                 match v {
                     Value::Bool(true) => {}
                     Value::Bool(false) => break,
                     other => {
                         return Err(self
-                            .err("while condition must be a bool", statement.span)
+                            .err(
+                                "while condition must be a bool",
+                                ast.stmts.get(*statement).span,
+                            )
                             .with_label(
-                                condition.span,
+                                ast.exprs.get(*condition).span,
                                 format!("this is {}, expected bool", other.type_name()),
                             ));
                     }
                 }
                 self.push_scope();
                 for statement in body {
-                    self.evaluate_statement(statement)?;
+                    self.evaluate_statement(ast, statement)?;
                     if self.return_value.is_some() || self.is_breaking || self.is_continuing {
                         break;
                     }
@@ -192,24 +205,27 @@ impl Evaluator {
                 body,
             } => {
                 self.push_scope();
-                self.evaluate_statement(initializer)?;
+                self.evaluate_statement(ast, initializer)?;
                 loop {
-                    let v = self.evaluate(condition)?;
+                    let v = self.evaluate(ast, condition)?;
                     match v {
                         Value::Bool(true) => {}
                         Value::Bool(false) => break,
                         other => {
                             return Err(self
-                                .err("for condition must be a bool", statement.span)
+                                .err(
+                                    "for condition must be a bool",
+                                    ast.stmts.get(*statement).span,
+                                )
                                 .with_label(
-                                    condition.span,
+                                    ast.exprs.get(*condition).span,
                                     format!("this is {}, expected bool", other.type_name()),
                                 ));
                         }
                     }
 
                     for statement in body {
-                        self.evaluate_statement(statement)?;
+                        self.evaluate_statement(ast, statement)?;
                         if self.return_value.is_some() || self.is_breaking || self.is_continuing {
                             break;
                         }
@@ -222,7 +238,7 @@ impl Evaluator {
 
                     if self.is_continuing {
                         self.is_continuing = false;
-                        self.evaluate(increment)?;
+                        self.evaluate(ast, increment)?;
                         continue;
                     }
 
@@ -230,7 +246,7 @@ impl Evaluator {
                         break;
                     }
 
-                    self.evaluate(increment)?;
+                    self.evaluate(ast, increment)?;
                 }
                 self.pop_scope();
             }
@@ -241,24 +257,27 @@ impl Evaluator {
                 increment,
                 body,
             } => {
-                self.evaluate_statement(initializer)?;
+                self.evaluate_statement(ast, initializer)?;
                 loop {
-                    let v = self.evaluate(condition)?;
+                    let v = self.evaluate(ast, condition)?;
                     match v {
                         Value::Bool(true) => {}
                         Value::Bool(false) => break,
                         other => {
                             return Err(self
-                                .err("for condition must be a bool", statement.span)
+                                .err(
+                                    "for condition must be a bool",
+                                    ast.stmts.get(*statement).span,
+                                )
                                 .with_label(
-                                    condition.span,
+                                    ast.exprs.get(*condition).span,
                                     format!("this is {}, expected bool", other.type_name()),
                                 ));
                         }
                     }
 
                     for stmt in body {
-                        self.evaluate_statement(stmt)?;
+                        self.evaluate_statement(ast, stmt)?;
                         if self.return_value.is_some() || self.is_breaking || self.is_continuing {
                             break;
                         }
@@ -270,14 +289,14 @@ impl Evaluator {
                     }
                     if self.is_continuing {
                         self.is_continuing = false;
-                        self.evaluate(increment)?;
+                        self.evaluate(ast, increment)?;
                         continue;
                     }
                     if self.return_value.is_some() {
                         break;
                     }
 
-                    self.evaluate(increment)?;
+                    self.evaluate(ast, increment)?;
                 }
             }
             StatementKind::Import { names, path } => {
@@ -285,7 +304,10 @@ impl Evaluator {
                 let mut module = &self.root_module;
                 for seg in path {
                     module = module.submodules.get(seg).ok_or_else(|| {
-                        self.err(format!("unknown module '{}'", seg), statement.span)
+                        self.err(
+                            format!("unknown module '{}'", seg),
+                            ast.stmts.get(*statement).span,
+                        )
                     })?;
                 }
                 let fns: Vec<_> = names
@@ -294,7 +316,7 @@ impl Evaluator {
                         let f = module.functions.get(name).ok_or_else(|| {
                             self.err(
                                 format!("'{}' is not defined in '{}'", name, module_path),
-                                statement.span,
+                                ast.stmts.get(*statement).span,
                             )
                         })?;
                         Ok((name.clone(), Arc::clone(f)))
@@ -307,7 +329,7 @@ impl Evaluator {
 
             StatementKind::ResolvedImportFile { body, .. } => {
                 for stmt in body {
-                    self.evaluate_statement(stmt)?;
+                    self.evaluate_statement(ast, stmt)?;
                 }
             }
             // require adding resolved version in resolver
@@ -325,20 +347,21 @@ impl Evaluator {
                 let source_text = std::fs::read_to_string(&file_path).map_err(|_| {
                     self.err(
                         format!("could not read file '{}'", import_name),
-                        statement.span,
+                        ast.stmts.get(*statement).span,
                     )
                 })?;
                 let source_file =
                     SourceFile::new(file_path.to_string_lossy().as_ref(), source_text);
                 let tokens = Tokenizer::lex(source_file.clone())?;
                 let stmts = Parser::parse(tokens, source_file.clone())?;
+                let (_, stmts) = stmts;
                 let stmts = self.resolver.resolve_statements(stmts);
 
                 let previous_source = self.source_file.clone();
                 self.source_file = Some(source_file);
 
                 for stmt in &stmts {
-                    self.evaluate_statement(stmt)?;
+                    self.evaluate_statement(ast, stmt)?;
                 }
 
                 let exported = self.environment.last().cloned().unwrap_or_default();
@@ -348,7 +371,7 @@ impl Evaluator {
                 // ImportFileNamed can't filter by name anymore without a name->slot map
                 // For now merge all exported slots - named filtering requires ScopeMap
                 let _ = names; // TODO: filter by name once ScopeMap is threaded through
-                let no_scope_err = self.err("no active scope", statement.span);
+                let no_scope_err = self.err("no active scope", ast.stmts.get(*statement).span);
                 let frame = self.environment.last_mut().ok_or(no_scope_err)?;
                 frame.extend(exported);
             }
@@ -356,12 +379,13 @@ impl Evaluator {
             StatementKind::ResolvedForRange {
                 slot, range, body, ..
             } => {
-                let items = match &range.kind {
+                let items = match &ast.stmts.get(*range).kind {
                     StatementKind::Range(items) => items.clone(),
                     _ => {
-                        return Err(
-                            self.err("for-range: expected a range statement", statement.span)
-                        );
+                        return Err(self.err(
+                            "for-range: expected a range statement",
+                            ast.stmts.get(*statement).span,
+                        ));
                     }
                 };
 
@@ -371,11 +395,11 @@ impl Evaluator {
                         *slot,
                         Value::Integer(item),
                         crate::ast::statements::TypeAnnotation::Int,
-                        statement.span,
+                        ast.stmts.get(*statement).span,
                     )?;
 
                     for statement in body {
-                        self.evaluate_statement(statement)?;
+                        self.evaluate_statement(ast, statement)?;
                         if self.return_value.is_some() || self.is_breaking || self.is_continuing {
                             break;
                         }
@@ -404,14 +428,17 @@ impl Evaluator {
                 body,
                 ..
             } => {
-                let arr = self.evaluate(iterable)?;
+                let arr = self.evaluate(ast, iterable)?;
                 let items = match arr {
                     Value::Values { items, .. } => items,
                     other => {
                         return Err(self
-                            .err("for-each: expected an array", statement.span)
+                            .err(
+                                "for-each: expected an array",
+                                ast.stmts.get(*statement).span,
+                            )
                             .with_label(
-                                iterable.span,
+                                ast.exprs.get(*iterable).span,
                                 format!("this is {}, expected array", other.type_name()),
                             ));
                     }
@@ -419,10 +446,10 @@ impl Evaluator {
                 for item in items {
                     let item_type = Evaluator::infer_type(&item, false);
                     self.push_scope();
-                    self.insert_value(*slot, item, item_type, statement.span)?;
+                    self.insert_value(*slot, item, item_type, ast.stmts.get(*statement).span)?;
 
                     for statement in body {
-                        self.evaluate_statement(statement)?;
+                        self.evaluate_statement(ast, statement)?;
                         if self.return_value.is_some() || self.is_breaking || self.is_continuing {
                             break;
                         }
@@ -446,22 +473,22 @@ impl Evaluator {
 
             StatementKind::ConditionalBranch { condition, body } => match condition {
                 Some(condition) => {
-                    let v = self.evaluate(condition)?;
+                    let v = self.evaluate(ast, condition)?;
                     match v {
                         Value::Bool(true) => {}
                         Value::Bool(false) => return Ok(()),
                         other => {
                             return Err(self
-                                .err("condition must be a bool", statement.span)
+                                .err("condition must be a bool", ast.stmts.get(*statement).span)
                                 .with_label(
-                                    condition.span,
+                                    ast.exprs.get(*condition).span,
                                     format!("this is {}, expected bool", other.type_name()),
                                 ));
                         }
                     }
                     self.push_scope();
                     for statement in body {
-                        self.evaluate_statement(statement)?;
+                        self.evaluate_statement(ast, statement)?;
                         if self.return_value.is_some() || self.is_breaking || self.is_continuing {
                             break;
                         }
@@ -470,7 +497,7 @@ impl Evaluator {
                 }
                 _ => {
                     for statement in body {
-                        self.evaluate_statement(statement)?;
+                        self.evaluate_statement(ast, statement)?;
                         if self.return_value.is_some() || self.is_breaking || self.is_continuing {
                             break;
                         }
@@ -482,10 +509,10 @@ impl Evaluator {
                 if_branch,
                 else_branch,
             } => {
-                if !self.evaluate_branch(if_branch)?
+                if !self.evaluate_branch(ast, if_branch)?
                     && let Some(branch) = else_branch
                 {
-                    self.evaluate_branch(branch)?;
+                    self.evaluate_branch(ast, branch)?;
                 }
             }
 
@@ -508,13 +535,13 @@ impl Evaluator {
                     *slot,
                     func,
                     crate::ast::statements::TypeAnnotation::Fn,
-                    statement.span,
+                    ast.stmts.get(*statement).span,
                 )?;
             }
 
             StatementKind::Return(expr) => {
                 let value = match expr {
-                    Some(e) => self.evaluate(e)?,
+                    Some(e) => self.evaluate(ast, e)?,
                     None => Value::Null,
                 };
 
@@ -534,7 +561,7 @@ impl Evaluator {
                 slots,
                 value,
             } => {
-                let val = self.evaluate(value)?;
+                let val = self.evaluate(ast, value)?;
                 let items = match val {
                     Value::Tuple(items) => items,
                     other => {
@@ -543,7 +570,7 @@ impl Evaluator {
                                 "expected tuple on right side of destructure, got {}",
                                 other.type_name()
                             ),
-                            statement.span,
+                            ast.stmts.get(*statement).span,
                         ));
                     }
                 };
@@ -554,7 +581,7 @@ impl Evaluator {
                             bindings.len(),
                             items.len()
                         ),
-                        statement.span,
+                        ast.stmts.get(*statement).span,
                     ));
                 }
                 for ((type_annotation, _name), (slot, val)) in
@@ -576,25 +603,30 @@ impl Evaluator {
                                 "tuple element type mismatch: expected {:?}, got {:?}",
                                 type_annotation, val_type
                             ),
-                            statement.span,
+                            ast.stmts.get(*statement).span,
                         ));
                     }
-                    self.insert_value(*slot, val, type_annotation.clone(), statement.span)?;
+                    self.insert_value(
+                        *slot,
+                        val,
+                        type_annotation.clone(),
+                        ast.stmts.get(*statement).span,
+                    )?;
                 }
             }
 
             StatementKind::Match { value, arms } => {
-                let val = self.evaluate(value)?;
+                let val = self.evaluate(ast, value)?;
                 for (pattern, body) in arms {
                     let matched = match pattern {
                         MatchPattern::Wildcard => true,
                         MatchPattern::Literal(expr) => {
-                            let pat_val = self.evaluate(expr)?;
+                            let pat_val = self.evaluate(ast, expr)?;
                             val == pat_val
                         }
                     };
                     if matched {
-                        self.evaluate_block(body)?;
+                        self.evaluate_block(ast, body)?;
                         break;
                     }
                 }
@@ -607,16 +639,16 @@ impl Evaluator {
 
     /// Evaluates a [`ConditionalBranch`] or [`Conditional`] and returns `true` if the
     /// branch was taken (condition was true or it was an `else`).
-    fn evaluate_branch(&mut self, statement: &Statement) -> Result<bool, Error> {
-        match &statement.kind {
+    fn evaluate_branch(&mut self, ast: &Ast, statement: &StmtId) -> Result<bool, Error> {
+        match &ast.stmts.get(*statement).kind {
             StatementKind::ConditionalBranch { condition, body } => match condition {
                 Some(condition) => {
-                    let v = self.evaluate(condition)?;
+                    let v = self.evaluate(ast, condition)?;
                     match v {
                         Value::Bool(true) => {
                             self.push_scope();
                             for statement in body {
-                                self.evaluate_statement(statement)?;
+                                self.evaluate_statement(ast, statement)?;
                                 if self.return_value.is_some()
                                     || self.is_breaking
                                     || self.is_continuing
@@ -629,9 +661,9 @@ impl Evaluator {
                         }
                         Value::Bool(false) => Ok(false),
                         other => Err(self
-                            .err("condition must be a bool", statement.span)
+                            .err("condition must be a bool", ast.stmts.get(*statement).span)
                             .with_label(
-                                condition.span,
+                                ast.exprs.get(*condition).span,
                                 format!("this is {}, expected bool", other.type_name()),
                             )),
                     }
@@ -639,7 +671,7 @@ impl Evaluator {
                 None => {
                     self.push_scope();
                     for statement in body {
-                        self.evaluate_statement(statement)?;
+                        self.evaluate_statement(ast, statement)?;
                         if self.return_value.is_some() || self.is_breaking || self.is_continuing {
                             break;
                         }
@@ -652,15 +684,18 @@ impl Evaluator {
                 if_branch,
                 else_branch,
             } => {
-                if !self.evaluate_branch(if_branch)?
+                if !self.evaluate_branch(ast, if_branch)?
                     && let Some(branch) = else_branch
                 {
-                    self.evaluate_branch(branch)?;
+                    self.evaluate_branch(ast, branch)?;
                 }
 
                 Ok(true)
             }
-            _ => Err(self.err("expected conditional branch", statement.span)),
+            _ => Err(self.err(
+                "expected conditional branch",
+                ast.stmts.get(*statement).span,
+            )),
         }
     }
 
@@ -684,9 +719,9 @@ impl Evaluator {
             }
             | StatementKind::ResolvedFunctionDeclaration {
                 name, attribute, ..
-            } = &statement.kind
+            } = &ast.stmts.get(*statement).kind
             {
-                let slot = match &statement.kind {
+                let slot = match &ast.stmts.get(*statement).kind {
                     StatementKind::ResolvedFunctionDeclaration { slot, .. } => Some(*slot),
                     _ => None,
                 };
@@ -694,28 +729,29 @@ impl Evaluator {
                 match attribute {
                     Some(FunctionAttribute::Entry) => {
                         if explicit_entry.is_some() {
-                            return Err(
-                                self.err("multiple !#[entry] functions found", statement.span)
-                            );
+                            return Err(self.err(
+                                "multiple !#[entry] functions found",
+                                ast.stmts.get(*statement).span,
+                            ));
                         }
                         if let Some(s) = slot {
-                            explicit_entry = Some((statement.span, s));
+                            explicit_entry = Some((ast.stmts.get(*statement).span, s));
                         }
                     }
 
                     Some(FunctionAttribute::Init) => {
                         if let Some(s) = slot {
-                            inits.push((statement.span, s))
+                            inits.push((ast.stmts.get(*statement).span, s))
                         }
                     }
                     Some(FunctionAttribute::Final) => {
                         if let Some(s) = slot {
-                            finals.push((statement.span, s))
+                            finals.push((ast.stmts.get(*statement).span, s))
                         }
                     }
                     Some(FunctionAttribute::Test) => {
                         if let Some(s) = slot {
-                            tests.push((statement.span, s))
+                            tests.push((ast.stmts.get(*statement).span, s))
                         }
                     }
 
@@ -723,7 +759,7 @@ impl Evaluator {
                         if name == "main"
                             && let Some(s) = slot
                         {
-                            main_entry = Some((statement.span, s));
+                            main_entry = Some((ast.stmts.get(*statement).span, s));
                         }
                     }
                 }
@@ -737,13 +773,13 @@ impl Evaluator {
 
         let Some((entry_span, entry_slot)) = entry else {
             for statement in statements {
-                self.evaluate_statement(statement)?;
+                self.evaluate_statement(ast, statement)?;
             }
             return Ok(());
         };
 
         for statement in statements {
-            match &statement.kind {
+            match &ast.stmts.get(*statement).kind {
                 StatementKind::ResolvedImportFile { .. }
                 | StatementKind::ResolvedFunctionDeclaration { .. }
                 | StatementKind::FunctionDeclaration { .. }
@@ -754,7 +790,7 @@ impl Evaluator {
                 | StatementKind::ResolvedConstantDeclaration { .. }
                 | StatementKind::ResolvedArray { .. }
                 | StatementKind::ResolvedConstantArray { .. } => {
-                    self.evaluate_statement(statement)?
+                    self.evaluate_statement(ast, statement)?
                 }
                 _ => {}
             }
@@ -765,7 +801,7 @@ impl Evaluator {
             for test_func in tests {
                 let (func_span, func_slot) = test_func;
                 let func = self.get_value(0, func_slot, func_span)?;
-                self.call_value(func, vec![], func_span)?;
+                self.call_value(ast, func, vec![], func_span)?;
             }
         }
 
@@ -773,18 +809,18 @@ impl Evaluator {
             for init_func in inits {
                 let (func_span, func_slot) = init_func;
                 let func = self.get_value(0, func_slot, func_span)?;
-                self.call_value(func, vec![], func_span)?;
+                self.call_value(ast, func, vec![], func_span)?;
             }
         }
 
         let func = self.get_value(0, entry_slot, entry_span)?;
-        self.call_value(func, vec![], entry_span)?;
+        self.call_value(ast, func, vec![], entry_span)?;
 
         if has_finals {
             for final_func in finals {
                 let (func_span, func_slot) = final_func;
                 let func = self.get_value(0, func_slot, func_span)?;
-                self.call_value(func, vec![], func_span)?;
+                self.call_value(ast, func, vec![], func_span)?;
             }
         }
 
@@ -792,10 +828,10 @@ impl Evaluator {
     }
 
     /// Evaluates a list of statements inside a fresh scope, used for inline blocks.
-    pub fn evaluate_block(&mut self, statements: &[Statement]) -> Result<(), Error> {
+    pub fn evaluate_block(&mut self, ast: &Ast, statements: &[StmtId]) -> Result<(), Error> {
         self.push_scope();
         for statement in statements {
-            self.evaluate_statement(statement)?;
+            self.evaluate_statement(ast, statement)?;
             if self.return_value.is_some() || self.is_breaking || self.is_continuing {
                 break;
             }

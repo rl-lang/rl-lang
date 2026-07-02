@@ -1,7 +1,10 @@
 //! Runtime value types for the rl interpreter.
 
 use crate::{
-    ast::statements::{Param, Statement, TypeAnnotation},
+    ast::{
+        StmtId,
+        statements::{Param, TypeAnnotation},
+    },
     interpreter::evaluator::EnvironmentItem,
 };
 use std::{fmt, rc::Rc};
@@ -33,7 +36,7 @@ pub enum Value {
     /// A first-class function or lambda value, carrying its closure environment.
     Function {
         params: Rc<Vec<Param>>,
-        body: Rc<Vec<Statement>>,
+        body: Rc<Vec<StmtId>>,
         /// Declared return type; `None` for lambdas without an annotation.
         return_type: Option<TypeAnnotation>,
         /// The captured environment frames at the point of lambda definition.

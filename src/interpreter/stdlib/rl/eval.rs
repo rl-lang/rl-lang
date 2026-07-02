@@ -25,15 +25,16 @@ pub fn func(eval: &mut Evaluator, value: Value) -> Value {
         Err(e) => return verr!(vs!(e.message().to_string())),
     };
 
+    let (ast, stmts) = ast;
     let mut resolver = std::mem::take(&mut eval.resolver);
-    let resolved = resolver.resolve_statements(ast);
+    let resolved = resolver.resolve_statements(stmts);
     eval.resolver = resolver;
 
     let prev_buffer = eval.output_buffer.take();
     eval.output_buffer = Some(String::new());
     eval.environment.push(vec![]);
 
-    let result = eval.evaluate_block(&resolved);
+    let result = eval.evaluate_block(&ast, &resolved);
 
     eval.environment.pop();
     let captured = eval.output_buffer.take().unwrap_or_default();

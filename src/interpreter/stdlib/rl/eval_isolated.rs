@@ -25,12 +25,13 @@ pub fn func(_: &mut Evaluator, value: Value) -> Value {
         Err(e) => return verr!(vs!(e.message().to_string())),
     };
 
+    let (ast, stmts) = ast;
     let mut fresh_eval = Evaluator::default().with_stdlib().with_source_file(source);
-    let resolved = fresh_eval.resolver.resolve_statements(ast);
+    let resolved = fresh_eval.resolver.resolve_statements(stmts);
 
     fresh_eval.output_buffer = Some(String::new());
 
-    let result = fresh_eval.evaluate_block(&resolved);
+    let result = fresh_eval.evaluate_block(&ast, &resolved);
     let captured = fresh_eval.output_buffer.take().unwrap_or_default();
 
     match result {

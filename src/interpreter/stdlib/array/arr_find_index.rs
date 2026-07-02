@@ -1,5 +1,5 @@
 use crate::{
-    ast::statements::TypeAnnotation,
+    ast::{Ast, statements::TypeAnnotation},
     interpreter::{evaluator::Evaluator, values::Value},
     utils::{errors::Error, span::Span},
 };
@@ -47,7 +47,8 @@ pub fn std_arr_find_index(
     }
 
     for (i, item) in items.iter().enumerate() {
-        let mapped_item = eval.call_value(function.clone(), vec![item.clone()], span)?;
+        let mapped_item =
+            eval.call_value(&Ast::new(), function.clone(), vec![item.clone()], span)?;
         if let Value::Bool(true) = mapped_item {
             return Ok(Value::Integer(i as i64));
         }
