@@ -1,15 +1,12 @@
 use crate::ast::statements::TypeAnnotation;
-use crate::interpreter::stdlib::common::check_arity;
+use crate::interpreter::stdlib::common::{verr, vok, vs};
 use crate::interpreter::{evaluator::Evaluator, values::Value};
-use crate::utils::{errors::Error, span::Span};
 use crossterm::event::{Event, KeyCode, KeyModifiers, MouseButton, MouseEventKind, read};
 
-pub fn func(eval: &mut Evaluator, args: Vec<Value>, span: Span) -> Result<Value, Error> {
-    check_arity(&args, 0, "term_read_key", span)?;
-
+pub fn func(_: &mut Evaluator) -> Value {
     loop {
-        match read().map_err(|e| eval.err(format!("term_read_key(): {}", e), span))? {
-            Event::Key(key) => {
+        match read() {
+            Ok(Event::Key(key)) => {
                 let s = match key.code {
                     KeyCode::Char(c) => {
                         if key.modifiers.contains(KeyModifiers::CONTROL) {
@@ -37,11 +34,11 @@ pub fn func(eval: &mut Evaluator, args: Vec<Value>, span: Span) -> Result<Value,
                     KeyCode::Null => "Null".into(),
                     _ => "Unknown".into(),
                 };
-                return Ok(Value::String(s));
+                return vok!(vs!(s));
             }
 
             // mouse events
-            Event::Mouse(m) => {
+            Ok(Event::Mouse(m)) => {
                 let kind = match m.kind {
                     MouseEventKind::Down(MouseButton::Left) => "MouseLeft".into(),
                     MouseEventKind::Down(MouseButton::Right) => "MouseRight".into(),
@@ -53,28 +50,26 @@ pub fn func(eval: &mut Evaluator, args: Vec<Value>, span: Span) -> Result<Value,
                     MouseEventKind::ScrollDown => "ScrollDown".into(),
                     _ => "MouseUnknown".into(),
                 };
-                return Ok(Value::Values {
+                return vok!(Value::Values {
                     items_type: TypeAnnotation::String,
-                    items: vec![
-                        Value::String(kind),
-                        Value::String(m.column.to_string()),
-                        Value::String(m.row.to_string()),
-                    ],
+                    items: vec![vs!(kind), vs!(m.column.to_string()), vs!(m.row.to_string()),],
                 });
             }
             // other events
-            Event::Resize(cols, rows) => {
-                return Ok(Value::Values {
+            Ok(Event::Resize(cols, rows)) => {
+                return vok!(Value::Values {
                     items_type: TypeAnnotation::String,
                     items: vec![
-                        Value::String("Resize".into()),
-                        Value::String(cols.to_string()),
-                        Value::String(rows.to_string()),
+                        vs!("Resize".into()),
+                        vs!(cols.to_string()),
+                        vs!(rows.to_string()),
                     ],
                 });
             }
-            Event::FocusGained => return Ok(Value::String("FocusGained".into())),
-            Event::FocusLost => return Ok(Value::String("FocusLost".into())),
+            Ok(Event::FocusGained) => return vok!(vs!("FocusGained".into())),
+            Ok(Event::FocusLost) => return vok!(vs!("FocusLost".into())),
+
+            Err(e) => return verr!(vs!(format!("term_read_key(): {}", e))),
             _ => continue,
         }
     }

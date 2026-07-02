@@ -1,17 +1,20 @@
-use crate::interpreter::stdlib::common::check_arity;
+use crate::interpreter::stdlib::common::{try_fn, verr, vnl, vok, vs};
 use crate::interpreter::stdlib::terminal::common::extract_u16;
 use crate::interpreter::{evaluator::Evaluator, values::Value};
-use crate::utils::{errors::Error, span::Span};
 use crossterm::{cursor::MoveTo, execute};
 use std::io::stdout;
 
-pub fn func(eval: &mut Evaluator, args: Vec<Value>, span: Span) -> Result<Value, Error> {
-    check_arity(&args, 2, "term_move", span)?;
+pub fn func(_: &mut Evaluator, x: Value, y: Value) -> Value {
+    let x = match extract_u16(x, "x") {
+        Ok(v) => v,
+        Err(e) => return verr!(vs!(e)),
+    };
+    let y = match extract_u16(y, "y") {
+        Ok(v) => v,
+        Err(e) => return verr!(vs!(e)),
+    };
 
-    let mut iter = args.into_iter();
-    let x = extract_u16(iter.next().unwrap(), "x", eval, span)?;
-    let y = extract_u16(iter.next().unwrap(), "y", eval, span)?;
-    execute!(stdout(), MoveTo(x, y)).map_err(|e| eval.err(format!("term_move(): {}", e), span))?;
+    try_fn!("term_move", execute!(stdout(), MoveTo(x, y)));
 
-    Ok(Value::Ok(Box::new(Value::Null)))
+    vok!(vnl!())
 }

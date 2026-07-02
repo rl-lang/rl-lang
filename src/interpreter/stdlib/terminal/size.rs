@@ -1,39 +1,35 @@
 use crate::ast::statements::TypeAnnotation;
-use crate::interpreter::stdlib::common::check_arity;
+use crate::interpreter::stdlib::common::{try_fn, verr, vi, vnl, vok, vs};
 use crate::interpreter::stdlib::terminal::common::extract_u16;
 use crate::interpreter::{evaluator::Evaluator, values::Value};
-use crate::utils::{errors::Error, span::Span};
 use crossterm::{
     execute,
     terminal::{SetSize, size},
 };
 use std::io::stdout;
 
-pub fn std_term_get_size(
-    eval: &mut Evaluator,
-    args: Vec<Value>,
-    span: Span,
-) -> Result<Value, Error> {
-    check_arity(&args, 0, "term_get_size", span)?;
+pub fn std_term_get_size(_: &mut Evaluator) -> Value {
+    let (cols, rows) = match size() {
+        Ok((cols, rows)) => (cols, rows),
+        Err(e) => return verr!(vs!(format!("term_get_size(): {}", e))),
+    };
 
-    let (cols, rows) = size().map_err(|e| eval.err(format!("term_get_size(): {}", e), span))?;
-    Ok(Value::Values {
+    vok!(Value::Values {
         items_type: TypeAnnotation::Int,
-        items: vec![Value::Integer(cols as i64), Value::Integer(rows as i64)],
+        items: vec![vi!(cols as i64), vi!(rows as i64)],
     })
 }
 
-pub fn std_term_set_size(
-    eval: &mut Evaluator,
-    args: Vec<Value>,
-    span: Span,
-) -> Result<Value, Error> {
-    check_arity(&args, 0, "term_set_size", span)?;
+pub fn std_term_set_size(_: &mut Evaluator, cols: Value, rows: Value) -> Value {
+    let cols = match extract_u16(cols, "cols") {
+        Ok(v) => v,
+        Err(e) => return verr!(vs!(e)),
+    };
+    let rows = match extract_u16(rows, "rows") {
+        Ok(v) => v,
+        Err(e) => return verr!(vs!(e)),
+    };
 
-    let mut iter = args.into_iter();
-    let cols = extract_u16(iter.next().unwrap(), "cols", eval, span)?;
-    let rows = extract_u16(iter.next().unwrap(), "rows", eval, span)?;
-    execute!(stdout(), SetSize(cols, rows))
-        .map_err(|e| eval.err(format!("term_set_size(): {}", e), span))?;
-    Ok(Value::Ok(Box::new(Value::Null)))
+    try_fn!("term_set_size", execute!(stdout(), SetSize(cols, rows)));
+    vok!(vnl!())
 }

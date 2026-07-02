@@ -5,12 +5,12 @@ use crate::interpreter::{
 };
 use crate::lexer::tokenizer::Tokenizer;
 use crate::parser::parser_logic::Parser;
-use crate::utils::{source::SourceFile, span::Span};
+use crate::utils::source::SourceFile;
 
 pub fn func(eval: &mut Evaluator, value: Value) -> Value {
-    let code = match extract_string(value, "eval", Span::dummy()) {
+    let code = match extract_string(value, "eval") {
         Ok(s) => s,
-        Err(e) => return verr!(vs!(e.message().to_string())),
+        Err(e) => return verr!(vs!(e)),
     };
 
     let source = SourceFile::new("<eval>", code);
