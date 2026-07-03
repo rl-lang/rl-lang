@@ -258,6 +258,7 @@ impl Parser {
             }
         }
 
+        // --- array ---
         if self.match_type(&[TokenType::LeftBracket]) {
             let mut items = Vec::new();
             while self.match_type(&[TokenType::Newline]) {}
@@ -274,10 +275,21 @@ impl Parser {
             }
             self.match_type(&[TokenType::RightBracket]);
             let span = start.join(self.previous_span());
-            let expr = Expression::new(ExpressionKind::ArrayLiteral(items), span);
+
+            #[cfg(feature = "debug")]
+            log::trace!(
+                "alloc ArrayLiteral expr: items={} @ {:?}",
+                items.len(),
+                span
+            );
+
+            let expr = self
+                .ast_arena
+                .alloc_expr(ExpressionKind::ArrayLiteral(items), span);
             return self.parse_postfix(expr, start);
         }
 
+        // --- integer ---
         if self.match_type(&[TokenType::NumberLiteral(0)]) {
             #[cfg(feature = "debug")]
             log::debug!("found number");
@@ -327,6 +339,7 @@ impl Parser {
             }
         }
 
+        // --- byte ---
         if self.match_type(&[TokenType::ByteLiteral(0)]) {
             let span = self.previous_span();
             if let TokenType::ByteLiteral(b) = self.previous() {
@@ -373,6 +386,7 @@ impl Parser {
             }
         }
 
+        // --- string ---
         if self.match_type(&[TokenType::StringLiteral(String::new())]) {
             #[cfg(feature = "debug")]
             log::debug!("found string");
@@ -383,6 +397,7 @@ impl Parser {
             }
         }
 
+        // --- character ---
         if matches!(
             self.tokens[self.current].token,
             TokenType::CharacterLiteral(_)
@@ -397,6 +412,7 @@ impl Parser {
             }
         }
 
+        // --- boolean ---
         if self.match_type(&[TokenType::BoolLiteral(false)]) {
             let span = self.previous_span();
             if let TokenType::BoolLiteral(b) = self.previous() {
@@ -405,6 +421,7 @@ impl Parser {
             }
         }
 
+        // --- float ---
         if self.match_type(&[TokenType::FloatLiteral(0.0)]) {
             #[cfg(feature = "debug")]
             log::debug!("oh no found float");
@@ -453,6 +470,7 @@ impl Parser {
             }
         }
 
+        // --- error ---
         if self.match_type(&[TokenType::Error]) {
             let error_start = self.previous_span();
             while self.match_type(&[TokenType::Newline]) {}
@@ -470,6 +488,7 @@ impl Parser {
             return self.parse_postfix(expr, start);
         }
 
+        // --- ok ---
         if self.match_type(&[TokenType::Ok]) {
             let kw_span = self.previous_span();
             while self.match_type(&[TokenType::Newline]) {}
@@ -489,6 +508,7 @@ impl Parser {
             );
         }
 
+        // --- err ---
         if self.match_type(&[TokenType::Err]) {
             let kw_span = self.previous_span();
             while self.match_type(&[TokenType::Newline]) {}
@@ -508,12 +528,14 @@ impl Parser {
             );
         }
 
+        // --- null ---
         if self.match_type(&[TokenType::Null]) {
             let span = self.previous_span();
             let expr = Expression::new(ExpressionKind::Null, span);
             return self.parse_postfix(expr, start);
         }
 
+        // --- group ---
         if self.match_type(&[TokenType::LeftParen]) {
             #[cfg(feature = "debug")]
             log::debug!("found group start");
@@ -548,6 +570,7 @@ impl Parser {
             return self.parse_postfix(expr, start);
         }
 
+        // --- function ---
         if self.match_type(&[TokenType::Fn]) {
             let lambda_start = self.previous_span();
             while self.match_type(&[TokenType::Newline]) {}
@@ -599,6 +622,7 @@ impl Parser {
             return self.parse_postfix(expr, start);
         }
 
+        // --- not valid expression ---
         Err(self.err("expected expression", self.peek_span()))
     }
 }
