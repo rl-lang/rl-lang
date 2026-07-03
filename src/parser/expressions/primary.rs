@@ -565,7 +565,9 @@ impl Parser {
         if self.match_type(&[TokenType::BoolLiteral(false)]) {
             let span = self.previous_span();
             if let TokenType::BoolLiteral(b) = self.previous() {
-                let expr = Expression::new(ExpressionKind::Bool(b), span);
+                let expr = self.ast_arena.alloc_expr(ExpressionKind::Bool(b), span);
+                #[cfg(feature = "debug")]
+                log::trace!("alloc Bool expr: {} @ {:?}", b, span);
                 return self.parse_postfix(expr, start);
             }
         }
