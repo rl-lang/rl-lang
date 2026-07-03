@@ -44,6 +44,19 @@ impl<T> Id<T> {
     pub fn arena_id(self) -> u32 {
         self.arena_id
     }
+
+    /// Rebases this id onto a different arena: shifts its index by `offset`
+    /// and retags it with `new_arena_id`. Used only by arena-merge logic -
+    /// this is the one place it's legal to construct an `Id` that wasn't
+    /// handed out by `Arena::alloc`.
+    #[inline]
+    pub fn rebase(self, offset: u32, new_arena_id: u32) -> Self {
+        Self {
+            index: self.index + offset,
+            arena_id: new_arena_id,
+            _marker: PhantomData,
+        }
+    }
 }
 
 impl<T> Clone for Id<T> {
@@ -156,6 +169,13 @@ impl<T> Arena<T> {
                 self.id
             );
         }
+    }
+
+    /// Low-level access to this arena's id and backing `Vec`, used only by
+    /// `Ast::merge_statements` to implement arena merging. Bypasses the
+    /// normal `Id`-checked API - not for general use.
+    pub fn raw_parts_mut(&mut self) -> (u32, &mut Vec<T>) {
+        (self.id, &mut self.items)
     }
 }
 
