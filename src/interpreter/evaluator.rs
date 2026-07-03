@@ -309,7 +309,8 @@ impl Evaluator {
     }
 
     pub fn evaluate(&mut self, expression: &ExprId) -> Result<Value, Error> {
-        let value = match &self.arena.exprs.get(*expression).kind.clone() {
+        let v = self.arena.exprs.get(*expression);
+        let value = match &v.kind {
             ExpressionKind::Null => Value::Null,
             ExpressionKind::Integer(i) => Value::Integer(*i),
             ExpressionKind::Byte(b) => Value::Byte(*b),
@@ -318,9 +319,10 @@ impl Evaluator {
             ExpressionKind::Float(f) => Value::Float(*f),
             ExpressionKind::Character(c) => Value::Char(*c),
             ExpressionKind::Index { target, index } => {
+                let (target, index) = (*target, *index);
                 if let Some((depth, slot)) = self.try_get_root_addr(expression) {
-                    let indices = self
-                        .get_indices_as_vec(expression, self.arena.exprs.get(*expression).span)?;
+                    let expr = self.arena.exprs.get(*expression);
+                    let indices = self.get_indices_as_vec(expression, expr.span)?;
                     self.index_read(
                         depth,
                         slot,
@@ -328,10 +330,10 @@ impl Evaluator {
                         self.arena.exprs.get(*expression).span,
                     )?
                 } else {
-                    let arr = self.evaluate(target)?;
-                    self.check_not_null(&arr, self.arena.exprs.get(*target).span)?;
-                    let idx = self.evaluate(index)?;
-                    self.check_not_null(&idx, self.arena.exprs.get(*index).span)?;
+                    let arr = self.evaluate(&target)?;
+                    self.check_not_null(&arr, self.arena.exprs.get(target).span)?;
+                    let idx = self.evaluate(&index)?;
+                    self.check_not_null(&idx, self.arena.exprs.get(index).span)?;
                     match (&arr, &idx) {
                         (Value::Values { items, .. }, Value::Integer(i)) => {
                             let i_usize = *i as usize;
@@ -342,7 +344,7 @@ impl Evaluator {
                                         self.arena.exprs.get(*expression).span,
                                     )
                                     .with_label(
-                                        self.arena.exprs.get(*target).span,
+                                        self.arena.exprs.get(target).span,
                                         format!("this array has length {}", items.len()),
                                     ));
                             }
@@ -357,7 +359,7 @@ impl Evaluator {
                                         self.arena.exprs.get(*expression).span,
                                     )
                                     .with_label(
-                                        self.arena.exprs.get(*target).span,
+                                        self.arena.exprs.get(target).span,
                                         format!("this array has length {}", items.len()),
                                     ));
                             }
@@ -377,7 +379,7 @@ impl Evaluator {
                                         self.arena.exprs.get(*expression).span,
                                     )
                                     .with_label(
-                                        self.arena.exprs.get(*target).span,
+                                        self.arena.exprs.get(target).span,
                                         format!("this tuple has {} elements", items.len()),
                                     ));
                             }
@@ -396,7 +398,7 @@ impl Evaluator {
                                         self.arena.exprs.get(*expression).span,
                                     )
                                     .with_label(
-                                        self.arena.exprs.get(*target).span,
+                                        self.arena.exprs.get(target).span,
                                         format!("this tuple has {} elements", items.len()),
                                     ));
                             }
@@ -409,11 +411,11 @@ impl Evaluator {
                                     self.arena.exprs.get(*expression).span,
                                 )
                                 .with_label(
-                                    self.arena.exprs.get(*target).span,
+                                    self.arena.exprs.get(target).span,
                                     format!("this is {}", arr.type_name()),
                                 )
                                 .with_label(
-                                    self.arena.exprs.get(*index).span,
+                                    self.arena.exprs.get(index).span,
                                     format!("this is {}", idx.type_name()),
                                 ));
                         }
@@ -421,8 +423,9 @@ impl Evaluator {
                 }
             }
             ExpressionKind::ArrayLiteral(items) => {
+                let items = items.clone();
                 let mut values = Vec::with_capacity(items.len());
-                for e in items {
+                for e in &items {
                     values.push(self.evaluate(e)?);
                 }
                 let items_type = values
@@ -462,33 +465,41 @@ impl Evaluator {
                 target,
                 index,
                 value,
-            } => self.index_assign(target, index, value, self.arena.exprs.get(*expression).span)?,
-            ExpressionKind::Grouping(inner) => self.evaluate(inner)?,
+            } => {
+                let (target, index, value) = (*target, *index, *value);
+                let expr = self.arena.exprs.get(*expression);
+                self.index_assign(&target, &index, &value, expr.span)?
+            }
+            ExpressionKind::Grouping(inner) => {
+                let inner = *inner;
+                self.evaluate(&inner)?
+            }
             ExpressionKind::Binary {
                 left,
                 operator,
                 right,
             } => {
+                let (left, operator, right) = (*left, operator.clone(), *right);
                 if matches!(operator, TokenType::And) {
-                    let l = self.evaluate(left)?;
+                    let l = self.evaluate(&left)?;
                     if let Value::Bool(false) = l {
                         return Ok(Value::Bool(false));
                     }
-                    let r = self.evaluate(right)?;
+                    let r = self.evaluate(&right)?;
                     return Ok(Value::Bool(matches!(r, Value::Bool(true))));
                 }
 
                 if matches!(operator, TokenType::Or) {
-                    let l = self.evaluate(left)?;
+                    let l = self.evaluate(&left)?;
                     if let Value::Bool(true) = l {
                         return Ok(Value::Bool(true));
                     }
-                    let r = self.evaluate(right)?;
+                    let r = self.evaluate(&right)?;
                     return Ok(Value::Bool(matches!(r, Value::Bool(true))));
                 }
 
-                let left_val = self.evaluate(left)?;
-                let right_val = self.evaluate(right)?;
+                let left_val = self.evaluate(&left)?;
+                let right_val = self.evaluate(&right)?;
                 if matches!(operator, TokenType::Compare | TokenType::BangEqual)
                     && (matches!(left_val, Value::Null) || matches!(right_val, Value::Null))
                 {
@@ -499,24 +510,25 @@ impl Evaluator {
                         Value::Bool(!result)
                     });
                 }
-                self.check_not_null(&left_val, self.arena.exprs.get(*left).span)?;
-                self.check_not_null(&right_val, self.arena.exprs.get(*right).span)?;
+                self.check_not_null(&left_val, self.arena.exprs.get(left).span)?;
+                self.check_not_null(&right_val, self.arena.exprs.get(right).span)?;
                 self.match_binary_operator(
                     left_val,
-                    self.arena.exprs.get(*left).span,
+                    self.arena.exprs.get(left).span,
                     right_val,
-                    self.arena.exprs.get(*right).span,
-                    operator,
+                    self.arena.exprs.get(right).span,
+                    &operator,
                     self.arena.exprs.get(*expression).span,
                 )?
             }
             ExpressionKind::Unary { operator, operand } => {
-                let operand_val = self.evaluate(operand)?;
-                self.check_not_null(&operand_val, self.arena.exprs.get(*operand).span)?;
+                let (operator, operand) = (operator.clone(), *operand);
+                let operand_val = self.evaluate(&operand)?;
+                self.check_not_null(&operand_val, self.arena.exprs.get(operand).span)?;
                 self.match_unary_operator(
                     operand_val,
-                    self.arena.exprs.get(*operand).span,
-                    operator,
+                    self.arena.exprs.get(operand).span,
+                    &operator,
                     self.arena.exprs.get(*expression).span,
                 )?
             }
@@ -526,12 +538,13 @@ impl Evaluator {
             ExpressionKind::ResolvedAssign {
                 depth, slot, value, ..
             } => {
-                let val = self.evaluate(value)?;
+                let (value, slot, depth) = (*value, *depth, *slot);
+                let val = self.evaluate(&value)?;
 
                 let inferred_type = Self::infer_type(&val, false);
                 self.assign_value(
-                    *depth,
-                    *slot,
+                    depth,
+                    slot,
                     val.clone(),
                     inferred_type,
                     self.arena.exprs.get(*expression).span,
@@ -539,19 +552,25 @@ impl Evaluator {
                 val
             }
             ExpressionKind::Call { path, args } => {
+                let (path, args) = (path.clone(), args.clone());
                 let mut evaluated_args = Vec::with_capacity(args.len());
                 for arg in args {
-                    let val = self.evaluate(arg)?;
+                    let val = self.evaluate(&arg)?;
                     evaluated_args.push(val);
                 }
-                self.call_path(path, evaluated_args, self.arena.exprs.get(*expression).span)?
+                self.call_path(
+                    &path,
+                    evaluated_args,
+                    self.arena.exprs.get(*expression).span,
+                )?
             }
 
             ExpressionKind::CallExpr { callee, args } => {
-                let func_val = self.evaluate(callee)?;
+                let (callee, args) = (callee.clone(), args.clone());
+                let func_val = self.evaluate(&callee)?;
                 let mut evaluated_args = Vec::with_capacity(args.len());
                 for arg in args {
-                    let val = self.evaluate(arg)?;
+                    let val = self.evaluate(&arg)?;
                     evaluated_args.push(val);
                 }
                 self.call_value(
@@ -566,14 +585,15 @@ impl Evaluator {
                 method,
                 args,
             } => {
-                let first_arg = self.evaluate(caller)?;
+                let (caller, method, args) = (caller.clone(), method.clone(), args.clone());
+                let first_arg = self.evaluate(&caller)?;
                 let mut evaluated_args = vec![first_arg];
                 // elevate and push the args
                 for arg in args {
-                    evaluated_args.push(self.evaluate(arg)?);
+                    evaluated_args.push(self.evaluate(&arg)?);
                 }
                 self.call_path(
-                    method,
+                    &method,
                     evaluated_args,
                     self.arena.exprs.get(*expression).span,
                 )?
@@ -614,9 +634,10 @@ impl Evaluator {
             }
 
             ExpressionKind::Cast { value, target_type } => {
-                let val = self.evaluate(value)?;
-                self.check_not_null(&val, self.arena.exprs.get(*value).span)?;
-                match (&val, target_type) {
+                let (value, target_type) = (*value, target_type.clone());
+                let val = self.evaluate(&value)?;
+                self.check_not_null(&val, self.arena.exprs.get(value).span)?;
+                match (&val, &target_type) {
                     (Value::Integer(n), TypeAnnotation::Float) => Value::Float(*n as f64),
                     (Value::Integer(n), TypeAnnotation::Byte) => Value::Byte(*n as u8),
                     (Value::Integer(_), TypeAnnotation::Int) => val,
@@ -632,7 +653,7 @@ impl Evaluator {
                             format!(
                                 "invalid cast: cannot cast {} to {:?}",
                                 val.type_name(),
-                                target_type
+                                &target_type
                             ),
                             self.arena.exprs.get(*expression).span,
                         ));
@@ -641,14 +662,16 @@ impl Evaluator {
             }
 
             ExpressionKind::TupleLiteral(items) => {
+                let items = items.clone();
                 let mut values = Vec::with_capacity(items.len());
                 for e in items {
-                    values.push(self.evaluate(e)?);
+                    values.push(self.evaluate(&e)?);
                 }
                 Value::Tuple(values)
             }
             ExpressionKind::ErrorLiteral(inner) => {
-                let val = self.evaluate(inner)?;
+                let inner = inner.clone();
+                let val = self.evaluate(&inner)?;
                 if matches!(val, Value::Error(_)) {
                     return Err(self.err(
                         "error cannot wrap another error",
@@ -658,16 +681,19 @@ impl Evaluator {
                 Value::Error(Box::new(val))
             }
             ExpressionKind::OkLiteral(inner) => {
-                let val = self.evaluate(inner)?;
+                let inner = inner.clone();
+                let val = self.evaluate(&inner)?;
                 Value::Ok(Box::new(val))
             }
             ExpressionKind::ErrLiteral(inner) => {
-                let val = self.evaluate(inner)?;
+                let inner = inner.clone();
+                let val = self.evaluate(&inner)?;
                 Value::Err(Box::new(val))
             }
 
             ExpressionKind::Propagate(inner) => {
-                let val = self.evaluate(inner)?;
+                let inner = inner.clone();
+                let val = self.evaluate(&inner)?;
                 match val {
                     Value::Ok(v) => *v,
                     Value::Err(_) => {
