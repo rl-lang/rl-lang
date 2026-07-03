@@ -40,6 +40,7 @@ impl Parser {
 
         let start = self.peek_span();
 
+        // ---- identifier start ----
         if self.match_type(&[TokenType::Identifier(String::new())]) {
             #[cfg(feature = "debug")]
             log::debug!("found identifier");
@@ -257,8 +258,9 @@ impl Parser {
                 return self.parse_postfix(expr, start);
             }
         }
+        // ---- identifier end ----
 
-        // --- array ---
+        // --- array literal ---
         if self.match_type(&[TokenType::LeftBracket]) {
             let mut items = Vec::new();
             while self.match_type(&[TokenType::Newline]) {}
@@ -289,25 +291,29 @@ impl Parser {
             return self.parse_postfix(expr, start);
         }
 
+        // ---- numbers start ----
         // --- integer ---
         if self.match_type(&[TokenType::NumberLiteral(0)]) {
             #[cfg(feature = "debug")]
-            log::debug!("found number");
+            log::debug!("found number <integer>");
             let span = self.previous_span();
             if let TokenType::NumberLiteral(n) = self.previous() {
+                // ---- cast start ----
                 if self.match_type(&[TokenType::As]) {
+                    // from integer to T
                     if self.match_type(&[TokenType::Int, TokenType::Byte, TokenType::Float]) {
                         match self.previous() {
                             TokenType::Int => {
                                 return self.parse_postfix(
-                                    Expression::new(ExpressionKind::Integer(n), span),
+                                    self.ast_arena.alloc_expr(ExpressionKind::Integer(n), span),
                                     start,
                                 );
                             }
 
                             TokenType::Float => {
                                 return self.parse_postfix(
-                                    Expression::new(ExpressionKind::Float(n as f64), span),
+                                    self.ast_arena
+                                        .alloc_expr(ExpressionKind::Float(n as f64), span),
                                     start,
                                 );
                             }
@@ -318,7 +324,8 @@ impl Parser {
                                         .err(format!("value {} is too large for byte", n), span));
                                 }
                                 return self.parse_postfix(
-                                    Expression::new(ExpressionKind::Byte(n as u8), span),
+                                    self.ast_arena
+                                        .alloc_expr(ExpressionKind::Byte(n as u8), span),
                                     start,
                                 );
                             }
@@ -333,8 +340,68 @@ impl Parser {
                     }
                     return Err(self.err("expected type after `as`", self.previous_span()));
                 }
+                // ---- cast end ----
 
-                let expr = Expression::new(ExpressionKind::Integer(n), span);
+                // no cast logic
+                let expr = self.ast_arena.alloc_expr(ExpressionKind::Integer(n), span);
+                return self.parse_postfix(expr, start);
+            }
+        }
+
+        // --- float ---
+        if self.match_type(&[TokenType::FloatLiteral(0.0)]) {
+            #[cfg(feature = "debug")]
+            log::debug!("found number <float>");
+            let span = self.previous_span();
+            if let TokenType::FloatLiteral(f) = self.previous() {
+                // ---- cast start ----
+                if self.match_type(&[TokenType::As]) {
+                    // from float to T
+                    if self.match_type(&[TokenType::Int, TokenType::Byte, TokenType::Float]) {
+                        match self.previous() {
+                            TokenType::Int => {
+                                return self.parse_postfix(
+                                    self.ast_arena
+                                        .alloc_expr(ExpressionKind::Integer(f as i64), span),
+                                    start,
+                                );
+                            }
+
+                            TokenType::Float => {
+                                return self.parse_postfix(
+                                    self.ast_arena.alloc_expr(ExpressionKind::Float(f), span),
+                                    start,
+                                );
+                            }
+
+                            TokenType::Byte => {
+                                if !(0.0..=255.0).contains(&f) {
+                                    return Err(self
+                                        .err(format!("value {} is too large for byte", f), span));
+                                }
+                                return self.parse_postfix(
+                                    self.ast_arena
+                                        .alloc_expr(ExpressionKind::Byte(f as u8), span),
+                                    start,
+                                );
+                            }
+
+                            other => {
+                                return Err(self.err(
+                                    format!("expected int/byte/float types found {:?}", other),
+                                    span,
+                                ));
+                            }
+                        }
+                    }
+                    return Err(self.err("expected type after `as`", span));
+                }
+                // ---- cast end ----
+
+                // no cast logic
+                let expr = self
+                    .ast_arena
+                    .alloc_expr(ExpressionKind::Float(f), self.previous_span());
                 return self.parse_postfix(expr, start);
             }
         }
@@ -343,30 +410,36 @@ impl Parser {
         if self.match_type(&[TokenType::ByteLiteral(0)]) {
             let span = self.previous_span();
             if let TokenType::ByteLiteral(b) = self.previous() {
+                // ---- cast start ----
                 if self.match_type(&[TokenType::As]) {
+                    // from byte to T
                     if self.match_type(&[TokenType::Int, TokenType::Byte, TokenType::Float]) {
                         match self.previous() {
                             TokenType::Int => {
                                 return self.parse_postfix(
-                                    Expression::new(ExpressionKind::Integer(b as i64), span),
+                                    self.ast_arena
+                                        .alloc_expr(ExpressionKind::Integer(b as i64), span),
                                     start,
                                 );
                             }
 
                             TokenType::Float => {
                                 return self.parse_postfix(
-                                    Expression::new(ExpressionKind::Float(b as f64), span),
+                                    self.ast_arena
+                                        .alloc_expr(ExpressionKind::Float(b as f64), span),
                                     start,
                                 );
                             }
 
                             TokenType::Byte => {
+                                // while it shouldn't be possible normally
+                                // keeping it as fallback for safety
                                 if !(0..=255).contains(&b) {
                                     return Err(self
                                         .err(format!("value {} is too large for byte", b), span));
                                 }
                                 return self.parse_postfix(
-                                    Expression::new(ExpressionKind::Byte(b), span),
+                                    self.ast_arena.alloc_expr(ExpressionKind::Byte(b), span),
                                     start,
                                 );
                             }
@@ -381,10 +454,14 @@ impl Parser {
                     }
                     return Err(self.err("expected type after `as`", self.previous_span()));
                 }
-                let expr = Expression::new(ExpressionKind::Byte(b), span);
+                // ---- cast end ----
+
+                // no cast logic
+                let expr = self.ast_arena.alloc_expr(ExpressionKind::Byte(b), span);
                 return self.parse_postfix(expr, start);
             }
         }
+        // ---- numbers end ----
 
         // --- string ---
         if self.match_type(&[TokenType::StringLiteral(String::new())]) {
@@ -421,55 +498,6 @@ impl Parser {
             }
         }
 
-        // --- float ---
-        if self.match_type(&[TokenType::FloatLiteral(0.0)]) {
-            #[cfg(feature = "debug")]
-            log::debug!("oh no found float");
-            let span = self.previous_span();
-            if let TokenType::FloatLiteral(f) = self.previous() {
-                if self.match_type(&[TokenType::As]) {
-                    if self.match_type(&[TokenType::Int, TokenType::Byte, TokenType::Float]) {
-                        match self.previous() {
-                            TokenType::Int => {
-                                return self.parse_postfix(
-                                    Expression::new(ExpressionKind::Integer(f as i64), span),
-                                    start,
-                                );
-                            }
-
-                            TokenType::Float => {
-                                return self.parse_postfix(
-                                    Expression::new(ExpressionKind::Float(f), span),
-                                    start,
-                                );
-                            }
-
-                            TokenType::Byte => {
-                                if !(0.0..=255.0).contains(&f) {
-                                    return Err(self
-                                        .err(format!("value {} is too large for byte", f), span));
-                                }
-                                return self.parse_postfix(
-                                    Expression::new(ExpressionKind::Byte(f as u8), span),
-                                    start,
-                                );
-                            }
-
-                            other => {
-                                return Err(self.err(
-                                    format!("expected int/byte/float types found {:?}", other),
-                                    span,
-                                ));
-                            }
-                        }
-                    }
-                    return Err(self.err("expected type after `as`", span));
-                }
-                let expr = Expression::new(ExpressionKind::Float(f), self.previous_span());
-                return self.parse_postfix(expr, start);
-            }
-        }
-
         // --- error ---
         if self.match_type(&[TokenType::Error]) {
             let error_start = self.previous_span();
@@ -488,6 +516,7 @@ impl Parser {
             return self.parse_postfix(expr, start);
         }
 
+        // ---- result start ----
         // --- ok ---
         if self.match_type(&[TokenType::Ok]) {
             let kw_span = self.previous_span();
@@ -527,6 +556,7 @@ impl Parser {
                 start,
             );
         }
+        // ---- result end ----
 
         // --- null ---
         if self.match_type(&[TokenType::Null]) {
