@@ -11,6 +11,7 @@
 //! environment lookup, eliminating runtime name searches.
 //!
 //! [`Resolver`]: crate::resolver
+use crate::ast::ExprId;
 use crate::ast::statements::{Param, Statement, TypeAnnotation};
 use crate::lexer::tokentypes;
 use crate::utils::span::Span;
@@ -38,17 +39,17 @@ pub enum ExpressionKind {
     Byte(u8),
     /// A binary operation: `left operator right`.
     Binary {
-        left: Box<Expression>,
+        left: ExprId,
         operator: tokentypes::TokenType,
-        right: Box<Expression>,
+        right: ExprId,
     },
     /// A unary prefix operation: `operator operand`.
     Unary {
         operator: tokentypes::TokenType,
-        operand: Box<Expression>,
+        operand: ExprId,
     },
     /// A parenthesised expression `(expr)` - preserves grouping in the AST.
-    Grouping(Box<Expression>),
+    Grouping(ExprId),
     /// A string literal.
     String(String),
     /// A boolean literal.
@@ -68,41 +69,41 @@ pub enum ExpressionKind {
         slot: usize,
     },
     /// An array literal `[a, b, c]`.
-    ArrayLiteral(Vec<Expression>),
+    ArrayLiteral(Vec<ExprId>),
     /// An unresolved variable assignment `name = value`.
     /// Replaced by [`ResolvedAssign`] after the resolver pass.
     Assign {
         name: String,
-        value: Box<Expression>,
+        value: ExprId,
     },
     /// A lexically-resolved variable assignment.
     ResolvedAssign {
         name: String,
         depth: usize,
         slot: usize,
-        value: Box<Expression>,
+        value: ExprId,
     },
     /// A function call via a module path: `std::io::println(args)` or `f(args)`.
     Call {
         path: Vec<String>,
-        args: Vec<Expression>,
+        args: Vec<ExprId>,
     },
     /// A method call chain: `expr.method(args)`.
     MethodCall {
-        caller: Box<Expression>,
+        caller: ExprId,
         method: Vec<String>,
-        args: Vec<Expression>,
+        args: Vec<ExprId>,
     },
     /// An index access: `target[index]`.
     Index {
-        target: Box<Expression>,
-        index: Box<Expression>,
+        target: ExprId,
+        index: ExprId,
     },
     /// An index assignment: `target[index] = value`.
     IndexAssign {
-        target: Box<Expression>,
-        index: Box<Expression>,
-        value: Box<Expression>,
+        target: ExprId,
+        index: ExprId,
+        value: ExprId,
     },
     /// An unresolved anonymous function (lambda) expression.
     /// Replaced by [`ResolvedLambda`] after the resolver pass.
@@ -122,22 +123,22 @@ pub enum ExpressionKind {
     /// A call on an arbitrary callee expression, e.g. `fns[0](args)` or
     /// an immediately-invoked lambda.
     CallExpr {
-        callee: Box<Expression>,
-        args: Vec<Expression>,
+        callee: ExprId,
+        args: Vec<ExprId>,
     },
 
     /// A type cast expression ` value as type `.
     /// Used for non-literal casts; literal casts are constant-folded in the parser.
     Cast {
-        value: Box<Expression>,
+        value: ExprId,
         target_type: TypeAnnotation,
     },
 
-    TupleLiteral(Vec<Expression>),
-    ErrorLiteral(Box<Expression>),
+    TupleLiteral(Vec<ExprId>),
+    ErrorLiteral(ExprId),
 
-    OkLiteral(Box<Expression>),
-    ErrLiteral(Box<Expression>),
+    OkLiteral(ExprId),
+    ErrLiteral(ExprId),
 
-    Propagate(Box<Expression>),
+    Propagate(ExprId),
 }
