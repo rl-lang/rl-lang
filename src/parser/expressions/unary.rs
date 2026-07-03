@@ -17,14 +17,11 @@ impl Parser {
         if self.match_type(&[TokenType::Bang, TokenType::Minus]) {
             let operator = self.previous();
             let operand = self.parse_unary()?;
-            let span = start.join(operand.span);
-            return Ok(Expression::new(
-                ExpressionKind::Unary {
-                    operator,
-                    operand: Box::new(operand),
-                },
-                span,
-            ));
+            let operand_id = self.ast_arena.exprs.get(operand);
+            let span = start.join(operand_id.span);
+            return Ok(self
+                .ast_arena
+                .alloc_expr(ExpressionKind::Unary { operator, operand }, span));
         }
         self.parse_primary()
     }
