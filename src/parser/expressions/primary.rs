@@ -122,38 +122,64 @@ impl Parser {
                     return self.parse_postfix(expr, start);
                 }
 
+                // --- index ---
                 if self.match_type(&[TokenType::LeftBracket]) {
+                    #[cfg(feature = "debug")]
+                    log::trace!(
+                        "alloc Identifier(index target) expr: name={} @ {:?}",
+                        name,
+                        ident_span
+                    );
+
                     let index = self.parse_expression()?;
                     self.match_type(&[TokenType::RightBracket]);
                     let after_index_span = self.previous_span();
 
-                    let mut expr = Expression::new(
+                    let target = self
+                        .ast_arena
+                        .alloc_expr(ExpressionKind::Identifier(name.clone()), ident_span);
+
+                    #[cfg(feature = "debug")]
+                    log::trace!(
+                        "alloc Index expr: target={:?} index={:?} @ {:?}",
+                        target,
+                        index,
+                        self.ast_arena.exprs.get(target).span
+                    );
+
+                    let mut expr = self.ast_arena.alloc_expr(
                         ExpressionKind::Index {
-                            target: Box::new(Expression::new(
-                                ExpressionKind::Identifier(name.clone()),
-                                ident_span,
-                            )),
-                            index: Box::new(index),
+                            target,
+                            index: index,
                         },
                         start.join(after_index_span),
                     );
 
-                    // consume chained indices: arr[0][1][2]
+                    // --- chained indices: arr[0][1][2] ---
                     while self.peek() == TokenType::LeftBracket {
                         self.advance();
                         let next_index = self.parse_expression()?;
                         self.match_type(&[TokenType::RightBracket]);
                         let span = start.join(self.previous_span());
-                        expr = Expression::new(
+
+                        #[cfg(feature = "debug")]
+                        log::trace!(
+                            "alloc Index(chained) expr: target={:?} index={:?} @ {:?}",
+                            expr,
+                            next_index,
+                            span
+                        );
+
+                        expr = self.ast_arena.alloc_expr(
                             ExpressionKind::Index {
-                                target: Box::new(expr),
-                                index: Box::new(next_index),
+                                target: expr,
+                                index: next_index,
                             },
                             span,
                         );
                     }
 
-                    // call on the result of an index: fns[0](arg)
+                    // --- call on the result of an index: fns[0](arg) ---
                     if self.match_type(&[TokenType::LeftParen]) {
                         let mut args = Vec::new();
                         while self.match_type(&[TokenType::Newline]) {}
@@ -170,29 +196,48 @@ impl Parser {
                         while self.match_type(&[TokenType::Newline]) {}
                         self.match_type(&[TokenType::RightParen]);
                         let span = start.join(self.previous_span());
-                        let expr = Expression::new(
-                            ExpressionKind::CallExpr {
-                                callee: Box::new(expr),
-                                args,
-                            },
-                            span,
+                        let expr = self
+                            .ast_arena
+                            .alloc_expr(ExpressionKind::CallExpr { callee: expr, args }, span);
+
+                        #[cfg(feature = "debug")]
+                        log::trace!(
+                            "alloc CallExpr expr: callee={:?} args={} @ {:?}",
+                            expr,
+                            args.len(),
+                            span
                         );
+
                         return self.parse_postfix(expr, start);
                     }
 
+                    // --- index assign ---
                     if self.match_type(&[TokenType::Assign]) {
                         #[cfg(feature = "debug")]
                         log::debug!("found array item assignment");
                         let value = self.parse_expression()?;
-                        let span = start.join(value.span);
-                        if let ExpressionKind::Index { target, index } = expr.kind {
-                            let expr = Expression::new(
+
+                        let value_id = self.ast_arena.exprs.get(value);
+                        let expr_id = self.ast_arena.exprs.get(expr);
+
+                        let span = start.join(value_id.span);
+                        if let ExpressionKind::Index { target, index } = expr_id.kind {
+                            let expr = self.ast_arena.alloc_expr(
                                 ExpressionKind::IndexAssign {
                                     target,
                                     index,
-                                    value: Box::new(value),
+                                    value,
                                 },
                                 span,
+                            );
+
+                            #[cfg(feature = "debug")]
+                            log::trace!(
+                                "alloc IndexAssign expr: target={:?} index={:?} value={:?} @ {:?}",
+                                target,
+                                index,
+                                value,
+                                span
                             );
                             return self.parse_postfix(expr, start);
                         }
@@ -200,7 +245,15 @@ impl Parser {
 
                     return self.parse_postfix(expr, start);
                 }
-                let expr = Expression::new(ExpressionKind::Identifier(name), ident_span);
+
+                // --- identifier ---
+                #[cfg(feature = "debug")]
+                log::trace!("alloc Identifier expr: name={} @ {:?}", name, ident_span);
+
+                let expr = self
+                    .ast_arena
+                    .alloc_expr(ExpressionKind::Identifier(name), ident_span);
+
                 return self.parse_postfix(expr, start);
             }
         }
