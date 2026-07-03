@@ -566,7 +566,7 @@ impl Evaluator {
             }
 
             ExpressionKind::CallExpr { callee, args } => {
-                let (callee, args) = (callee.clone(), args.clone());
+                let (callee, args) = (*callee, args.clone());
                 let func_val = self.evaluate(&callee)?;
                 let mut evaluated_args = Vec::with_capacity(args.len());
                 for arg in args {
@@ -585,7 +585,7 @@ impl Evaluator {
                 method,
                 args,
             } => {
-                let (caller, method, args) = (caller.clone(), method.clone(), args.clone());
+                let (caller, method, args) = (*caller, method.clone(), args.clone());
                 let first_arg = self.evaluate(&caller)?;
                 let mut evaluated_args = vec![first_arg];
                 // elevate and push the args
@@ -670,7 +670,7 @@ impl Evaluator {
                 Value::Tuple(values)
             }
             ExpressionKind::ErrorLiteral(inner) => {
-                let inner = inner.clone();
+                let inner = *inner;
                 let val = self.evaluate(&inner)?;
                 if matches!(val, Value::Error(_)) {
                     return Err(self.err(
@@ -681,18 +681,18 @@ impl Evaluator {
                 Value::Error(Box::new(val))
             }
             ExpressionKind::OkLiteral(inner) => {
-                let inner = inner.clone();
+                let inner = *inner;
                 let val = self.evaluate(&inner)?;
                 Value::Ok(Box::new(val))
             }
             ExpressionKind::ErrLiteral(inner) => {
-                let inner = inner.clone();
+                let inner = *inner;
                 let val = self.evaluate(&inner)?;
                 Value::Err(Box::new(val))
             }
 
             ExpressionKind::Propagate(inner) => {
-                let inner = inner.clone();
+                let inner = *inner;
                 let val = self.evaluate(&inner)?;
                 match val {
                     Value::Ok(v) => *v,

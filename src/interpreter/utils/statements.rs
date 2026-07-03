@@ -246,7 +246,7 @@ impl Evaluator {
                     }
 
                     for statement in &body {
-                        self.evaluate_statement(&statement)?;
+                        self.evaluate_statement(statement)?;
                         if self.return_value.is_some() || self.is_breaking || self.is_continuing {
                             break;
                         }
