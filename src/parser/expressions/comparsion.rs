@@ -31,16 +31,19 @@ impl Parser {
             let operator = self.previous();
             while self.match_type(&[TokenType::Newline]) {}
             let right = self.parse_term()?;
-            let span = left.span.join(right.span);
+            let left_id = self.ast_arena.exprs.get(left);
+            let right_id = self.ast_arena.exprs.get(right);
+
+            let span = left_id.span.join(right_id.span);
 
             match operator {
                 TokenType::PlusEqual
                 | TokenType::MinusEqual
                 | TokenType::StarEqual
                 | TokenType::SlashEqual => {
-                    if let ExpressionKind::Identifier(name) = &left.kind {
+                    if let ExpressionKind::Identifier(name) = &left_id.kind {
                         let name = name.clone();
-                        let lhs_span = left.span;
+                        let lhs_span = left_id.span;
                         let operator = match operator {
                             TokenType::PlusEqual => TokenType::Plus,
                             TokenType::MinusEqual => TokenType::Minus,
@@ -48,41 +51,43 @@ impl Parser {
                             TokenType::SlashEqual => TokenType::Slash,
                             _ => unreachable!(),
                         };
-                        let binary = Expression::new(
+                        let left_expr = self
+                            .ast_arena
+                            .alloc_expr(ExpressionKind::Identifier(name.clone()), lhs_span);
+
+                        let binary = self.ast_arena.alloc_expr(
                             ExpressionKind::Binary {
-                                left: Box::new(Expression::new(
-                                    ExpressionKind::Identifier(name.clone()),
-                                    lhs_span,
-                                )),
+                                left: left_expr,
                                 operator,
-                                right: Box::new(right),
+                                right,
                             },
                             span,
                         );
-                        left = Expression::new(
+
+                        left = self.ast_arena.alloc_expr(
                             ExpressionKind::Assign {
                                 name,
-                                value: Box::new(binary),
+                                value: binary,
                             },
                             span,
                         );
                     } else {
-                        left = Expression::new(
+                        left = self.ast_arena.alloc_expr(
                             ExpressionKind::Binary {
-                                left: Box::new(left),
+                                left,
                                 operator,
-                                right: Box::new(right),
+                                right,
                             },
                             span,
                         );
                     }
                 }
                 _ => {
-                    left = Expression::new(
+                    left = self.ast_arena.alloc_expr(
                         ExpressionKind::Binary {
-                            left: Box::new(left),
+                            left,
                             operator,
-                            right: Box::new(right),
+                            right,
                         },
                         span,
                     );
