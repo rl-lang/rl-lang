@@ -20,18 +20,20 @@ impl Evaluator {
     /// via `is_breaking`, `is_continuing`, and `return_value` flags on [`Evaluator`]
     /// rather than exceptions, so callers must check these flags after each statement.
     pub fn evaluate_statement(&mut self, statement: &StmtId) -> Result<(), Error> {
-        match &self.arena.stmts.get(*statement).kind.clone() {
+        let v = self.arena.stmts.get(*statement);
+        match &v.kind {
             StatementKind::ResolvedVariableDeclaration {
                 slot,
                 value,
                 type_annotation,
                 ..
             } => {
-                let val = self.evaluate(value)?;
+                let (slot, value, type_annotation) = (*slot, *value, type_annotation.clone());
+                let val = self.evaluate(&value)?;
 
                 let val_type = Self::infer_type(&val, false);
-                if !Self::types_compatible(&val_type, type_annotation)
-                    && val_type != *type_annotation
+                if !Self::types_compatible(&val_type, &type_annotation)
+                    && val_type != type_annotation
                     && val_type != TypeAnnotation::Null
                 {
                     return Err(self.err(
@@ -43,7 +45,7 @@ impl Evaluator {
                     ));
                 }
                 self.insert_value(
-                    *slot,
+                    slot,
                     val,
                     type_annotation.clone(),
                     self.arena.stmts.get(*statement).span,
@@ -56,11 +58,12 @@ impl Evaluator {
                 type_annotation,
                 ..
             } => {
-                let val = self.evaluate(value)?;
+                let (slot, value, type_annotation) = (*slot, *value, type_annotation.clone());
+                let val = self.evaluate(&value)?;
 
                 let val_type = Self::infer_type(&val, true);
-                if !Self::types_compatible(&val_type, type_annotation)
-                    && val_type != *type_annotation
+                if !Self::types_compatible(&val_type, &type_annotation)
+                    && val_type != type_annotation
                     && val_type != TypeAnnotation::Null
                 {
                     return Err(self.err(
@@ -72,7 +75,7 @@ impl Evaluator {
                     ));
                 }
                 self.insert_const(
-                    *slot,
+                    slot,
                     val,
                     type_annotation.clone(),
                     self.arena.stmts.get(*statement).span,
@@ -85,12 +88,13 @@ impl Evaluator {
                 type_annotation,
                 ..
             } => {
-                let val = self.evaluate(value)?;
+                let (slot, value, type_annotation) = (*slot, *value, type_annotation.clone());
+                let val = self.evaluate(&value)?;
                 let val = match val {
                     Value::Values { items, .. } => {
                         for item in &items {
                             let actual = Self::infer_type(item, false);
-                            if !Self::types_compatible(&actual, type_annotation) {
+                            if !Self::types_compatible(&actual, &type_annotation) {
                                 return Err(self.err(
                                     format!(
                                         "array element type mismatch: expected {:?}, found {:?}",
@@ -114,7 +118,7 @@ impl Evaluator {
                 };
                 let declared_type = TypeAnnotation::Array(Box::new(type_annotation.clone()));
                 self.insert_value(
-                    *slot,
+                    slot,
                     val,
                     declared_type,
                     self.arena.stmts.get(*statement).span,
@@ -127,12 +131,13 @@ impl Evaluator {
                 type_annotation,
                 ..
             } => {
-                let val = self.evaluate(value)?;
+                let (slot, value, type_annotation) = (*slot, *value, type_annotation.clone());
+                let val = self.evaluate(&value)?;
                 let val = match val {
                     Value::Values { items, .. } => {
                         for item in &items {
                             let actual = Self::infer_type(item, false);
-                            if !Self::types_compatible(&actual, type_annotation) {
+                            if !Self::types_compatible(&actual, &type_annotation) {
                                 return Err(self.err(
                                     format!(
                                         "array element type mismatch: expected {:?}, found {:?}",
@@ -156,7 +161,7 @@ impl Evaluator {
                 };
                 let declared_type = TypeAnnotation::CArray(Box::new(type_annotation.clone()));
                 self.insert_value(
-                    *slot,
+                    slot,
                     val,
                     declared_type,
                     self.arena.stmts.get(*statement).span,
@@ -164,47 +169,51 @@ impl Evaluator {
             }
 
             StatementKind::Expression(expr) => {
-                self.evaluate(expr)?;
+                let expr = *expr;
+                self.evaluate(&expr)?;
             }
 
-            StatementKind::While { condition, body } => loop {
-                let v = self.evaluate(condition)?;
-                match v {
-                    Value::Bool(true) => {}
-                    Value::Bool(false) => break,
-                    other => {
-                        return Err(self
-                            .err(
-                                "while condition must be a bool",
-                                self.arena.stmts.get(*statement).span,
-                            )
-                            .with_label(
-                                self.arena.exprs.get(*condition).span,
-                                format!("this is {}, expected bool", other.type_name()),
-                            ));
+            StatementKind::While { condition, body } => {
+                let (condition, body) = (*condition, body.clone());
+                loop {
+                    let v = self.evaluate(&condition)?;
+                    match v {
+                        Value::Bool(true) => {}
+                        Value::Bool(false) => break,
+                        other => {
+                            return Err(self
+                                .err(
+                                    "while condition must be a bool",
+                                    self.arena.stmts.get(*statement).span,
+                                )
+                                .with_label(
+                                    self.arena.exprs.get(condition).span,
+                                    format!("this is {}, expected bool", other.type_name()),
+                                ));
+                        }
                     }
-                }
-                self.push_scope();
-                for statement in body {
-                    self.evaluate_statement(statement)?;
-                    if self.return_value.is_some() || self.is_breaking || self.is_continuing {
+                    self.push_scope();
+                    for statement in &body {
+                        self.evaluate_statement(statement)?;
+                        if self.return_value.is_some() || self.is_breaking || self.is_continuing {
+                            break;
+                        }
+                    }
+                    self.pop_scope();
+                    if self.is_breaking {
+                        self.is_breaking = false;
+                        break;
+                    }
+
+                    if self.is_continuing {
+                        self.is_continuing = false;
+                    }
+
+                    if self.return_value.is_some() {
                         break;
                     }
                 }
-                self.pop_scope();
-                if self.is_breaking {
-                    self.is_breaking = false;
-                    break;
-                }
-
-                if self.is_continuing {
-                    self.is_continuing = false;
-                }
-
-                if self.return_value.is_some() {
-                    break;
-                }
-            },
+            }
 
             StatementKind::Range(..) => {}
 
@@ -214,10 +223,12 @@ impl Evaluator {
                 increment,
                 body,
             } => {
+                let (initializer, condition, increment, body) =
+                    (*initializer, *condition, *increment, body.clone());
                 self.push_scope();
-                self.evaluate_statement(initializer)?;
+                self.evaluate_statement(&initializer)?;
                 loop {
-                    let v = self.evaluate(condition)?;
+                    let v = self.evaluate(&condition)?;
                     match v {
                         Value::Bool(true) => {}
                         Value::Bool(false) => break,
@@ -228,14 +239,14 @@ impl Evaluator {
                                     self.arena.stmts.get(*statement).span,
                                 )
                                 .with_label(
-                                    self.arena.exprs.get(*condition).span,
+                                    self.arena.exprs.get(condition).span,
                                     format!("this is {}, expected bool", other.type_name()),
                                 ));
                         }
                     }
 
-                    for statement in body {
-                        self.evaluate_statement(statement)?;
+                    for statement in &body {
+                        self.evaluate_statement(&statement)?;
                         if self.return_value.is_some() || self.is_breaking || self.is_continuing {
                             break;
                         }
@@ -248,7 +259,7 @@ impl Evaluator {
 
                     if self.is_continuing {
                         self.is_continuing = false;
-                        self.evaluate(increment)?;
+                        self.evaluate(&increment)?;
                         continue;
                     }
 
@@ -256,7 +267,7 @@ impl Evaluator {
                         break;
                     }
 
-                    self.evaluate(increment)?;
+                    self.evaluate(&increment)?;
                 }
                 self.pop_scope();
             }
@@ -267,9 +278,11 @@ impl Evaluator {
                 increment,
                 body,
             } => {
-                self.evaluate_statement(initializer)?;
+                let (initializer, condition, increment, body) =
+                    (*initializer, *condition, *increment, body.clone());
+                self.evaluate_statement(&initializer)?;
                 loop {
-                    let v = self.evaluate(condition)?;
+                    let v = self.evaluate(&condition)?;
                     match v {
                         Value::Bool(true) => {}
                         Value::Bool(false) => break,
@@ -280,13 +293,13 @@ impl Evaluator {
                                     self.arena.stmts.get(*statement).span,
                                 )
                                 .with_label(
-                                    self.arena.exprs.get(*condition).span,
+                                    self.arena.exprs.get(condition).span,
                                     format!("this is {}, expected bool", other.type_name()),
                                 ));
                         }
                     }
 
-                    for stmt in body {
+                    for stmt in &body {
                         self.evaluate_statement(stmt)?;
                         if self.return_value.is_some() || self.is_breaking || self.is_continuing {
                             break;
@@ -299,14 +312,14 @@ impl Evaluator {
                     }
                     if self.is_continuing {
                         self.is_continuing = false;
-                        self.evaluate(increment)?;
+                        self.evaluate(&increment)?;
                         continue;
                     }
                     if self.return_value.is_some() {
                         break;
                     }
 
-                    self.evaluate(increment)?;
+                    self.evaluate(&increment)?;
                 }
             }
             StatementKind::Import { names, path } => {
@@ -338,12 +351,14 @@ impl Evaluator {
             }
 
             StatementKind::ResolvedImportFile { body, .. } => {
-                for stmt in body {
+                let body = body.clone();
+                for stmt in &body {
                     self.evaluate_statement(stmt)?;
                 }
             }
             // require adding resolved version in resolver
             StatementKind::ImportFileNamed { path, names } => {
+                let (path, names) = (path.clone(), names.clone());
                 let import_name = format!("{}.rl", path.join("/"));
                 let file_path = if let Some(ref source_file) = self.source_file {
                     let current_file_dir = Path::new(source_file.name.as_ref())
@@ -396,7 +411,8 @@ impl Evaluator {
             StatementKind::ResolvedForRange {
                 slot, range, body, ..
             } => {
-                let items = match &self.arena.stmts.get(*range).kind.clone() {
+                let (slot, range, body) = (*slot, *range, body.clone());
+                let items = match &self.arena.stmts.get(range).kind.clone() {
                     StatementKind::Range(items) => items.clone(),
                     _ => {
                         return Err(self.err(
@@ -409,13 +425,13 @@ impl Evaluator {
                 for item in items {
                     self.push_scope();
                     self.insert_value(
-                        *slot,
+                        slot,
                         Value::Integer(item),
                         crate::ast::statements::TypeAnnotation::Int,
                         self.arena.stmts.get(*statement).span,
                     )?;
 
-                    for statement in body {
+                    for statement in &body {
                         self.evaluate_statement(statement)?;
                         if self.return_value.is_some() || self.is_breaking || self.is_continuing {
                             break;
@@ -445,7 +461,8 @@ impl Evaluator {
                 body,
                 ..
             } => {
-                let arr = self.evaluate(iterable)?;
+                let (slot, iterable, body) = (*slot, *iterable, body.clone());
+                let arr = self.evaluate(&iterable)?;
                 let items = match arr {
                     Value::Values { items, .. } => items,
                     other => {
@@ -455,7 +472,7 @@ impl Evaluator {
                                 self.arena.stmts.get(*statement).span,
                             )
                             .with_label(
-                                self.arena.exprs.get(*iterable).span,
+                                self.arena.exprs.get(iterable).span,
                                 format!("this is {}, expected array", other.type_name()),
                             ));
                     }
@@ -464,13 +481,13 @@ impl Evaluator {
                     let item_type = Evaluator::infer_type(&item, false);
                     self.push_scope();
                     self.insert_value(
-                        *slot,
+                        slot,
                         item,
                         item_type,
                         self.arena.stmts.get(*statement).span,
                     )?;
 
-                    for statement in body {
+                    for statement in &body {
                         self.evaluate_statement(statement)?;
                         if self.return_value.is_some() || self.is_breaking || self.is_continuing {
                             break;
@@ -493,51 +510,57 @@ impl Evaluator {
                 }
             }
 
-            StatementKind::ConditionalBranch { condition, body } => match condition {
-                Some(condition) => {
-                    let v = self.evaluate(condition)?;
-                    match v {
-                        Value::Bool(true) => {}
-                        Value::Bool(false) => return Ok(()),
-                        other => {
-                            return Err(self
-                                .err(
-                                    "condition must be a bool",
-                                    self.arena.stmts.get(*statement).span,
-                                )
-                                .with_label(
-                                    self.arena.exprs.get(*condition).span,
-                                    format!("this is {}, expected bool", other.type_name()),
-                                ));
+            StatementKind::ConditionalBranch { condition, body } => {
+                let (condition, body) = (*condition, body.clone());
+                match condition {
+                    Some(condition) => {
+                        let v = self.evaluate(&condition)?;
+                        match v {
+                            Value::Bool(true) => {}
+                            Value::Bool(false) => return Ok(()),
+                            other => {
+                                return Err(self
+                                    .err(
+                                        "condition must be a bool",
+                                        self.arena.stmts.get(*statement).span,
+                                    )
+                                    .with_label(
+                                        self.arena.exprs.get(condition).span,
+                                        format!("this is {}, expected bool", other.type_name()),
+                                    ));
+                            }
+                        }
+                        self.push_scope();
+                        for statement in &body {
+                            self.evaluate_statement(statement)?;
+                            if self.return_value.is_some() || self.is_breaking || self.is_continuing
+                            {
+                                break;
+                            }
+                        }
+                        self.pop_scope();
+                    }
+                    _ => {
+                        for statement in &body {
+                            self.evaluate_statement(statement)?;
+                            if self.return_value.is_some() || self.is_breaking || self.is_continuing
+                            {
+                                break;
+                            }
                         }
                     }
-                    self.push_scope();
-                    for statement in body {
-                        self.evaluate_statement(statement)?;
-                        if self.return_value.is_some() || self.is_breaking || self.is_continuing {
-                            break;
-                        }
-                    }
-                    self.pop_scope();
                 }
-                _ => {
-                    for statement in body {
-                        self.evaluate_statement(statement)?;
-                        if self.return_value.is_some() || self.is_breaking || self.is_continuing {
-                            break;
-                        }
-                    }
-                }
-            },
+            }
 
             StatementKind::Conditional {
                 if_branch,
                 else_branch,
             } => {
-                if !self.evaluate_branch(if_branch)?
+                let (if_branch, else_branch) = (*if_branch, *else_branch);
+                if !self.evaluate_branch(&if_branch)?
                     && let Some(branch) = else_branch
                 {
-                    self.evaluate_branch(branch)?;
+                    self.evaluate_branch(&branch)?;
                 }
             }
 
@@ -565,7 +588,8 @@ impl Evaluator {
             }
 
             StatementKind::Return(expr) => {
-                let value = match expr {
+                let expr = *expr;
+                let value = match &expr {
                     Some(e) => self.evaluate(e)?,
                     None => Value::Null,
                 };
@@ -586,7 +610,8 @@ impl Evaluator {
                 slots,
                 value,
             } => {
-                let val = self.evaluate(value)?;
+                let (bindings, slots, value) = (bindings.clone(), slots.clone(), *value);
+                let val = self.evaluate(&value)?;
                 let items = match val {
                     Value::Tuple(items) => items,
                     other => {
@@ -641,8 +666,9 @@ impl Evaluator {
             }
 
             StatementKind::Match { value, arms } => {
-                let val = self.evaluate(value)?;
-                for (pattern, body) in arms {
+                let (value, arms) = (*value, arms.clone());
+                let val = self.evaluate(&value)?;
+                for (pattern, body) in &arms {
                     let matched = match pattern {
                         MatchPattern::Wildcard => true,
                         MatchPattern::Literal(expr) => {
@@ -665,57 +691,63 @@ impl Evaluator {
     /// Evaluates a [`ConditionalBranch`] or [`Conditional`] and returns `true` if the
     /// branch was taken (condition was true or it was an `else`).
     fn evaluate_branch(&mut self, statement: &StmtId) -> Result<bool, Error> {
-        match &self.arena.stmts.get(*statement).kind.clone() {
-            StatementKind::ConditionalBranch { condition, body } => match condition {
-                Some(condition) => {
-                    let v = self.evaluate(condition)?;
-                    match v {
-                        Value::Bool(true) => {
-                            self.push_scope();
-                            for statement in body {
-                                self.evaluate_statement(statement)?;
-                                if self.return_value.is_some()
-                                    || self.is_breaking
-                                    || self.is_continuing
-                                {
-                                    break;
+        let v = self.arena.stmts.get(*statement);
+        match &v.kind {
+            StatementKind::ConditionalBranch { condition, body } => {
+                let (condition, body) = (*condition, body.clone());
+                match &condition {
+                    Some(condition) => {
+                        let v = self.evaluate(condition)?;
+                        match v {
+                            Value::Bool(true) => {
+                                self.push_scope();
+                                for statement in &body {
+                                    self.evaluate_statement(statement)?;
+                                    if self.return_value.is_some()
+                                        || self.is_breaking
+                                        || self.is_continuing
+                                    {
+                                        break;
+                                    }
                                 }
+                                self.pop_scope();
+                                Ok(true)
                             }
-                            self.pop_scope();
-                            Ok(true)
-                        }
-                        Value::Bool(false) => Ok(false),
-                        other => Err(self
-                            .err(
-                                "condition must be a bool",
-                                self.arena.stmts.get(*statement).span,
-                            )
-                            .with_label(
-                                self.arena.exprs.get(*condition).span,
-                                format!("this is {}, expected bool", other.type_name()),
-                            )),
-                    }
-                }
-                None => {
-                    self.push_scope();
-                    for statement in body {
-                        self.evaluate_statement(statement)?;
-                        if self.return_value.is_some() || self.is_breaking || self.is_continuing {
-                            break;
+                            Value::Bool(false) => Ok(false),
+                            other => Err(self
+                                .err(
+                                    "condition must be a bool",
+                                    self.arena.stmts.get(*statement).span,
+                                )
+                                .with_label(
+                                    self.arena.exprs.get(*condition).span,
+                                    format!("this is {}, expected bool", other.type_name()),
+                                )),
                         }
                     }
-                    self.pop_scope();
-                    Ok(true)
+                    None => {
+                        self.push_scope();
+                        for statement in &body {
+                            self.evaluate_statement(statement)?;
+                            if self.return_value.is_some() || self.is_breaking || self.is_continuing
+                            {
+                                break;
+                            }
+                        }
+                        self.pop_scope();
+                        Ok(true)
+                    }
                 }
-            },
+            }
             StatementKind::Conditional {
                 if_branch,
                 else_branch,
             } => {
-                if !self.evaluate_branch(if_branch)?
+                let (if_branch, else_branch) = (*if_branch, *else_branch);
+                if !self.evaluate_branch(&if_branch)?
                     && let Some(branch) = else_branch
                 {
-                    self.evaluate_branch(branch)?;
+                    self.evaluate_branch(&branch)?;
                 }
 
                 Ok(true)
@@ -807,7 +839,8 @@ impl Evaluator {
         };
 
         for statement in statements {
-            match &self.arena.stmts.get(*statement).kind.clone() {
+            let v = self.arena.stmts.get(*statement);
+            match &v.kind {
                 StatementKind::ResolvedImportFile { .. }
                 | StatementKind::ResolvedFunctionDeclaration { .. }
                 | StatementKind::FunctionDeclaration { .. }
