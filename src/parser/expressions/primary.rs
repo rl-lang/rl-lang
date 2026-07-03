@@ -645,7 +645,9 @@ impl Parser {
         // --- null ---
         if self.match_type(&[TokenType::Null]) {
             let span = self.previous_span();
-            let expr = Expression::new(ExpressionKind::Null, span);
+            let expr = self.ast_arena.alloc_expr(ExpressionKind::Null, span);
+            #[cfg(feature = "debug")]
+            log::trace!("alloc Null expr @ {:?}", span);
             return self.parse_postfix(expr, start);
         }
 
@@ -655,8 +657,9 @@ impl Parser {
             log::debug!("found group start");
             while self.match_type(&[TokenType::Newline]) {}
             let first = self.parse_expression()?;
+
             if self.match_type(&[TokenType::Comma]) {
-                // tuple literal: (expr, expr, ...)
+                // --- tuple literal ---
                 let mut items = vec![first];
                 while self.peek() != TokenType::RightParen && self.peek() != TokenType::Eof {
                     while self.match_type(&[TokenType::Newline]) {}
@@ -674,13 +677,28 @@ impl Parser {
                     return Err(self.err("expected ) after tuple elements", self.peek_span()));
                 }
                 let span = start.join(self.previous_span());
-                let expr = Expression::new(ExpressionKind::TupleLiteral(items), span);
+                let expr = self
+                    .ast_arena
+                    .alloc_expr(ExpressionKind::TupleLiteral(items), span);
+                #[cfg(feature = "debug")]
+                log::trace!(
+                    "alloc TupleLiteral expr: items={} @ {:?}",
+                    items.len(),
+                    span
+                );
                 return self.parse_postfix(expr, start);
             }
+
+            // normal group
             while self.match_type(&[TokenType::Newline]) {}
             self.match_type(&[TokenType::RightParen]);
+
             let span = start.join(self.previous_span());
-            let expr = Expression::new(ExpressionKind::Grouping(Box::new(first)), span);
+            let expr = self
+                .ast_arena
+                .alloc_expr(ExpressionKind::Grouping(first), span);
+            #[cfg(feature = "debug")]
+            log::trace!("alloc Grouping expr: inner={:?} @ {:?}", first, span);
             return self.parse_postfix(expr, start);
         }
 
