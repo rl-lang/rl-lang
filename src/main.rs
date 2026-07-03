@@ -178,6 +178,9 @@ enum Commands {
 }
 
 fn main() {
+    #[cfg(feature = "debug")]
+    env_logger::init();
+
     // expriemental
     if let Some(source) = find_embedded() {
         let sf = SourceFile::new("program", source);
