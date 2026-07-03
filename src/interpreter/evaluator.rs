@@ -555,11 +555,7 @@ impl Evaluator {
                 capture_depth,
             } => {
                 let total = self.environment.len();
-                let start = if total > capture_depth {
-                    total - capture_depth
-                } else {
-                    0
-                };
+                let start = total.saturating_sub(capture_depth);
                 let captured_env: Vec<Vec<EnvironmentItem>> = self.environment[start..].to_vec();
 
                 Value::Function {

@@ -118,7 +118,7 @@ impl Parser {
                     );
                     let expr = self
                         .ast_arena
-                        .alloc_expr(ExpressionKind::Assign { name, value: value }, span);
+                        .alloc_expr(ExpressionKind::Assign { name, value }, span);
 
                     return self.parse_postfix(expr, start);
                 }
@@ -151,7 +151,7 @@ impl Parser {
                     let mut expr = self.ast_arena.alloc_expr(
                         ExpressionKind::Index {
                             target,
-                            index: index,
+                            index,
                         },
                         start.join(after_index_span),
                     );
