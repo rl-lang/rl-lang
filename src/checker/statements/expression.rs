@@ -9,8 +9,9 @@ use crate::{
 
 impl TypeChecker {
     pub fn check_expression(&mut self, expression: ExprId) -> CheckType {
-        let expr_id = self.ast_arena.exprs.get(expression);
-        match expr_id.kind.clone() {
+        let expr_span = self.ast_arena.exprs.get(expression).span;
+        let expr_kind = self.ast_arena.exprs.get(expression).kind.clone();
+        match expr_kind {
             // returns as type
             ExpressionKind::Null => CheckType::Known(TypeAnnotation::Null),
             ExpressionKind::Integer(_) => CheckType::Known(TypeAnnotation::Int),
@@ -22,15 +23,15 @@ impl TypeChecker {
             // returns the inner type
             ExpressionKind::Grouping(inner) => self.check_expression(inner),
             // does this identifier exist?
-            ExpressionKind::Identifier(name) => self.lookup(&name, expr_id.span),
+            ExpressionKind::Identifier(name) => self.lookup(&name, expr_span),
             // checks array items
             ExpressionKind::ArrayLiteral(items) => {
                 // checks every item type in items then push it to the new
                 // item_types vec
                 let mut item_types = Vec::with_capacity(items.len());
                 for item in items {
-                    let item_id = self.ast_arena.exprs.get(item);
-                    item_types.push((self.check_expression(item), item_id.span));
+                    let item_span = self.ast_arena.exprs.get(item).span;
+                    item_types.push((self.check_expression(item), item_span));
                 }
                 // sets the items types to same first item type otherwise null
                 let items_type = item_types
@@ -62,13 +63,13 @@ impl TypeChecker {
 
             ExpressionKind::Index { target, index } => {
                 // is the target (array) null?
-                let target_id = self.ast_arena.exprs.get(target);
-                let index_id = self.ast_arena.exprs.get(index);
+                let target_span = self.ast_arena.exprs.get(target).span;
+                let index_span = self.ast_arena.exprs.get(index).span;
                 let target_type = self.check_expression(target);
-                self.check_is_null(&target_type, target_id.span);
+                self.check_is_null(&target_type, target_span);
                 // is the index null??
                 let index_type = self.check_expression(index);
-                self.check_is_null(&index_type, index_id.span);
+                self.check_is_null(&index_type, index_span);
 
                 // is it integer?
                 if !matches!(
@@ -82,7 +83,7 @@ impl TypeChecker {
                 ) {
                     self.error(
                         format!("invalid index operation: index is {}", index_type.info()),
-                        expr_id.span,
+                        expr_span,
                     );
                 }
 
@@ -102,7 +103,7 @@ impl TypeChecker {
                     other => {
                         self.error(
                             format!("invalid index operation: this is {}", other.info()),
-                            expr_id.span,
+                            expr_span,
                         );
                         CheckType::Unknown
                     }
@@ -114,7 +115,7 @@ impl TypeChecker {
                 target,
                 index,
                 value,
-            } => self.check_index_assign(target, index, value, expr_id.span),
+            } => self.check_index_assign(target, index, value, expr_span),
 
             // offloads to binary
             ExpressionKind::Binary {
@@ -131,23 +132,23 @@ impl TypeChecker {
                 let right_id = self.ast_arena.exprs.get(right);
                 self.check_is_null(&right_type, right_id.span);
                 // is the binary correct?
-                self.check_binary_operator(left_type, right_type, &operator, expr_id.span)
+                self.check_binary_operator(left_type, right_type, &operator, expr_span)
             }
 
             // offloads to unary
             ExpressionKind::Unary { operator, operand } => {
                 // is the operand null?
+                let operand_span = self.ast_arena.exprs.get(operand).span;
                 let operand_type = self.check_expression(operand);
-                let operand_id = self.ast_arena.exprs.get(operand);
-                self.check_is_null(&operand_type, operand_id.span);
+                self.check_is_null(&operand_type, operand_span);
                 // is the unary correct?
-                self.check_unary_operator(operand_type, operand_id.span, &operator, expr_id.span)
+                self.check_unary_operator(operand_type, operand_span, &operator, expr_span)
             }
 
             // assigns the value to the variable then returns it
             ExpressionKind::Assign { name, value } => {
                 let value_type = self.check_expression(value);
-                self.assign(&name, value_type.clone(), expr_id.span);
+                self.assign(&name, value_type.clone(), expr_span);
                 value_type
             }
 
@@ -157,11 +158,11 @@ impl TypeChecker {
                     .iter()
                     .map(|a| {
                         let a = *a;
-                        let a_id = self.ast_arena.exprs.get(a);
-                        (self.check_expression(a), a_id.span)
+                        let a_span = self.ast_arena.exprs.get(a).span;
+                        (self.check_expression(a), a_span)
                     })
                     .collect();
-                self.check_call_path(&path, &arg_types, expr_id.span)
+                self.check_call_path(&path, &arg_types, expr_span)
             }
 
             // checks the call of the function
@@ -171,11 +172,11 @@ impl TypeChecker {
                     .iter()
                     .map(|a| {
                         let a = *a;
-                        let a_id = self.ast_arena.exprs.get(a);
-                        (self.check_expression(a), a_id.span)
+                        let a_span = self.ast_arena.exprs.get(a).span;
+                        (self.check_expression(a), a_span)
                     })
                     .collect();
-                self.check_call_value(callee_type, &arg_types, expr_id.span)
+                self.check_call_value(callee_type, &arg_types, expr_span)
             }
 
             // checks the method call
@@ -188,10 +189,10 @@ impl TypeChecker {
                 let caller_id = self.ast_arena.exprs.get(caller);
                 let mut arg_types: Vec<(CheckType, Span)> = vec![(caller_type, caller_id.span)];
                 for arg in args {
-                    let arg_id = self.ast_arena.exprs.get(arg);
-                    arg_types.push((self.check_expression(arg), arg_id.span));
+                    let arg_span = self.ast_arena.exprs.get(arg).span;
+                    arg_types.push((self.check_expression(arg), arg_span));
                 }
-                self.check_call_path(&method, &arg_types, expr_id.span)
+                self.check_call_path(&method, &arg_types, expr_span)
             }
 
             // checks the lambda and transforms it to function type
@@ -205,12 +206,12 @@ impl TypeChecker {
                 // add scope level
                 self.push_scope();
                 // declare the params
-                for param in params {
+                for param in &params {
                     self.declare(
                         param.param_name.clone(),
                         CheckType::Known(param.param_type.clone()),
                         false,
-                        expr_id.span,
+                        expr_span,
                     );
                 }
                 // add the resolved return type as the expected return
@@ -259,7 +260,7 @@ impl TypeChecker {
                             value_type.info(),
                             target_type
                         ),
-                        expr_id.span,
+                        expr_span,
                     );
                 }
                 CheckType::Unknown
@@ -281,7 +282,7 @@ impl TypeChecker {
                     inner_type,
                     CheckType::Known(TypeAnnotation::Error | TypeAnnotation::CError)
                 ) {
-                    self.error("error cannot wrap another error", expr_id.span);
+                    self.error("error cannot wrap another error", expr_span);
                 }
                 CheckType::Known(TypeAnnotation::Error)
             }
