@@ -22,53 +22,41 @@ fn dec_int() {
 
 #[test]
 fn const_int() {
-    let (ast, statements) = common::parse("CONST int x = 1000");
-    assert_eq!(statements.len(), 1);
-    let StatementKind::ConstantDeclaration {
-        name,
-        type_annotation,
-        value,
-    } = &statements[0].kind
-    else {
-        panic!("expected ConstantDeclaration, got {:?}", statements[0].kind)
-    };
-
-    assert_eq!(name, "x");
-    assert_eq!(*type_annotation, TypeAnnotation::CInt);
-    assert_eq!(ast.exprs.get(*value).kind, ExpressionKind::Integer(1000));
-    assert_eq!(ast.exprs.get(*value).span, Span::new(14, 18));
-    assert_eq!(statements[0].span, Span::new(0, 18));
+    assert_decl!(
+        "CONST int x = 1000",
+        StatementKind::ConstantDeclaration,
+        name: "x",
+        type_annotation: TypeAnnotation::CInt,
+        value: ExpressionKind::Integer(1000), Span::new(14, 18),
+        span: Span::new(0, 18),
+    );
 }
 
-/*
 #[test]
 fn dec_float() {
-    let statements = common::parse("dec float x = 0.0");
-    let expected = Statement::new(
-        StatementKind::VariableDeclaration {
-            name: "x".to_string(),
-            type_annotation: TypeAnnotation::Float,
-            value: Expression::new(ExpressionKind::Float(0.0), Span::new(14, 17)),
-        },
-        Span::new(0, 17),
+    assert_decl!(
+        "dec float x = 1000.0",
+        StatementKind::VariableDeclaration,
+        name: "x",
+        type_annotation: TypeAnnotation::Float,
+        value: ExpressionKind::Float(1000.0), Span::new(14, 20),
+        span: Span::new(0, 20),
     );
-    assert_eq!(statements, vec![expected]);
 }
 
 #[test]
 fn const_float() {
-    let statements = common::parse("CONST float x = 0.0");
-    let expected = Statement::new(
-        StatementKind::ConstantDeclaration {
-            name: "x".to_string(),
-            type_annotation: TypeAnnotation::CFloat,
-            value: Expression::new(ExpressionKind::Float(0.0), Span::new(16, 19)),
-        },
-        Span::new(0, 19),
+    assert_decl!(
+        "CONST float x = 1000.0",
+        StatementKind::ConstantDeclaration,
+        name: "x",
+        type_annotation: TypeAnnotation::CFloat,
+        value: ExpressionKind::Float(1000.0), Span::new(16, 22),
+        span: Span::new(0, 22),
     );
-    assert_eq!(statements, vec![expected]);
 }
 
+/*
 #[test]
 fn dec_string() {
     let statements = common::parse("dec string x = \"hi\"");
