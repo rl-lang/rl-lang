@@ -1,5 +1,6 @@
 use rl_lang::ast::statements::StatementKind;
 use rl_lang::ast::{ExprId, nodes::ExpressionKind};
+use rl_lang::lexer::tokentypes::TokenType;
 use rl_lang::{
     ast::{Ast, statements::Statement},
     interpreter::evaluator::Evaluator,
@@ -25,6 +26,7 @@ pub fn eval_program(source: &str) -> Result<Evaluator, Error> {
     Ok(evaluator)
 }
 
+// ---- helpers start ----
 pub fn assert_expr(ast: &Ast, id: ExprId, kind: ExpressionKind, span: rl_lang::utils::span::Span) {
     let expr = ast.exprs.get(id);
     assert_eq!(expr.kind, kind);
@@ -62,6 +64,53 @@ pub fn assert_single_expr_stmt(
         other => panic!("expected Expression statement, got {:?}", other),
     }
 }
+
+pub fn assert_binary(
+    ast: &Ast,
+    id: ExprId,
+    left_kind: ExpressionKind,
+    left_span: rl_lang::utils::span::Span,
+    operator: TokenType,
+    right_kind: ExpressionKind,
+    right_span: rl_lang::utils::span::Span,
+    span: rl_lang::utils::span::Span,
+) {
+    let expr = ast.exprs.get(id);
+    assert_eq!(expr.span, span);
+    match &expr.kind {
+        ExpressionKind::Binary {
+            left,
+            operator: op,
+            right,
+        } => {
+            assert_expr(ast, *left, left_kind, left_span);
+            assert_eq!(*op, operator);
+            assert_expr(ast, *right, right_kind, right_span);
+        }
+        other => panic!("expected Binary, got {:?}", other),
+    }
+}
+
+/// Checks an `Assign { name, value }` expression, delegating the value check
+/// to a closure since the value is often itself a nested Binary/etc.
+pub fn assert_assign(
+    ast: &Ast,
+    id: ExprId,
+    name: &str,
+    span: rl_lang::utils::span::Span,
+    check_value: impl FnOnce(&Ast, ExprId),
+) {
+    let expr = ast.exprs.get(id);
+    assert_eq!(expr.span, span);
+    match &expr.kind {
+        ExpressionKind::Assign { name: n, value } => {
+            assert_eq!(n, name);
+            check_value(ast, *value);
+        }
+        other => panic!("expected Assign, got {:?}", other),
+    }
+}
+// ---- helpers end ====
 
 // ---- macro start ----
 
@@ -127,6 +176,46 @@ macro_rules! assert_while {
                 );
             }
             other => panic!("expected While, got {:?}", other),
+        }
+        assert_eq!(statements[0].span, $stmt_span);
+    }};
+}
+
+#[macro_export]
+macro_rules! assert_for_range {
+    (
+        $source:expr,
+        variable: $var:expr,
+        range: $range_vals:expr, $range_span:expr,
+        body_expr: $body_kind:expr, $body_expr_span:expr, $body_stmt_span:expr,
+        span: $stmt_span:expr $(,)?
+    ) => {{
+        let (ast, statements) = common::parse($source);
+        assert_eq!(statements.len(), 1, "expected exactly one statement");
+        match &statements[0].kind {
+            rl_lang::ast::statements::StatementKind::ForRange {
+                variable,
+                range,
+                body,
+            } => {
+                assert_eq!(variable, $var);
+                match &range.kind {
+                    rl_lang::ast::statements::StatementKind::Range(vals) => {
+                        assert_eq!(*vals, $range_vals);
+                    }
+                    other => panic!("expected Range, got {:?}", other),
+                }
+                assert_eq!(range.span, $range_span);
+                assert_eq!(body.len(), 1, "expected exactly one body statement");
+                common::assert_single_expr_stmt(
+                    &body[0],
+                    &ast,
+                    $body_kind,
+                    $body_expr_span,
+                    $body_stmt_span,
+                );
+            }
+            other => panic!("expected ForRange, got {:?}", other),
         }
         assert_eq!(statements[0].span, $stmt_span);
     }};
