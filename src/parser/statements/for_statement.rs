@@ -78,9 +78,10 @@ impl Parser {
             // range or foreach: for <ident> in …
             while self.match_type(&[TokenType::Newline]) {}
             let ident_expr = self.parse_expression()?;
-            let variable_name = match ident_expr.kind {
+            let ident_id = self.ast_arena.exprs.get(ident_expr).clone();
+            let variable_name = match &ident_id.kind {
                 ExpressionKind::Identifier(name) => name,
-                _ => return Err(self.err("for-range expects identifier", ident_expr.span)),
+                _ => return Err(self.err("for-range expects identifier", ident_id.span)),
             };
             while self.match_type(&[TokenType::Newline]) {}
             self.match_type(&[TokenType::In]);
@@ -92,17 +93,19 @@ impl Parser {
                 // literal range: N..M  (integers or bytes, evaluated at parse time)
                 let start_expr = self.parse_expression()?;
                 while self.match_type(&[TokenType::Newline]) {}
-                let range_start = match start_expr.kind {
+                let start_id = self.ast_arena.exprs.get(start_expr);
+                let range_start = match start_id.kind {
                     ExpressionKind::Integer(i) => i,
                     ExpressionKind::Byte(b) => b as i64,
-                    _ => return Err(self.err("range should be integers only", start_expr.span)),
+                    _ => return Err(self.err("range should be integers only", start_id.span)),
                 };
                 self.match_type(&[TokenType::DotDot]);
                 let end_expr = self.parse_expression()?;
-                let range_end = match end_expr.kind {
+                let end_id = self.ast_arena.exprs.get(end_expr);
+                let range_end = match end_id.kind {
                     ExpressionKind::Integer(i) => i,
                     ExpressionKind::Byte(b) => b as i64,
-                    _ => return Err(self.err("range should be integers only", end_expr.span)),
+                    _ => return Err(self.err("range should be integers only", end_id.span)),
                 };
                 let range_vec: Vec<i64> = (range_start..range_end).collect();
                 let span = start.join(self.previous_span());
@@ -127,10 +130,11 @@ impl Parser {
                 self.match_type(&[TokenType::RightBracket]);
                 let mut iterable_list = Vec::new();
                 for item in items {
-                    match item.kind {
+                    let item_id = self.ast_arena.exprs.get(item);
+                    match item_id.kind {
                         ExpressionKind::Integer(i) => iterable_list.push(i),
                         ExpressionKind::Byte(b) => iterable_list.push(b as i64),
-                        _ => return Err(self.err("list items must be integers", item.span)),
+                        _ => return Err(self.err("list items must be integers", item_id.span)),
                     }
                 }
                 let span = start.join(self.previous_span());
@@ -145,7 +149,7 @@ impl Parser {
                     let span = start.join(self.previous_span());
                     return Ok(Statement::new(
                         StatementKind::ForEach {
-                            variable: variable_name,
+                            variable: variable_name.clone(),
                             iterable: iterable_expression,
                             body,
                         },
@@ -163,7 +167,7 @@ impl Parser {
             let span = start.join(self.previous_span());
             Ok(Statement::new(
                 StatementKind::ForRange {
-                    variable: variable_name,
+                    variable: variable_name.clone(),
                     range,
                     body,
                 },
