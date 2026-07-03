@@ -26,7 +26,9 @@ pub fn func(eval: &mut Evaluator, value: Value) -> Value {
     };
 
     let mut resolver = std::mem::take(&mut eval.resolver);
+    resolver.push_scope();
     let resolved = resolver.resolve_program(ast, statements);
+    resolver.pop_scope();
     eval.resolver = resolver;
 
     let prev_buffer = eval.output_buffer.take();

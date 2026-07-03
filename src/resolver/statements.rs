@@ -29,7 +29,7 @@ use crate::{
 
 impl Resolver {
     pub fn resolve_program(&mut self, ast: Ast, statements: Vec<Statement>) -> Vec<Statement> {
-        self.ast_arena = ast;
+        let statements = self.ast_arena.merge_statements(ast, statements);
         self.resolve_statements(statements)
     }
 
