@@ -39,8 +39,10 @@ fn for_c() {
             common::assert_binary(
                 &ast,
                 *condition,
-                ExpressionKind::Identifier("i".to_string()),
-                Span::new(16, 17),
+                (
+                    ExpressionKind::Identifier("i".to_string()),
+                    Span::new(16, 17),
+                ),
                 TokenType::Less,
                 ExpressionKind::Integer(10),
                 Span::new(20, 22),
@@ -51,8 +53,10 @@ fn for_c() {
                 common::assert_binary(
                     ast,
                     value_id,
-                    ExpressionKind::Identifier("i".to_string()),
-                    Span::new(24, 25),
+                    (
+                        ExpressionKind::Identifier("i".to_string()),
+                        Span::new(24, 25),
+                    ),
                     TokenType::Plus,
                     ExpressionKind::Integer(1),
                     Span::new(29, 30),

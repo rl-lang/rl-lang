@@ -69,13 +69,13 @@ pub fn assert_single_expr_stmt(
 pub fn assert_binary(
     ast: &Ast,
     id: ExprId,
-    left_kind: ExpressionKind,
-    left_span: rl_lang::utils::span::Span,
+    left: (ExpressionKind, rl_lang::utils::span::Span),
     operator: TokenType,
     right_kind: ExpressionKind,
     right_span: rl_lang::utils::span::Span,
     span: rl_lang::utils::span::Span,
 ) {
+    let (left_kind, left_span) = left;
     let expr = ast.exprs.get(id);
     assert_eq!(expr.span, span);
     match &expr.kind {
