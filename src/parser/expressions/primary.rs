@@ -79,10 +79,6 @@ impl Parser {
                     }
                     self.match_type(&[TokenType::RightParen]);
                     let span = start.join(self.previous_span());
-                    let expr = self
-                        .ast_arena
-                        .alloc_expr(ExpressionKind::Call { path, args }, span);
-
                     #[cfg(feature = "debug")]
                     log::trace!(
                         "alloc Call expr: path={:?} args={} @ {:?}",
@@ -90,6 +86,10 @@ impl Parser {
                         args.len(),
                         span
                     );
+                    let expr = self
+                        .ast_arena
+                        .alloc_expr(ExpressionKind::Call { path, args }, span);
+
                     return self.parse_postfix(expr, start);
                 }
 
@@ -109,10 +109,6 @@ impl Parser {
                     let value = self.parse_expression()?;
                     let value_id = self.ast_arena.exprs.get(value);
                     let span = start.join(value_id.span);
-                    let expr = self
-                        .ast_arena
-                        .alloc_expr(ExpressionKind::Assign { name, value: value }, span);
-
                     #[cfg(feature = "debug")]
                     log::trace!(
                         "alloc Assign expr: name={} value={:?} @ {:?}",
@@ -120,6 +116,10 @@ impl Parser {
                         value,
                         span
                     );
+                    let expr = self
+                        .ast_arena
+                        .alloc_expr(ExpressionKind::Assign { name, value: value }, span);
+
                     return self.parse_postfix(expr, start);
                 }
 
@@ -197,10 +197,6 @@ impl Parser {
                         while self.match_type(&[TokenType::Newline]) {}
                         self.match_type(&[TokenType::RightParen]);
                         let span = start.join(self.previous_span());
-                        let expr = self
-                            .ast_arena
-                            .alloc_expr(ExpressionKind::CallExpr { callee: expr, args }, span);
-
                         #[cfg(feature = "debug")]
                         log::trace!(
                             "alloc CallExpr expr: callee={:?} args={} @ {:?}",
@@ -209,7 +205,11 @@ impl Parser {
                             span
                         );
 
-                        return self.parse_postfix(expr, start);
+                        let call_expr = self
+                            .ast_arena
+                            .alloc_expr(ExpressionKind::CallExpr { callee: expr, args }, span);
+
+                        return self.parse_postfix(call_expr, start);
                     }
 
                     // --- index assign ---
@@ -222,7 +222,7 @@ impl Parser {
                         let expr_id = self.ast_arena.exprs.get(expr);
 
                         let span = start.join(value_id.span);
-                        if let ExpressionKind::Index { target, index } = expr_id.kind {
+                        if let ExpressionKind::Index { target, index } = expr_id.kind.clone() {
                             let expr = self.ast_arena.alloc_expr(
                                 ExpressionKind::IndexAssign {
                                     target,
@@ -310,10 +310,10 @@ impl Parser {
                                     n,
                                     span
                                 );
-                                return self.parse_postfix(
-                                    self.ast_arena.alloc_expr(ExpressionKind::Integer(n), span),
-                                    start,
-                                );
+
+                                let int_expr =
+                                    self.ast_arena.alloc_expr(ExpressionKind::Integer(n), span);
+                                return self.parse_postfix(int_expr, start);
                             }
 
                             TokenType::Float => {
@@ -323,11 +323,10 @@ impl Parser {
                                     n as f64,
                                     span
                                 );
-                                return self.parse_postfix(
-                                    self.ast_arena
-                                        .alloc_expr(ExpressionKind::Float(n as f64), span),
-                                    start,
-                                );
+                                let int_expr = self
+                                    .ast_arena
+                                    .alloc_expr(ExpressionKind::Float(n as f64), span);
+                                return self.parse_postfix(int_expr, start);
                             }
 
                             TokenType::Byte => {
@@ -341,11 +340,10 @@ impl Parser {
                                     return Err(self
                                         .err(format!("value {} is too large for byte", n), span));
                                 }
-                                return self.parse_postfix(
-                                    self.ast_arena
-                                        .alloc_expr(ExpressionKind::Byte(n as u8), span),
-                                    start,
-                                );
+                                let int_expr = self
+                                    .ast_arena
+                                    .alloc_expr(ExpressionKind::Byte(n as u8), span);
+                                return self.parse_postfix(int_expr, start);
                             }
 
                             other => {
@@ -390,11 +388,10 @@ impl Parser {
                                     f as i64,
                                     span
                                 );
-                                return self.parse_postfix(
-                                    self.ast_arena
-                                        .alloc_expr(ExpressionKind::Integer(f as i64), span),
-                                    start,
-                                );
+                                let float_expr = self
+                                    .ast_arena
+                                    .alloc_expr(ExpressionKind::Integer(f as i64), span);
+                                return self.parse_postfix(float_expr, start);
                             }
 
                             TokenType::Float => {
@@ -404,10 +401,9 @@ impl Parser {
                                     f,
                                     span
                                 );
-                                return self.parse_postfix(
-                                    self.ast_arena.alloc_expr(ExpressionKind::Float(f), span),
-                                    start,
-                                );
+                                let float_expr =
+                                    self.ast_arena.alloc_expr(ExpressionKind::Float(f), span);
+                                return self.parse_postfix(float_expr, start);
                             }
 
                             TokenType::Byte => {
@@ -421,11 +417,10 @@ impl Parser {
                                     return Err(self
                                         .err(format!("value {} is too large for byte", f), span));
                                 }
-                                return self.parse_postfix(
-                                    self.ast_arena
-                                        .alloc_expr(ExpressionKind::Byte(f as u8), span),
-                                    start,
-                                );
+                                let float_expr = self
+                                    .ast_arena
+                                    .alloc_expr(ExpressionKind::Byte(f as u8), span);
+                                return self.parse_postfix(float_expr, start);
                             }
 
                             other => {
@@ -468,11 +463,10 @@ impl Parser {
                                     b as i64,
                                     span
                                 );
-                                return self.parse_postfix(
-                                    self.ast_arena
-                                        .alloc_expr(ExpressionKind::Integer(b as i64), span),
-                                    start,
-                                );
+                                let byte_expr = self
+                                    .ast_arena
+                                    .alloc_expr(ExpressionKind::Integer(b as i64), span);
+                                return self.parse_postfix(byte_expr, start);
                             }
 
                             TokenType::Float => {
@@ -482,11 +476,10 @@ impl Parser {
                                     b as f64,
                                     span
                                 );
-                                return self.parse_postfix(
-                                    self.ast_arena
-                                        .alloc_expr(ExpressionKind::Float(b as f64), span),
-                                    start,
-                                );
+                                let byte_expr = self
+                                    .ast_arena
+                                    .alloc_expr(ExpressionKind::Float(b as f64), span);
+                                return self.parse_postfix(byte_expr, start);
                             }
 
                             TokenType::Byte => {
@@ -502,10 +495,9 @@ impl Parser {
                                     return Err(self
                                         .err(format!("value {} is too large for byte", b), span));
                                 }
-                                return self.parse_postfix(
-                                    self.ast_arena.alloc_expr(ExpressionKind::Byte(b), span),
-                                    start,
-                                );
+                                let byte_expr =
+                                    self.ast_arena.alloc_expr(ExpressionKind::Byte(b), span);
+                                return self.parse_postfix(byte_expr, start);
                             }
 
                             other => {
@@ -535,9 +527,9 @@ impl Parser {
             log::debug!("found string");
             let span = self.previous_span();
             if let TokenType::StringLiteral(s) = self.previous() {
-                let expr = self.ast_arena.alloc_expr(ExpressionKind::String(s), span);
                 #[cfg(feature = "debug")]
                 log::trace!("alloc String expr: {:?} @ {:?}", s, span);
+                let expr = self.ast_arena.alloc_expr(ExpressionKind::String(s), span);
                 return self.parse_postfix(expr, start);
             }
         }
@@ -552,11 +544,11 @@ impl Parser {
             log::debug!("found character");
             let span = self.previous_span();
             if let TokenType::CharacterLiteral(c) = self.previous() {
+                #[cfg(feature = "debug")]
+                log::trace!("alloc Character expr: {:?} @ {:?}", c, span);
                 let expr = self
                     .ast_arena
                     .alloc_expr(ExpressionKind::Character(c), span);
-                #[cfg(feature = "debug")]
-                log::trace!("alloc Character expr: {:?} @ {:?}", c, span);
                 return self.parse_postfix(expr, start);
             }
         }
@@ -611,11 +603,10 @@ impl Parser {
             let span = kw_span.join(self.previous_span());
             #[cfg(feature = "debug")]
             log::trace!("alloc OkLiteral expr: inner={:?} @ {:?}", inner, span);
-            return self.parse_postfix(
-                self.ast_arena
-                    .alloc_expr(ExpressionKind::OkLiteral(inner), span),
-                start,
-            );
+            let ok_expr = self
+                .ast_arena
+                .alloc_expr(ExpressionKind::OkLiteral(inner), span);
+            return self.parse_postfix(ok_expr, start);
         }
 
         // --- err ---
@@ -634,11 +625,10 @@ impl Parser {
             let span = kw_span.join(self.previous_span());
             #[cfg(feature = "debug")]
             log::trace!("alloc ErrLiteral expr: inner={:?} @ {:?}", inner, span);
-            return self.parse_postfix(
-                self.ast_arena
-                    .alloc_expr(ExpressionKind::ErrLiteral(inner), span),
-                start,
-            );
+            let err_expr = self
+                .ast_arena
+                .alloc_expr(ExpressionKind::ErrLiteral(inner), span);
+            return self.parse_postfix(err_expr, start);
         }
         // ---- result end ----
 
@@ -677,15 +667,16 @@ impl Parser {
                     return Err(self.err("expected ) after tuple elements", self.peek_span()));
                 }
                 let span = start.join(self.previous_span());
-                let expr = self
-                    .ast_arena
-                    .alloc_expr(ExpressionKind::TupleLiteral(items), span);
                 #[cfg(feature = "debug")]
                 log::trace!(
                     "alloc TupleLiteral expr: items={} @ {:?}",
                     items.len(),
                     span
                 );
+
+                let expr = self
+                    .ast_arena
+                    .alloc_expr(ExpressionKind::TupleLiteral(items), span);
                 return self.parse_postfix(expr, start);
             }
 
@@ -743,14 +734,6 @@ impl Parser {
             while self.match_type(&[TokenType::Newline]) {}
             let body = self.parse_block()?;
             let span = lambda_start.join(self.previous_span());
-            let expr = self.ast_arena.alloc_expr(
-                ExpressionKind::Lambda {
-                    params,
-                    return_type,
-                    body,
-                },
-                span,
-            );
             #[cfg(feature = "debug")]
             log::trace!(
                 "alloc Lambda expr: params={} return_type={:?} body_stmts={} @ {:?}",
@@ -758,6 +741,14 @@ impl Parser {
                 return_type,
                 body.len(),
                 span
+            );
+            let expr = self.ast_arena.alloc_expr(
+                ExpressionKind::Lambda {
+                    params,
+                    return_type,
+                    body,
+                },
+                span,
             );
             return self.parse_postfix(expr, start);
         }
