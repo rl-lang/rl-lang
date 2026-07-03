@@ -28,7 +28,7 @@ pub fn eval_input(input: &str, evaluator: &mut Evaluator, output: &mut Vec<Outpu
         }
     };
 
-    let statements = match Parser::parse(tokens, source.clone()) {
+    let (_file_ast, statements) = match Parser::parse(tokens, source.clone()) {
         Ok(s) => s,
         Err(e) => {
             output.push(OutputLine::Error(format!("error: {}", e.message())));
@@ -43,7 +43,7 @@ pub fn eval_input(input: &str, evaluator: &mut Evaluator, output: &mut Vec<Outpu
 
     for statement in &statements {
         if let crate::ast::statements::StatementKind::Expression(expr) = &statement.kind {
-            match evaluator.evaluate(expr) {
+            match evaluator.evaluate(*expr) {
                 Ok(val) => {
                     if !matches!(val, crate::interpreter::values::Value::Null) {
                         let val_str = format!("{}", val);
