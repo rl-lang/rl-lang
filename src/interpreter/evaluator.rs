@@ -321,7 +321,7 @@ impl Evaluator {
             ExpressionKind::Character(c) => Value::Char(c),
             ExpressionKind::Index { target, index } => {
                 if let Some((depth, slot)) = try_get_root_addr(target, &self.resolver.ast_arena) {
-                    let indices = get_indices_as_vec(target, self, span)?;
+                    let indices = get_indices_as_vec(id, self, span)?;
                     self.index_read(depth, slot, &indices, span)?
                 } else {
                     let target_span = self.resolver.ast_arena.exprs.get(target).span;
