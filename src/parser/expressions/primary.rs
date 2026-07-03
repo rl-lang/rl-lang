@@ -304,6 +304,12 @@ impl Parser {
                     if self.match_type(&[TokenType::Int, TokenType::Byte, TokenType::Float]) {
                         match self.previous() {
                             TokenType::Int => {
+                                #[cfg(feature = "debug")]
+                                log::trace!(
+                                    "alloc Integer expr (from number, cast to int): {} @ {:?}",
+                                    n,
+                                    span
+                                );
                                 return self.parse_postfix(
                                     self.ast_arena.alloc_expr(ExpressionKind::Integer(n), span),
                                     start,
@@ -311,6 +317,12 @@ impl Parser {
                             }
 
                             TokenType::Float => {
+                                #[cfg(feature = "debug")]
+                                log::trace!(
+                                    "alloc Float expr (from number, cast to float): {} @ {:?}",
+                                    n as f64,
+                                    span
+                                );
                                 return self.parse_postfix(
                                     self.ast_arena
                                         .alloc_expr(ExpressionKind::Float(n as f64), span),
@@ -319,6 +331,12 @@ impl Parser {
                             }
 
                             TokenType::Byte => {
+                                #[cfg(feature = "debug")]
+                                log::trace!(
+                                    "alloc Byte expr (from number, cast to byte): {} @ {:?}",
+                                    n as u8,
+                                    span
+                                );
                                 if !(0..=255).contains(&n) {
                                     return Err(self
                                         .err(format!("value {} is too large for byte", n), span));
@@ -343,6 +361,12 @@ impl Parser {
                 // ---- cast end ----
 
                 // no cast logic
+                #[cfg(feature = "debug")]
+                log::trace!(
+                    "alloc Integer expr (plain number literal): {} @ {:?}",
+                    n,
+                    span
+                );
                 let expr = self.ast_arena.alloc_expr(ExpressionKind::Integer(n), span);
                 return self.parse_postfix(expr, start);
             }
@@ -360,6 +384,12 @@ impl Parser {
                     if self.match_type(&[TokenType::Int, TokenType::Byte, TokenType::Float]) {
                         match self.previous() {
                             TokenType::Int => {
+                                #[cfg(feature = "debug")]
+                                log::trace!(
+                                    "alloc Integer expr (from float, cast to int): {} @ {:?}",
+                                    f as i64,
+                                    span
+                                );
                                 return self.parse_postfix(
                                     self.ast_arena
                                         .alloc_expr(ExpressionKind::Integer(f as i64), span),
@@ -368,6 +398,12 @@ impl Parser {
                             }
 
                             TokenType::Float => {
+                                #[cfg(feature = "debug")]
+                                log::trace!(
+                                    "alloc Float expr (from float, cast to float): {} @ {:?}",
+                                    f,
+                                    span
+                                );
                                 return self.parse_postfix(
                                     self.ast_arena.alloc_expr(ExpressionKind::Float(f), span),
                                     start,
@@ -375,6 +411,12 @@ impl Parser {
                             }
 
                             TokenType::Byte => {
+                                #[cfg(feature = "debug")]
+                                log::trace!(
+                                    "alloc Byte expr (from float, cast to byte): {} @ {:?}",
+                                    f as u8,
+                                    span
+                                );
                                 if !(0.0..=255.0).contains(&f) {
                                     return Err(self
                                         .err(format!("value {} is too large for byte", f), span));
@@ -399,6 +441,8 @@ impl Parser {
                 // ---- cast end ----
 
                 // no cast logic
+                #[cfg(feature = "debug")]
+                log::trace!("alloc Float expr (plain float literal): {} @ {:?}", f, span);
                 let expr = self
                     .ast_arena
                     .alloc_expr(ExpressionKind::Float(f), self.previous_span());
@@ -408,6 +452,8 @@ impl Parser {
 
         // --- byte ---
         if self.match_type(&[TokenType::ByteLiteral(0)]) {
+            #[cfg(feature = "debug")]
+            log::debug!("found number <byte>");
             let span = self.previous_span();
             if let TokenType::ByteLiteral(b) = self.previous() {
                 // ---- cast start ----
@@ -416,6 +462,12 @@ impl Parser {
                     if self.match_type(&[TokenType::Int, TokenType::Byte, TokenType::Float]) {
                         match self.previous() {
                             TokenType::Int => {
+                                #[cfg(feature = "debug")]
+                                log::trace!(
+                                    "alloc Integer expr (from byte, cast to int): {} @ {:?}",
+                                    b as i64,
+                                    span
+                                );
                                 return self.parse_postfix(
                                     self.ast_arena
                                         .alloc_expr(ExpressionKind::Integer(b as i64), span),
@@ -424,6 +476,12 @@ impl Parser {
                             }
 
                             TokenType::Float => {
+                                #[cfg(feature = "debug")]
+                                log::trace!(
+                                    "alloc Float expr (from byte, cast to float): {} @ {:?}",
+                                    b as f64,
+                                    span
+                                );
                                 return self.parse_postfix(
                                     self.ast_arena
                                         .alloc_expr(ExpressionKind::Float(b as f64), span),
@@ -434,6 +492,12 @@ impl Parser {
                             TokenType::Byte => {
                                 // while it shouldn't be possible normally
                                 // keeping it as fallback for safety
+                                #[cfg(feature = "debug")]
+                                log::trace!(
+                                    "alloc Byte expr (from byte, cast to byte): {} @ {:?}",
+                                    b,
+                                    span
+                                );
                                 if !(0..=255).contains(&b) {
                                     return Err(self
                                         .err(format!("value {} is too large for byte", b), span));
@@ -457,6 +521,8 @@ impl Parser {
                 // ---- cast end ----
 
                 // no cast logic
+                #[cfg(feature = "debug")]
+                log::trace!("alloc Byte expr (plain byte literal): {} @ {:?}", b, span);
                 let expr = self.ast_arena.alloc_expr(ExpressionKind::Byte(b), span);
                 return self.parse_postfix(expr, start);
             }
