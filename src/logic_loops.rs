@@ -79,7 +79,7 @@ pub fn eval_loop(
         .unwrap_or(std::path::Path::new(""))
         .to_path_buf();
 
-    let statements = evaluator.resolver.resolve_statements(ast, statements);
+    let statements = evaluator.resolver.resolve_program(ast, statements);
     if let Err(e) = evaluator.evaluate_program(&statements) {
         e.report_to_stderr();
         std::process::exit(1);

@@ -18,7 +18,7 @@
 use crate::{
     ast::{
         Ast,
-        nodes::{Expression, ExpressionKind},
+        nodes::ExpressionKind,
         statements::{Statement, StatementKind},
     },
     lexer::tokenizer::Tokenizer,
@@ -28,8 +28,12 @@ use crate::{
 };
 
 impl Resolver {
-    pub fn resolve_statements(&mut self, ast: Ast, statements: Vec<Statement>) -> Vec<Statement> {
+    pub fn resolve_program(&mut self, ast: Ast, statements: Vec<Statement>) -> Vec<Statement> {
         self.ast_arena = ast;
+        self.resolve_statements(statements)
+    }
+
+    pub fn resolve_statements(&mut self, statements: Vec<Statement>) -> Vec<Statement> {
         statements
             .into_iter()
             .map(|statement| self.resolve_statement(statement))
@@ -78,11 +82,15 @@ impl Resolver {
                     .map(|e| self.resolve_expression(e))
                     .collect();
                 let slot = self.declare(name.clone());
+                let value = self
+                    .ast_arena
+                    .alloc_expr(ExpressionKind::ArrayLiteral(value), span);
+
                 StatementKind::ResolvedArray {
                     name,
                     slot,
                     type_annotation,
-                    value: Expression::new(ExpressionKind::ArrayLiteral(value), span),
+                    value,
                 }
             }
             StatementKind::ConstantArray {
@@ -95,11 +103,15 @@ impl Resolver {
                     .map(|e| self.resolve_expression(e))
                     .collect();
                 let slot = self.declare(name.clone());
+                let value = self
+                    .ast_arena
+                    .alloc_expr(ExpressionKind::ArrayLiteral(value), span);
+
                 StatementKind::ResolvedConstantArray {
                     name,
                     slot,
                     type_annotation,
-                    value: Expression::new(ExpressionKind::ArrayLiteral(value), span),
+                    value,
                 }
             }
             StatementKind::FunctionDeclaration {
@@ -219,7 +231,7 @@ impl Resolver {
                 let Ok(tokens) = Tokenizer::lex(source_file.clone()) else {
                     return Statement::new(StatementKind::ImportFile { path }, span);
                 };
-                let Ok(stmts) = Parser::parse(tokens, source_file) else {
+                let Ok((imported_ast, stmts)) = Parser::parse(tokens, source_file) else {
                     return Statement::new(StatementKind::ImportFile { path }, span);
                 };
                 let imported_dir = file_path
@@ -227,7 +239,9 @@ impl Resolver {
                     .unwrap_or(std::path::Path::new(""))
                     .to_path_buf();
                 let prev_dir = std::mem::replace(&mut self.current_dir, imported_dir);
+                let prev_ast = std::mem::replace(&mut self.ast_arena, imported_ast);
                 let resolved = self.resolve_statements(stmts);
+                self.ast_arena = prev_ast;
                 self.current_dir = prev_dir;
                 StatementKind::ResolvedImportFile {
                     path,
@@ -246,7 +260,7 @@ impl Resolver {
                 let Ok(tokens) = Tokenizer::lex(source_file.clone()) else {
                     return Statement::new(StatementKind::ImportFileNamed { path, names }, span);
                 };
-                let Ok(stmts) = Parser::parse(tokens, source_file) else {
+                let Ok((imported_ast, stmts)) = Parser::parse(tokens, source_file) else {
                     return Statement::new(StatementKind::ImportFileNamed { path, names }, span);
                 };
                 let stmts: Vec<_> = stmts
@@ -265,7 +279,9 @@ impl Resolver {
                     .unwrap_or(std::path::Path::new(""))
                     .to_path_buf();
                 let prev_dir = std::mem::replace(&mut self.current_dir, imported_dir);
+                let prev_ast = std::mem::replace(&mut self.ast_arena, imported_ast);
                 let body = self.resolve_statements(stmts);
+                self.ast_arena = prev_ast;
                 self.current_dir = prev_dir;
                 StatementKind::ResolvedImportFile { path, body }
             }
