@@ -1,3 +1,4 @@
+use rl_lang::ast::statements::MatchPattern;
 use rl_lang::ast::statements::StatementKind;
 use rl_lang::ast::{ExprId, nodes::ExpressionKind};
 use rl_lang::lexer::tokentypes::TokenType;
@@ -175,6 +176,33 @@ pub fn assert_branch(
         }
         other => panic!("expected ConditionalBranch, got {:?}", other),
     }
+}
+
+/// Checks one `(MatchPattern, Vec<Statement>)` match arm. `pattern` is
+/// `None` for a wildcard (`_`) arm, or `Some((kind, span))` for a literal
+/// pattern. Body must be exactly one bare-expression statement.
+pub fn assert_match_arm(
+    arm: &(MatchPattern, Vec<Statement>),
+    ast: &Ast,
+    pattern: Option<(ExpressionKind, rl_lang::utils::span::Span)>,
+    body_expr: (
+        ExpressionKind,
+        rl_lang::utils::span::Span,
+        rl_lang::utils::span::Span,
+    ),
+) {
+    match (&arm.0, pattern) {
+        (MatchPattern::Literal(id), Some((kind, span))) => assert_expr(ast, *id, kind, span),
+        (MatchPattern::Wildcard, None) => {}
+        (got, want) => panic!(
+            "match pattern mismatch: got {:?}, expected literal-present = {}",
+            got,
+            want.is_some()
+        ),
+    }
+    assert_eq!(arm.1.len(), 1, "expected exactly one body statement in arm");
+    let (kind, expr_span, stmt_span) = body_expr;
+    assert_single_expr_stmt(&arm.1[0], ast, kind, expr_span, stmt_span);
 }
 // ---- helpers end ====
 
