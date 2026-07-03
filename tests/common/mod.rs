@@ -286,4 +286,33 @@ macro_rules! assert_for_range {
         assert_eq!(statements[0].span, $stmt_span);
     }};
 }
+
+#[macro_export]
+macro_rules! assert_array_decl {
+    (
+        $source:expr,
+        $variant:path,
+        name: $name:expr,
+        type_annotation: $ty:expr,
+        item: $item_kind:expr, $item_span:expr,
+        span: $stmt_span:expr $(,)?
+    ) => {{
+        let (ast, statements) = common::parse($source);
+        assert_eq!(statements.len(), 1, "expected exactly one statement");
+        match &statements[0].kind {
+            $variant {
+                name,
+                type_annotation,
+                value,
+            } => {
+                assert_eq!(name, $name);
+                assert_eq!(*type_annotation, $ty);
+                assert_eq!(value.len(), 1, "expected exactly one array item");
+                common::assert_expr(&ast, value[0], $item_kind, $item_span);
+            }
+            other => panic!("expected {}, got {:?}", stringify!($variant), other),
+        }
+        assert_eq!(statements[0].span, $stmt_span);
+    }};
+}
 // ---- macro end   ----
