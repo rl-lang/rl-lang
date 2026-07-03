@@ -22,7 +22,6 @@ pub mod nodes;
 pub mod statements;
 // pub mod variables;
 pub type ScopeMap = Vec<Vec<String>>;
-pub mod macros;
 
 /// Owns every `Expression` allocated during a single parse/resolve/eval
 /// session. `Statement` stays `Box`-owned for now - this migrates the
