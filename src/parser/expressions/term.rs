@@ -16,12 +16,15 @@ impl Parser {
             let operator = self.previous();
             while self.match_type(&[TokenType::Newline]) {}
             let right = self.parse_factor()?;
-            let span = left.span.join(right.span);
-            left = Expression::new(
+            let left_id = self.ast_arena.exprs.get(left);
+            let right_id = self.ast_arena.exprs.get(right);
+
+            let span = left_id.span.join(right_id.span);
+            left = self.ast_arena.alloc_expr(
                 ExpressionKind::Binary {
-                    left: Box::new(left),
+                    left,
                     operator,
-                    right: Box::new(right),
+                    right,
                 },
                 span,
             );
