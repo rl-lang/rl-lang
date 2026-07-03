@@ -33,12 +33,14 @@ impl Evaluator {
         expression: &ExprId,
         span: Span,
     ) -> Result<Vec<usize>, Error> {
-        let kind = &self.arena.exprs.get(*expression).kind.clone();
+        let v = self.arena.exprs.get(*expression);
+        let kind = &v.kind;
         match kind {
             ExpressionKind::ResolvedIdentifier { .. } => Ok(vec![]),
             ExpressionKind::Index { target, index } => {
-                let mut indices = self.get_indices_as_vec(target, span)?;
-                if let Value::Integer(i) = self.evaluate(index)? {
+                let (target, index) = (*target, *index);
+                let mut indices = self.get_indices_as_vec(&target, span)?;
+                if let Value::Integer(i) = self.evaluate(&index)? {
                     if i < 0 {
                         return Err(self.err(format!("index cannot be negative: {}", i), span));
                     }
