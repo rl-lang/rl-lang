@@ -24,13 +24,14 @@ pub fn run_pipeline(source: &str, uri: &Url) -> Vec<Diagnostic> {
         Err(e) => return vec![error_to_diagnostic(source, &e)],
     };
 
-    // --------------------------HERE!!!!!
-    let statements = match Parser::parse(tokens, file.clone()) {
+    let (ast, statements) = match Parser::parse(tokens, file.clone()) {
         Ok(s) => s,
         Err(e) => return vec![error_to_diagnostic(source, &e)],
     };
 
-    let mut checker = TypeChecker::new().with_source_file(file);
+    let mut checker = TypeChecker::new()
+        .with_source_file(file)
+        .with_ast_arena(ast);
     if let Ok(doc_path) = uri.to_file_path()
         && let Some(doc_dir) = doc_path.parent()
     {

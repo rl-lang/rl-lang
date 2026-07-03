@@ -29,9 +29,10 @@ pub fn run_hover(source: &str, position: Position, uri: &Url) -> Option<Hover> {
     // if not then return
     let token_span = find_identifier_span_at(&tokens, offset)?;
 
-    // -------------------HERE!!!
-    let statements = Parser::parse(tokens, file.clone()).ok()?;
-    let mut checker = TypeChecker::new().with_source_file(file);
+    let (ast, statements) = Parser::parse(tokens, file.clone()).ok()?;
+    let mut checker = TypeChecker::new()
+        .with_source_file(file)
+        .with_ast_arena(ast);
     if let Ok(doc_path) = uri.to_file_path()
         && let Some(doc_dir) = doc_path.parent()
     {
