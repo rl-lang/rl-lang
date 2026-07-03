@@ -1,5 +1,5 @@
 use crate::{
-    ast::nodes::{Expression, ExpressionKind},
+    ast::{ExprId, nodes::ExpressionKind},
     lexer::tokentypes::TokenType,
     parser::parser_logic::Parser,
     utils::errors::Error,
@@ -32,7 +32,7 @@ impl Parser {
     /// above forms match the current token.
     ///
     /// [`parse_postfix`]: Parser::parse_postfix
-    pub fn parse_primary(&mut self) -> Result<Expression, Error> {
+    pub fn parse_primary(&mut self) -> Result<ExprId, Error> {
         #[cfg(feature = "debug")]
         log::debug!("current index: {:?}", self.current);
         #[cfg(feature = "debug")]
@@ -44,6 +44,7 @@ impl Parser {
             #[cfg(feature = "debug")]
             log::debug!("found identifier");
             let ident_span = self.previous_span();
+
             if let TokenType::Identifier(first) = self.previous() {
                 // consume :: segments to build a module path
                 let mut path = vec![first];
@@ -57,6 +58,7 @@ impl Parser {
                 }
                 let path_span = start.join(self.previous_span());
 
+                // --- function call ---
                 if self.match_type(&[TokenType::LeftParen]) {
                     #[cfg(feature = "debug")]
                     log::debug!("found function call");
@@ -76,7 +78,17 @@ impl Parser {
                     }
                     self.match_type(&[TokenType::RightParen]);
                     let span = start.join(self.previous_span());
-                    let expr = Expression::new(ExpressionKind::Call { path, args }, span);
+                    let expr = self
+                        .ast_arena
+                        .alloc_expr(ExpressionKind::Call { path, args }, span);
+
+                    #[cfg(feature = "debug")]
+                    log::trace!(
+                        "alloc Call expr: path={:?} args={} @ {:?}",
+                        path,
+                        args.len(),
+                        span
+                    );
                     return self.parse_postfix(expr, start);
                 }
 

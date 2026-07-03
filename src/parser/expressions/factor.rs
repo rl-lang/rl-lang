@@ -1,5 +1,5 @@
 use crate::{
-    ast::nodes::{Expression, ExpressionKind},
+    ast::{ExprId, nodes::ExpressionKind},
     lexer::tokentypes::TokenType,
     parser::parser_logic::Parser,
     utils::errors::Error,
@@ -9,7 +9,7 @@ impl Parser {
     /// Parses multiplicative expressions: `*` and `/`.
     ///
     /// Left-associative: `a * b / c` is `(a * b) / c`.
-    pub fn parse_factor(&mut self) -> Result<Expression, Error> {
+    pub fn parse_factor(&mut self) -> Result<ExprId, Error> {
         let mut left = self.parse_unary()?;
         while self.match_type(&[TokenType::Star, TokenType::Slash]) {
             while self.match_type(&[TokenType::Newline]) {}

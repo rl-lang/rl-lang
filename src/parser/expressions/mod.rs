@@ -27,13 +27,13 @@ mod primary;
 mod term;
 mod unary;
 
-use crate::{ast::nodes::Expression, parser::parser_logic::Parser, utils::errors::Error};
+use crate::{ast::ExprId, parser::parser_logic::Parser, utils::errors::Error};
 
 impl Parser {
     /// Entry point for expression parsing. Delegates to [`parse_equality`].
     ///
     /// [`parse_equality`]: Parser::parse_equality
-    pub fn parse_expression(&mut self) -> Result<Expression, Error> {
+    pub fn parse_expression(&mut self) -> Result<ExprId, Error> {
         self.parse_logical()
     }
 }

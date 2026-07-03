@@ -1,5 +1,5 @@
 use crate::{
-    ast::nodes::{Expression, ExpressionKind},
+    ast::{ExprId, nodes::ExpressionKind},
     lexer::tokentypes::TokenType,
     parser::parser_logic::Parser,
     utils::errors::Error,
@@ -15,7 +15,7 @@ impl Parser {
     /// [`ExpressionKind::Binary`]. If the LHS is not a simple identifier the
     /// operator is treated as a plain binary expression (the checker will reject
     /// it later if needed).
-    pub fn parse_comparsion(&mut self) -> Result<Expression, Error> {
+    pub fn parse_comparsion(&mut self) -> Result<ExprId, Error> {
         let mut left = self.parse_term()?;
         while self.match_type(&[
             TokenType::Less,
