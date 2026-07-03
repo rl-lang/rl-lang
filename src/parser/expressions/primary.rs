@@ -101,20 +101,27 @@ impl Parser {
                 }
                 let name = path.pop().unwrap();
 
+                // --- assign expression ---
                 if self.match_type(&[TokenType::Assign]) {
                     #[cfg(feature = "debug")]
                     log::debug!("found variable assignment");
                     let value = self.parse_expression()?;
-                    let span = start.join(value.span);
-                    let expr = Expression::new(
-                        ExpressionKind::Assign {
-                            name,
-                            value: Box::new(value),
-                        },
-                        span,
+                    let value_id = self.ast_arena.exprs.get(value);
+                    let span = start.join(value_id.span);
+                    let expr = self
+                        .ast_arena
+                        .alloc_expr(ExpressionKind::Assign { name, value: value }, span);
+
+                    #[cfg(feature = "debug")]
+                    log::trace!(
+                        "alloc Assign expr: name={} value={:?} @ {:?}",
+                        name,
+                        value,
+                        span
                     );
                     return self.parse_postfix(expr, start);
                 }
+
                 if self.match_type(&[TokenType::LeftBracket]) {
                     let index = self.parse_expression()?;
                     self.match_type(&[TokenType::RightBracket]);
