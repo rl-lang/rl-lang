@@ -7,10 +7,7 @@ use crate::interpreter::stdlib::random::xoshiro::Xoshiro256;
 use crate::lexer::tokentypes::TokenType;
 use crate::resolver::Resolver;
 use crate::{
-    ast::{
-        nodes::{Expression, ExpressionKind},
-        statements::TypeAnnotation,
-    },
+    ast::{ExprId, nodes::ExpressionKind, statements::TypeAnnotation},
     interpreter::evaluator_types::addressing::{get_indices_as_vec, try_get_root_addr},
     interpreter::{
         native::{IntoNativeFn, Module},
@@ -65,6 +62,9 @@ pub struct Evaluator {
     /// The Xoshiro256** PRNG instance shared across all `std::random` calls.
     pub rng: Xoshiro256,
     /// The resolver, kept alive so import statements can resolve newly loaded files inline.
+    /// Also owns `ast_arena: Ast` - the single expression arena for this session,
+    /// shared by the resolver and evaluator alike. Never construct a second `Ast`
+    /// anywhere else; everything reads/writes through `self.resolver.ast_arena`.
     pub resolver: Resolver,
     /// Maps top-level function names to their environment slot for `call_path` shortcut.
     pub fn_names: std::collections::HashMap<String, usize>,
@@ -304,24 +304,33 @@ impl Evaluator {
         }
     }
 
-    pub fn evaluate(&mut self, expression: &Expression) -> Result<Value, Error> {
-        let value = match &expression.kind {
+    pub fn evaluate(&mut self, id: ExprId) -> Result<Value, Error> {
+        let span = self.resolver.ast_arena.exprs.get(id).span;
+        let kind = self.resolver.ast_arena.exprs.get(id).kind.clone();
+
+        #[cfg(feature = "debug")]
+        log::trace!("evaluate {:?} @ {:?}", id, span);
+
+        let value = match kind {
             ExpressionKind::Null => Value::Null,
-            ExpressionKind::Integer(i) => Value::Integer(*i),
-            ExpressionKind::Byte(b) => Value::Byte(*b),
+            ExpressionKind::Integer(i) => Value::Integer(i),
+            ExpressionKind::Byte(b) => Value::Byte(b),
             ExpressionKind::String(s) => Value::String(s.clone()),
-            ExpressionKind::Bool(b) => Value::Bool(*b),
-            ExpressionKind::Float(f) => Value::Float(*f),
-            ExpressionKind::Character(c) => Value::Char(*c),
+            ExpressionKind::Bool(b) => Value::Bool(b),
+            ExpressionKind::Float(f) => Value::Float(f),
+            ExpressionKind::Character(c) => Value::Char(c),
             ExpressionKind::Index { target, index } => {
-                if let Some((depth, slot)) = try_get_root_addr(expression) {
-                    let indices = get_indices_as_vec(expression, self, expression.span)?;
-                    self.index_read(depth, slot, &indices, expression.span)?
+                if let Some((depth, slot)) = try_get_root_addr(target, &self.resolver.ast_arena) {
+                    let indices = get_indices_as_vec(target, self, span)?;
+                    self.index_read(depth, slot, &indices, span)?
                 } else {
+                    let target_span = self.resolver.ast_arena.exprs.get(target).span;
+                    let index_span = self.resolver.ast_arena.exprs.get(index).span;
+
                     let arr = self.evaluate(target)?;
-                    self.check_not_null(&arr, target.span)?;
+                    self.check_not_null(&arr, target_span)?;
                     let idx = self.evaluate(index)?;
-                    self.check_not_null(&idx, index.span)?;
+                    self.check_not_null(&idx, index_span)?;
                     match (&arr, &idx) {
                         (Value::Values { items, .. }, Value::Integer(i)) => {
                             let i_usize = *i as usize;
@@ -329,10 +338,10 @@ impl Evaluator {
                                 return Err(self
                                     .err(
                                         format!("index {} out of bounds (len {})", i, items.len()),
-                                        expression.span,
+                                        span,
                                     )
                                     .with_label(
-                                        target.span,
+                                        target_span,
                                         format!("this array has length {}", items.len()),
                                     ));
                             }
@@ -344,10 +353,10 @@ impl Evaluator {
                                 return Err(self
                                     .err(
                                         format!("index {} out of bounds (len {})", b, items.len()),
-                                        expression.span,
+                                        span,
                                     )
                                     .with_label(
-                                        target.span,
+                                        target_span,
                                         format!("this array has length {}", items.len()),
                                     ));
                             }
@@ -364,10 +373,10 @@ impl Evaluator {
                                             i,
                                             items.len()
                                         ),
-                                        expression.span,
+                                        span,
                                     )
                                     .with_label(
-                                        target.span,
+                                        target_span,
                                         format!("this tuple has {} elements", items.len()),
                                     ));
                             }
@@ -383,10 +392,10 @@ impl Evaluator {
                                             b,
                                             items.len()
                                         ),
-                                        expression.span,
+                                        span,
                                     )
                                     .with_label(
-                                        target.span,
+                                        target_span,
                                         format!("this tuple has {} elements", items.len()),
                                     ));
                             }
@@ -394,9 +403,9 @@ impl Evaluator {
                         }
                         _ => {
                             return Err(self
-                                .err("invalid index operation", expression.span)
-                                .with_label(target.span, format!("this is {}", arr.type_name()))
-                                .with_label(index.span, format!("this is {}", idx.type_name())));
+                                .err("invalid index operation", span)
+                                .with_label(target_span, format!("this is {}", arr.type_name()))
+                                .with_label(index_span, format!("this is {}", idx.type_name())));
                         }
                     }
                 }
@@ -423,7 +432,7 @@ impl Evaluator {
                                     actual,
                                     items_type,
                                 ),
-                                expression.span,
+                                span,
                             ));
                         }
                     }
@@ -443,7 +452,7 @@ impl Evaluator {
                 target,
                 index,
                 value,
-            } => self.index_assign(target, index, value, expression.span)?,
+            } => self.index_assign(target, index, value, span)?,
             ExpressionKind::Grouping(inner) => self.evaluate(inner)?,
             ExpressionKind::Binary {
                 left,
@@ -468,6 +477,9 @@ impl Evaluator {
                     return Ok(Value::Bool(matches!(r, Value::Bool(true))));
                 }
 
+                let left_span = self.resolver.ast_arena.exprs.get(left).span;
+                let right_span = self.resolver.ast_arena.exprs.get(right).span;
+
                 let left_val = self.evaluate(left)?;
                 let right_val = self.evaluate(right)?;
                 if matches!(operator, TokenType::Compare | TokenType::BangEqual)
@@ -480,24 +492,20 @@ impl Evaluator {
                         Value::Bool(!result)
                     });
                 }
-                self.check_not_null(&left_val, left.span)?;
-                self.check_not_null(&right_val, right.span)?;
+                self.check_not_null(&left_val, left_span)?;
+                self.check_not_null(&right_val, right_span)?;
                 self.match_binary_operator(
-                    left_val,
-                    left.span,
-                    right_val,
-                    right.span,
-                    operator,
-                    expression.span,
+                    left_val, left_span, right_val, right_span, &operator, span,
                 )?
             }
             ExpressionKind::Unary { operator, operand } => {
+                let operand_span = self.resolver.ast_arena.exprs.get(operand).span;
                 let operand_val = self.evaluate(operand)?;
-                self.check_not_null(&operand_val, operand.span)?;
-                self.match_unary_operator(operand_val, operand.span, operator, expression.span)?
+                self.check_not_null(&operand_val, operand_span)?;
+                self.match_unary_operator(operand_val, operand_span, &operator, span)?
             }
             ExpressionKind::ResolvedIdentifier { depth, slot, .. } => {
-                self.get_value(*depth, *slot, expression.span)?
+                self.get_value(depth, slot, span)?
             }
             ExpressionKind::ResolvedAssign {
                 depth, slot, value, ..
@@ -505,7 +513,7 @@ impl Evaluator {
                 let val = self.evaluate(value)?;
 
                 let inferred_type = Self::infer_type(&val, false);
-                self.assign_value(*depth, *slot, val.clone(), inferred_type, expression.span)?;
+                self.assign_value(depth, slot, val.clone(), inferred_type, span)?;
                 val
             }
             ExpressionKind::Call { path, args } => {
@@ -514,7 +522,7 @@ impl Evaluator {
                     let val = self.evaluate(arg)?;
                     evaluated_args.push(val);
                 }
-                self.call_path(path, evaluated_args, expression.span)?
+                self.call_path(&path, evaluated_args, span)?
             }
 
             ExpressionKind::CallExpr { callee, args } => {
@@ -524,7 +532,7 @@ impl Evaluator {
                     let val = self.evaluate(arg)?;
                     evaluated_args.push(val);
                 }
-                self.call_value(func_val, evaluated_args, expression.span)?
+                self.call_value(func_val, evaluated_args, span)?
             }
 
             ExpressionKind::MethodCall {
@@ -538,7 +546,7 @@ impl Evaluator {
                 for arg in args {
                     evaluated_args.push(self.evaluate(arg)?);
                 }
-                self.call_path(method, evaluated_args, expression.span)?
+                self.call_path(&method, evaluated_args, span)?
             }
             ExpressionKind::ResolvedLambda {
                 params,
@@ -547,7 +555,7 @@ impl Evaluator {
                 capture_depth,
             } => {
                 let total = self.environment.len();
-                let start = if total > *capture_depth {
+                let start = if total > capture_depth {
                     total - capture_depth
                 } else {
                     0
@@ -555,24 +563,25 @@ impl Evaluator {
                 let captured_env: Vec<Vec<EnvironmentItem>> = self.environment[start..].to_vec();
 
                 Value::Function {
-                    params: Rc::new(params.clone()),
-                    body: Rc::new(body.clone()),
-                    return_type: return_type.clone(),
+                    params: Rc::new(params),
+                    body: Rc::new(body),
+                    return_type,
                     captured_env,
                 }
             }
 
             ExpressionKind::Identifier(name) => {
-                return Err(self.err(format!("undefined variable '{}'", name), expression.span));
+                return Err(self.err(format!("undefined variable '{}'", name), span));
             }
             ExpressionKind::Assign { name, .. } => {
-                return Err(self.err(format!("undefined variable '{}'", name), expression.span));
+                return Err(self.err(format!("undefined variable '{}'", name), span));
             }
 
             ExpressionKind::Cast { value, target_type } => {
+                let value_span = self.resolver.ast_arena.exprs.get(value).span;
                 let val = self.evaluate(value)?;
-                self.check_not_null(&val, value.span)?;
-                match (&val, target_type) {
+                self.check_not_null(&val, value_span)?;
+                match (&val, &target_type) {
                     (Value::Integer(n), TypeAnnotation::Float) => Value::Float(*n as f64),
                     (Value::Integer(n), TypeAnnotation::Byte) => Value::Byte(*n as u8),
                     (Value::Integer(_), TypeAnnotation::Int) => val,
@@ -590,7 +599,7 @@ impl Evaluator {
                                 val.type_name(),
                                 target_type
                             ),
-                            expression.span,
+                            span,
                         ));
                     }
                 }
@@ -606,7 +615,7 @@ impl Evaluator {
             ExpressionKind::ErrorLiteral(inner) => {
                 let val = self.evaluate(inner)?;
                 if matches!(val, Value::Error(_)) {
-                    return Err(self.err("error cannot wrap another error", expression.span));
+                    return Err(self.err("error cannot wrap another error", span));
                 }
                 Value::Error(Box::new(val))
             }

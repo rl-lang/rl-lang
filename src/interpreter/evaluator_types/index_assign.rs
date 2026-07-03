@@ -8,7 +8,7 @@
 //! structure mutably to perform the assignment, enforcing type compatibility and bounds.
 
 use crate::{
-    ast::{nodes::Expression, statements::TypeAnnotation},
+    ast::{ExprId, statements::TypeAnnotation},
     interpreter::{
         evaluator::{EnvironmentItem, Evaluator},
         evaluator_types::addressing::{get_indices_as_vec, get_root_addr},
@@ -20,14 +20,14 @@ use crate::{
 impl Evaluator {
     pub fn index_assign(
         &mut self,
-        target: &Expression,
-        index: &Expression,
-        value: &Expression,
+        target: ExprId,
+        index: ExprId,
+        value: ExprId,
         span: Span,
     ) -> Result<Value, Error> {
         let idx = self.evaluate(index)?;
         let val = self.evaluate(value)?;
-        let (depth, slot) = get_root_addr(target);
+        let (depth, slot) = get_root_addr(target, &self.resolver.ast_arena);
         let mut indices = get_indices_as_vec(target, self, span)?;
         if let Value::Integer(i) = idx {
             if i < 0 {
@@ -73,7 +73,7 @@ impl Evaluator {
                     }
                 }
                 if let Value::Values { items_type, items } = current {
-                    let val_type = Self::infer_type(&val, false);
+                    let val_type = Evaluator::infer_type(&val, false);
                     if val_type != *items_type && val_type != TypeAnnotation::Null {
                         return Err(Error::at(
                             crate::utils::errors::Reason::Interpreter,

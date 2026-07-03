@@ -1,5 +1,9 @@
+//! Helpers for resolving the "root address" (depth, slot) of an addressable
+//! expression chain (`ResolvedIdentifier`, possibly wrapped in one or more
+//! `Index` nodes), used by both index-read fast paths and index-assign.
+
 use crate::{
-    ast::nodes::{Expression, ExpressionKind},
+    ast::{Ast, ExprId, nodes::ExpressionKind},
     interpreter::{
         evaluator::{EnvironmentItem, Evaluator},
         values::Value,
@@ -7,10 +11,10 @@ use crate::{
     utils::{errors::Error, span::Span},
 };
 
-pub fn get_root_addr(expression: &Expression) -> (usize, usize) {
-    match &expression.kind {
+pub fn get_root_addr(id: ExprId, ast: &Ast) -> (usize, usize) {
+    match &ast.exprs.get(id).kind {
         ExpressionKind::ResolvedIdentifier { depth, slot, .. } => (*depth, *slot),
-        ExpressionKind::Index { target, .. } => get_root_addr(target),
+        ExpressionKind::Index { target, .. } => get_root_addr(*target, ast),
         _ => unreachable!("index_assign: unexpected root expression"),
     }
 }
@@ -19,20 +23,21 @@ pub fn get_root_addr(expression: &Expression) -> (usize, usize) {
 /// reads) where the target may not be addressable - e.g. foo()[0].
 /// Returns `None` instead of panicking so the caller can fall back to
 /// normal evaluation.
-pub fn try_get_root_addr(expression: &Expression) -> Option<(usize, usize)> {
-    match &expression.kind {
+pub fn try_get_root_addr(id: ExprId, ast: &Ast) -> Option<(usize, usize)> {
+    match &ast.exprs.get(id).kind {
         ExpressionKind::ResolvedIdentifier { depth, slot, .. } => Some((*depth, *slot)),
-        ExpressionKind::Index { target, .. } => try_get_root_addr(target),
+        ExpressionKind::Index { target, .. } => try_get_root_addr(*target, ast),
         _ => None,
     }
 }
 
 pub fn get_indices_as_vec(
-    expression: &Expression,
+    id: ExprId,
     evaluator: &mut Evaluator,
     span: Span,
 ) -> Result<Vec<usize>, Error> {
-    match &expression.kind {
+    let kind = evaluator.resolver.ast_arena.exprs.get(id).kind.clone();
+    match kind {
         ExpressionKind::ResolvedIdentifier { .. } => Ok(vec![]),
         ExpressionKind::Index { target, index } => {
             let mut indices = get_indices_as_vec(target, evaluator, span)?;
