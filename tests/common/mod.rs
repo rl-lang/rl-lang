@@ -110,6 +110,29 @@ pub fn assert_assign(
         other => panic!("expected Assign, got {:?}", other),
     }
 }
+
+/// Checks a `Return(expr)` statement. `expected` is `None` for bare `return`,
+/// or `Some((kind, span))` for `return <expr>`.
+pub fn assert_return(
+    stmt: &Statement,
+    ast: &Ast,
+    expected: Option<(ExpressionKind, rl_lang::utils::span::Span)>,
+    stmt_span: rl_lang::utils::span::Span,
+) {
+    assert_eq!(stmt.span, stmt_span);
+    match &stmt.kind {
+        StatementKind::Return(expr) => match (expr, expected) {
+            (Some(id), Some((kind, span))) => assert_expr(ast, *id, kind, span),
+            (None, None) => {}
+            (got, want) => panic!(
+                "return mismatch: got {:?}, expected present = {}",
+                got,
+                want.is_some()
+            ),
+        },
+        other => panic!("expected Return, got {:?}", other),
+    }
+}
 // ---- helpers end ====
 
 // ---- macro start ----
