@@ -25,7 +25,10 @@ pub mod structs;
 pub mod types;
 
 use crate::{
-    ast::statements::{Statement, StatementKind},
+    ast::{
+        Ast,
+        statements::{Statement, StatementKind},
+    },
     checker::structs::CheckType,
     interpreter::evaluator::Evaluator,
     utils::{
@@ -65,6 +68,7 @@ impl TypeChecker {
             base_dir: None,
             importing: Vec::new(),
             imported: HashSet::new(),
+            ast_arena: Ast::new(),
         }
     }
 
@@ -79,6 +83,10 @@ impl TypeChecker {
 
     pub fn with_base_dir(mut self, dir: impl Into<PathBuf>) -> Self {
         self.base_dir = Some(dir.into());
+        self
+    }
+    pub fn with_ast_arena(mut self, arena: Ast) -> Self {
+        self.ast_arena = arena;
         self
     }
 
