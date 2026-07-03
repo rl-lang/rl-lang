@@ -4,7 +4,7 @@
 //! the methods defined here. Nothing in this file produces AST nodes directly;
 //! it only provides the machinery for navigating the token stream.
 use crate::{
-    ast::statements::Statement,
+    ast::{Ast, statements::Statement},
     lexer::tokentypes::Token,
     utils::{
         errors::{Error, Reason},
@@ -32,6 +32,7 @@ pub struct Parser {
     pub tokens: Vec<Token>,
     /// index of the token currently being examined (the "read head")
     pub current: usize,
+    pub ast_arena: Ast,
 }
 
 impl Parser {
@@ -44,11 +45,15 @@ impl Parser {
     /// Returns the first [`Error`] encountered; parsing stops immediately.
     ///
     /// [`parse_statement_to_ast`]: Parser::parse_statement_to_ast
-    pub fn parse(tokens: Vec<Token>, source_file: SourceFile) -> Result<Vec<Statement>, Error> {
+    pub fn parse(
+        tokens: Vec<Token>,
+        source_file: SourceFile,
+    ) -> Result<(Ast, Vec<Statement>), Error> {
         let mut parser = Parser {
             source_file,
             tokens,
             current: 0,
+            ast_arena: Ast::new(),
         };
 
         #[cfg(feature = "debug")]
@@ -61,7 +66,7 @@ impl Parser {
 
         #[cfg(feature = "debug")]
         log::info!("parsing complete");
-        Ok(statements)
+        Ok((parser.ast_arena, statements))
     }
 
     /// Constructs a [`Reason::Parse`] error anchored at `span` with the source
