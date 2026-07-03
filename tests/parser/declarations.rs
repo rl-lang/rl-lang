@@ -6,27 +6,18 @@ use rl_lang::{
     utils::span::Span,
 };
 
-use crate::common;
+use crate::{assert_decl, common};
 
 #[test]
 fn dec_int() {
-    let (ast, statements) = common::parse("dec int x = 1000");
-
-    assert_eq!(statements.len(), 1);
-    let StatementKind::VariableDeclaration {
-        name,
-        type_annotation,
-        value,
-    } = &statements[0].kind
-    else {
-        panic!("expected VariableDeclaration, got {:?}", statements[0].kind)
-    };
-
-    assert_eq!(name, "x");
-    assert_eq!(*type_annotation, TypeAnnotation::Int);
-    assert_eq!(ast.exprs.get(*value).kind, ExpressionKind::Integer(1000));
-    assert_eq!(ast.exprs.get(*value).span, Span::new(12, 16));
-    assert_eq!(statements[0].span, Span::new(0, 16));
+    assert_decl!(
+        "dec int x = 1000",
+        StatementKind::VariableDeclaration,
+        name: "x",
+        type_annotation: TypeAnnotation::Int,
+        value: ExpressionKind::Integer(1000), Span::new(12, 16),
+        span: Span::new(0, 16),
+    );
 }
 
 #[test]

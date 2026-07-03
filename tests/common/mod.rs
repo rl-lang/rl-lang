@@ -22,3 +22,36 @@ pub fn eval_program(source: &str) -> Result<Evaluator, Error> {
     evaluator.evaluate_program(&stmts)?;
     Ok(evaluator)
 }
+
+// ---- macro start ----
+
+#[macro_export]
+macro_rules! assert_decl {
+    (
+        $source:expr,
+        $variant:path,
+        name: $name:expr,
+        type_annotation: $ty:expr,
+        value: $expr_kind:expr, $expr_span:expr,
+        span: $stmt_span:expr $(,)?
+    ) => {{
+        let (ast, statements) = common::parse($source);
+        assert_eq!(statements.len(), 1, "expected exactly one statement");
+        match &statements[0].kind {
+            $variant {
+                name,
+                type_annotation,
+                value,
+            } => {
+                assert_eq!(name, $name);
+                assert_eq!(*type_annotation, $ty);
+                assert_eq!(ast.exprs.get(*value).kind, $expr_kind);
+                assert_eq!(ast.exprs.get(*value).span, $expr_span);
+            }
+            other => panic!("expected {}, got {:?}", stringify!($variant), other),
+        }
+        assert_eq!(statements[0].span, $stmt_span);
+    }};
+}
+
+// ---- macro end   ----
