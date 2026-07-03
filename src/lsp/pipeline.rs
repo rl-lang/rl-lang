@@ -24,6 +24,7 @@ pub fn run_pipeline(source: &str, uri: &Url) -> Vec<Diagnostic> {
         Err(e) => return vec![error_to_diagnostic(source, &e)],
     };
 
+    // --------------------------HERE!!!!!
     let statements = match Parser::parse(tokens, file.clone()) {
         Ok(s) => s,
         Err(e) => return vec![error_to_diagnostic(source, &e)],

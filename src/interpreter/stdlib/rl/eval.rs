@@ -20,6 +20,7 @@ pub fn func(eval: &mut Evaluator, value: Value) -> Value {
         Err(e) => return verr!(vs!(e.message().to_string())),
     };
 
+    // ------------------HERE!!
     let (_file_ast, ast) = match Parser::parse(tokens, source) {
         Ok(s) => s,
         Err(e) => return verr!(vs!(e.message().to_string())),

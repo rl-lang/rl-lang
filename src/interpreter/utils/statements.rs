@@ -331,6 +331,7 @@ impl Evaluator {
                 let source_file =
                     SourceFile::new(file_path.to_string_lossy().as_ref(), source_text);
                 let tokens = Tokenizer::lex(source_file.clone())?;
+                // ---------------HERE
                 let (_file_ast, stmts) = Parser::parse(tokens, source_file.clone())?;
                 let stmts = self.resolver.resolve_statements(stmts);
 
