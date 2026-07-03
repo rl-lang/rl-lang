@@ -586,7 +586,11 @@ impl Parser {
                 return Err(self.err("expected `)` after error value", self.peek_span()));
             }
             let span = error_start.join(self.previous_span());
-            let expr = Expression::new(ExpressionKind::ErrorLiteral(Box::new(inner)), span);
+            let expr = self
+                .ast_arena
+                .alloc_expr(ExpressionKind::ErrorLiteral(inner), span);
+            #[cfg(feature = "debug")]
+            log::trace!("alloc ErrorLiteral expr: inner={:?} @ {:?}", inner, span);
             return self.parse_postfix(expr, start);
         }
 
@@ -605,8 +609,11 @@ impl Parser {
                 return Err(self.err("expected `)` after ok value", self.peek_span()));
             }
             let span = kw_span.join(self.previous_span());
+            #[cfg(feature = "debug")]
+            log::trace!("alloc OkLiteral expr: inner={:?} @ {:?}", inner, span);
             return self.parse_postfix(
-                Expression::new(ExpressionKind::OkLiteral(Box::new(inner)), span),
+                self.ast_arena
+                    .alloc_expr(ExpressionKind::OkLiteral(inner), span),
                 start,
             );
         }
@@ -625,8 +632,11 @@ impl Parser {
                 return Err(self.err("expected `)` after err value", self.peek_span()));
             }
             let span = kw_span.join(self.previous_span());
+            #[cfg(feature = "debug")]
+            log::trace!("alloc ErrLiteral expr: inner={:?} @ {:?}", inner, span);
             return self.parse_postfix(
-                Expression::new(ExpressionKind::ErrLiteral(Box::new(inner)), span),
+                self.ast_arena
+                    .alloc_expr(ExpressionKind::ErrLiteral(inner), span),
                 start,
             );
         }
