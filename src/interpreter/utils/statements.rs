@@ -24,7 +24,7 @@ impl Evaluator {
                 type_annotation,
                 ..
             } => {
-                let val = self.evaluate(value)?;
+                let val = self.evaluate(*value)?;
 
                 let val_type = Self::infer_type(&val, false);
                 if !Self::types_compatible(&val_type, type_annotation)
@@ -48,7 +48,7 @@ impl Evaluator {
                 type_annotation,
                 ..
             } => {
-                let val = self.evaluate(value)?;
+                let val = self.evaluate(*value)?;
 
                 let val_type = Self::infer_type(&val, true);
                 if !Self::types_compatible(&val_type, type_annotation)
@@ -72,7 +72,7 @@ impl Evaluator {
                 type_annotation,
                 ..
             } => {
-                let val = self.evaluate(value)?;
+                let val = self.evaluate(*value)?;
                 let val = match val {
                     Value::Values { items, .. } => {
                         for item in &items {
@@ -109,7 +109,7 @@ impl Evaluator {
                 type_annotation,
                 ..
             } => {
-                let val = self.evaluate(value)?;
+                let val = self.evaluate(*value)?;
                 let val = match val {
                     Value::Values { items, .. } => {
                         for item in &items {
@@ -141,11 +141,12 @@ impl Evaluator {
             }
 
             StatementKind::Expression(expr) => {
-                self.evaluate(expr)?;
+                self.evaluate(*expr)?;
             }
 
             StatementKind::While { condition, body } => loop {
-                let v = self.evaluate(condition)?;
+                let condition_span = self.resolver.ast_arena.exprs.get(*condition).span;
+                let v = self.evaluate(*condition)?;
                 match v {
                     Value::Bool(true) => {}
                     Value::Bool(false) => break,
@@ -153,7 +154,7 @@ impl Evaluator {
                         return Err(self
                             .err("while condition must be a bool", statement.span)
                             .with_label(
-                                condition.span,
+                                condition_span,
                                 format!("this is {}, expected bool", other.type_name()),
                             ));
                     }
@@ -191,7 +192,8 @@ impl Evaluator {
                 self.push_scope();
                 self.evaluate_statement(initializer)?;
                 loop {
-                    let v = self.evaluate(condition)?;
+                    let condition_span = self.resolver.ast_arena.exprs.get(*condition).span;
+                    let v = self.evaluate(*condition)?;
                     match v {
                         Value::Bool(true) => {}
                         Value::Bool(false) => break,
@@ -199,7 +201,7 @@ impl Evaluator {
                             return Err(self
                                 .err("for condition must be a bool", statement.span)
                                 .with_label(
-                                    condition.span,
+                                    condition_span,
                                     format!("this is {}, expected bool", other.type_name()),
                                 ));
                         }
@@ -219,7 +221,7 @@ impl Evaluator {
 
                     if self.is_continuing {
                         self.is_continuing = false;
-                        self.evaluate(increment)?;
+                        self.evaluate(*increment)?;
                         continue;
                     }
 
@@ -227,7 +229,7 @@ impl Evaluator {
                         break;
                     }
 
-                    self.evaluate(increment)?;
+                    self.evaluate(*increment)?;
                 }
                 self.pop_scope();
             }
@@ -240,7 +242,8 @@ impl Evaluator {
             } => {
                 self.evaluate_statement(initializer)?;
                 loop {
-                    let v = self.evaluate(condition)?;
+                    let condition_span = self.resolver.ast_arena.exprs.get(*condition).span;
+                    let v = self.evaluate(*condition)?;
                     match v {
                         Value::Bool(true) => {}
                         Value::Bool(false) => break,
@@ -248,7 +251,7 @@ impl Evaluator {
                             return Err(self
                                 .err("for condition must be a bool", statement.span)
                                 .with_label(
-                                    condition.span,
+                                    condition_span,
                                     format!("this is {}, expected bool", other.type_name()),
                                 ));
                         }
@@ -267,14 +270,14 @@ impl Evaluator {
                     }
                     if self.is_continuing {
                         self.is_continuing = false;
-                        self.evaluate(increment)?;
+                        self.evaluate(*increment)?;
                         continue;
                     }
                     if self.return_value.is_some() {
                         break;
                     }
 
-                    self.evaluate(increment)?;
+                    self.evaluate(*increment)?;
                 }
             }
             StatementKind::Import { names, path } => {
@@ -328,7 +331,7 @@ impl Evaluator {
                 let source_file =
                     SourceFile::new(file_path.to_string_lossy().as_ref(), source_text);
                 let tokens = Tokenizer::lex(source_file.clone())?;
-                let stmts = Parser::parse(tokens, source_file.clone())?;
+                let (_file_ast, stmts) = Parser::parse(tokens, source_file.clone())?;
                 let stmts = self.resolver.resolve_statements(stmts);
 
                 let previous_source = self.source_file.clone();
@@ -401,14 +404,15 @@ impl Evaluator {
                 body,
                 ..
             } => {
-                let arr = self.evaluate(iterable)?;
+                let iterable_span = self.resolver.ast_arena.exprs.get(*iterable).span;
+                let arr = self.evaluate(*iterable)?;
                 let items = match arr {
                     Value::Values { items, .. } => items,
                     other => {
                         return Err(self
                             .err("for-each: expected an array", statement.span)
                             .with_label(
-                                iterable.span,
+                                iterable_span,
                                 format!("this is {}, expected array", other.type_name()),
                             ));
                     }
@@ -443,7 +447,8 @@ impl Evaluator {
 
             StatementKind::ConditionalBranch { condition, body } => match condition {
                 Some(condition) => {
-                    let v = self.evaluate(condition)?;
+                    let condition_span = self.resolver.ast_arena.exprs.get(*condition).span;
+                    let v = self.evaluate(*condition)?;
                     match v {
                         Value::Bool(true) => {}
                         Value::Bool(false) => return Ok(()),
@@ -451,7 +456,7 @@ impl Evaluator {
                             return Err(self
                                 .err("condition must be a bool", statement.span)
                                 .with_label(
-                                    condition.span,
+                                    condition_span,
                                     format!("this is {}, expected bool", other.type_name()),
                                 ));
                         }
@@ -511,7 +516,7 @@ impl Evaluator {
 
             StatementKind::Return(expr) => {
                 let value = match expr {
-                    Some(e) => self.evaluate(e)?,
+                    Some(e) => self.evaluate(*e)?,
                     None => Value::Null,
                 };
 
@@ -531,7 +536,7 @@ impl Evaluator {
                 slots,
                 value,
             } => {
-                let val = self.evaluate(value)?;
+                let val = self.evaluate(*value)?;
                 let items = match val {
                     Value::Tuple(items) => items,
                     other => {
@@ -581,12 +586,12 @@ impl Evaluator {
             }
 
             StatementKind::Match { value, arms } => {
-                let val = self.evaluate(value)?;
+                let val = self.evaluate(*value)?;
                 for (pattern, body) in arms {
                     let matched = match pattern {
                         MatchPattern::Wildcard => true,
                         MatchPattern::Literal(expr) => {
-                            let pat_val = self.evaluate(expr)?;
+                            let pat_val = self.evaluate(*expr)?;
                             val == pat_val
                         }
                     };
@@ -608,7 +613,8 @@ impl Evaluator {
         match &statement.kind {
             StatementKind::ConditionalBranch { condition, body } => match condition {
                 Some(condition) => {
-                    let v = self.evaluate(condition)?;
+                    let condition_span = self.resolver.ast_arena.exprs.get(*condition).span;
+                    let v = self.evaluate(*condition)?;
                     match v {
                         Value::Bool(true) => {
                             self.push_scope();
@@ -628,7 +634,7 @@ impl Evaluator {
                         other => Err(self
                             .err("condition must be a bool", statement.span)
                             .with_label(
-                                condition.span,
+                                condition_span,
                                 format!("this is {}, expected bool", other.type_name()),
                             )),
                     }
