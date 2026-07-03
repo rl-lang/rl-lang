@@ -51,6 +51,14 @@ impl Ast {
         kind: nodes::ExpressionKind,
         span: crate::utils::span::Span,
     ) -> ExprId {
-        self.exprs.alloc(Expression { kind, span })
+        let id = self.exprs.alloc(Expression { kind, span });
+        #[cfg(feature = "debug")]
+        log::trace!(
+            "[arena {}] alloc_expr -> {:?} @ {:?}",
+            self.exprs.id(),
+            id,
+            span
+        );
+        id
     }
 }
