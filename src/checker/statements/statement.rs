@@ -483,7 +483,7 @@ impl TypeChecker {
             return;
         };
 
-        let Ok(stmts) = Parser::parse(tokens, source_file) else {
+        let Ok((imported_ast, stmts)) = Parser::parse(tokens, source_file) else {
             self.error(
                 format!(
                     "module `{}` has syntax error and could not be parsed",
@@ -495,6 +495,8 @@ impl TypeChecker {
         };
 
         self.importing.push(canonical.clone());
+
+        let prev_ast = std::mem::replace(&mut self.ast_arena, imported_ast);
 
         for stmt in &stmts {
             match &stmt.kind {
@@ -572,6 +574,7 @@ impl TypeChecker {
             }
         }
 
+        self.ast_arena = prev_ast;
         self.importing.pop();
         self.imported.insert(canonical);
     }
