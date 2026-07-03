@@ -310,7 +310,7 @@ impl Evaluator {
                     self.evaluate_statement(stmt)?;
                 }
             }
-            // require adding resolved version in resolver
+
             StatementKind::ImportFileNamed { path, names } => {
                 let import_name = format!("{}.rl", path.join("/"));
                 let file_path = if let Some(ref source_file) = self.source_file {
@@ -331,8 +331,9 @@ impl Evaluator {
                 let source_file =
                     SourceFile::new(file_path.to_string_lossy().as_ref(), source_text);
                 let tokens = Tokenizer::lex(source_file.clone())?;
-                // ---------------HERE
-                let (_file_ast, stmts) = Parser::parse(tokens, source_file.clone())?;
+
+                let (file_ast, stmts) = Parser::parse(tokens, source_file.clone())?;
+                let stmts = self.resolver.ast_arena.merge_statements(file_ast, stmts);
                 let stmts = self.resolver.resolve_statements(stmts);
 
                 let previous_source = self.source_file.clone();
@@ -346,8 +347,6 @@ impl Evaluator {
 
                 self.source_file = previous_source;
 
-                // ImportFileNamed can't filter by name anymore without a name->slot map
-                // For now merge all exported slots - named filtering requires ScopeMap
                 let _ = names; // TODO: filter by name once ScopeMap is threaded through
                 let no_scope_err = self.err("no active scope", statement.span);
                 let frame = self.environment.last_mut().ok_or(no_scope_err)?;

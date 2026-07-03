@@ -234,15 +234,17 @@ impl Resolver {
                 let Ok((imported_ast, stmts)) = Parser::parse(tokens, source_file) else {
                     return Statement::new(StatementKind::ImportFile { path }, span);
                 };
+
+                let stmts = self.ast_arena.merge_statements(imported_ast, stmts);
+
                 let imported_dir = file_path
                     .parent()
                     .unwrap_or(std::path::Path::new(""))
                     .to_path_buf();
                 let prev_dir = std::mem::replace(&mut self.current_dir, imported_dir);
-                let prev_ast = std::mem::replace(&mut self.ast_arena, imported_ast);
                 let resolved = self.resolve_statements(stmts);
-                self.ast_arena = prev_ast;
                 self.current_dir = prev_dir;
+
                 StatementKind::ResolvedImportFile {
                     path,
                     body: resolved,
@@ -274,15 +276,17 @@ impl Resolver {
                         _ => false,
                     })
                     .collect();
+
+                let stmts = self.ast_arena.merge_statements(imported_ast, stmts);
+
                 let imported_dir = file_path
                     .parent()
                     .unwrap_or(std::path::Path::new(""))
                     .to_path_buf();
                 let prev_dir = std::mem::replace(&mut self.current_dir, imported_dir);
-                let prev_ast = std::mem::replace(&mut self.ast_arena, imported_ast);
                 let body = self.resolve_statements(stmts);
-                self.ast_arena = prev_ast;
                 self.current_dir = prev_dir;
+
                 StatementKind::ResolvedImportFile { path, body }
             }
 
