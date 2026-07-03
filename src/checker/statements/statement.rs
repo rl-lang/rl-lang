@@ -22,7 +22,7 @@ impl TypeChecker {
                 type_annotation,
                 value,
             } => {
-                let value_type = self.check_expression(value);
+                let value_type = self.check_expression(*value);
                 let declared = CheckType::Known(type_annotation.clone());
 
                 if !value_type.matches(&declared) {
@@ -46,7 +46,7 @@ impl TypeChecker {
                 type_annotation,
                 value,
             } => {
-                let value_type = self.check_expression(value).into_const();
+                let value_type = self.check_expression(*value).into_const();
                 let declared = CheckType::Known(type_annotation.clone());
 
                 if !value_type.matches(&declared) {
@@ -71,7 +71,8 @@ impl TypeChecker {
                 value,
             } => {
                 for item in value {
-                    let item_type = self.check_expression(item);
+                    let item_span = self.ast_arena.exprs.get(*item).span;
+                    let item_type = self.check_expression(*item);
                     let expected = CheckType::Known(type_annotation.clone());
 
                     if !item_type.matches(&expected) {
@@ -81,7 +82,7 @@ impl TypeChecker {
                                 expected.info(),
                                 item_type.info()
                             ),
-                            item.span,
+                            item_span,
                         );
                     }
                 }
@@ -97,7 +98,8 @@ impl TypeChecker {
                 value,
             } => {
                 for item in value {
-                    let item_type = self.check_expression(item);
+                    let item_span = self.ast_arena.exprs.get(*item).span;
+                    let item_type = self.check_expression(*item);
                     let expected = CheckType::Known(type_annotation.clone());
 
                     if !item_type.matches(&expected) {
@@ -107,7 +109,7 @@ impl TypeChecker {
                                 expected.info(),
                                 item_type.info()
                             ),
-                            item.span,
+                            item_span,
                         );
                     }
                 }
@@ -120,24 +122,25 @@ impl TypeChecker {
 
             // offloads to expression checker
             StatementKind::Expression(expr) => {
-                self.check_expression(expr);
+                self.check_expression(*expr);
             }
 
             // loops checker
             StatementKind::While { condition, body } => {
                 // is condition type is bool?
-                let condition_type = self.check_expression(condition);
+                let condition_type = self.check_expression(*condition);
                 if !matches!(
                     condition_type,
                     CheckType::Known(TypeAnnotation::Bool | TypeAnnotation::CBool)
                         | CheckType::Unknown
                 ) {
+                    let condition_span = self.ast_arena.exprs.get(*condition).span;
                     self.error(
                         format!(
                             "while condition must be bool, got {}",
                             condition_type.info()
                         ),
-                        condition.span,
+                        condition_span,
                     );
                 }
                 // add loop depth
@@ -159,19 +162,20 @@ impl TypeChecker {
                 // is the initializer correct?
                 self.check_statement(initializer);
                 // is the condition bool?
-                let condition_type = self.check_expression(condition);
+                let condition_type = self.check_expression(*condition);
                 if !matches!(
                     condition_type,
                     CheckType::Known(TypeAnnotation::Bool | TypeAnnotation::CBool)
                         | CheckType::Unknown
                 ) {
+                    let condition_span = self.ast_arena.exprs.get(*condition).span;
                     self.error(
                         format!("for condition must be bool, got {}", condition_type.info()),
-                        condition.span,
+                        condition_span,
                     );
                 }
                 // is the increment correct?
-                self.check_expression(increment);
+                self.check_expression(*increment);
                 // add loop depth
                 self.enter_loop();
                 // is body correct?
@@ -218,7 +222,7 @@ impl TypeChecker {
                 body,
             } => {
                 // is the iterable correct?
-                let iter_type = self.check_expression(iterable);
+                let iter_type = self.check_expression(*iterable);
                 // is the ieterable items correct?
                 let item_type = match &iter_type {
                     CheckType::Known(TypeAnnotation::Array(inner))
@@ -227,9 +231,10 @@ impl TypeChecker {
                     }
                     CheckType::Unknown => CheckType::Unknown,
                     other => {
+                        let iterable_span = self.ast_arena.exprs.get(*iterable).span;
                         self.error(
                             format!("for-each: expected an array, got {}", other.info()),
-                            iterable.span,
+                            iterable_span,
                         );
                         CheckType::Unknown
                     }
@@ -257,15 +262,16 @@ impl TypeChecker {
                 // is there condition? or is it else?
                 if let Some(cond) = condition {
                     // is the condition bool?
-                    let condition_type = self.check_expression(cond);
+                    let condition_type = self.check_expression(*cond);
                     if !matches!(
                         condition_type,
                         CheckType::Known(TypeAnnotation::Bool | TypeAnnotation::CBool)
                             | CheckType::Unknown
                     ) {
+                        let cond_span = self.ast_arena.exprs.get(*cond).span;
                         self.error(
                             format!("condition must be bool, got {}", condition_type.info()),
-                            cond.span,
+                            cond_span,
                         );
                     }
                 }
@@ -311,7 +317,7 @@ impl TypeChecker {
             StatementKind::Return(expr) => {
                 // is the expression a valid type? otherwise null
                 let actual_type = match expr {
-                    Some(e) => self.check_expression(e),
+                    Some(e) => self.check_expression(*e),
                     None => CheckType::Known(TypeAnnotation::Null),
                 };
                 // is the actual type same as the expected return one?
@@ -357,7 +363,7 @@ impl TypeChecker {
             StatementKind::Import { .. } => {}
 
             StatementKind::DestructureDeclaration { bindings, value } => {
-                let value_type = self.check_expression(value);
+                let value_type = self.check_expression(*value);
                 let tuple_types = match &value_type {
                     CheckType::Known(
                         TypeAnnotation::Tuple(types) | TypeAnnotation::CTuple(types),
@@ -414,13 +420,14 @@ impl TypeChecker {
             }
 
             StatementKind::Match { value, arms } => {
-                let val_type = self.check_expression(value);
+                let val_type = self.check_expression(*value);
                 for (pattern, body) in arms {
                     if let MatchPattern::Literal(expr) = pattern {
-                        let pat_type = self.check_expression(expr);
+                        let pat_type = self.check_expression(*expr);
                         if !pat_type.is_unknown() && !val_type.is_unknown() && pat_type != val_type
                         {
-                            self.error("match pattern type does not match value type", expr.span);
+                            let expr_span = self.ast_arena.exprs.get(*expr).span;
+                            self.error("match pattern type does not match value type", expr_span);
                         }
                     }
                     for stmt in body {
