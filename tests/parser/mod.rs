@@ -3,5 +3,5 @@ mod declarations;
 // mod flow_if;
 // mod flow_while;
 // mod fns_lambdas;
-// mod imports;
+mod imports;
 // mod programs;

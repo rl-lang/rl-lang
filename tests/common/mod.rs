@@ -54,4 +54,13 @@ macro_rules! assert_decl {
     }};
 }
 
+#[macro_export]
+macro_rules! assert_stmt {
+    ($source:expr, $expected_kind:expr, $stmt_span:expr $(,)?) => {{
+        let (_ast, statements) = common::parse($source);
+        assert_eq!(statements.len(), 1, "expected exactly one statement");
+        assert_eq!(statements[0].kind, $expected_kind);
+        assert_eq!(statements[0].span, $stmt_span);
+    }};
+}
 // ---- macro end   ----
