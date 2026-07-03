@@ -535,7 +535,9 @@ impl Parser {
             log::debug!("found string");
             let span = self.previous_span();
             if let TokenType::StringLiteral(s) = self.previous() {
-                let expr = Expression::new(ExpressionKind::String(s), span);
+                let expr = self.ast_arena.alloc_expr(ExpressionKind::String(s), span);
+                #[cfg(feature = "debug")]
+                log::trace!("alloc String expr: {:?} @ {:?}", s, span);
                 return self.parse_postfix(expr, start);
             }
         }
@@ -550,7 +552,11 @@ impl Parser {
             log::debug!("found character");
             let span = self.previous_span();
             if let TokenType::CharacterLiteral(c) = self.previous() {
-                let expr = Expression::new(ExpressionKind::Character(c), span);
+                let expr = self
+                    .ast_arena
+                    .alloc_expr(ExpressionKind::Character(c), span);
+                #[cfg(feature = "debug")]
+                log::trace!("alloc Character expr: {:?} @ {:?}", c, span);
                 return self.parse_postfix(expr, start);
             }
         }
