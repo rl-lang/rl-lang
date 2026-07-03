@@ -20,14 +20,13 @@ pub fn func(_: &mut Evaluator, value: Value) -> Value {
         Err(e) => return verr!(vs!(e.message().to_string())),
     };
 
-    // ---------------------HERE!!!!
-    let (_file_ast, ast) = match Parser::parse(tokens, source.clone()) {
+    let (ast, statements) = match Parser::parse(tokens, source.clone()) {
         Ok(s) => s,
         Err(e) => return verr!(vs!(e.message().to_string())),
     };
 
     let mut fresh_eval = Evaluator::default().with_stdlib().with_source_file(source);
-    let resolved = fresh_eval.resolver.resolve_statements(ast);
+    let resolved = fresh_eval.resolver.resolve_program(ast, statements);
 
     fresh_eval.output_buffer = Some(String::new());
 
