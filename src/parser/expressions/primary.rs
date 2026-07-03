@@ -702,7 +702,7 @@ impl Parser {
             return self.parse_postfix(expr, start);
         }
 
-        // --- function ---
+        // --- function/lambda ---
         if self.match_type(&[TokenType::Fn]) {
             let lambda_start = self.previous_span();
             while self.match_type(&[TokenType::Newline]) {}
@@ -743,13 +743,21 @@ impl Parser {
             while self.match_type(&[TokenType::Newline]) {}
             let body = self.parse_block()?;
             let span = lambda_start.join(self.previous_span());
-            let expr = Expression::new(
+            let expr = self.ast_arena.alloc_expr(
                 ExpressionKind::Lambda {
                     params,
                     return_type,
                     body,
                 },
                 span,
+            );
+            #[cfg(feature = "debug")]
+            log::trace!(
+                "alloc Lambda expr: params={} return_type={:?} body_stmts={} @ {:?}",
+                params.len(),
+                return_type,
+                body.len(),
+                span
             );
             return self.parse_postfix(expr, start);
         }
