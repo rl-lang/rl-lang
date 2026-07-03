@@ -17,6 +17,7 @@
 
 use crate::{
     ast::{
+        Ast,
         nodes::{Expression, ExpressionKind},
         statements::{Statement, StatementKind},
     },
@@ -27,7 +28,8 @@ use crate::{
 };
 
 impl Resolver {
-    pub fn resolve_statements(&mut self, statements: Vec<Statement>) -> Vec<Statement> {
+    pub fn resolve_statements(&mut self, ast: Ast, statements: Vec<Statement>) -> Vec<Statement> {
+        self.ast_arena = ast;
         statements
             .into_iter()
             .map(|statement| self.resolve_statement(statement))
