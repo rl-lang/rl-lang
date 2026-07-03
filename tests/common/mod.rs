@@ -133,6 +133,49 @@ pub fn assert_return(
         other => panic!("expected Return, got {:?}", other),
     }
 }
+
+/// Checks a `ConditionalBranch { condition, body }` statement where the
+/// condition (if present) is a parenthesised `Grouping`, and the body is
+/// exactly one bare-expression statement.
+pub fn assert_branch(
+    stmt: &Statement,
+    ast: &Ast,
+    condition: Option<(
+        ExpressionKind,
+        rl_lang::utils::span::Span,
+        rl_lang::utils::span::Span,
+    )>,
+    body_expr: (
+        ExpressionKind,
+        rl_lang::utils::span::Span,
+        rl_lang::utils::span::Span,
+    ),
+    branch_span: rl_lang::utils::span::Span,
+) {
+    assert_eq!(stmt.span, branch_span);
+    match &stmt.kind {
+        StatementKind::ConditionalBranch {
+            condition: cond,
+            body,
+        } => {
+            match (cond, condition) {
+                (Some(id), Some((inner_kind, inner_span, group_span))) => {
+                    assert_grouping(ast, *id, inner_kind, inner_span, group_span);
+                }
+                (None, None) => {}
+                (got, want) => panic!(
+                    "condition mismatch: got present = {}, expected present = {}",
+                    got.is_some(),
+                    want.is_some()
+                ),
+            }
+            assert_eq!(body.len(), 1, "expected exactly one body statement");
+            let (kind, expr_span, stmt_span) = body_expr;
+            assert_single_expr_stmt(&body[0], ast, kind, expr_span, stmt_span);
+        }
+        other => panic!("expected ConditionalBranch, got {:?}", other),
+    }
+}
 // ---- helpers end ====
 
 // ---- macro start ----
