@@ -19,7 +19,7 @@ mod while_statement;
 
 use crate::{
     ast::{
-        nodes::{Expression, ExpressionKind},
+        nodes::ExpressionKind,
         statements::{FunctionAttribute, Statement, StatementKind},
     },
     lexer::tokentypes::TokenType,
@@ -64,7 +64,9 @@ impl Parser {
                 log::info!("found newline while parsing... skipping");
                 let span = self.previous_span();
                 Ok(Statement::new(
-                    StatementKind::Expression(Expression::new(ExpressionKind::Integer(0), span)),
+                    StatementKind::Expression(
+                        self.ast_arena.alloc_expr(ExpressionKind::Integer(0), span),
+                    ),
                     span,
                 ))
             }
@@ -153,7 +155,7 @@ impl Parser {
                 #[cfg(feature = "debug")]
                 log::info!("parsing the current tokens as expression");
                 let expr = self.parse_expression()?;
-                let span = expr.span;
+                let span = self.ast_arena.exprs.get(expr).span;
                 Ok(Statement::new(StatementKind::Expression(expr), span))
             }
         }
