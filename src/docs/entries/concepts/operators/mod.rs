@@ -1,4 +1,4 @@
-use crate::docs::entry::{ConceptEntry, DescriptionEntry};
+use crate::docs::entry::{ConceptCategory, ConceptEntry, DescriptionEntry, DescriptionKind};
 
 pub static OPERATORS: ConceptEntry = ConceptEntry {
     name: "operators",
@@ -11,6 +11,9 @@ pub static OPERATORS: ConceptEntry = ConceptEntry {
                 "dec int z = 4  * 3   // 12",
                 "dec int w = 10 / 2   // 5",
             ],
+            kind: DescriptionKind::Explanation,
+            title: None,
+            expected_output: &[],
         },
         DescriptionEntry {
             description: "comparison: `==`, `!=`, `<`, `<=`, `>`, `>=` and always return bool",
@@ -20,14 +23,23 @@ pub static OPERATORS: ConceptEntry = ConceptEntry {
                 "3 < 10    // true",
                 "10 >= 10  // true",
             ],
+            kind: DescriptionKind::Explanation,
+            title: None,
+            expected_output: &[],
         },
         DescriptionEntry {
             description: "logical: `!`",
             examples: &["!true           // false"],
+            kind: DescriptionKind::Explanation,
+            title: None,
+            expected_output: &[],
         },
         DescriptionEntry {
             description: "unary negation with `-`",
             examples: &["dec int x = 5\ndec int y = -x  // -5"],
+            kind: DescriptionKind::Explanation,
+            title: None,
+            expected_output: &[],
         },
         DescriptionEntry {
             description: "method-style call with `.` - calls a function with the value as first argument",
@@ -35,10 +47,23 @@ pub static OPERATORS: ConceptEntry = ConceptEntry {
                 "get std::str::to_upper\n\ndec string s = \"hello\"\ns.to_upper()  // \"HELLO\"",
                 "get std::array::arr_push\n\ndec arr[int] nums = [1, 2]\nnums = nums.arr_push(3)  // [1, 2, 3]",
             ],
+            kind: DescriptionKind::Explanation,
+            title: None,
+            expected_output: &[],
         },
         DescriptionEntry {
             description: "grouping with `()` controls evaluation order",
             examples: &["dec int x = (2 + 3) * 4  // 20\ndec int y = 2 + 3 * 4    // 14"],
+            kind: DescriptionKind::Explanation,
+            title: None,
+            expected_output: &[],
         },
     ],
+    summary: "",
+    category: ConceptCategory::Syntax,
+    prerequisites: &[],
+    pitfalls: &[],
+    related: &[],
+    related_stdlib: &[],
+    since: None,
 };
