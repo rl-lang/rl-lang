@@ -47,6 +47,11 @@ pub struct Evaluator {
     /// The environment stack - each frame is a scope; innermost is last.
     /// Holds only local call frames
     pub environment: Vec<Vec<EnvironmentItem>>,
+    /// Pool of previously-used, now-empty scope frames. `push_scope`/
+    /// `pop_scope` recycle through here instead of allocating a fresh
+    /// `Vec` on every function call and block entry - a hot recursive
+    /// function otherwise pays one malloc+free per call just for its frame.
+    pub scope_pool: Vec<Vec<EnvironmentItem>>,
     /// Source file for Ariadne error rendering; `None` in embedded/test contexts.
     pub source_file: Option<SourceFile>,
     /// The stdlib module tree, used for resolving `std::*` calls.
@@ -83,6 +88,7 @@ impl Evaluator {
         Self {
             globals: vec![],
             environment: vec![],
+            scope_pool: vec![],
             source_file: None,
             root_module: Module::new(""),
             return_value: None,

@@ -18,27 +18,35 @@ use crate::{
 };
 
 impl Evaluator {
-    /// Pushes a new empty scope frame onto the environment stack.
+    /// Pushes a new empty scope frame onto the scope pool stack.
     pub fn push_scope(&mut self) {
-        self.environment.push(vec![]);
+        let frame = self.scope_pool.pop().unwrap_or_default();
+        self.environment.push(frame);
     }
 
     /// Pops the innermost scope frame.
     pub fn pop_scope(&mut self) {
-        self.environment.pop();
+        if let Some(mut frame) = self.environment.pop() {
+            frame.clear();
+            self.scope_pool.push(frame);
+        }
     }
 
     fn ensure_slot(frame: &mut Vec<EnvironmentItem>, slot: usize, item: EnvironmentItem) {
-        if slot >= frame.len() {
-            frame.resize_with(slot + 1, || {
-                EnvironmentItem::PItem(PItem {
-                    value: Value::Null,
-                    type_annotation: TypeAnnotation::Null,
-                    is_const: false,
-                })
-            });
+        match slot.cmp(&frame.len()) {
+            std::cmp::Ordering::Less => frame[slot] = item,
+            std::cmp::Ordering::Equal => frame.push(item),
+            std::cmp::Ordering::Greater => {
+                frame.resize_with(slot, || {
+                    EnvironmentItem::PItem(PItem {
+                        value: Value::Null,
+                        type_annotation: TypeAnnotation::Null,
+                        is_const: false,
+                    })
+                });
+                frame.push(item);
+            }
         }
-        frame[slot] = item;
     }
 
     /// Reads the value at `(depth, slot)` in the environment.
