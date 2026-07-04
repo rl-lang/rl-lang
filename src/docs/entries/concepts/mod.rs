@@ -1,16 +1,16 @@
 //! Language concept documentation entries (variables, types, loops, etc.).
 pub mod arrays;
-pub mod byte;
-pub mod casting;
+pub mod bytes;
+pub mod casts;
 pub mod constants;
-pub mod entry;
+pub mod entries;
 pub mod errors;
-pub mod flow;
+pub mod flow_control;
 pub mod functions;
-pub mod general;
+pub mod generals;
 pub mod imports;
 pub mod lambdas;
-pub mod null;
+pub mod nulls;
 pub mod operators;
 pub mod tooling;
 pub mod tuples;
