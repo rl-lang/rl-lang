@@ -75,7 +75,7 @@ impl Evaluator {
         slot: usize,
         value: Value,
         type_annotation: TypeAnnotation,
-        span: Span,
+        _: Span,
     ) -> Result<(), Error> {
         if self.environment.is_empty() {
             Self::ensure_slot(
@@ -89,8 +89,12 @@ impl Evaluator {
             );
             return Ok(());
         }
-        let e = self.err("no active scope", span);
-        let frame = self.environment.last_mut().ok_or(e)?;
+
+        let frame = self
+            .environment
+            .last_mut()
+            .expect("checked non-empty above");
+
         Self::ensure_slot(
             frame,
             slot,
@@ -141,13 +145,18 @@ impl Evaluator {
             );
             return Ok(());
         }
-        let e = self.err("no active scope", span);
-        let frame = self.environment.last_mut().ok_or(e)?;
-        if let Some(EnvironmentItem::PItem(p)) = frame.get(slot)
+
+        if let Some(EnvironmentItem::PItem(p)) = self.environment.last().and_then(|f| f.get(slot))
             && p.is_const
         {
             return Err(self.err(format!("slot {} is already a constant", slot), span));
         }
+
+        let frame = self
+            .environment
+            .last_mut()
+            .expect("checked non-empty above");
+
         Self::ensure_slot(
             frame,
             slot,
@@ -200,8 +209,10 @@ impl Evaluator {
         span: Span,
     ) -> Result<(), Error> {
         if depth >= self.environment.len() {
-            let e2 = self.err(format!("undefined slot {} at depth {}", slot, depth), span);
-            let entry = self.globals.get_mut(slot).ok_or(e2)?;
+            if self.globals.get(slot).is_none() {
+                return Err(self.err(format!("undefined slot {} at depth {}", slot, depth), span));
+            }
+            let entry = &mut self.globals[slot];
             return match entry {
                 EnvironmentItem::PItem(p) => {
                     if p.is_const {
@@ -237,11 +248,11 @@ impl Evaluator {
             };
         }
 
-        let e = self.err(format!("no scope at depth {}", depth), span);
-        let e2 = self.err(format!("undefined slot {} at depth {}", slot, depth), span);
         let idx = self.environment.len() - 1 - depth;
-        let frame = self.environment.get_mut(idx).ok_or(e)?;
-        let entry = frame.get_mut(slot).ok_or(e2)?;
+        if slot >= self.environment[idx].len() {
+            return Err(self.err(format!("undefined slot {} at depth {}", slot, depth), span));
+        }
+        let entry = &mut self.environment[idx][slot];
         match entry {
             EnvironmentItem::PItem(p) => {
                 if p.is_const {

@@ -49,14 +49,16 @@ impl Evaluator {
         // scope, addressed via `self.globals` rather than the local frame
         // stack. See `scopes.rs` for the same convention.
         let entry: &mut EnvironmentItem = if depth >= self.environment.len() {
-            let e2 = self.err(format!("undefined slot {} at depth {}", slot, depth), span);
-            self.globals.get_mut(slot).ok_or(e2)?
+            if self.globals.get(slot).is_none() {
+                return Err(self.err(format!("undefined slot {} at depth {}", slot, depth), span));
+            }
+            &mut self.globals[slot]
         } else {
             let env_idx = self.environment.len() - 1 - depth;
-            let e = self.err(format!("no scope at depth {}", depth), span);
-            let e2 = self.err(format!("undefined slot {} at depth {}", slot, depth), span);
-            let frame = self.environment.get_mut(env_idx).ok_or(e)?;
-            frame.get_mut(slot).ok_or(e2)?
+            if slot >= self.environment[env_idx].len() {
+                return Err(self.err(format!("undefined slot {} at depth {}", slot, depth), span));
+            }
+            &mut self.environment[env_idx][slot]
         };
 
         match entry {
