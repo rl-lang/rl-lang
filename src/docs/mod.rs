@@ -15,7 +15,9 @@ pub mod entry;
 use serde::Serialize;
 use serde_json::to_string_pretty;
 
-use crate::docs::entry::{ConceptEntry, FnEntry, StdEntry};
+use crate::docs::entry::{
+    ConceptCategory, ConceptEntry, DescriptionEntry, DescriptionKind, FnEntry, StdEntry,
+};
 
 /// Searches all stdlib entries for a function whose signature starts with `fn_name(`.
 ///
@@ -43,27 +45,115 @@ pub fn find_fn_doc(
     None
 }
 
+impl ConceptCategory {
+    /// A short human-readable label used as a section tag in Markdown output.
+    fn label(&self) -> &'static str {
+        match self {
+            ConceptCategory::Syntax => "syntax",
+            ConceptCategory::Types => "types",
+            ConceptCategory::ControlFlow => "control flow",
+            ConceptCategory::Functions => "functions",
+            ConceptCategory::Modules => "modules",
+            ConceptCategory::Tooling => "tooling",
+            ConceptCategory::ErrorHandling => "error handling",
+        }
+    }
+}
+
+impl DescriptionKind {
+    /// The Markdown admonition label used to prefix a description block.
+    /// `None` for plain explanations, which render with no prefix.
+    fn label(&self) -> Option<&'static str> {
+        match self {
+            DescriptionKind::Explanation => None,
+            DescriptionKind::Syntax => Some("Syntax"),
+            DescriptionKind::Pitfall => Some("⚠ Pitfall"),
+            DescriptionKind::Note => Some("Note"),
+        }
+    }
+}
+
+/// Renders a `see_also`/`related`/`related_stdlib` list as a Markdown line,
+/// or an empty string if the list is empty.
+fn render_related(label: &str, names: &[&str], prefix: &str) -> String {
+    if names.is_empty() {
+        return String::new();
+    }
+    let links = names
+        .iter()
+        .map(|n| format!("`{}{}`", prefix, n))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("**{}:** {}\n\n", label, links)
+}
+
+/// Renders one [`DescriptionEntry`] (title, kind label, prose, examples,
+/// and expected output) into the given output buffer.
+fn render_description(output: &mut String, description: &DescriptionEntry) {
+    if let Some(title) = description.title {
+        output.push_str(&format!("#### {}\n\n", title));
+    }
+    if let Some(kind_label) = description.kind.label() {
+        output.push_str(&format!("**{}:** ", kind_label));
+    }
+    output.push_str(&format!("{}\n\n", description.description));
+
+    for (i, example) in description.examples.iter().enumerate() {
+        output.push_str(&format!("```rl\n{}\n```\n\n", example));
+        if let Some(expected) = description.expected_output.get(i) {
+            output.push_str(&format!("output:\n```text\n{}\n```\n\n", expected));
+        }
+    }
+}
+
 /// Renders all stdlib entries into a Markdown reference document.
 ///
 /// Output is structured as:
 /// ```text
 /// # rl stdlib reference
-/// ## std::<module>
+/// ## std::<module> (since v0.1.0) [unstable]
 /// ### `<signature>`
 /// <description>
+/// **Returns:** <returns>
+/// **Errors:** <errors>
 /// ```rl
 /// <example>
 /// ```
+/// output:
+/// ```text
+/// <expected_output>
+/// ```
+/// **See also:** `<see_also>`
 /// ```
 pub fn std_to_markdown(entries: &[&StdEntry]) -> String {
     let mut output = String::from("# rl stdlib reference\n\n");
     for entry in entries {
-        output.push_str(&format!("## std::{}\n\n", entry.name));
+        output.push_str(&format!("## std::{}", entry.name));
+        if let Some(since) = entry.since {
+            output.push_str(&format!(" (since {})", since));
+        }
+        if entry.unstable {
+            output.push_str(" `unstable`");
+        }
+        output.push_str("\n\n");
         output.push_str(&format!("{}\n\n", entry.description));
+
         for func in entry.functions {
-            output.push_str(&format!("### `{}`\n\n", func.signature));
+            output.push_str(&format!("### `{}`", func.signature));
+            if let Some(since) = func.since {
+                output.push_str(&format!(" (since {})", since));
+            }
+            output.push_str("\n\n");
             output.push_str(&format!("{}\n\n", func.description));
+            output.push_str(&format!("**Returns:** {}\n\n", func.returns));
+            if let Some(errors) = func.errors {
+                output.push_str(&format!("**Errors:** {}\n\n", errors));
+            }
             output.push_str(&format!("```rl\n{}\n```\n\n", func.example));
+            if let Some(expected) = func.expected_output {
+                output.push_str(&format!("output:\n```text\n{}\n```\n\n", expected));
+            }
+            output.push_str(&render_related("See also", func.see_also, ""));
         }
     }
 
@@ -74,13 +164,32 @@ pub fn std_to_markdown(entries: &[&StdEntry]) -> String {
 fn entries_to_markdown(header: &str, entries: &[&ConceptEntry]) -> String {
     let mut output = format!("# {}\n\n", header);
     for entry in entries {
-        output.push_str(&format!("## {}\n\n", entry.name));
-        for description in entry.descriptions {
-            output.push_str(&format!("{}\n\n", description.description));
-            for example in description.examples {
-                output.push_str(&format!("```rl\n{}\n```\n\n", example));
-            }
+        output.push_str(&format!("## {} ({})", entry.name, entry.category.label()));
+        if let Some(since) = entry.since {
+            output.push_str(&format!(" (since {})", since));
         }
+        output.push_str("\n\n");
+        output.push_str(&format!("{}\n\n", entry.summary));
+        output.push_str(&render_related("Prerequisites", entry.prerequisites, ""));
+
+        for description in entry.descriptions {
+            render_description(&mut output, description);
+        }
+
+        if !entry.pitfalls.is_empty() {
+            output.push_str("**Pitfalls:**\n\n");
+            for pitfall in entry.pitfalls {
+                output.push_str(&format!("- {}\n", pitfall));
+            }
+            output.push('\n');
+        }
+
+        output.push_str(&render_related("Related concepts", entry.related, ""));
+        output.push_str(&render_related(
+            "Related stdlib",
+            entry.related_stdlib,
+            "std::",
+        ));
     }
     output
 }
