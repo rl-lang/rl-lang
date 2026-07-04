@@ -1,4 +1,4 @@
-use crate::docs::entry::{ConceptEntry, DescriptionEntry};
+use crate::docs::entry::{ConceptCategory, ConceptEntry, DescriptionEntry, DescriptionKind};
 
 pub static CONSTANTS: ConceptEntry = ConceptEntry {
     name: "constants",
@@ -12,6 +12,9 @@ pub static CONSTANTS: ConceptEntry = ConceptEntry {
                 "CONST string LANG      = \"rl\"",
                 "CONST char   NEWLINE   = '\\n'",
             ],
+            kind: DescriptionKind::Explanation,
+            title: None,
+            expected_output: &[],
         },
         DescriptionEntry {
             description: "constant arrays use `CONST arr[<type>]`",
@@ -19,6 +22,16 @@ pub static CONSTANTS: ConceptEntry = ConceptEntry {
                 "CONST arr[int]    PRIMES = [2, 3, 5, 7, 11]",
                 "CONST arr[string] DAYS   = [\"sat\", \"sun\", \"mon\"]",
             ],
+            kind: DescriptionKind::Explanation,
+            title: None,
+            expected_output: &[],
         },
     ],
+    summary: "",
+    category: ConceptCategory::Syntax,
+    prerequisites: &[],
+    pitfalls: &[],
+    related: &[],
+    related_stdlib: &[],
+    since: None,
 };

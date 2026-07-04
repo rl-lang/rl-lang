@@ -1,4 +1,4 @@
-use crate::docs::entry::{ConceptEntry, DescriptionEntry};
+use crate::docs::entry::{ConceptCategory, ConceptEntry, DescriptionEntry, DescriptionKind};
 
 pub static CASTING: ConceptEntry = ConceptEntry {
     name: "casting",
@@ -11,6 +11,9 @@ pub static CASTING: ConceptEntry = ConceptEntry {
                 "dec byte  b = 200 as byte   // int -> byte",
                 "dec int   i = 3.9 as int    // float -> int (truncates: 3)",
             ],
+            kind: DescriptionKind::Explanation,
+            title: None,
+            expected_output: &[],
         },
         DescriptionEntry {
             description: "int to byte wraps on overflow (same as Rust `as u8`)",
@@ -18,6 +21,9 @@ pub static CASTING: ConceptEntry = ConceptEntry {
                 "dec byte b = 256 as byte  // 0  (wraps)",
                 "dec byte c = 300 as byte  // 44 (300 - 256)",
             ],
+            kind: DescriptionKind::Explanation,
+            title: None,
+            expected_output: &[],
         },
         DescriptionEntry {
             description: "float to int truncates toward zero",
@@ -25,6 +31,16 @@ pub static CASTING: ConceptEntry = ConceptEntry {
                 "dec int a = 3.9 as int   // 3",
                 "dec int b = -2.7 as int  // -2",
             ],
+            kind: DescriptionKind::Explanation,
+            title: None,
+            expected_output: &[],
         },
     ],
+    summary: "",
+    category: ConceptCategory::Syntax,
+    prerequisites: &[],
+    pitfalls: &[],
+    related: &[],
+    related_stdlib: &[],
+    since: None,
 };
