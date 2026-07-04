@@ -10,9 +10,9 @@ mod tutorial;
 pub fn stdlib_entries() -> Vec<&'static StdEntry> {
     vec![
         &stdlib::math::MATH,
-        &stdlib::constants::MATH_CONSTS,
+        &stdlib::math_consts::MATH_CONSTS,
         &stdlib::io::IO,
-        &stdlib::arrays::ARRAY,
+        &stdlib::array::ARRAY,
         &stdlib::str::STR,
         &stdlib::types::TYPES,
         &stdlib::path::PATH,
