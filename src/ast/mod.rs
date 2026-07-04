@@ -212,7 +212,9 @@ fn remap_stmt_kind(kind: &mut StatementKind, offset: u32, target_arena_id: u32) 
             remap_stmts(body, offset, target_arena_id);
         }
 
-        ConditionalBranch { condition, body } => {
+        ConditionalBranch {
+            condition, body, ..
+        } => {
             if let Some(id) = condition {
                 remap_id(id, offset, target_arena_id);
             }

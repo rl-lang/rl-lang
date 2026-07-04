@@ -148,6 +148,10 @@ pub enum StatementKind {
     ConditionalBranch {
         condition: Option<ExprId>,
         body: Vec<Statement>,
+        /// Precomputed by the resolver
+        /// true if `body` declares any local variable/constant
+        /// and therefore needs its own scope frame
+        needs_scope: bool,
     },
     /// A full if / else-if / else chain.
     Conditional {

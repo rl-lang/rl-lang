@@ -198,7 +198,9 @@ fn if_nested() {
         } => {
             assert_eq!(if_branch.span, Span::new(0, 37));
             match &if_branch.kind {
-                StatementKind::ConditionalBranch { condition, body } => {
+                StatementKind::ConditionalBranch {
+                    condition, body, ..
+                } => {
                     let condition = condition.expect("expected condition");
                     common::assert_grouping(
                         &ast,

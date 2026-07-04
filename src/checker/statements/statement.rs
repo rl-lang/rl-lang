@@ -258,7 +258,9 @@ impl TypeChecker {
             StatementKind::Range(_) => {}
 
             // if - else if - else
-            StatementKind::ConditionalBranch { condition, body } => {
+            StatementKind::ConditionalBranch {
+                condition, body, ..
+            } => {
                 // is there condition? or is it else?
                 if let Some(cond) = condition {
                     // is the condition bool?

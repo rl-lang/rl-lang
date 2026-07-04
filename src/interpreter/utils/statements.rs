@@ -448,7 +448,11 @@ impl Evaluator {
                 }
             }
 
-            StatementKind::ConditionalBranch { condition, body } => match condition {
+            StatementKind::ConditionalBranch {
+                condition,
+                body,
+                needs_scope,
+            } => match condition {
                 Some(condition) => {
                     let condition_span = self.resolver.ast_arena.exprs.get(*condition).span;
                     let v = self.evaluate(*condition)?;
@@ -464,14 +468,18 @@ impl Evaluator {
                                 ));
                         }
                     }
-                    self.push_scope();
+                    if *needs_scope {
+                        self.push_scope();
+                    }
                     for statement in body {
                         self.evaluate_statement(statement)?;
                         if self.return_value.is_some() || self.is_breaking || self.is_continuing {
                             break;
                         }
                     }
-                    self.pop_scope();
+                    if *needs_scope {
+                        self.pop_scope();
+                    }
                 }
                 _ => {
                     for statement in body {
@@ -614,13 +622,19 @@ impl Evaluator {
     /// branch was taken (condition was true or it was an `else`).
     fn evaluate_branch(&mut self, statement: &Statement) -> Result<bool, Error> {
         match &statement.kind {
-            StatementKind::ConditionalBranch { condition, body } => match condition {
+            StatementKind::ConditionalBranch {
+                condition,
+                body,
+                needs_scope,
+            } => match condition {
                 Some(condition) => {
                     let condition_span = self.resolver.ast_arena.exprs.get(*condition).span;
                     let v = self.evaluate(*condition)?;
                     match v {
                         Value::Bool(true) => {
-                            self.push_scope();
+                            if *needs_scope {
+                                self.push_scope();
+                            }
                             for statement in body {
                                 self.evaluate_statement(statement)?;
                                 if self.return_value.is_some()
@@ -630,7 +644,9 @@ impl Evaluator {
                                     break;
                                 }
                             }
-                            self.pop_scope();
+                            if *needs_scope {
+                                self.pop_scope();
+                            }
                             Ok(true)
                         }
                         Value::Bool(false) => Ok(false),
@@ -643,17 +659,22 @@ impl Evaluator {
                     }
                 }
                 None => {
-                    self.push_scope();
+                    if *needs_scope {
+                        self.push_scope();
+                    }
                     for statement in body {
                         self.evaluate_statement(statement)?;
                         if self.return_value.is_some() || self.is_breaking || self.is_continuing {
                             break;
                         }
                     }
-                    self.pop_scope();
+                    if *needs_scope {
+                        self.pop_scope();
+                    }
                     Ok(true)
                 }
             },
+
             StatementKind::Conditional {
                 if_branch,
                 else_branch,

@@ -158,6 +158,7 @@ pub fn assert_branch(
         StatementKind::ConditionalBranch {
             condition: cond,
             body,
+            ..
         } => {
             match (cond, condition) {
                 (Some(id), Some((inner_kind, inner_span, group_span))) => {
