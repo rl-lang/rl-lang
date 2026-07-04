@@ -25,9 +25,11 @@ pub fn func(eval: &mut Evaluator, value: Value) -> Value {
         Err(e) => return verr!(vs!(e.message().to_string())),
     };
 
+    let statements = eval.resolver.ast_arena.merge_statements(ast, statements);
+
     let mut resolver = std::mem::take(&mut eval.resolver);
     resolver.push_scope();
-    let resolved = resolver.resolve_program(ast, statements);
+    let resolved = resolver.resolve_statements(statements);
     resolver.pop_scope();
     eval.resolver = resolver;
 
