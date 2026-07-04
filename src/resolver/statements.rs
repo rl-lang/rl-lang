@@ -206,12 +206,29 @@ impl Resolver {
                     else_branch,
                 }
             }
-            StatementKind::ConditionalBranch { condition, body } => {
+            StatementKind::ConditionalBranch {
+                condition, body, ..
+            } => {
                 let condition = condition.map(|e| self.resolve_expression(e));
                 self.push_scope();
                 let body = self.resolve_statements(body);
                 self.pop_scope();
-                StatementKind::ConditionalBranch { condition, body }
+                let needs_scope = body.iter().any(|s| {
+                    matches!(
+                        s.kind,
+                        StatementKind::ResolvedVariableDeclaration { .. }
+                            | StatementKind::ResolvedConstantDeclaration { .. }
+                            | StatementKind::ResolvedArray { .. }
+                            | StatementKind::ResolvedConstantArray { .. }
+                            | StatementKind::ResolvedFunctionDeclaration { .. }
+                    )
+                });
+
+                StatementKind::ConditionalBranch {
+                    condition,
+                    body,
+                    needs_scope,
+                }
             }
             StatementKind::Return(expr) => {
                 StatementKind::Return(expr.map(|e| self.resolve_expression(e)))

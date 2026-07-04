@@ -51,6 +51,7 @@ impl Parser {
             StatementKind::ConditionalBranch {
                 condition: Some(if_condition),
                 body: if_body,
+                needs_scope: true,
             },
             if_branch_span,
         );
@@ -74,6 +75,7 @@ impl Parser {
                     StatementKind::ConditionalBranch {
                         condition: None,
                         body: else_body,
+                        needs_scope: true,
                     },
                     span,
                 )))
