@@ -9,6 +9,8 @@
 //! dec int x, string y = (1, "hi")
 //! ```
 
+use std::rc::Rc;
+
 use crate::{
     ast::statements::{Statement, StatementKind, TypeAnnotation},
     lexer::tokentypes::TokenType,
@@ -76,7 +78,7 @@ impl Parser {
                 return Ok(Statement::new(
                     StatementKind::VariableDeclaration {
                         name,
-                        type_annotation: TypeAnnotation::Tuple(types),
+                        type_annotation: TypeAnnotation::Tuple(Rc::new(types)),
                         value,
                     },
                     span,

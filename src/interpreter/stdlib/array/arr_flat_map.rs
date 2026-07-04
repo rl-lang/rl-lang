@@ -24,7 +24,7 @@ pub fn std_arr_flat_map(
             ));
         }
     };
-    if !matches!(function, Value::Function { .. }) {
+    let Value::Function(data) = &function else {
         return Err(eval.err(
             format!(
                 "arr_flat_map() expected function or lambda found {}",
@@ -32,15 +32,13 @@ pub fn std_arr_flat_map(
             ),
             span,
         ));
-    }
+    };
 
-    if let Value::Function { return_type, .. } = function.clone()
-        && !matches!(return_type, Some(TypeAnnotation::Array(_)))
-    {
+    if !matches!(data.return_type, Some(TypeAnnotation::Array(_))) {
         return Err(eval.err(
             format!(
                 "arr_flat_map() expected function or lambda with Array return type found {:?}",
-                return_type
+                data.return_type
             ),
             span,
         ));

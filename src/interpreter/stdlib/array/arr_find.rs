@@ -20,7 +20,7 @@ pub fn std_arr_find(
             ));
         }
     };
-    if !matches!(function, Value::Function { .. }) {
+    let Value::Function(data) = &function else {
         return Err(eval.err(
             format!(
                 "arr_find() expected function or lambda found {}",
@@ -28,15 +28,13 @@ pub fn std_arr_find(
             ),
             span,
         ));
-    }
+    };
 
-    if let Value::Function { return_type, .. } = function.clone()
-        && !matches!(return_type, Some(TypeAnnotation::Bool))
-    {
+    if !matches!(data.return_type, Some(TypeAnnotation::Bool)) {
         return Err(eval.err(
             format!(
                 "arr_find() expected function or lambda with Bool return type found {:?}",
-                return_type
+                data.return_type
             ),
             span,
         ));

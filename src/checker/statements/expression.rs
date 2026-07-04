@@ -1,6 +1,8 @@
 //! Expression type checking - walks every [`ExpressionKind`] variant and
 //! returns the static [`CheckType`] of the expression.
 
+use std::rc::Rc;
+
 use crate::{
     ast::{ExprId, nodes::ExpressionKind, statements::TypeAnnotation},
     checker::{TypeChecker, structs::CheckType},
@@ -274,7 +276,7 @@ impl TypeChecker {
                         Self::to_type_annotation(&t)
                     })
                     .collect();
-                CheckType::Known(TypeAnnotation::Tuple(types))
+                CheckType::Known(TypeAnnotation::Tuple(Rc::new(types)))
             }
             ExpressionKind::ErrorLiteral(inner) => {
                 let inner_type = self.check_expression(inner);

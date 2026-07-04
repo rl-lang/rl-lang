@@ -15,6 +15,8 @@
 //! bindings at the type level via separate variants (`Int` vs `CInt`, etc.).
 //!
 //! [`Resolver`]: crate::resolver
+use std::rc::Rc;
+
 use crate::ast::ExprId;
 use crate::utils::span::Span;
 
@@ -267,8 +269,8 @@ pub enum TypeAnnotation {
     /// Absence of a type - used as the default return type when none is annotated.
     Null,
 
-    Tuple(Vec<TypeAnnotation>),
-    CTuple(Vec<TypeAnnotation>),
+    Tuple(Rc<Vec<TypeAnnotation>>),
+    CTuple(Rc<Vec<TypeAnnotation>>),
 
     Error,
     CError,

@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::ast::statements::TypeAnnotation;
 use crate::interpreter::stdlib::common::vi;
 use crate::interpreter::{
@@ -30,11 +32,11 @@ pub fn func(_: &mut Evaluator, value: Value) -> Value {
         })
         .collect();
 
-    let items_type = TypeAnnotation::Tuple(vec![
+    let items_type = TypeAnnotation::Tuple(Rc::new(vec![
         TypeAnnotation::String,
         TypeAnnotation::String,
         TypeAnnotation::Int,
-    ]);
+    ]));
 
     vok!(Value::Values { items_type, items })
 }

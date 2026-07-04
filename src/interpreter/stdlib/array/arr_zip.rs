@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::ast::statements::TypeAnnotation;
 use crate::interpreter::{evaluator::Evaluator, values::Value};
 use crate::utils::errors::{Error, Reason};
@@ -39,7 +41,10 @@ pub fn std_arr_zip(_: &mut Evaluator, args: Vec<Value>, span: Span) -> Result<Va
         .collect();
 
     Ok(Value::Values {
-        items_type: TypeAnnotation::Tuple(vec![TypeAnnotation::Null, TypeAnnotation::Null]),
+        items_type: TypeAnnotation::Tuple(Rc::new(vec![
+            TypeAnnotation::Null,
+            TypeAnnotation::Null,
+        ])),
         items,
     })
 }

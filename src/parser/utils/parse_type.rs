@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::{
     ast::statements::TypeAnnotation, lexer::tokentypes::TokenType, parser::parser_logic::Parser,
     utils::errors::Error,
@@ -71,7 +73,7 @@ impl Parser {
                             );
                         }
                     }
-                    TypeAnnotation::Tuple(inner)
+                    TypeAnnotation::Tuple(Rc::new(inner))
                 }
                 TokenType::Result => {
                     self.advance();
@@ -134,7 +136,7 @@ impl Parser {
                             );
                         }
                     }
-                    TypeAnnotation::CTuple(inner)
+                    TypeAnnotation::CTuple(Rc::new(inner))
                 }
                 TokenType::Result => {
                     self.advance();

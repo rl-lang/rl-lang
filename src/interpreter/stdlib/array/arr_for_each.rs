@@ -24,7 +24,7 @@ pub fn std_arr_for_each(
             ));
         }
     };
-    if !matches!(function, Value::Function { .. }) {
+    let Value::Function(data) = &function else {
         return Err(eval.err(
             format!(
                 "arr_for_each() expected function or lambda found {}",
@@ -32,17 +32,15 @@ pub fn std_arr_for_each(
             ),
             span,
         ));
-    }
+    };
 
-    if let Value::Function { return_type, .. } = function.clone()
-        && !matches!(return_type, Some(TypeAnnotation::Null))
-    {
+    if !matches!(data.return_type, Some(TypeAnnotation::Null)) {
         return Err(eval.err(
             format!(
                 "arr_for_each() expected function or lambda with no (or null) return type found {:?}",
-                return_type
+                data.return_type
             ),
-            span
+            span,
         ));
     }
 
