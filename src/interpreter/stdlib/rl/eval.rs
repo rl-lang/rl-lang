@@ -20,13 +20,17 @@ pub fn func(eval: &mut Evaluator, value: Value) -> Value {
         Err(e) => return verr!(vs!(e.message().to_string())),
     };
 
-    let ast = match Parser::parse(tokens, source) {
+    let (ast, statements) = match Parser::parse(tokens, source) {
         Ok(s) => s,
         Err(e) => return verr!(vs!(e.message().to_string())),
     };
 
+    let statements = eval.resolver.ast_arena.merge_statements(ast, statements);
+
     let mut resolver = std::mem::take(&mut eval.resolver);
-    let resolved = resolver.resolve_statements(ast);
+    resolver.push_scope();
+    let resolved = resolver.resolve_statements(statements);
+    resolver.pop_scope();
     eval.resolver = resolver;
 
     let prev_buffer = eval.output_buffer.take();

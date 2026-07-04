@@ -17,7 +17,8 @@
 
 use crate::{
     ast::{
-        nodes::{Expression, ExpressionKind},
+        Ast,
+        nodes::ExpressionKind,
         statements::{Statement, StatementKind},
     },
     lexer::tokenizer::Tokenizer,
@@ -27,6 +28,11 @@ use crate::{
 };
 
 impl Resolver {
+    pub fn resolve_program(&mut self, ast: Ast, statements: Vec<Statement>) -> Vec<Statement> {
+        let statements = self.ast_arena.merge_statements(ast, statements);
+        self.resolve_statements(statements)
+    }
+
     pub fn resolve_statements(&mut self, statements: Vec<Statement>) -> Vec<Statement> {
         statements
             .into_iter()
@@ -76,11 +82,15 @@ impl Resolver {
                     .map(|e| self.resolve_expression(e))
                     .collect();
                 let slot = self.declare(name.clone());
+                let value = self
+                    .ast_arena
+                    .alloc_expr(ExpressionKind::ArrayLiteral(value), span);
+
                 StatementKind::ResolvedArray {
                     name,
                     slot,
                     type_annotation,
-                    value: Expression::new(ExpressionKind::ArrayLiteral(value), span),
+                    value,
                 }
             }
             StatementKind::ConstantArray {
@@ -93,11 +103,15 @@ impl Resolver {
                     .map(|e| self.resolve_expression(e))
                     .collect();
                 let slot = self.declare(name.clone());
+                let value = self
+                    .ast_arena
+                    .alloc_expr(ExpressionKind::ArrayLiteral(value), span);
+
                 StatementKind::ResolvedConstantArray {
                     name,
                     slot,
                     type_annotation,
-                    value: Expression::new(ExpressionKind::ArrayLiteral(value), span),
+                    value,
                 }
             }
             StatementKind::FunctionDeclaration {
@@ -217,9 +231,12 @@ impl Resolver {
                 let Ok(tokens) = Tokenizer::lex(source_file.clone()) else {
                     return Statement::new(StatementKind::ImportFile { path }, span);
                 };
-                let Ok(stmts) = Parser::parse(tokens, source_file) else {
+                let Ok((imported_ast, stmts)) = Parser::parse(tokens, source_file) else {
                     return Statement::new(StatementKind::ImportFile { path }, span);
                 };
+
+                let stmts = self.ast_arena.merge_statements(imported_ast, stmts);
+
                 let imported_dir = file_path
                     .parent()
                     .unwrap_or(std::path::Path::new(""))
@@ -227,6 +244,7 @@ impl Resolver {
                 let prev_dir = std::mem::replace(&mut self.current_dir, imported_dir);
                 let resolved = self.resolve_statements(stmts);
                 self.current_dir = prev_dir;
+
                 StatementKind::ResolvedImportFile {
                     path,
                     body: resolved,
@@ -244,7 +262,7 @@ impl Resolver {
                 let Ok(tokens) = Tokenizer::lex(source_file.clone()) else {
                     return Statement::new(StatementKind::ImportFileNamed { path, names }, span);
                 };
-                let Ok(stmts) = Parser::parse(tokens, source_file) else {
+                let Ok((imported_ast, stmts)) = Parser::parse(tokens, source_file) else {
                     return Statement::new(StatementKind::ImportFileNamed { path, names }, span);
                 };
                 let stmts: Vec<_> = stmts
@@ -258,6 +276,9 @@ impl Resolver {
                         _ => false,
                     })
                     .collect();
+
+                let stmts = self.ast_arena.merge_statements(imported_ast, stmts);
+
                 let imported_dir = file_path
                     .parent()
                     .unwrap_or(std::path::Path::new(""))
@@ -265,6 +286,7 @@ impl Resolver {
                 let prev_dir = std::mem::replace(&mut self.current_dir, imported_dir);
                 let body = self.resolve_statements(stmts);
                 self.current_dir = prev_dir;
+
                 StatementKind::ResolvedImportFile { path, body }
             }
 

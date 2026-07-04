@@ -1,8 +1,5 @@
 use rl_lang::{
-    ast::{
-        nodes::{Expression, ExpressionKind},
-        statements::{Statement, StatementKind},
-    },
+    ast::{nodes::ExpressionKind, statements::StatementKind},
     utils::span::Span,
 };
 
@@ -10,283 +7,261 @@ use crate::common;
 
 #[test]
 fn if_simple() {
-    let statements = common::parse("if (true) {0}");
-    let expected = Statement::new(
+    let (ast, statements) = common::parse("if (true) {0}");
+    assert_eq!(statements.len(), 1, "expected exactly one statement");
+    match &statements[0].kind {
         StatementKind::Conditional {
-            if_branch: Box::new(Statement::new(
-                StatementKind::ConditionalBranch {
-                    condition: Some(Expression::new(
-                        ExpressionKind::Grouping(Box::new(Expression::new(
-                            ExpressionKind::Bool(true),
-                            Span::new(4, 8),
-                        ))),
-                        Span::new(3, 9),
-                    )),
-                    body: vec![Statement::new(
-                        StatementKind::Expression(Expression::new(
-                            ExpressionKind::Integer(0),
-                            Span::new(11, 12),
-                        )),
-                        Span::new(11, 12),
-                    )],
-                },
+            if_branch,
+            else_branch,
+        } => {
+            common::assert_branch(
+                if_branch,
+                &ast,
+                Some((ExpressionKind::Bool(true), Span::new(4, 8), Span::new(3, 9))),
+                (
+                    ExpressionKind::Integer(0),
+                    Span::new(11, 12),
+                    Span::new(11, 12),
+                ),
                 Span::new(0, 13),
-            )),
-            else_branch: None,
-        },
-        Span::new(0, 13),
-    );
-    assert_eq!(statements, vec![expected]);
+            );
+            assert!(else_branch.is_none());
+        }
+        other => panic!("expected Conditional, got {:?}", other),
+    }
+    assert_eq!(statements[0].span, Span::new(0, 13));
 }
 
 #[test]
 fn if_else() {
-    let statements = common::parse("if (true) {1} else {0}");
-    let expected = Statement::new(
+    let (ast, statements) = common::parse("if (true) {1} else {0}");
+    assert_eq!(statements.len(), 1, "expected exactly one statement");
+    match &statements[0].kind {
         StatementKind::Conditional {
-            if_branch: Box::new(Statement::new(
-                StatementKind::ConditionalBranch {
-                    condition: Some(Expression::new(
-                        ExpressionKind::Grouping(Box::new(Expression::new(
-                            ExpressionKind::Bool(true),
-                            Span::new(4, 8),
-                        ))),
-                        Span::new(3, 9),
-                    )),
-                    body: vec![Statement::new(
-                        StatementKind::Expression(Expression::new(
-                            ExpressionKind::Integer(1),
-                            Span::new(11, 12),
-                        )),
-                        Span::new(11, 12),
-                    )],
-                },
+            if_branch,
+            else_branch,
+        } => {
+            common::assert_branch(
+                if_branch,
+                &ast,
+                Some((ExpressionKind::Bool(true), Span::new(4, 8), Span::new(3, 9))),
+                (
+                    ExpressionKind::Integer(1),
+                    Span::new(11, 12),
+                    Span::new(11, 12),
+                ),
                 Span::new(0, 13),
-            )),
-            else_branch: Some(Box::new(Statement::new(
-                StatementKind::ConditionalBranch {
-                    condition: None,
-                    body: vec![Statement::new(
-                        StatementKind::Expression(Expression::new(
-                            ExpressionKind::Integer(0),
-                            Span::new(20, 21),
-                        )),
-                        Span::new(20, 21),
-                    )],
-                },
+            );
+            let else_branch = else_branch.as_ref().expect("expected else branch");
+            common::assert_branch(
+                else_branch,
+                &ast,
+                None,
+                (
+                    ExpressionKind::Integer(0),
+                    Span::new(20, 21),
+                    Span::new(20, 21),
+                ),
                 Span::new(14, 22),
-            ))),
-        },
-        Span::new(0, 22),
-    );
-    assert_eq!(statements, vec![expected]);
+            );
+        }
+        other => panic!("expected Conditional, got {:?}", other),
+    }
+    assert_eq!(statements[0].span, Span::new(0, 22));
 }
 
 // else if is now a nested Conditional inside else_branch
-//
-// if (true) {1} else if (false) {2}
-// becomes:
-// Conditional {
-//   if_branch:   (true) => {1}
-//   else_branch: Conditional {
-//     if_branch:   (false) => {2}
-//     else_branch: None
-//   }
-// }
 #[test]
 fn if_else_if() {
-    let statements = common::parse("if (true) {1} else if (false) {2}");
-    let expected = Statement::new(
+    let (ast, statements) = common::parse("if (true) {1} else if (false) {2}");
+    assert_eq!(statements.len(), 1, "expected exactly one statement");
+    match &statements[0].kind {
         StatementKind::Conditional {
-            if_branch: Box::new(Statement::new(
-                StatementKind::ConditionalBranch {
-                    condition: Some(Expression::new(
-                        ExpressionKind::Grouping(Box::new(Expression::new(
-                            ExpressionKind::Bool(true),
-                            Span::new(4, 8),
-                        ))),
-                        Span::new(3, 9),
-                    )),
-                    body: vec![Statement::new(
-                        StatementKind::Expression(Expression::new(
-                            ExpressionKind::Integer(1),
-                            Span::new(11, 12),
-                        )),
-                        Span::new(11, 12),
-                    )],
-                },
+            if_branch,
+            else_branch,
+        } => {
+            common::assert_branch(
+                if_branch,
+                &ast,
+                Some((ExpressionKind::Bool(true), Span::new(4, 8), Span::new(3, 9))),
+                (
+                    ExpressionKind::Integer(1),
+                    Span::new(11, 12),
+                    Span::new(11, 12),
+                ),
                 Span::new(0, 13),
-            )),
-            else_branch: Some(Box::new(Statement::new(
+            );
+            let else_branch = else_branch.as_ref().expect("expected else branch");
+            assert_eq!(else_branch.span, Span::new(19, 33));
+            match &else_branch.kind {
                 StatementKind::Conditional {
-                    if_branch: Box::new(Statement::new(
-                        StatementKind::ConditionalBranch {
-                            condition: Some(Expression::new(
-                                ExpressionKind::Grouping(Box::new(Expression::new(
-                                    ExpressionKind::Bool(false),
-                                    Span::new(23, 28),
-                                ))),
-                                Span::new(22, 29),
-                            )),
-                            body: vec![Statement::new(
-                                StatementKind::Expression(Expression::new(
-                                    ExpressionKind::Integer(2),
-                                    Span::new(31, 32),
-                                )),
-                                Span::new(31, 32),
-                            )],
-                        },
+                    if_branch,
+                    else_branch,
+                } => {
+                    common::assert_branch(
+                        if_branch,
+                        &ast,
+                        Some((
+                            ExpressionKind::Bool(false),
+                            Span::new(23, 28),
+                            Span::new(22, 29),
+                        )),
+                        (
+                            ExpressionKind::Integer(2),
+                            Span::new(31, 32),
+                            Span::new(31, 32),
+                        ),
                         Span::new(19, 33),
-                    )),
-                    else_branch: None,
-                },
-                Span::new(19, 33),
-            ))),
-        },
-        Span::new(0, 33),
-    );
-    assert_eq!(statements, vec![expected]);
+                    );
+                    assert!(else_branch.is_none());
+                }
+                other => panic!("expected nested Conditional, got {:?}", other),
+            }
+        }
+        other => panic!("expected Conditional, got {:?}", other),
+    }
+    assert_eq!(statements[0].span, Span::new(0, 33));
 }
 
 #[test]
 fn if_else_if_else() {
-    let statements = common::parse("if (true) {1} else if (false) {2} else {0}");
-    let expected = Statement::new(
+    let (ast, statements) = common::parse("if (true) {1} else if (false) {2} else {0}");
+    assert_eq!(statements.len(), 1, "expected exactly one statement");
+    match &statements[0].kind {
         StatementKind::Conditional {
-            if_branch: Box::new(Statement::new(
-                StatementKind::ConditionalBranch {
-                    condition: Some(Expression::new(
-                        ExpressionKind::Grouping(Box::new(Expression::new(
-                            ExpressionKind::Bool(true),
-                            Span::new(4, 8),
-                        ))),
-                        Span::new(3, 9),
-                    )),
-                    body: vec![Statement::new(
-                        StatementKind::Expression(Expression::new(
-                            ExpressionKind::Integer(1),
-                            Span::new(11, 12),
-                        )),
-                        Span::new(11, 12),
-                    )],
-                },
+            if_branch,
+            else_branch,
+        } => {
+            common::assert_branch(
+                if_branch,
+                &ast,
+                Some((ExpressionKind::Bool(true), Span::new(4, 8), Span::new(3, 9))),
+                (
+                    ExpressionKind::Integer(1),
+                    Span::new(11, 12),
+                    Span::new(11, 12),
+                ),
                 Span::new(0, 13),
-            )),
-            else_branch: Some(Box::new(Statement::new(
+            );
+            let else_branch = else_branch.as_ref().expect("expected else branch");
+            assert_eq!(else_branch.span, Span::new(19, 42));
+            match &else_branch.kind {
                 StatementKind::Conditional {
-                    if_branch: Box::new(Statement::new(
-                        StatementKind::ConditionalBranch {
-                            condition: Some(Expression::new(
-                                ExpressionKind::Grouping(Box::new(Expression::new(
-                                    ExpressionKind::Bool(false),
-                                    Span::new(23, 28),
-                                ))),
-                                Span::new(22, 29),
-                            )),
-                            body: vec![Statement::new(
-                                StatementKind::Expression(Expression::new(
-                                    ExpressionKind::Integer(2),
-                                    Span::new(31, 32),
-                                )),
-                                Span::new(31, 32),
-                            )],
-                        },
+                    if_branch,
+                    else_branch,
+                } => {
+                    common::assert_branch(
+                        if_branch,
+                        &ast,
+                        Some((
+                            ExpressionKind::Bool(false),
+                            Span::new(23, 28),
+                            Span::new(22, 29),
+                        )),
+                        (
+                            ExpressionKind::Integer(2),
+                            Span::new(31, 32),
+                            Span::new(31, 32),
+                        ),
                         Span::new(19, 33),
-                    )),
-                    else_branch: Some(Box::new(Statement::new(
-                        StatementKind::ConditionalBranch {
-                            condition: None,
-                            body: vec![Statement::new(
-                                StatementKind::Expression(Expression::new(
-                                    ExpressionKind::Integer(0),
-                                    Span::new(40, 41),
-                                )),
-                                Span::new(40, 41),
-                            )],
-                        },
+                    );
+                    let else_branch = else_branch.as_ref().expect("expected inner else branch");
+                    common::assert_branch(
+                        else_branch,
+                        &ast,
+                        None,
+                        (
+                            ExpressionKind::Integer(0),
+                            Span::new(40, 41),
+                            Span::new(40, 41),
+                        ),
                         Span::new(34, 42),
-                    ))),
-                },
-                Span::new(19, 42),
-            ))),
-        },
-        Span::new(0, 42),
-    );
-    assert_eq!(statements, vec![expected]);
+                    );
+                }
+                other => panic!("expected nested Conditional, got {:?}", other),
+            }
+        }
+        other => panic!("expected Conditional, got {:?}", other),
+    }
+    assert_eq!(statements[0].span, Span::new(0, 42));
 }
 
 // "if (true) { if (false) {0} else {1} } else {0}"
-//  0123456789012345678901234567890123456789012345678
-//            1111111111222222222233333333334444444444
 #[test]
 fn if_nested() {
-    let statements = common::parse("if (true) { if (false) {0} else {1} } else {0}");
-    let expected = Statement::new(
+    let (ast, statements) = common::parse("if (true) { if (false) {0} else {1} } else {0}");
+    assert_eq!(statements.len(), 1, "expected exactly one statement");
+    match &statements[0].kind {
         StatementKind::Conditional {
-            if_branch: Box::new(Statement::new(
-                StatementKind::ConditionalBranch {
-                    condition: Some(Expression::new(
-                        ExpressionKind::Grouping(Box::new(Expression::new(
-                            ExpressionKind::Bool(true),
-                            Span::new(4, 8),
-                        ))),
+            if_branch,
+            else_branch,
+        } => {
+            assert_eq!(if_branch.span, Span::new(0, 37));
+            match &if_branch.kind {
+                StatementKind::ConditionalBranch { condition, body } => {
+                    let condition = condition.expect("expected condition");
+                    common::assert_grouping(
+                        &ast,
+                        condition,
+                        ExpressionKind::Bool(true),
+                        Span::new(4, 8),
                         Span::new(3, 9),
-                    )),
-                    body: vec![Statement::new(
+                    );
+                    assert_eq!(body.len(), 1, "expected exactly one body statement");
+                    assert_eq!(body[0].span, Span::new(12, 35));
+                    match &body[0].kind {
                         StatementKind::Conditional {
-                            if_branch: Box::new(Statement::new(
-                                StatementKind::ConditionalBranch {
-                                    condition: Some(Expression::new(
-                                        ExpressionKind::Grouping(Box::new(Expression::new(
-                                            ExpressionKind::Bool(false),
-                                            Span::new(16, 21),
-                                        ))),
-                                        Span::new(15, 22),
-                                    )),
-                                    body: vec![Statement::new(
-                                        StatementKind::Expression(Expression::new(
-                                            ExpressionKind::Integer(0),
-                                            Span::new(24, 25),
-                                        )),
-                                        Span::new(24, 25),
-                                    )],
-                                },
+                            if_branch,
+                            else_branch,
+                        } => {
+                            common::assert_branch(
+                                if_branch,
+                                &ast,
+                                Some((
+                                    ExpressionKind::Bool(false),
+                                    Span::new(16, 21),
+                                    Span::new(15, 22),
+                                )),
+                                (
+                                    ExpressionKind::Integer(0),
+                                    Span::new(24, 25),
+                                    Span::new(24, 25),
+                                ),
                                 Span::new(12, 26),
-                            )),
-                            else_branch: Some(Box::new(Statement::new(
-                                StatementKind::ConditionalBranch {
-                                    condition: None,
-                                    body: vec![Statement::new(
-                                        StatementKind::Expression(Expression::new(
-                                            ExpressionKind::Integer(1),
-                                            Span::new(33, 34),
-                                        )),
-                                        Span::new(33, 34),
-                                    )],
-                                },
+                            );
+                            let else_branch =
+                                else_branch.as_ref().expect("expected inner else branch");
+                            common::assert_branch(
+                                else_branch,
+                                &ast,
+                                None,
+                                (
+                                    ExpressionKind::Integer(1),
+                                    Span::new(33, 34),
+                                    Span::new(33, 34),
+                                ),
                                 Span::new(27, 35),
-                            ))),
-                        },
-                        Span::new(12, 35),
-                    )],
-                },
-                Span::new(0, 37),
-            )),
-            else_branch: Some(Box::new(Statement::new(
-                StatementKind::ConditionalBranch {
-                    condition: None,
-                    body: vec![Statement::new(
-                        StatementKind::Expression(Expression::new(
-                            ExpressionKind::Integer(0),
-                            Span::new(44, 45),
-                        )),
-                        Span::new(44, 45),
-                    )],
-                },
+                            );
+                        }
+                        other => panic!("expected inner Conditional, got {:?}", other),
+                    }
+                }
+                other => panic!("expected ConditionalBranch, got {:?}", other),
+            }
+            let else_branch = else_branch.as_ref().expect("expected outer else branch");
+            common::assert_branch(
+                else_branch,
+                &ast,
+                None,
+                (
+                    ExpressionKind::Integer(0),
+                    Span::new(44, 45),
+                    Span::new(44, 45),
+                ),
                 Span::new(38, 46),
-            ))),
-        },
-        Span::new(0, 46),
-    );
-    assert_eq!(statements, vec![expected]);
+            );
+        }
+        other => panic!("expected Conditional, got {:?}", other),
+    }
+    assert_eq!(statements[0].span, Span::new(0, 46));
 }

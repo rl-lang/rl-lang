@@ -1,13 +1,16 @@
-use crate::interpreter::{
-    evaluator::Evaluator,
-    stdlib::common::{extract_string, verr, vok, vs},
-    values::Value,
-};
 use crate::lexer::tokenizer::Tokenizer;
 use crate::parser::parser_logic::Parser;
 use crate::utils::source::SourceFile;
+use crate::{
+    checker::TypeChecker,
+    interpreter::{
+        evaluator::Evaluator,
+        stdlib::common::{extract_string, verr, vok, vs},
+        values::Value,
+    },
+};
 
-pub fn func(eval: &mut Evaluator, value: Value) -> Value {
+pub fn func(_: &mut Evaluator, value: Value) -> Value {
     let code = match extract_string(value, "check") {
         Ok(s) => s,
         Err(e) => return verr!(vs!(e)),
@@ -20,14 +23,25 @@ pub fn func(eval: &mut Evaluator, value: Value) -> Value {
         Err(e) => return verr!(vs!(e.message().to_string())),
     };
 
-    let ast = match Parser::parse(tokens, source) {
+    let (ast, statements) = match Parser::parse(tokens, source.clone()) {
         Ok(s) => s,
         Err(e) => return verr!(vs!(e.message().to_string())),
     };
 
-    let mut resolver = std::mem::take(&mut eval.resolver);
-    resolver.resolve_statements(ast);
-    eval.resolver = resolver;
+    let mut checker = TypeChecker::new()
+        .with_source_file(source)
+        .with_ast_arena(ast);
 
-    vok!(Value::Null)
+    let errors = checker.check(&statements);
+
+    if errors.is_empty() {
+        return vok!(Value::Null);
+    }
+    verr!(Value::Values {
+        items_type: crate::ast::statements::TypeAnnotation::String,
+        items: errors
+            .iter()
+            .map(|e| vs!(e.message().to_string()))
+            .collect(),
+    })
 }

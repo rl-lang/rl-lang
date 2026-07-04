@@ -12,6 +12,8 @@
 //! Function and lambda bodies are resolved in their own pushed scope.
 //! Import statements are read from disk, lexed, parsed, and resolved inline.
 
+use crate::ast::Ast;
+
 mod expressions;
 mod statements;
 
@@ -21,6 +23,7 @@ pub struct Resolver {
     /// Index in the list is the slot number; distance from the top is the depth.
     scopes: Vec<Vec<String>>,
     pub current_dir: std::path::PathBuf,
+    pub ast_arena: Ast,
 }
 
 impl Default for Resolver {
@@ -35,6 +38,7 @@ impl Resolver {
         Self {
             scopes: vec![vec![]],
             current_dir: std::path::PathBuf::new(),
+            ast_arena: Ast::new(),
         }
     }
 

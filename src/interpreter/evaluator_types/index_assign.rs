@@ -8,7 +8,7 @@
 //! structure mutably to perform the assignment, enforcing type compatibility and bounds.
 
 use crate::{
-    ast::{nodes::Expression, statements::TypeAnnotation},
+    ast::{ExprId, statements::TypeAnnotation},
     interpreter::{
         evaluator::{EnvironmentItem, Evaluator},
         evaluator_types::addressing::{get_indices_as_vec, get_root_addr},
@@ -20,14 +20,14 @@ use crate::{
 impl Evaluator {
     pub fn index_assign(
         &mut self,
-        target: &Expression,
-        index: &Expression,
-        value: &Expression,
+        target: ExprId,
+        index: ExprId,
+        value: ExprId,
         span: Span,
     ) -> Result<Value, Error> {
         let idx = self.evaluate(index)?;
         let val = self.evaluate(value)?;
-        let (depth, slot) = get_root_addr(target);
+        let (depth, slot) = get_root_addr(target, &self.resolver.ast_arena);
         let mut indices = get_indices_as_vec(target, self, span)?;
         if let Value::Integer(i) = idx {
             if i < 0 {
@@ -49,14 +49,16 @@ impl Evaluator {
         // scope, addressed via `self.globals` rather than the local frame
         // stack. See `scopes.rs` for the same convention.
         let entry: &mut EnvironmentItem = if depth >= self.environment.len() {
-            let e2 = self.err(format!("undefined slot {} at depth {}", slot, depth), span);
-            self.globals.get_mut(slot).ok_or(e2)?
+            if self.globals.get(slot).is_none() {
+                return Err(self.err(format!("undefined slot {} at depth {}", slot, depth), span));
+            }
+            &mut self.globals[slot]
         } else {
             let env_idx = self.environment.len() - 1 - depth;
-            let e = self.err(format!("no scope at depth {}", depth), span);
-            let e2 = self.err(format!("undefined slot {} at depth {}", slot, depth), span);
-            let frame = self.environment.get_mut(env_idx).ok_or(e)?;
-            frame.get_mut(slot).ok_or(e2)?
+            if slot >= self.environment[env_idx].len() {
+                return Err(self.err(format!("undefined slot {} at depth {}", slot, depth), span));
+            }
+            &mut self.environment[env_idx][slot]
         };
 
         match entry {
@@ -73,7 +75,7 @@ impl Evaluator {
                     }
                 }
                 if let Value::Values { items_type, items } = current {
-                    let val_type = Self::infer_type(&val, false);
+                    let val_type = Evaluator::infer_type(&val, false);
                     if val_type != *items_type && val_type != TypeAnnotation::Null {
                         return Err(Error::at(
                             crate::utils::errors::Reason::Interpreter,

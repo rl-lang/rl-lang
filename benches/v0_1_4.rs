@@ -127,12 +127,12 @@ fn full_pipeline(text: &str) {
         Ok(t) => t,
         Err(_) => return,
     };
-    let stmts = match Parser::parse(tokens, sf.clone()) {
+    let (ast, stmts) = match Parser::parse(tokens, sf.clone()) {
         Ok(s) => s,
         Err(_) => return,
     };
     let mut ev = Evaluator::default().with_stdlib().with_source_file(sf);
-    let stmts = ev.resolver.resolve_statements(stmts);
+    let stmts = ev.resolver.resolve_program(ast, stmts);
     let _ = ev.evaluate_program(&stmts);
 }
 

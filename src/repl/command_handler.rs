@@ -181,7 +181,7 @@ pub fn handle_command(
                             return;
                         }
                     };
-                    let stmts = match Parser::parse(tokens, source.clone()) {
+                    let (_file_ast, stmts) = match Parser::parse(tokens, source.clone()) {
                         Ok(s) => s,
                         Err(e) => {
                             push_error(output, &e);

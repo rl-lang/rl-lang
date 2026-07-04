@@ -15,7 +15,7 @@
 //! bindings at the type level via separate variants (`Int` vs `CInt`, etc.).
 //!
 //! [`Resolver`]: crate::resolver
-use crate::ast::nodes::Expression;
+use crate::ast::ExprId;
 use crate::utils::span::Span;
 
 /// A statement paired with its source span.
@@ -37,7 +37,7 @@ pub enum StatementKind {
     VariableDeclaration {
         name: String,
         type_annotation: TypeAnnotation,
-        value: Expression,
+        value: ExprId,
     },
     /// Resolver-annotated mutable variable declaration. `slot` is the index
     /// in the current environment frame.
@@ -45,32 +45,32 @@ pub enum StatementKind {
         name: String,
         slot: usize,
         type_annotation: TypeAnnotation,
-        value: Expression,
+        value: ExprId,
     },
     /// An immutable constant declaration: `const T NAME = value`.
     ConstantDeclaration {
         name: String,
         type_annotation: TypeAnnotation,
-        value: Expression,
+        value: ExprId,
     },
     /// Resolver-annotated constant declaration.
     ResolvedConstantDeclaration {
         name: String,
         slot: usize,
         type_annotation: TypeAnnotation,
-        value: Expression,
+        value: ExprId,
     },
     /// A mutable array declaration with an inline literal: `dec array[T] name = [items]`.
     Array {
         name: String,
         type_annotation: TypeAnnotation,
-        value: Vec<Expression>,
+        value: Vec<ExprId>,
     },
     /// An immutable array declaration with an inline literal: `const array[T] NAME = [items]`.
     ConstantArray {
         name: String,
         type_annotation: TypeAnnotation,
-        value: Vec<Expression>,
+        value: Vec<ExprId>,
     },
     /// Resolver-annotated mutable array declaration. `value` is the
     /// initialiser expression (may be an [`ExpressionKind::ArrayLiteral`]).
@@ -80,35 +80,35 @@ pub enum StatementKind {
         name: String,
         slot: usize,
         type_annotation: TypeAnnotation,
-        value: Expression,
+        value: ExprId,
     },
     /// Resolver-annotated constant array declaration.
     ResolvedConstantArray {
         name: String,
         slot: usize,
         type_annotation: TypeAnnotation,
-        value: Expression,
+        value: ExprId,
     },
     /// A bare expression used as a statement (e.g. a function call whose
     /// return value is discarded, or a newline placeholder).
-    Expression(Expression),
+    Expression(ExprId),
     /// A `while condition { body }` loop.
     While {
-        condition: Expression,
+        condition: ExprId,
         body: Vec<Statement>,
     },
     /// A C-style `for [init, cond, incr] { body }` loop.
     For {
         initializer: Box<Statement>,
-        condition: Expression,
-        increment: Expression,
+        condition: ExprId,
+        increment: ExprId,
         body: Vec<Statement>,
     },
     /// Resolver-annotated C-style for loop.
     ResolvedFor {
         initializer: Box<Statement>,
-        condition: Expression,
-        increment: Expression,
+        condition: ExprId,
+        increment: ExprId,
         body: Vec<Statement>,
     },
     /// A range-based `for x in N..M { body }` loop. The range is pre-evaluated
@@ -129,14 +129,14 @@ pub enum StatementKind {
     /// A foreach `for item in iterable { body }` loop over an array expression.
     ForEach {
         variable: String,
-        iterable: Expression,
+        iterable: ExprId,
         body: Vec<Statement>,
     },
     /// Resolver-annotated foreach loop.
     ResolvedForEach {
         slot: usize,
         variable: String,
-        iterable: Expression,
+        iterable: ExprId,
         body: Vec<Statement>,
     },
     /// A pre-evaluated integer range produced by the parser for `for x in N..M`.
@@ -144,7 +144,7 @@ pub enum StatementKind {
     /// A single branch of a conditional: either `if condition { body }` (`condition`
     /// is `Some`) or `else { body }` (`condition` is `None`).
     ConditionalBranch {
-        condition: Option<Expression>,
+        condition: Option<ExprId>,
         body: Vec<Statement>,
     },
     /// A full if / else-if / else chain.
@@ -172,7 +172,7 @@ pub enum StatementKind {
         attribute: Option<FunctionAttribute>,
     },
     /// A `return expr` or bare `return` statement.
-    Return(Option<Expression>),
+    Return(Option<ExprId>),
     /// Breaks out of the nearest enclosing loop.
     Break,
     /// Skips to the next iteration of the nearest enclosing loop.
@@ -199,23 +199,23 @@ pub enum StatementKind {
 
     DestructureDeclaration {
         bindings: Vec<(TypeAnnotation, String)>,
-        value: Expression,
+        value: ExprId,
     },
     ResolvedDestructureDeclaration {
         bindings: Vec<(TypeAnnotation, String)>,
         slots: Vec<usize>,
-        value: Expression,
+        value: ExprId,
     },
 
     Match {
-        value: Expression,
+        value: ExprId,
         arms: Vec<(MatchPattern, Vec<Statement>)>,
     },
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum MatchPattern {
-    Literal(Expression),
+    Literal(ExprId),
     Wildcard,
 }
 

@@ -71,7 +71,8 @@ impl Parser {
                     return Err(self.err("expected `=` after name", self.peek_span()));
                 }
                 let value = self.parse_expression()?;
-                let span = start.join(value.span);
+                let value_id = self.ast_arena.exprs.get(value);
+                let span = start.join(value_id.span);
                 return Ok(Statement::new(
                     StatementKind::VariableDeclaration {
                         name,
@@ -139,7 +140,8 @@ impl Parser {
                 }
                 while self.match_type(&[TokenType::Newline]) {}
                 let value = self.parse_expression()?;
-                let span = start.join(value.span);
+                let value_id = self.ast_arena.exprs.get(value);
+                let span = start.join(value_id.span);
                 return Ok(Statement::new(
                     StatementKind::DestructureDeclaration { bindings, value },
                     span,
@@ -151,7 +153,8 @@ impl Parser {
                 }
                 while self.match_type(&[TokenType::Newline]) {}
                 let value = self.parse_expression()?;
-                let span = start.join(value.span);
+                let value_id = self.ast_arena.exprs.get(value);
+                let span = start.join(value_id.span);
                 return Ok(Statement::new(
                     StatementKind::VariableDeclaration {
                         name: first_name,
@@ -219,7 +222,8 @@ impl Parser {
             } else {
                 while self.match_type(&[TokenType::Newline]) {}
                 let value = self.parse_expression()?;
-                let span = start.join(value.span);
+                let value_id = self.ast_arena.exprs.get(value);
+                let span = start.join(value_id.span);
                 return Ok(Statement::new(
                     StatementKind::VariableDeclaration {
                         name,
@@ -252,7 +256,8 @@ impl Parser {
 
         while self.match_type(&[TokenType::Newline]) {}
         let value = self.parse_expression()?;
-        let span = start.join(value.span);
+        let value_id = self.ast_arena.exprs.get(value);
+        let span = start.join(value_id.span);
 
         Ok(Statement::new(
             StatementKind::VariableDeclaration {

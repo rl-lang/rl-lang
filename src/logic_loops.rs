@@ -16,6 +16,8 @@
 #[cfg(feature = "debug")]
 use log::info;
 
+use crate::ast::Ast;
+
 #[cfg(feature = "eval")]
 use super::interpreter::evaluator::Evaluator;
 
@@ -40,7 +42,7 @@ pub fn lexing_loop(source: SourceFile) -> Vec<Token> {
 }
 
 /// Parses `tokens` into an AST statement list, or prints the error and exits.
-pub fn parsing_loop(source: SourceFile, tokens: Vec<Token>) -> Vec<Statement> {
+pub fn parsing_loop(source: SourceFile, tokens: Vec<Token>) -> (Ast, Vec<Statement>) {
     #[cfg(feature = "debug")]
     info!("parsing the tokens into ast tree...");
     match Parser::parse(tokens, source.clone()) {
@@ -59,7 +61,12 @@ pub fn parsing_loop(source: SourceFile, tokens: Vec<Token>) -> Vec<Statement> {
 ///
 /// [`Resolver`]: crate::resolver
 #[cfg(feature = "eval")]
-pub fn eval_loop(source: SourceFile, statements: Vec<Statement>, user_args_offset: usize) {
+pub fn eval_loop(
+    source: SourceFile,
+    ast: Ast,
+    statements: Vec<Statement>,
+    user_args_offset: usize,
+) {
     #[cfg(feature = "debug")]
     info!("evaluating the ast tree...");
     let mut evaluator = Evaluator::default()
@@ -72,7 +79,7 @@ pub fn eval_loop(source: SourceFile, statements: Vec<Statement>, user_args_offse
         .unwrap_or(std::path::Path::new(""))
         .to_path_buf();
 
-    let statements = evaluator.resolver.resolve_statements(statements);
+    let statements = evaluator.resolver.resolve_program(ast, statements);
     if let Err(e) = evaluator.evaluate_program(&statements) {
         e.report_to_stderr();
         std::process::exit(1);

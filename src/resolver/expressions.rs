@@ -11,31 +11,37 @@
 //! - `Call` with a single-segment path -> `CallExpr` with a `ResolvedIdentifier`
 //!   callee if the name is in scope; left as `Call` for stdlib paths
 //! - All other variants recurse into their sub-expressions unchanged
+//!
+//! All resolution mutates nodes in place via `ExprId` + `Arena::get_mut`.
+//! The node's `ExprId` never changes - only its `kind` does. Child `ExprId`s
+//! embedded in a parent's kind stay valid across the rewrite since resolving
+//! a child mutates the arena slot it already occupies, not its address.
 use crate::{
-    ast::nodes::{Expression, ExpressionKind},
+    ast::{ExprId, nodes::ExpressionKind},
     resolver::Resolver,
 };
 
 impl Resolver {
-    pub fn resolve_expression(&mut self, expression: Expression) -> Expression {
-        let span = expression.span;
-        let kind = match expression.kind {
-            ExpressionKind::Identifier(name) => match self.resolve_name(&name) {
-                Some((depth, slot)) => ExpressionKind::ResolvedIdentifier { name, depth, slot },
-                None => ExpressionKind::Identifier(name),
-            },
+    /// Resolves the expression at `id` in place and returns the same `id`.
+    /// The return value exists so call sites can write
+    /// `field: self.resolve_expression(field)` without changing shape.
+    pub fn resolve_expression(&mut self, id: ExprId) -> ExprId {
+        let span = self.ast_arena.exprs.get(id).span;
+        // One clone to release the immutable borrow before recursing -
+        // matches the `.kind.clone()` pattern already in evaluator.rs.
+        let kind = self.ast_arena.exprs.get(id).kind.clone();
+
+        let new_kind = match kind {
+            ExpressionKind::Identifier(name) => self.resolve_name(&name).map(|(depth, slot)| ExpressionKind::ResolvedIdentifier { name, depth, slot }),
 
             ExpressionKind::Assign { name, value } => {
-                let value = Box::new(self.resolve_expression(*value));
-                match self.resolve_name(&name) {
-                    Some((depth, slot)) => ExpressionKind::ResolvedAssign {
+                self.resolve_expression(value);
+                self.resolve_name(&name).map(|(depth, slot)| ExpressionKind::ResolvedAssign {
                         name,
                         depth,
                         slot,
                         value,
-                    },
-                    None => ExpressionKind::Assign { name, value },
-                }
+                    })
             }
 
             ExpressionKind::Lambda {
@@ -52,130 +58,115 @@ impl Resolver {
                 let body = self.resolve_statements(body);
                 self.pop_scope();
 
-                ExpressionKind::ResolvedLambda {
+                Some(ExpressionKind::ResolvedLambda {
                     params,
                     return_type,
                     body,
                     capture_depth,
-                }
+                })
             }
 
-            ExpressionKind::Binary {
-                left,
-                operator,
-                right,
-            } => ExpressionKind::Binary {
-                left: Box::new(self.resolve_expression(*left)),
-                operator,
-                right: Box::new(self.resolve_expression(*right)),
-            },
-            ExpressionKind::Unary { operator, operand } => ExpressionKind::Unary {
-                operator,
-                operand: Box::new(self.resolve_expression(*operand)),
-            },
+            ExpressionKind::Binary { left, right, .. } => {
+                self.resolve_expression(left);
+                self.resolve_expression(right);
+                None
+            }
+            ExpressionKind::Unary { operand, .. } => {
+                self.resolve_expression(operand);
+                None
+            }
 
             ExpressionKind::Grouping(inner) => {
-                ExpressionKind::Grouping(Box::new(self.resolve_expression(*inner)))
+                self.resolve_expression(inner);
+                None
             }
-            ExpressionKind::ArrayLiteral(items) => ExpressionKind::ArrayLiteral(
-                items
-                    .into_iter()
-                    .map(|item| self.resolve_expression(item))
-                    .collect(),
-            ),
+            ExpressionKind::ArrayLiteral(items) => {
+                for item in &items {
+                    self.resolve_expression(*item);
+                }
+                None
+            }
 
-            ExpressionKind::Index { target, index } => ExpressionKind::Index {
-                target: Box::new(self.resolve_expression(*target)),
-                index: Box::new(self.resolve_expression(*index)),
-            },
+            ExpressionKind::Index { target, index } => {
+                self.resolve_expression(target);
+                self.resolve_expression(index);
+                None
+            }
             ExpressionKind::IndexAssign {
                 target,
                 index,
                 value,
-            } => ExpressionKind::IndexAssign {
-                target: Box::new(self.resolve_expression(*target)),
-                index: Box::new(self.resolve_expression(*index)),
-                value: Box::new(self.resolve_expression(*value)),
-            },
+            } => {
+                self.resolve_expression(target);
+                self.resolve_expression(index);
+                self.resolve_expression(value);
+                None
+            }
 
             ExpressionKind::Call { path, args } => {
-                let args = args
-                    .into_iter()
-                    .map(|e| self.resolve_expression(e))
-                    .collect();
+                for arg in &args {
+                    self.resolve_expression(*arg);
+                }
                 if path.len() == 1
                     && let Some((depth, slot)) = self.resolve_name(&path[0])
                 {
-                    return Expression::new(
-                        ExpressionKind::CallExpr {
-                            callee: Box::new(Expression::new(
-                                ExpressionKind::ResolvedIdentifier {
-                                    name: path[0].clone(),
-                                    depth,
-                                    slot,
-                                },
-                                span,
-                            )),
-                            args,
+                    let callee = self.ast_arena.alloc_expr(
+                        ExpressionKind::ResolvedIdentifier {
+                            name: path[0].clone(),
+                            depth,
+                            slot,
                         },
                         span,
                     );
+                    Some(ExpressionKind::CallExpr { callee, args })
+                } else {
+                    // stdlib path - leave as Call
+                    None
                 }
-                // stdlib path - leave as Call
-                ExpressionKind::Call { path, args }
             }
-            ExpressionKind::CallExpr { callee, args } => ExpressionKind::CallExpr {
-                callee: Box::new(self.resolve_expression(*callee)),
-                args: args
-                    .into_iter()
-                    .map(|arg| self.resolve_expression(arg))
-                    .collect(),
-            },
-
-            ExpressionKind::MethodCall {
-                caller,
-                method,
-                args,
-            } => ExpressionKind::MethodCall {
-                caller: Box::new(self.resolve_expression(*caller)),
-                method,
-                args: args
-                    .into_iter()
-                    .map(|arg| self.resolve_expression(arg))
-                    .collect(),
-            },
-
-            ExpressionKind::Cast { value, target_type } => ExpressionKind::Cast {
-                value: Box::new(self.resolve_expression(*value)),
-                target_type,
-            },
-
-            ExpressionKind::ErrorLiteral(inner) => {
-                ExpressionKind::ErrorLiteral(Box::new(self.resolve_expression(*inner)))
+            ExpressionKind::CallExpr { callee, args } => {
+                self.resolve_expression(callee);
+                for arg in &args {
+                    self.resolve_expression(*arg);
+                }
+                None
             }
 
-            ExpressionKind::TupleLiteral(items) => ExpressionKind::TupleLiteral(
-                items
-                    .into_iter()
-                    .map(|e| self.resolve_expression(e))
-                    .collect(),
-            ),
-
-            ExpressionKind::OkLiteral(inner) => {
-                ExpressionKind::OkLiteral(Box::new(self.resolve_expression(*inner)))
+            ExpressionKind::MethodCall { caller, args, .. } => {
+                self.resolve_expression(caller);
+                for arg in &args {
+                    self.resolve_expression(*arg);
+                }
+                None
             }
 
-            ExpressionKind::ErrLiteral(inner) => {
-                ExpressionKind::ErrLiteral(Box::new(self.resolve_expression(*inner)))
+            ExpressionKind::Cast { value, .. } => {
+                self.resolve_expression(value);
+                None
             }
 
-            ExpressionKind::Propagate(inner) => {
-                ExpressionKind::Propagate(Box::new(self.resolve_expression(*inner)))
+            ExpressionKind::ErrorLiteral(inner)
+            | ExpressionKind::OkLiteral(inner)
+            | ExpressionKind::ErrLiteral(inner)
+            | ExpressionKind::Propagate(inner) => {
+                self.resolve_expression(inner);
+                None
             }
 
-            other => other,
+            ExpressionKind::TupleLiteral(items) => {
+                for item in &items {
+                    self.resolve_expression(*item);
+                }
+                None
+            }
+
+            _ => None,
         };
 
-        Expression::new(kind, span)
+        if let Some(new_kind) = new_kind {
+            self.ast_arena.exprs.get_mut(id).kind = new_kind;
+        }
+
+        id
     }
 }

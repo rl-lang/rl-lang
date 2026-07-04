@@ -7,10 +7,7 @@ use crate::interpreter::stdlib::random::xoshiro::Xoshiro256;
 use crate::lexer::tokentypes::TokenType;
 use crate::resolver::Resolver;
 use crate::{
-    ast::{
-        nodes::{Expression, ExpressionKind},
-        statements::TypeAnnotation,
-    },
+    ast::{ExprId, nodes::ExpressionKind, statements::TypeAnnotation},
     interpreter::evaluator_types::addressing::{get_indices_as_vec, try_get_root_addr},
     interpreter::{
         native::{IntoNativeFn, Module},
@@ -50,6 +47,11 @@ pub struct Evaluator {
     /// The environment stack - each frame is a scope; innermost is last.
     /// Holds only local call frames
     pub environment: Vec<Vec<EnvironmentItem>>,
+    /// Pool of previously-used, now-empty scope frames. `push_scope`/
+    /// `pop_scope` recycle through here instead of allocating a fresh
+    /// `Vec` on every function call and block entry - a hot recursive
+    /// function otherwise pays one malloc+free per call just for its frame.
+    pub scope_pool: Vec<Vec<EnvironmentItem>>,
     /// Source file for Ariadne error rendering; `None` in embedded/test contexts.
     pub source_file: Option<SourceFile>,
     /// The stdlib module tree, used for resolving `std::*` calls.
@@ -65,6 +67,9 @@ pub struct Evaluator {
     /// The Xoshiro256** PRNG instance shared across all `std::random` calls.
     pub rng: Xoshiro256,
     /// The resolver, kept alive so import statements can resolve newly loaded files inline.
+    /// Also owns `ast_arena: Ast` - the single expression arena for this session,
+    /// shared by the resolver and evaluator alike. Never construct a second `Ast`
+    /// anywhere else; everything reads/writes through `self.resolver.ast_arena`.
     pub resolver: Resolver,
     /// Maps top-level function names to their environment slot for `call_path` shortcut.
     pub fn_names: std::collections::HashMap<String, usize>,
@@ -83,6 +88,7 @@ impl Evaluator {
         Self {
             globals: vec![],
             environment: vec![],
+            scope_pool: vec![],
             source_file: None,
             root_module: Module::new(""),
             return_value: None,
@@ -304,24 +310,37 @@ impl Evaluator {
         }
     }
 
-    pub fn evaluate(&mut self, expression: &Expression) -> Result<Value, Error> {
-        let value = match &expression.kind {
-            ExpressionKind::Null => Value::Null,
-            ExpressionKind::Integer(i) => Value::Integer(*i),
-            ExpressionKind::Byte(b) => Value::Byte(*b),
-            ExpressionKind::String(s) => Value::String(s.clone()),
-            ExpressionKind::Bool(b) => Value::Bool(*b),
-            ExpressionKind::Float(f) => Value::Float(*f),
-            ExpressionKind::Character(c) => Value::Char(*c),
+    pub fn evaluate(&mut self, id: ExprId) -> Result<Value, Error> {
+        let span = self.resolver.ast_arena.exprs.get(id).span;
+
+        #[cfg(feature = "debug")]
+        log::trace!("evaluate {:?} @ {:?}", id, span);
+
+        match &self.resolver.ast_arena.exprs.get(id).kind {
+            ExpressionKind::Null => Ok(Value::Null),
+            ExpressionKind::Integer(i) => Ok(Value::Integer(*i)),
+            ExpressionKind::Byte(b) => Ok(Value::Byte(*b)),
+            ExpressionKind::Bool(b) => Ok(Value::Bool(*b)),
+            ExpressionKind::Float(f) => Ok(Value::Float(*f)),
+            ExpressionKind::Character(c) => Ok(Value::Char(*c)),
+            ExpressionKind::String(s) => {
+                let s = s.clone();
+                Ok(Value::String(s))
+            }
+
             ExpressionKind::Index { target, index } => {
-                if let Some((depth, slot)) = try_get_root_addr(expression) {
-                    let indices = get_indices_as_vec(expression, self, expression.span)?;
-                    self.index_read(depth, slot, &indices, expression.span)?
+                let (target, index) = (*target, *index);
+                if let Some((depth, slot)) = try_get_root_addr(target, &self.resolver.ast_arena) {
+                    let indices = get_indices_as_vec(id, self, span)?;
+                    Ok(self.index_read(depth, slot, &indices, span)?)
                 } else {
+                    let target_span = self.resolver.ast_arena.exprs.get(target).span;
+                    let index_span = self.resolver.ast_arena.exprs.get(index).span;
+
                     let arr = self.evaluate(target)?;
-                    self.check_not_null(&arr, target.span)?;
+                    self.check_not_null(&arr, target_span)?;
                     let idx = self.evaluate(index)?;
-                    self.check_not_null(&idx, index.span)?;
+                    self.check_not_null(&idx, index_span)?;
                     match (&arr, &idx) {
                         (Value::Values { items, .. }, Value::Integer(i)) => {
                             let i_usize = *i as usize;
@@ -329,14 +348,14 @@ impl Evaluator {
                                 return Err(self
                                     .err(
                                         format!("index {} out of bounds (len {})", i, items.len()),
-                                        expression.span,
+                                        span,
                                     )
                                     .with_label(
-                                        target.span,
+                                        target_span,
                                         format!("this array has length {}", items.len()),
                                     ));
                             }
-                            items[i_usize].clone()
+                            Ok(items[i_usize].clone())
                         }
                         (Value::Values { items, .. }, Value::Byte(b)) => {
                             let b_usize = *b as usize;
@@ -344,16 +363,15 @@ impl Evaluator {
                                 return Err(self
                                     .err(
                                         format!("index {} out of bounds (len {})", b, items.len()),
-                                        expression.span,
+                                        span,
                                     )
                                     .with_label(
-                                        target.span,
+                                        target_span,
                                         format!("this array has length {}", items.len()),
                                     ));
                             }
-                            items[b_usize].clone()
+                            Ok(items[b_usize].clone())
                         }
-
                         (Value::Tuple(items), Value::Integer(i)) => {
                             let i_usize = *i as usize;
                             if i_usize >= items.len() {
@@ -364,14 +382,14 @@ impl Evaluator {
                                             i,
                                             items.len()
                                         ),
-                                        expression.span,
+                                        span,
                                     )
                                     .with_label(
-                                        target.span,
+                                        target_span,
                                         format!("this tuple has {} elements", items.len()),
                                     ));
                             }
-                            items[i_usize].clone()
+                            Ok(items[i_usize].clone())
                         }
                         (Value::Tuple(items), Value::Byte(b)) => {
                             let b_usize = *b as usize;
@@ -383,73 +401,81 @@ impl Evaluator {
                                             b,
                                             items.len()
                                         ),
-                                        expression.span,
+                                        span,
                                     )
                                     .with_label(
-                                        target.span,
+                                        target_span,
                                         format!("this tuple has {} elements", items.len()),
                                     ));
                             }
-                            items[b_usize].clone()
+                            Ok(items[b_usize].clone())
                         }
-                        _ => {
-                            return Err(self
-                                .err("invalid index operation", expression.span)
-                                .with_label(target.span, format!("this is {}", arr.type_name()))
-                                .with_label(index.span, format!("this is {}", idx.type_name())));
-                        }
+                        _ => Err(self
+                            .err("invalid index operation", span)
+                            .with_label(target_span, format!("this is {}", arr.type_name()))
+                            .with_label(index_span, format!("this is {}", idx.type_name()))),
                     }
                 }
             }
+
             ExpressionKind::ArrayLiteral(items) => {
-                let mut values = Vec::with_capacity(items.len());
-                for e in items {
-                    values.push(self.evaluate(e)?);
+                let len = items.len();
+                let mut values = Vec::with_capacity(len);
+                for i in 0..len {
+                    // Re-fetch per element instead of cloning the whole Vec<ExprId>
+                    // up front - each fetch is a cheap bounds-checked index, no alloc.
+                    let item_id = match &self.resolver.ast_arena.exprs.get(id).kind {
+                        ExpressionKind::ArrayLiteral(items) => items[i],
+                        _ => unreachable!(),
+                    };
+                    values.push(self.evaluate(item_id)?);
                 }
                 let items_type = values
                     .first()
                     .map(|v| Self::infer_type(v, false))
                     .unwrap_or(TypeAnnotation::Null);
 
-                // Validate every element after the first against items_type.
                 if items_type != TypeAnnotation::Null {
-                    for (i, v) in values.clone().into_iter().enumerate() {
-                        let actual = Self::infer_type(&v, false);
+                    for (i, v) in values.iter().enumerate() {
+                        let actual = Self::infer_type(v, false);
                         if !Self::types_compatible(&actual, &items_type) {
                             return Err(self.err(
                                 format!(
                                     "array element type mismatch: element {} is {:?}, expected {:?}",
-                                    i,
-                                    actual,
-                                    items_type,
+                                    i, actual, items_type,
                                 ),
-                                expression.span,
+                                span,
                             ));
                         }
                     }
-                    Value::Values {
-                        items_type,
-                        items: values,
-                    }
-                } else {
-                    Value::Values {
-                        items_type,
-                        items: values,
-                    }
                 }
+                Ok(Value::Values {
+                    items_type,
+                    items: values,
+                })
             }
 
             ExpressionKind::IndexAssign {
                 target,
                 index,
                 value,
-            } => self.index_assign(target, index, value, expression.span)?,
-            ExpressionKind::Grouping(inner) => self.evaluate(inner)?,
+            } => {
+                let (target, index, value) = (*target, *index, *value);
+                self.index_assign(target, index, value, span)
+            }
+
+            ExpressionKind::Grouping(inner) => {
+                let inner = *inner;
+                self.evaluate(inner)
+            }
+
             ExpressionKind::Binary {
                 left,
                 operator,
                 right,
             } => {
+                let (left, operator, right) = (*left, operator.clone(), *right);
+
                 if matches!(operator, TokenType::And) {
                     let l = self.evaluate(left)?;
                     if let Value::Bool(false) = l {
@@ -468,6 +494,9 @@ impl Evaluator {
                     return Ok(Value::Bool(matches!(r, Value::Bool(true))));
                 }
 
+                let left_span = self.resolver.ast_arena.exprs.get(left).span;
+                let right_span = self.resolver.ast_arena.exprs.get(right).span;
+
                 let left_val = self.evaluate(left)?;
                 let right_val = self.evaluate(right)?;
                 if matches!(operator, TokenType::Compare | TokenType::BangEqual)
@@ -480,160 +509,198 @@ impl Evaluator {
                         Value::Bool(!result)
                     });
                 }
-                self.check_not_null(&left_val, left.span)?;
-                self.check_not_null(&right_val, right.span)?;
+                self.check_not_null(&left_val, left_span)?;
+                self.check_not_null(&right_val, right_span)?;
                 self.match_binary_operator(
-                    left_val,
-                    left.span,
-                    right_val,
-                    right.span,
-                    operator,
-                    expression.span,
-                )?
+                    left_val, left_span, right_val, right_span, &operator, span,
+                )
             }
+
             ExpressionKind::Unary { operator, operand } => {
+                let (operator, operand) = (operator.clone(), *operand);
+                let operand_span = self.resolver.ast_arena.exprs.get(operand).span;
                 let operand_val = self.evaluate(operand)?;
-                self.check_not_null(&operand_val, operand.span)?;
-                self.match_unary_operator(operand_val, operand.span, operator, expression.span)?
+                self.check_not_null(&operand_val, operand_span)?;
+                self.match_unary_operator(operand_val, operand_span, &operator, span)
             }
+
             ExpressionKind::ResolvedIdentifier { depth, slot, .. } => {
-                self.get_value(*depth, *slot, expression.span)?
+                let (depth, slot) = (*depth, *slot);
+                self.get_value(depth, slot, span)
             }
+
             ExpressionKind::ResolvedAssign {
                 depth, slot, value, ..
             } => {
+                let (depth, slot, value) = (*depth, *slot, *value);
                 let val = self.evaluate(value)?;
-
                 let inferred_type = Self::infer_type(&val, false);
-                self.assign_value(*depth, *slot, val.clone(), inferred_type, expression.span)?;
-                val
-            }
-            ExpressionKind::Call { path, args } => {
-                let mut evaluated_args = Vec::with_capacity(args.len());
-                for arg in args {
-                    let val = self.evaluate(arg)?;
-                    evaluated_args.push(val);
-                }
-                self.call_path(path, evaluated_args, expression.span)?
+                self.assign_value(depth, slot, val.clone(), inferred_type, span)?;
+                Ok(val)
             }
 
-            ExpressionKind::CallExpr { callee, args } => {
+            ExpressionKind::Call { .. } => {
+                let (path, len) = match &self.resolver.ast_arena.exprs.get(id).kind {
+                    ExpressionKind::Call { path, args } => (path.clone(), args.len()),
+                    _ => unreachable!(),
+                };
+                let mut evaluated_args = Vec::with_capacity(len);
+                for i in 0..len {
+                    let arg_id = match &self.resolver.ast_arena.exprs.get(id).kind {
+                        ExpressionKind::Call { args, .. } => args[i],
+                        _ => unreachable!(),
+                    };
+                    evaluated_args.push(self.evaluate(arg_id)?);
+                }
+                self.call_path(&path, evaluated_args, span)
+            }
+
+            ExpressionKind::CallExpr { .. } => {
+                let (callee, len) = match &self.resolver.ast_arena.exprs.get(id).kind {
+                    ExpressionKind::CallExpr { callee, args } => (*callee, args.len()),
+                    _ => unreachable!(),
+                };
                 let func_val = self.evaluate(callee)?;
-                let mut evaluated_args = Vec::with_capacity(args.len());
-                for arg in args {
-                    let val = self.evaluate(arg)?;
-                    evaluated_args.push(val);
+                let mut evaluated_args = Vec::with_capacity(len);
+                for i in 0..len {
+                    let arg_id = match &self.resolver.ast_arena.exprs.get(id).kind {
+                        ExpressionKind::CallExpr { args, .. } => args[i],
+                        _ => unreachable!(),
+                    };
+                    evaluated_args.push(self.evaluate(arg_id)?);
                 }
-                self.call_value(func_val, evaluated_args, expression.span)?
+                self.call_value(func_val, evaluated_args, span)
             }
 
-            ExpressionKind::MethodCall {
-                caller,
-                method,
-                args,
-            } => {
+            ExpressionKind::MethodCall { .. } => {
+                let (caller, method, len) = match &self.resolver.ast_arena.exprs.get(id).kind {
+                    ExpressionKind::MethodCall {
+                        caller,
+                        method,
+                        args,
+                    } => (*caller, method.clone(), args.len()),
+                    _ => unreachable!(),
+                };
                 let first_arg = self.evaluate(caller)?;
                 let mut evaluated_args = vec![first_arg];
-                // elevate and push the args
-                for arg in args {
-                    evaluated_args.push(self.evaluate(arg)?);
+                for i in 0..len {
+                    let arg_id = match &self.resolver.ast_arena.exprs.get(id).kind {
+                        ExpressionKind::MethodCall { args, .. } => args[i],
+                        _ => unreachable!(),
+                    };
+                    evaluated_args.push(self.evaluate(arg_id)?);
                 }
-                self.call_path(method, evaluated_args, expression.span)?
+                self.call_path(&method, evaluated_args, span)
             }
-            ExpressionKind::ResolvedLambda {
-                params,
-                return_type,
-                body,
-                capture_depth,
-            } => {
+
+            ExpressionKind::ResolvedLambda { .. } => {
+                let (params, body, return_type, capture_depth) =
+                    match &self.resolver.ast_arena.exprs.get(id).kind {
+                        ExpressionKind::ResolvedLambda {
+                            params,
+                            body,
+                            return_type,
+                            capture_depth,
+                        } => (
+                            params.clone(),
+                            body.clone(),
+                            return_type.clone(),
+                            *capture_depth,
+                        ),
+                        _ => unreachable!(),
+                    };
                 let total = self.environment.len();
-                let start = if total > *capture_depth {
-                    total - capture_depth
-                } else {
-                    0
-                };
+                let start = total.saturating_sub(capture_depth);
                 let captured_env: Vec<Vec<EnvironmentItem>> = self.environment[start..].to_vec();
 
-                Value::Function {
-                    params: Rc::new(params.clone()),
-                    body: Rc::new(body.clone()),
-                    return_type: return_type.clone(),
+                Ok(Value::Function {
+                    params: Rc::new(params),
+                    body: Rc::new(body),
+                    return_type,
                     captured_env,
-                }
+                })
             }
 
             ExpressionKind::Identifier(name) => {
-                return Err(self.err(format!("undefined variable '{}'", name), expression.span));
+                Err(self.err(format!("undefined variable '{}'", name), span))
             }
             ExpressionKind::Assign { name, .. } => {
-                return Err(self.err(format!("undefined variable '{}'", name), expression.span));
+                Err(self.err(format!("undefined variable '{}'", name), span))
             }
 
             ExpressionKind::Cast { value, target_type } => {
+                let (value, target_type) = (*value, target_type.clone());
+                let value_span = self.resolver.ast_arena.exprs.get(value).span;
                 let val = self.evaluate(value)?;
-                self.check_not_null(&val, value.span)?;
-                match (&val, target_type) {
-                    (Value::Integer(n), TypeAnnotation::Float) => Value::Float(*n as f64),
-                    (Value::Integer(n), TypeAnnotation::Byte) => Value::Byte(*n as u8),
-                    (Value::Integer(_), TypeAnnotation::Int) => val,
-                    (Value::Float(f), TypeAnnotation::Int) => Value::Integer(*f as i64),
-                    (Value::Float(f), TypeAnnotation::Byte) => Value::Byte(*f as u8),
-                    (Value::Float(_), TypeAnnotation::Float) => val,
-                    (Value::Byte(b), TypeAnnotation::Float) => Value::Float(*b as f64),
-                    (Value::Byte(b), TypeAnnotation::Int) => Value::Integer(*b as i64),
-                    (Value::Byte(_), TypeAnnotation::Byte) => val,
-
-                    _ => {
-                        return Err(self.err(
-                            format!(
-                                "invalid cast: cannot cast {} to {:?}",
-                                val.type_name(),
-                                target_type
-                            ),
-                            expression.span,
-                        ));
-                    }
+                self.check_not_null(&val, value_span)?;
+                match (&val, &target_type) {
+                    (Value::Integer(n), TypeAnnotation::Float) => Ok(Value::Float(*n as f64)),
+                    (Value::Integer(n), TypeAnnotation::Byte) => Ok(Value::Byte(*n as u8)),
+                    (Value::Integer(_), TypeAnnotation::Int) => Ok(val),
+                    (Value::Float(f), TypeAnnotation::Int) => Ok(Value::Integer(*f as i64)),
+                    (Value::Float(f), TypeAnnotation::Byte) => Ok(Value::Byte(*f as u8)),
+                    (Value::Float(_), TypeAnnotation::Float) => Ok(val),
+                    (Value::Byte(b), TypeAnnotation::Float) => Ok(Value::Float(*b as f64)),
+                    (Value::Byte(b), TypeAnnotation::Int) => Ok(Value::Integer(*b as i64)),
+                    (Value::Byte(_), TypeAnnotation::Byte) => Ok(val),
+                    _ => Err(self.err(
+                        format!(
+                            "invalid cast: cannot cast {} to {:?}",
+                            val.type_name(),
+                            target_type
+                        ),
+                        span,
+                    )),
                 }
             }
 
             ExpressionKind::TupleLiteral(items) => {
-                let mut values = Vec::with_capacity(items.len());
-                for e in items {
-                    values.push(self.evaluate(e)?);
+                let len = items.len();
+                let mut values = Vec::with_capacity(len);
+                for i in 0..len {
+                    let item_id = match &self.resolver.ast_arena.exprs.get(id).kind {
+                        ExpressionKind::TupleLiteral(items) => items[i],
+                        _ => unreachable!(),
+                    };
+                    values.push(self.evaluate(item_id)?);
                 }
-                Value::Tuple(values)
+                Ok(Value::Tuple(values))
             }
+
             ExpressionKind::ErrorLiteral(inner) => {
+                let inner = *inner;
                 let val = self.evaluate(inner)?;
                 if matches!(val, Value::Error(_)) {
-                    return Err(self.err("error cannot wrap another error", expression.span));
+                    return Err(self.err("error cannot wrap another error", span));
                 }
-                Value::Error(Box::new(val))
+                Ok(Value::Error(Box::new(val)))
             }
             ExpressionKind::OkLiteral(inner) => {
+                let inner = *inner;
                 let val = self.evaluate(inner)?;
-                Value::Ok(Box::new(val))
+                Ok(Value::Ok(Box::new(val)))
             }
             ExpressionKind::ErrLiteral(inner) => {
+                let inner = *inner;
                 let val = self.evaluate(inner)?;
-                Value::Err(Box::new(val))
+                Ok(Value::Err(Box::new(val)))
             }
 
             ExpressionKind::Propagate(inner) => {
+                let inner = *inner;
                 let val = self.evaluate(inner)?;
                 match val {
-                    Value::Ok(v) => *v,
+                    Value::Ok(v) => Ok(*v),
                     Value::Err(_) => {
                         self.return_value = Some(val);
-                        return Ok(Value::Null);
+                        Ok(Value::Null)
                     }
-                    other => other,
+                    other => Ok(other),
                 }
             }
 
-            _ => Value::Null,
-        };
-        Ok(value)
+            _ => Ok(Value::Null),
+        }
     }
 
     /// Calls a [`Value::Function`], setting up the captured environment, inserting

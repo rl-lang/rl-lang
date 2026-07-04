@@ -36,9 +36,6 @@ vm = []
 cranelift = []
 lsp = ["dep:tower-lsp", "dep:tokio"]
 
-[[bench]]
-name = "v0_1_0"
-harness = false
 
 [[bench]]
 name = "v0_1_4"

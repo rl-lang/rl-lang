@@ -1,5 +1,5 @@
 use crate::{
-    ast::nodes::{Expression, ExpressionKind},
+    ast::{ExprId, nodes::ExpressionKind},
     lexer::tokentypes::TokenType,
     parser::parser_logic::Parser,
     utils::errors::Error,
@@ -32,7 +32,7 @@ impl Parser {
     /// above forms match the current token.
     ///
     /// [`parse_postfix`]: Parser::parse_postfix
-    pub fn parse_primary(&mut self) -> Result<Expression, Error> {
+    pub fn parse_primary(&mut self) -> Result<ExprId, Error> {
         #[cfg(feature = "debug")]
         log::debug!("current index: {:?}", self.current);
         #[cfg(feature = "debug")]
@@ -40,10 +40,12 @@ impl Parser {
 
         let start = self.peek_span();
 
+        // ---- identifier start ----
         if self.match_type(&[TokenType::Identifier(String::new())]) {
             #[cfg(feature = "debug")]
             log::debug!("found identifier");
             let ident_span = self.previous_span();
+
             if let TokenType::Identifier(first) = self.previous() {
                 // consume :: segments to build a module path
                 let mut path = vec![first];
@@ -57,6 +59,7 @@ impl Parser {
                 }
                 let path_span = start.join(self.previous_span());
 
+                // --- function call ---
                 if self.match_type(&[TokenType::LeftParen]) {
                     #[cfg(feature = "debug")]
                     log::debug!("found function call");
@@ -76,7 +79,17 @@ impl Parser {
                     }
                     self.match_type(&[TokenType::RightParen]);
                     let span = start.join(self.previous_span());
-                    let expr = Expression::new(ExpressionKind::Call { path, args }, span);
+                    #[cfg(feature = "debug")]
+                    log::trace!(
+                        "alloc Call expr: path={:?} args={} @ {:?}",
+                        path,
+                        args.len(),
+                        span
+                    );
+                    let expr = self
+                        .ast_arena
+                        .alloc_expr(ExpressionKind::Call { path, args }, span);
+
                     return self.parse_postfix(expr, start);
                 }
 
@@ -89,52 +102,85 @@ impl Parser {
                 }
                 let name = path.pop().unwrap();
 
+                // --- assign expression ---
                 if self.match_type(&[TokenType::Assign]) {
                     #[cfg(feature = "debug")]
                     log::debug!("found variable assignment");
                     let value = self.parse_expression()?;
-                    let span = start.join(value.span);
-                    let expr = Expression::new(
-                        ExpressionKind::Assign {
-                            name,
-                            value: Box::new(value),
-                        },
-                        span,
+                    let value_id = self.ast_arena.exprs.get(value);
+                    let span = start.join(value_id.span);
+                    #[cfg(feature = "debug")]
+                    log::trace!(
+                        "alloc Assign expr: name={} value={:?} @ {:?}",
+                        name,
+                        value,
+                        span
                     );
+                    let expr = self
+                        .ast_arena
+                        .alloc_expr(ExpressionKind::Assign { name, value }, span);
+
                     return self.parse_postfix(expr, start);
                 }
+
+                // --- index ---
                 if self.match_type(&[TokenType::LeftBracket]) {
+                    #[cfg(feature = "debug")]
+                    log::trace!(
+                        "alloc Identifier(index target) expr: name={} @ {:?}",
+                        name,
+                        ident_span
+                    );
+
                     let index = self.parse_expression()?;
                     self.match_type(&[TokenType::RightBracket]);
                     let after_index_span = self.previous_span();
 
-                    let mut expr = Expression::new(
+                    let target = self
+                        .ast_arena
+                        .alloc_expr(ExpressionKind::Identifier(name.clone()), ident_span);
+
+                    #[cfg(feature = "debug")]
+                    log::trace!(
+                        "alloc Index expr: target={:?} index={:?} @ {:?}",
+                        target,
+                        index,
+                        self.ast_arena.exprs.get(target).span
+                    );
+
+                    let mut expr = self.ast_arena.alloc_expr(
                         ExpressionKind::Index {
-                            target: Box::new(Expression::new(
-                                ExpressionKind::Identifier(name.clone()),
-                                ident_span,
-                            )),
-                            index: Box::new(index),
+                            target,
+                            index,
                         },
                         start.join(after_index_span),
                     );
 
-                    // consume chained indices: arr[0][1][2]
+                    // --- chained indices: arr[0][1][2] ---
                     while self.peek() == TokenType::LeftBracket {
                         self.advance();
                         let next_index = self.parse_expression()?;
                         self.match_type(&[TokenType::RightBracket]);
                         let span = start.join(self.previous_span());
-                        expr = Expression::new(
+
+                        #[cfg(feature = "debug")]
+                        log::trace!(
+                            "alloc Index(chained) expr: target={:?} index={:?} @ {:?}",
+                            expr,
+                            next_index,
+                            span
+                        );
+
+                        expr = self.ast_arena.alloc_expr(
                             ExpressionKind::Index {
-                                target: Box::new(expr),
-                                index: Box::new(next_index),
+                                target: expr,
+                                index: next_index,
                             },
                             span,
                         );
                     }
 
-                    // call on the result of an index: fns[0](arg)
+                    // --- call on the result of an index: fns[0](arg) ---
                     if self.match_type(&[TokenType::LeftParen]) {
                         let mut args = Vec::new();
                         while self.match_type(&[TokenType::Newline]) {}
@@ -151,29 +197,48 @@ impl Parser {
                         while self.match_type(&[TokenType::Newline]) {}
                         self.match_type(&[TokenType::RightParen]);
                         let span = start.join(self.previous_span());
-                        let expr = Expression::new(
-                            ExpressionKind::CallExpr {
-                                callee: Box::new(expr),
-                                args,
-                            },
-                            span,
+                        #[cfg(feature = "debug")]
+                        log::trace!(
+                            "alloc CallExpr expr: callee={:?} args={} @ {:?}",
+                            expr,
+                            args.len(),
+                            span
                         );
-                        return self.parse_postfix(expr, start);
+
+                        let call_expr = self
+                            .ast_arena
+                            .alloc_expr(ExpressionKind::CallExpr { callee: expr, args }, span);
+
+                        return self.parse_postfix(call_expr, start);
                     }
 
+                    // --- index assign ---
                     if self.match_type(&[TokenType::Assign]) {
                         #[cfg(feature = "debug")]
                         log::debug!("found array item assignment");
                         let value = self.parse_expression()?;
-                        let span = start.join(value.span);
-                        if let ExpressionKind::Index { target, index } = expr.kind {
-                            let expr = Expression::new(
+
+                        let value_id = self.ast_arena.exprs.get(value);
+                        let expr_id = self.ast_arena.exprs.get(expr);
+
+                        let span = start.join(value_id.span);
+                        if let ExpressionKind::Index { target, index } = expr_id.kind.clone() {
+                            let expr = self.ast_arena.alloc_expr(
                                 ExpressionKind::IndexAssign {
                                     target,
                                     index,
-                                    value: Box::new(value),
+                                    value,
                                 },
                                 span,
+                            );
+
+                            #[cfg(feature = "debug")]
+                            log::trace!(
+                                "alloc IndexAssign expr: target={:?} index={:?} value={:?} @ {:?}",
+                                target,
+                                index,
+                                value,
+                                span
                             );
                             return self.parse_postfix(expr, start);
                         }
@@ -181,11 +246,21 @@ impl Parser {
 
                     return self.parse_postfix(expr, start);
                 }
-                let expr = Expression::new(ExpressionKind::Identifier(name), ident_span);
+
+                // --- identifier ---
+                #[cfg(feature = "debug")]
+                log::trace!("alloc Identifier expr: name={} @ {:?}", name, ident_span);
+
+                let expr = self
+                    .ast_arena
+                    .alloc_expr(ExpressionKind::Identifier(name), ident_span);
+
                 return self.parse_postfix(expr, start);
             }
         }
+        // ---- identifier end ----
 
+        // --- array literal ---
         if self.match_type(&[TokenType::LeftBracket]) {
             let mut items = Vec::new();
             while self.match_type(&[TokenType::Newline]) {}
@@ -202,41 +277,73 @@ impl Parser {
             }
             self.match_type(&[TokenType::RightBracket]);
             let span = start.join(self.previous_span());
-            let expr = Expression::new(ExpressionKind::ArrayLiteral(items), span);
+
+            #[cfg(feature = "debug")]
+            log::trace!(
+                "alloc ArrayLiteral expr: items={} @ {:?}",
+                items.len(),
+                span
+            );
+
+            let expr = self
+                .ast_arena
+                .alloc_expr(ExpressionKind::ArrayLiteral(items), span);
             return self.parse_postfix(expr, start);
         }
 
+        // ---- numbers start ----
+        // --- integer ---
         if self.match_type(&[TokenType::NumberLiteral(0)]) {
             #[cfg(feature = "debug")]
-            log::debug!("found number");
+            log::debug!("found number <integer>");
             let span = self.previous_span();
             if let TokenType::NumberLiteral(n) = self.previous() {
+                // ---- cast start ----
                 if self.match_type(&[TokenType::As]) {
+                    // from integer to T
                     if self.match_type(&[TokenType::Int, TokenType::Byte, TokenType::Float]) {
                         match self.previous() {
                             TokenType::Int => {
-                                return self.parse_postfix(
-                                    Expression::new(ExpressionKind::Integer(n), span),
-                                    start,
+                                #[cfg(feature = "debug")]
+                                log::trace!(
+                                    "alloc Integer expr (from number, cast to int): {} @ {:?}",
+                                    n,
+                                    span
                                 );
+
+                                let int_expr =
+                                    self.ast_arena.alloc_expr(ExpressionKind::Integer(n), span);
+                                return self.parse_postfix(int_expr, start);
                             }
 
                             TokenType::Float => {
-                                return self.parse_postfix(
-                                    Expression::new(ExpressionKind::Float(n as f64), span),
-                                    start,
+                                #[cfg(feature = "debug")]
+                                log::trace!(
+                                    "alloc Float expr (from number, cast to float): {} @ {:?}",
+                                    n as f64,
+                                    span
                                 );
+                                let int_expr = self
+                                    .ast_arena
+                                    .alloc_expr(ExpressionKind::Float(n as f64), span);
+                                return self.parse_postfix(int_expr, start);
                             }
 
                             TokenType::Byte => {
+                                #[cfg(feature = "debug")]
+                                log::trace!(
+                                    "alloc Byte expr (from number, cast to byte): {} @ {:?}",
+                                    n as u8,
+                                    span
+                                );
                                 if !(0..=255).contains(&n) {
                                     return Err(self
                                         .err(format!("value {} is too large for byte", n), span));
                                 }
-                                return self.parse_postfix(
-                                    Expression::new(ExpressionKind::Byte(n as u8), span),
-                                    start,
-                                );
+                                let int_expr = self
+                                    .ast_arena
+                                    .alloc_expr(ExpressionKind::Byte(n as u8), span);
+                                return self.parse_postfix(int_expr, start);
                             }
 
                             other => {
@@ -249,121 +356,71 @@ impl Parser {
                     }
                     return Err(self.err("expected type after `as`", self.previous_span()));
                 }
+                // ---- cast end ----
 
-                let expr = Expression::new(ExpressionKind::Integer(n), span);
+                // no cast logic
+                #[cfg(feature = "debug")]
+                log::trace!(
+                    "alloc Integer expr (plain number literal): {} @ {:?}",
+                    n,
+                    span
+                );
+                let expr = self.ast_arena.alloc_expr(ExpressionKind::Integer(n), span);
                 return self.parse_postfix(expr, start);
             }
         }
 
-        if self.match_type(&[TokenType::ByteLiteral(0)]) {
-            let span = self.previous_span();
-            if let TokenType::ByteLiteral(b) = self.previous() {
-                if self.match_type(&[TokenType::As]) {
-                    if self.match_type(&[TokenType::Int, TokenType::Byte, TokenType::Float]) {
-                        match self.previous() {
-                            TokenType::Int => {
-                                return self.parse_postfix(
-                                    Expression::new(ExpressionKind::Integer(b as i64), span),
-                                    start,
-                                );
-                            }
-
-                            TokenType::Float => {
-                                return self.parse_postfix(
-                                    Expression::new(ExpressionKind::Float(b as f64), span),
-                                    start,
-                                );
-                            }
-
-                            TokenType::Byte => {
-                                if !(0..=255).contains(&b) {
-                                    return Err(self
-                                        .err(format!("value {} is too large for byte", b), span));
-                                }
-                                return self.parse_postfix(
-                                    Expression::new(ExpressionKind::Byte(b), span),
-                                    start,
-                                );
-                            }
-
-                            other => {
-                                return Err(self.err(
-                                    format!("expected int/byte/float types found {:?}", other),
-                                    span,
-                                ));
-                            }
-                        }
-                    }
-                    return Err(self.err("expected type after `as`", self.previous_span()));
-                }
-                let expr = Expression::new(ExpressionKind::Byte(b), span);
-                return self.parse_postfix(expr, start);
-            }
-        }
-
-        if self.match_type(&[TokenType::StringLiteral(String::new())]) {
-            #[cfg(feature = "debug")]
-            log::debug!("found string");
-            let span = self.previous_span();
-            if let TokenType::StringLiteral(s) = self.previous() {
-                let expr = Expression::new(ExpressionKind::String(s), span);
-                return self.parse_postfix(expr, start);
-            }
-        }
-
-        if matches!(
-            self.tokens[self.current].token,
-            TokenType::CharacterLiteral(_)
-        ) {
-            self.advance();
-            #[cfg(feature = "debug")]
-            log::debug!("found character");
-            let span = self.previous_span();
-            if let TokenType::CharacterLiteral(c) = self.previous() {
-                let expr = Expression::new(ExpressionKind::Character(c), span);
-                return self.parse_postfix(expr, start);
-            }
-        }
-
-        if self.match_type(&[TokenType::BoolLiteral(false)]) {
-            let span = self.previous_span();
-            if let TokenType::BoolLiteral(b) = self.previous() {
-                let expr = Expression::new(ExpressionKind::Bool(b), span);
-                return self.parse_postfix(expr, start);
-            }
-        }
-
+        // --- float ---
         if self.match_type(&[TokenType::FloatLiteral(0.0)]) {
             #[cfg(feature = "debug")]
-            log::debug!("oh no found float");
+            log::debug!("found number <float>");
             let span = self.previous_span();
             if let TokenType::FloatLiteral(f) = self.previous() {
+                // ---- cast start ----
                 if self.match_type(&[TokenType::As]) {
+                    // from float to T
                     if self.match_type(&[TokenType::Int, TokenType::Byte, TokenType::Float]) {
                         match self.previous() {
                             TokenType::Int => {
-                                return self.parse_postfix(
-                                    Expression::new(ExpressionKind::Integer(f as i64), span),
-                                    start,
+                                #[cfg(feature = "debug")]
+                                log::trace!(
+                                    "alloc Integer expr (from float, cast to int): {} @ {:?}",
+                                    f as i64,
+                                    span
                                 );
+                                let float_expr = self
+                                    .ast_arena
+                                    .alloc_expr(ExpressionKind::Integer(f as i64), span);
+                                return self.parse_postfix(float_expr, start);
                             }
 
                             TokenType::Float => {
-                                return self.parse_postfix(
-                                    Expression::new(ExpressionKind::Float(f), span),
-                                    start,
+                                #[cfg(feature = "debug")]
+                                log::trace!(
+                                    "alloc Float expr (from float, cast to float): {} @ {:?}",
+                                    f,
+                                    span
                                 );
+                                let float_expr =
+                                    self.ast_arena.alloc_expr(ExpressionKind::Float(f), span);
+                                return self.parse_postfix(float_expr, start);
                             }
 
                             TokenType::Byte => {
+                                #[cfg(feature = "debug")]
+                                log::trace!(
+                                    "alloc Byte expr (from float, cast to byte): {} @ {:?}",
+                                    f as u8,
+                                    span
+                                );
                                 if !(0.0..=255.0).contains(&f) {
                                     return Err(self
                                         .err(format!("value {} is too large for byte", f), span));
                                 }
-                                return self.parse_postfix(
-                                    Expression::new(ExpressionKind::Byte(f as u8), span),
-                                    start,
-                                );
+                                let float_expr = self
+                                    .ast_arena
+                                    .alloc_expr(ExpressionKind::Byte(f as u8), span);
+                                return self.parse_postfix(float_expr, start);
                             }
 
                             other => {
@@ -376,11 +433,138 @@ impl Parser {
                     }
                     return Err(self.err("expected type after `as`", span));
                 }
-                let expr = Expression::new(ExpressionKind::Float(f), self.previous_span());
+                // ---- cast end ----
+
+                // no cast logic
+                #[cfg(feature = "debug")]
+                log::trace!("alloc Float expr (plain float literal): {} @ {:?}", f, span);
+                let expr = self
+                    .ast_arena
+                    .alloc_expr(ExpressionKind::Float(f), self.previous_span());
                 return self.parse_postfix(expr, start);
             }
         }
 
+        // --- byte ---
+        if self.match_type(&[TokenType::ByteLiteral(0)]) {
+            #[cfg(feature = "debug")]
+            log::debug!("found number <byte>");
+            let span = self.previous_span();
+            if let TokenType::ByteLiteral(b) = self.previous() {
+                // ---- cast start ----
+                if self.match_type(&[TokenType::As]) {
+                    // from byte to T
+                    if self.match_type(&[TokenType::Int, TokenType::Byte, TokenType::Float]) {
+                        match self.previous() {
+                            TokenType::Int => {
+                                #[cfg(feature = "debug")]
+                                log::trace!(
+                                    "alloc Integer expr (from byte, cast to int): {} @ {:?}",
+                                    b as i64,
+                                    span
+                                );
+                                let byte_expr = self
+                                    .ast_arena
+                                    .alloc_expr(ExpressionKind::Integer(b as i64), span);
+                                return self.parse_postfix(byte_expr, start);
+                            }
+
+                            TokenType::Float => {
+                                #[cfg(feature = "debug")]
+                                log::trace!(
+                                    "alloc Float expr (from byte, cast to float): {} @ {:?}",
+                                    b as f64,
+                                    span
+                                );
+                                let byte_expr = self
+                                    .ast_arena
+                                    .alloc_expr(ExpressionKind::Float(b as f64), span);
+                                return self.parse_postfix(byte_expr, start);
+                            }
+
+                            TokenType::Byte => {
+                                // while it shouldn't be possible normally
+                                // keeping it as fallback for safety
+                                #[cfg(feature = "debug")]
+                                log::trace!(
+                                    "alloc Byte expr (from byte, cast to byte): {} @ {:?}",
+                                    b,
+                                    span
+                                );
+                                if !(0..=255).contains(&b) {
+                                    return Err(self
+                                        .err(format!("value {} is too large for byte", b), span));
+                                }
+                                let byte_expr =
+                                    self.ast_arena.alloc_expr(ExpressionKind::Byte(b), span);
+                                return self.parse_postfix(byte_expr, start);
+                            }
+
+                            other => {
+                                return Err(self.err(
+                                    format!("expected int/byte/float types found {:?}", other),
+                                    span,
+                                ));
+                            }
+                        }
+                    }
+                    return Err(self.err("expected type after `as`", self.previous_span()));
+                }
+                // ---- cast end ----
+
+                // no cast logic
+                #[cfg(feature = "debug")]
+                log::trace!("alloc Byte expr (plain byte literal): {} @ {:?}", b, span);
+                let expr = self.ast_arena.alloc_expr(ExpressionKind::Byte(b), span);
+                return self.parse_postfix(expr, start);
+            }
+        }
+        // ---- numbers end ----
+
+        // --- string ---
+        if self.match_type(&[TokenType::StringLiteral(String::new())]) {
+            #[cfg(feature = "debug")]
+            log::debug!("found string");
+            let span = self.previous_span();
+            if let TokenType::StringLiteral(s) = self.previous() {
+                #[cfg(feature = "debug")]
+                log::trace!("alloc String expr: {:?} @ {:?}", s, span);
+                let expr = self.ast_arena.alloc_expr(ExpressionKind::String(s), span);
+                return self.parse_postfix(expr, start);
+            }
+        }
+
+        // --- character ---
+        if matches!(
+            self.tokens[self.current].token,
+            TokenType::CharacterLiteral(_)
+        ) {
+            self.advance();
+            #[cfg(feature = "debug")]
+            log::debug!("found character");
+            let span = self.previous_span();
+            if let TokenType::CharacterLiteral(c) = self.previous() {
+                #[cfg(feature = "debug")]
+                log::trace!("alloc Character expr: {:?} @ {:?}", c, span);
+                let expr = self
+                    .ast_arena
+                    .alloc_expr(ExpressionKind::Character(c), span);
+                return self.parse_postfix(expr, start);
+            }
+        }
+
+        // --- boolean ---
+        if self.match_type(&[TokenType::BoolLiteral(false)]) {
+            let span = self.previous_span();
+            if let TokenType::BoolLiteral(b) = self.previous() {
+                let expr = self.ast_arena.alloc_expr(ExpressionKind::Bool(b), span);
+                #[cfg(feature = "debug")]
+                log::trace!("alloc Bool expr: {} @ {:?}", b, span);
+                return self.parse_postfix(expr, start);
+            }
+        }
+
+        // --- error ---
         if self.match_type(&[TokenType::Error]) {
             let error_start = self.previous_span();
             while self.match_type(&[TokenType::Newline]) {}
@@ -394,10 +578,16 @@ impl Parser {
                 return Err(self.err("expected `)` after error value", self.peek_span()));
             }
             let span = error_start.join(self.previous_span());
-            let expr = Expression::new(ExpressionKind::ErrorLiteral(Box::new(inner)), span);
+            let expr = self
+                .ast_arena
+                .alloc_expr(ExpressionKind::ErrorLiteral(inner), span);
+            #[cfg(feature = "debug")]
+            log::trace!("alloc ErrorLiteral expr: inner={:?} @ {:?}", inner, span);
             return self.parse_postfix(expr, start);
         }
 
+        // ---- result start ----
+        // --- ok ---
         if self.match_type(&[TokenType::Ok]) {
             let kw_span = self.previous_span();
             while self.match_type(&[TokenType::Newline]) {}
@@ -411,12 +601,15 @@ impl Parser {
                 return Err(self.err("expected `)` after ok value", self.peek_span()));
             }
             let span = kw_span.join(self.previous_span());
-            return self.parse_postfix(
-                Expression::new(ExpressionKind::OkLiteral(Box::new(inner)), span),
-                start,
-            );
+            #[cfg(feature = "debug")]
+            log::trace!("alloc OkLiteral expr: inner={:?} @ {:?}", inner, span);
+            let ok_expr = self
+                .ast_arena
+                .alloc_expr(ExpressionKind::OkLiteral(inner), span);
+            return self.parse_postfix(ok_expr, start);
         }
 
+        // --- err ---
         if self.match_type(&[TokenType::Err]) {
             let kw_span = self.previous_span();
             while self.match_type(&[TokenType::Newline]) {}
@@ -430,25 +623,33 @@ impl Parser {
                 return Err(self.err("expected `)` after err value", self.peek_span()));
             }
             let span = kw_span.join(self.previous_span());
-            return self.parse_postfix(
-                Expression::new(ExpressionKind::ErrLiteral(Box::new(inner)), span),
-                start,
-            );
+            #[cfg(feature = "debug")]
+            log::trace!("alloc ErrLiteral expr: inner={:?} @ {:?}", inner, span);
+            let err_expr = self
+                .ast_arena
+                .alloc_expr(ExpressionKind::ErrLiteral(inner), span);
+            return self.parse_postfix(err_expr, start);
         }
+        // ---- result end ----
 
+        // --- null ---
         if self.match_type(&[TokenType::Null]) {
             let span = self.previous_span();
-            let expr = Expression::new(ExpressionKind::Null, span);
+            let expr = self.ast_arena.alloc_expr(ExpressionKind::Null, span);
+            #[cfg(feature = "debug")]
+            log::trace!("alloc Null expr @ {:?}", span);
             return self.parse_postfix(expr, start);
         }
 
+        // --- group ---
         if self.match_type(&[TokenType::LeftParen]) {
             #[cfg(feature = "debug")]
             log::debug!("found group start");
             while self.match_type(&[TokenType::Newline]) {}
             let first = self.parse_expression()?;
+
             if self.match_type(&[TokenType::Comma]) {
-                // tuple literal: (expr, expr, ...)
+                // --- tuple literal ---
                 let mut items = vec![first];
                 while self.peek() != TokenType::RightParen && self.peek() != TokenType::Eof {
                     while self.match_type(&[TokenType::Newline]) {}
@@ -466,16 +667,33 @@ impl Parser {
                     return Err(self.err("expected ) after tuple elements", self.peek_span()));
                 }
                 let span = start.join(self.previous_span());
-                let expr = Expression::new(ExpressionKind::TupleLiteral(items), span);
+                #[cfg(feature = "debug")]
+                log::trace!(
+                    "alloc TupleLiteral expr: items={} @ {:?}",
+                    items.len(),
+                    span
+                );
+
+                let expr = self
+                    .ast_arena
+                    .alloc_expr(ExpressionKind::TupleLiteral(items), span);
                 return self.parse_postfix(expr, start);
             }
+
+            // normal group
             while self.match_type(&[TokenType::Newline]) {}
             self.match_type(&[TokenType::RightParen]);
+
             let span = start.join(self.previous_span());
-            let expr = Expression::new(ExpressionKind::Grouping(Box::new(first)), span);
+            let expr = self
+                .ast_arena
+                .alloc_expr(ExpressionKind::Grouping(first), span);
+            #[cfg(feature = "debug")]
+            log::trace!("alloc Grouping expr: inner={:?} @ {:?}", first, span);
             return self.parse_postfix(expr, start);
         }
 
+        // --- function/lambda ---
         if self.match_type(&[TokenType::Fn]) {
             let lambda_start = self.previous_span();
             while self.match_type(&[TokenType::Newline]) {}
@@ -516,7 +734,15 @@ impl Parser {
             while self.match_type(&[TokenType::Newline]) {}
             let body = self.parse_block()?;
             let span = lambda_start.join(self.previous_span());
-            let expr = Expression::new(
+            #[cfg(feature = "debug")]
+            log::trace!(
+                "alloc Lambda expr: params={} return_type={:?} body_stmts={} @ {:?}",
+                params.len(),
+                return_type,
+                body.len(),
+                span
+            );
+            let expr = self.ast_arena.alloc_expr(
                 ExpressionKind::Lambda {
                     params,
                     return_type,
@@ -527,6 +753,7 @@ impl Parser {
             return self.parse_postfix(expr, start);
         }
 
+        // --- not valid expression ---
         Err(self.err("expected expression", self.peek_span()))
     }
 }
