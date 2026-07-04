@@ -2,7 +2,10 @@
 
 use crate::{
     ast::statements::{FunctionAttribute, MatchPattern, Statement, StatementKind, TypeAnnotation},
-    interpreter::{evaluator::Evaluator, values::Value},
+    interpreter::{
+        evaluator::Evaluator,
+        values::{FunctionData, Value},
+    },
     lexer::tokenizer::Tokenizer,
     parser::parser_logic::Parser,
     utils::{errors::Error, source::SourceFile, span::Span},
@@ -499,12 +502,12 @@ impl Evaluator {
                 name,
                 ..
             } => {
-                let func = Value::Function {
+                let func = Value::Function(Rc::new(FunctionData {
                     params: Rc::new(params.clone()),
                     body: Rc::new(body.clone()),
                     return_type: Some(return_type.clone()),
                     captured_env: vec![],
-                };
+                }));
                 self.fn_names.insert(name.clone(), *slot);
                 self.insert_value(
                     *slot,

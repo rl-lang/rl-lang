@@ -4,6 +4,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::interpreter::stdlib::random::xoshiro::Xoshiro256;
+use crate::interpreter::values::FunctionData;
 use crate::lexer::tokentypes::TokenType;
 use crate::resolver::Resolver;
 use crate::{
@@ -613,12 +614,12 @@ impl Evaluator {
                 let start = total.saturating_sub(capture_depth);
                 let captured_env: Vec<Vec<EnvironmentItem>> = self.environment[start..].to_vec();
 
-                Ok(Value::Function {
+                Ok(Value::Function(Rc::new(FunctionData {
                     params: Rc::new(params),
                     body: Rc::new(body),
                     return_type,
                     captured_env,
-                })
+                })))
             }
 
             ExpressionKind::Identifier(name) => {
@@ -713,35 +714,29 @@ impl Evaluator {
         args: Vec<Value>,
         span: Span,
     ) -> Result<Value, Error> {
-        if let Value::Function {
-            params,
-            body,
-            return_type,
-            captured_env,
-        } = func
-        {
-            if params.len() != args.len() {
+        if let Value::Function(data) = func {
+            if data.params.len() != args.len() {
                 return Err(self.err(
                     format!(
                         "function expects {} argument(s), got {}",
-                        params.len(),
+                        data.params.len(),
                         args.len()
                     ),
                     span,
                 ));
             }
 
-            let saved_env = std::mem::replace(&mut self.environment, captured_env);
+            let saved_env = std::mem::replace(&mut self.environment, data.captured_env.clone());
             let saved_return = self.return_value.take();
 
             self.push_scope();
 
-            for (slot, (_, arg)) in params.iter().zip(args).enumerate() {
+            for (slot, (_, arg)) in data.params.iter().zip(args).enumerate() {
                 let arg_type = Self::infer_type(&arg, false);
                 self.insert_value(slot, arg, arg_type, span)?;
             }
 
-            for statement in &*body {
+            for statement in &*data.body {
                 self.evaluate_statement(statement)?;
                 if self.return_value.is_some() {
                     break;
@@ -753,7 +748,7 @@ impl Evaluator {
             self.environment = saved_env;
             self.return_value = saved_return;
 
-            if let Some(expected) = &return_type
+            if let Some(expected) = &data.return_type
                 && *expected != TypeAnnotation::Null
             {
                 let actual = Self::infer_type(&result, false);

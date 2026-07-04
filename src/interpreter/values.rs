@@ -31,14 +31,7 @@ pub enum Value {
     Null,
 
     /// A first-class function or lambda value, carrying its closure environment.
-    Function {
-        params: Rc<Vec<Param>>,
-        body: Rc<Vec<Statement>>,
-        /// Declared return type; `None` for lambdas without an annotation.
-        return_type: Option<TypeAnnotation>,
-        /// The captured environment frames at the point of lambda definition.
-        captured_env: Vec<Vec<EnvironmentItem>>,
-    },
+    Function(Rc<FunctionData>),
 
     /// A heterogeneous tuple of values.
     Tuple(Vec<Value>),
@@ -46,6 +39,17 @@ pub enum Value {
     Error(Box<Value>),
     Ok(Box<Value>),
     Err(Box<Value>),
+}
+
+/// Payload for `Value::Function`
+#[derive(Debug, Clone, PartialEq)]
+pub struct FunctionData {
+    pub params: Rc<Vec<Param>>,
+    pub body: Rc<Vec<Statement>>,
+    /// Declared return type; `None` for lambdas without an annotation.
+    pub return_type: Option<TypeAnnotation>,
+    /// The captured environment frames at the point of lambda definition.
+    pub captured_env: Vec<Vec<EnvironmentItem>>,
 }
 
 impl Value {
@@ -90,9 +94,9 @@ impl fmt::Display for Value {
                 write!(f, "[{}]", formatted.join(", "))
             }
             Value::Null => write!(f, "null"),
-            Value::Function { params, .. } => {
+            Value::Function(data) => {
                 let mut params_name = vec![];
-                for param in params.iter() {
+                for param in data.params.iter() {
                     params_name.push(param.param_name.clone());
                 }
                 write!(f, "<fn({})>", params_name.join(", "))
