@@ -230,9 +230,9 @@ impl Evaluator {
                 let inner: Vec<TypeAnnotation> =
                     items.iter().map(|v| Self::infer_type(v, false)).collect();
                 if is_const {
-                    TypeAnnotation::CTuple(inner)
+                    TypeAnnotation::CTuple(Rc::new(inner))
                 } else {
-                    TypeAnnotation::Tuple(inner)
+                    TypeAnnotation::Tuple(Rc::new(inner))
                 }
             }
             Value::Error(_) => {

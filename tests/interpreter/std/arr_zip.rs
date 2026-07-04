@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use rl_lang::ast::statements::TypeAnnotation;
 use rl_lang::interpreter::values::Value;
 
@@ -17,7 +19,10 @@ dec arr[(int, string)] z = arr_zip(a, b)
     assert_eq!(
         ev.get_value_raw("z"),
         Some(Value::Values {
-            items_type: TypeAnnotation::Tuple(vec![TypeAnnotation::Null, TypeAnnotation::Null,]),
+            items_type: TypeAnnotation::Tuple(Rc::new(vec![
+                TypeAnnotation::Null,
+                TypeAnnotation::Null,
+            ])),
             items: vec![
                 Value::Tuple(vec![Value::Integer(1), Value::String("one".to_string())]),
                 Value::Tuple(vec![Value::Integer(2), Value::String("two".to_string())]),
@@ -41,7 +46,10 @@ dec arr[(int, int)] z = arr_zip(a, b)
     assert_eq!(
         ev.get_value_raw("z"),
         Some(Value::Values {
-            items_type: TypeAnnotation::Tuple(vec![TypeAnnotation::Null, TypeAnnotation::Null,]),
+            items_type: TypeAnnotation::Tuple(Rc::new(vec![
+                TypeAnnotation::Null,
+                TypeAnnotation::Null,
+            ])),
             items: vec![
                 Value::Tuple(vec![Value::Integer(10), Value::Integer(1)]),
                 Value::Tuple(vec![Value::Integer(20), Value::Integer(2)]),
@@ -140,7 +148,10 @@ dec arr[(int, string)] z = arr_zip(a, b)
     assert_eq!(
         ev.get_value_raw("z"),
         Some(Value::Values {
-            items_type: TypeAnnotation::Tuple(vec![TypeAnnotation::Null, TypeAnnotation::Null,]),
+            items_type: TypeAnnotation::Tuple(Rc::new(vec![
+                TypeAnnotation::Null,
+                TypeAnnotation::Null,
+            ])),
             items: vec![Value::Tuple(vec![
                 Value::Integer(42),
                 Value::String("hi".to_string()),

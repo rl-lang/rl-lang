@@ -11,6 +11,8 @@
 //! CONST int X, string Y = (1, "hi")
 //! ```
 
+use std::rc::Rc;
+
 use crate::{
     ast::statements::{Statement, StatementKind, TypeAnnotation},
     lexer::tokentypes::TokenType,
@@ -81,7 +83,7 @@ impl Parser {
                 return Ok(Statement::new(
                     StatementKind::ConstantDeclaration {
                         name,
-                        type_annotation: TypeAnnotation::CTuple(types),
+                        type_annotation: TypeAnnotation::CTuple(Rc::new(types)),
                         value,
                     },
                     span,

@@ -1,4 +1,6 @@
 mod parse_type;
+use std::rc::Rc;
+
 use crate::{
     ast::statements::TypeAnnotation,
     lexer::tokentypes::TokenType,
@@ -164,7 +166,7 @@ impl Parser {
                 if !self.match_type(&[TokenType::RightParen]) {
                     return Err(self.err("expected `)` after tuple types", self.peek_span()));
                 }
-                Ok(TypeAnnotation::Tuple(inner))
+                Ok(TypeAnnotation::Tuple(Rc::new(inner)))
             }
             TokenType::Error => {
                 self.advance();
