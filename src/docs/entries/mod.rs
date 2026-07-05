@@ -21,6 +21,9 @@ pub fn stdlib_entries() -> Vec<&'static StdEntry> {
         &stdlib::time::TIME,
         &stdlib::process::PROCESS,
         &stdlib::result::RES,
+        &stdlib::bitwise::BITWISE,
+        &stdlib::term::TERM,
+        &stdlib::rl::RL,
     ]
 }
 
@@ -45,6 +48,7 @@ pub fn concept_entries() -> Vec<&'static ConceptEntry> {
         &concepts::tuples::TUPLES,
         &concepts::errors::ERROR_TYPE,
         &concepts::casts::CASTING,
+        &concepts::r#match::MATCH,
     ]
 }
 
