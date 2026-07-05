@@ -24,45 +24,45 @@ will have random stuff that should be tracked
   - [ ] finish tests
 - [ ] refactor the following std modules
    - [ ] `str`
-    - [ ] logic
-    - [ ] tests
-    - [ ] docs
+      - [ ] logic
+      - [ ] tests
+      - [ ] docs
    - [ ] `result`
-    - [ ] logic
-    - [ ] tests
-    - [ ] docs
+      - [ ] logic
+      - [ ] tests
+      - [ ] docs
    - [ ] `random`
-    - [ ] logic
-    - [ ] tests
-    - [ ] docs
+      - [ ] logic
+      - [ ] tests
+      - [ ] docs
    - [ ] `process`
-    - [ ] logic
-    - [ ] tests
-    - [ ] docs
+      - [ ] logic
+      - [ ] tests
+      - [ ] docs
    - [ ] `path`
-    - [ ] logic
-    - [ ] tests
-    - [ ] docs
+      - [ ] logic
+      - [ ] tests
+      - [ ] docs
    - [ ] `math`
-    - [ ] logic
-    - [ ] tests
-    - [ ] docs
+      - [ ] logic
+      - [ ] tests
+      - [ ] docs
    - [ ] `io`
-    - [ ] logic
-    - [ ] tests
-    - [ ] docs
+      - [ ] logic
+      - [ ] tests
+      - [ ] docs
    - [ ] `fs`
-    - [ ] logic
-    - [ ] tests
-    - [ ] docs
+      - [ ] logic
+      - [ ] tests
+      - [ ] docs
    - [ ] `bitwise`
-    - [ ] logic
-    - [ ] tests
-    - [ ] docs
+      - [ ] logic
+      - [ ] tests
+      - [ ] docs
    - [ ] `array`
-    - [ ] logic
-    - [ ] tests
-    - [ ] docs
+      - [ ] logic
+      - [ ] tests
+      - [ ] docs
 - [ ] finish the rest of documentation
   - [ ] finish concepts
     - [ ] add new concepts
