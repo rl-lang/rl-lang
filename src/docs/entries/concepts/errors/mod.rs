@@ -63,11 +63,27 @@ pub static ERROR_TYPE: ConceptEntry = ConceptEntry {
             expected_output: &[],
         },
         DescriptionEntry {
-            description: "`result_map` transforms the ok value; `result_map_err` transforms the err value — both pass the other variant through unchanged",
+            description: "`result_map` transforms the ok value; `result_map_err` transforms the err value - both pass the other variant through unchanged",
             examples: &[
                 "get result_map from std::res\ndec result[int] r = ok(5)\ndec result[int] r2 = result_map(r, fn(int x) -> int { return x * 2 })\nprintln(result_unwrap(r2))  // 10",
             ],
             kind: DescriptionKind::Explanation,
+            title: None,
+            expected_output: &[],
+        },
+        DescriptionEntry {
+            description: "`error[T]` is a separate wrapper type from `result[T]` - construct it with `error(value)`, check with `is_error` from `std::res`, and unwrap with `error_unwrap`",
+            examples: &[
+                "get is_error, error_unwrap from std::res\ndec error e = error(\"disk full\")\nprintln(is_error(e))          // true\nprintln(error_unwrap(e))      // \"disk full\"",
+            ],
+            kind: DescriptionKind::Explanation,
+            title: None,
+            expected_output: &[],
+        },
+        DescriptionEntry {
+            description: "an `error` cannot wrap another `error` - this raises a runtime error",
+            examples: &["dec error e = error(error(\"oops\"))  // runtime error"],
+            kind: DescriptionKind::Pitfall,
             title: None,
             expected_output: &[],
         },
