@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="logo-circle.svg" width="200">
+  <img src="assets/logo-circle.svg" width="200">
   <h1>RL</h1>
   <p>A statically-typed interpreted language written in Rust with a clean syntax, a TUI REPL, and a growing standard library.</p>
 </div>
