@@ -1,0 +1,73 @@
+# This is notes
+will have random stuff that should be tracked
+
+## To do
+- [ ] finish `debug` std module
+  - [ ] finish implementation
+    - [ ] `dbg` 
+    - [ ] `typeof`
+    - [ ] `assert`
+    - [ ] `assert_eq`
+    - [ ] `assert_ne`
+    - [ ] `panic`
+    - [ ] `unreachable`
+    - [ ] `todo`
+  - [ ] finish documentation
+  - [ ] finish tests
+- [ ] finish `net` std module
+  - [ ] finish implementation
+  - [ ] finish documentation
+  - [ ] finish tests
+- [ ] finish `http` std module
+  - [ ] finish implementation
+  - [ ] finish documentation
+  - [ ] finish tests
+- [ ] refactor the following std modules
+   - [ ] `str`
+    - [ ] logic
+    - [ ] tests
+    - [ ] docs
+   - [ ] `result`
+    - [ ] logic
+    - [ ] tests
+    - [ ] docs
+   - [ ] `random`
+    - [ ] logic
+    - [ ] tests
+    - [ ] docs
+   - [ ] `process`
+    - [ ] logic
+    - [ ] tests
+    - [ ] docs
+   - [ ] `path`
+    - [ ] logic
+    - [ ] tests
+    - [ ] docs
+   - [ ] `math`
+    - [ ] logic
+    - [ ] tests
+    - [ ] docs
+   - [ ] `io`
+    - [ ] logic
+    - [ ] tests
+    - [ ] docs
+   - [ ] `fs`
+    - [ ] logic
+    - [ ] tests
+    - [ ] docs
+   - [ ] `bitwise`
+    - [ ] logic
+    - [ ] tests
+    - [ ] docs
+   - [ ] `array`
+    - [ ] logic
+    - [ ] tests
+    - [ ] docs
+- [ ] finish the rest of documentation
+  - [ ] finish concepts
+    - [ ] add new concepts
+    - [ ] update the old concepts
+  - [ ] finish tutorial
+    - [ ] design the most simple and optimized version of tutorial programs
+    - [ ] redesign the steps of tutorial
+  - [ ] update stdlib
