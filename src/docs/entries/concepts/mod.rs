@@ -10,6 +10,7 @@ pub mod functions;
 pub mod generals;
 pub mod imports;
 pub mod lambdas;
+pub mod r#match;
 pub mod nulls;
 pub mod operators;
 pub mod tooling;
