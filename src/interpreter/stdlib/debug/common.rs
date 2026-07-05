@@ -45,3 +45,54 @@ pub fn assert_eq_message(
     }
 }
 
+pub fn assert_cmp(
+    eval: &mut Evaluator,
+    args: Vec<Value>,
+    span: Span,
+    name: &str,
+    op: fn(f64, f64) -> bool,
+) -> Result<Value, Error> {
+    if args.len() < 2 || args.len() > 3 {
+        return Err(eval.err(
+            format!("{}() expects 2 or 3 arguments, got {}", name, args.len()),
+            span,
+        ));
+    }
+
+    let (a, b) = (&args[0], &args[1]);
+    let (fa, fb) = match (as_f64(a), as_f64(b)) {
+        (Some(fa), Some(fb)) => (fa, fb),
+        _ => {
+            return Err(eval.err(
+                format!(
+                    "{}: expects numeric arguments, got {} and {}",
+                    name,
+                    a.type_name(),
+                    b.type_name()
+                ),
+                span,
+            ));
+        }
+    };
+
+    if !op(fa, fb) {
+        let default_msg = format!("{} failed: `{}` vs `{}`", name, a, b);
+        let message = match args.get(2) {
+            Some(Value::String(s)) => format!("{}: {}", s, default_msg),
+            Some(other) => {
+                return Err(eval.err(
+                    format!(
+                        "{}: expects a string message, got {}",
+                        name,
+                        other.type_name()
+                    ),
+                    span,
+                ));
+            }
+            None => default_msg,
+        };
+        return Err(eval.err(message, span));
+    }
+
+    Ok(Value::Null)
+}
