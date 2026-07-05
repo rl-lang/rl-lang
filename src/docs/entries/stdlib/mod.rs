@@ -1,5 +1,6 @@
 //! Standard library documentation entries, one module per file.
 pub mod array;
+pub mod bitwise;
 pub mod fs;
 pub mod io;
 pub mod math;
@@ -9,5 +10,6 @@ pub mod process;
 pub mod random;
 pub mod result;
 pub mod str;
+pub mod term;
 pub mod time;
 pub mod types;
