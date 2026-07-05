@@ -9,6 +9,7 @@ pub mod path;
 pub mod process;
 pub mod random;
 pub mod result;
+pub mod rl;
 pub mod str;
 pub mod term;
 pub mod time;
