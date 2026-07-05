@@ -24,6 +24,7 @@ pub fn stdlib_entries() -> Vec<&'static StdEntry> {
         &stdlib::bitwise::BITWISE,
         &stdlib::term::TERM,
         &stdlib::rl::RL,
+        &stdlib::debug::DEBUG,
     ]
 }
 
