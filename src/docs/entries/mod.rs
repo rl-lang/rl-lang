@@ -22,6 +22,7 @@ pub fn stdlib_entries() -> Vec<&'static StdEntry> {
         &stdlib::process::PROCESS,
         &stdlib::result::RES,
         &stdlib::bitwise::BITWISE,
+        &stdlib::term::TERM,
     ]
 }
 
