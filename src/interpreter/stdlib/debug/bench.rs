@@ -27,14 +27,11 @@ pub fn func(eval: &mut Evaluator, function: Value, iterations_val: Value) -> Val
 
     let start = std::time::Instant::now();
     for _ in 0..iterations {
-        match eval.call_value(function.clone(), vec![], Span::dummy()) {
-            Err(e) => {
-                return verr!(vs!(format!(
-                    "bench: error executing the function: {}",
-                    e.message()
-                )));
-            }
-            Ok(_) => {}
+        if let Err(e) = eval.call_value(function.clone(), vec![], Span::dummy()) {
+            return verr!(vs!(format!(
+                "bench: error executing the function: {}",
+                e.message()
+            )));
         };
     }
     let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
