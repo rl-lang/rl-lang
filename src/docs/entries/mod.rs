@@ -49,6 +49,8 @@ pub fn concept_entries() -> Vec<&'static ConceptEntry> {
         &concepts::errors::ERROR_TYPE,
         &concepts::casts::CASTING,
         &concepts::r#match::MATCH,
+        &concepts::propagate::PROPAGATE,
+        &concepts::logical_operators::LOGICAL_OPERATORS,
     ]
 }
 
