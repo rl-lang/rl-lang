@@ -7,6 +7,15 @@ use crate::{
     utils::{errors::Error, span::Span},
 };
 
+pub fn as_f64(value: &Value) -> Option<f64> {
+    match value {
+        Value::Integer(i) => Some(*i as f64),
+        Value::Float(f) => Some(*f),
+        Value::Byte(b) => Some(*b as f64),
+        _ => None,
+    }
+}
+
 pub fn assert_eq_message(
     a: &Value,
     b: &Value,
