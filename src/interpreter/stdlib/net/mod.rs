@@ -9,6 +9,8 @@ mod tcp_accept;
 mod tcp_close;
 mod tcp_connect;
 mod tcp_listen;
+mod tcp_local_addr;
+mod tcp_peer_addr;
 pub const KEYWORDS: &[&str] = &[
     "tcp_listen",
     "tcp_accept",
@@ -43,6 +45,7 @@ pub fn module() -> Module {
         .with_function("tcp_listen", tcp_listen::func)
         .with_function("tcp_accept", tcp_accept::func)
         .with_function("tcp_connect", tcp_connect::func)
+        .with_function("tcp_peer_addr", tcp_peer_addr::func)
         .with_function("tcp_local_addr", tcp_local_addr::func)
         .with_function("tcp_close", tcp_close::func)
         .with_function("resolve", resolve::func)
