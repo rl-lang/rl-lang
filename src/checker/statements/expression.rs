@@ -351,6 +351,36 @@ impl TypeChecker {
                 CheckType::Known(TypeAnnotation::Record(name))
             }
 
+            ExpressionKind::FieldAccess { target, field } => {
+                let target_type = self.check_expression(target);
+                match &target_type {
+                    CheckType::Known(
+                        TypeAnnotation::Record(name) | TypeAnnotation::CRecord(name),
+                    ) => {
+                        match self.records.get(name).and_then(|fs| {
+                            fs.iter().find(|(n, _)| *n == field).map(|(_, t)| t.clone())
+                        }) {
+                            Some(field_type) => CheckType::Known(field_type),
+                            None => {
+                                self.error(
+                                    format!("record `{}` has no field `{}`", name, field),
+                                    expr_span,
+                                );
+                                CheckType::Unknown
+                            }
+                        }
+                    }
+                    CheckType::Unknown => CheckType::Unknown,
+                    other => {
+                        self.error(
+                            format!("cannot access field `{}` on {}", field, other.info()),
+                            expr_span,
+                        );
+                        CheckType::Unknown
+                    }
+                }
+            }
+
             _ => CheckType::Unknown,
         }
     }
