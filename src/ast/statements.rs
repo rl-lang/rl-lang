@@ -281,6 +281,16 @@ pub enum TypeAnnotation {
 
     Result(Box<TypeAnnotation>),
     CResult(Box<TypeAnnotation>),
+
+    /// A named record (struct) type, mutable binding.
+    Record(String),
+    /// A named record (struct) type, constant binding.
+    CRecord(String),
+
+    /// A named tag (enum) type, mutable binding.
+    Enum(String),
+    /// A named tag (enum) type, constant binding.
+    CEnum(String),
 }
 
 /// A single function or lambda parameter: a name and its type annotation.
