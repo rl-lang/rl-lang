@@ -335,9 +335,17 @@ impl Evaluator {
                 TypeAnnotation::Error | TypeAnnotation::CError,
             ) => true,
             (
+                TypeAnnotation::Record(a) | TypeAnnotation::CRecord(a),
+                TypeAnnotation::Record(b) | TypeAnnotation::CRecord(b),
+            ) => a == b,
+            (
                 TypeAnnotation::Result(_) | TypeAnnotation::CResult(_),
                 TypeAnnotation::Result(_) | TypeAnnotation::CResult(_),
             ) => true,
+            (
+                TypeAnnotation::Enum(a) | TypeAnnotation::CEnum(a),
+                TypeAnnotation::Enum(b) | TypeAnnotation::CEnum(b),
+            ) => a == b,
             _ => false,
         }
     }
