@@ -878,6 +878,29 @@ impl Evaluator {
                 }
             }
 
+            ExpressionKind::EnumVariant { .. } => {
+                let (enum_name, variant) = match &self.resolver.ast_arena.exprs.get(id).kind {
+                    ExpressionKind::EnumVariant { enum_name, variant } => {
+                        (enum_name.clone(), variant.clone())
+                    }
+                    _ => unreachable!(),
+                };
+
+                if let Some(declared_variants) = self.tags.get(&enum_name) {
+                    if !declared_variants.contains(&variant) {
+                        return Err(self.err(
+                            format!("tag `{}` has no variant `{}`", enum_name, variant),
+                            span,
+                        ));
+                    }
+                }
+
+                Ok(Value::Enum {
+                    name: enum_name,
+                    variant,
+                })
+            }
+
             _ => Ok(Value::Null),
         }
     }
