@@ -845,6 +845,39 @@ impl Evaluator {
                 }
             }
 
+            ExpressionKind::FieldAssign { .. } => {
+                let (target, field, value) = match &self.resolver.ast_arena.exprs.get(id).kind {
+                    ExpressionKind::FieldAssign {
+                        target,
+                        field,
+                        value,
+                    } => (*target, field.clone(), *value),
+                    _ => unreachable!(),
+                };
+                let target_span = self.resolver.ast_arena.exprs.get(target).span;
+                let target_val = self.evaluate(target)?;
+                let new_val = self.evaluate(value)?;
+                match target_val {
+                    Value::Struct { name, fields } => {
+                        let mut fields = fields.borrow_mut();
+                        match fields.iter_mut().find(|(n, _)| *n == field) {
+                            Some((_, slot)) => {
+                                *slot = new_val.clone();
+                                Ok(new_val)
+                            }
+                            None => Err(self
+                                .err(format!("record `{}` has no field `{}`", name, field), span)),
+                        }
+                    }
+                    other => Err(self
+                        .err(
+                            format!("cannot assign field `{}` on {}", field, other.type_name()),
+                            span,
+                        )
+                        .with_label(target_span, format!("this is {}", other.type_name()))),
+                }
+            }
+
             _ => Ok(Value::Null),
         }
     }
