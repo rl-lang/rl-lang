@@ -147,6 +147,18 @@ fn remap_expr_kind(kind: &mut ExpressionKind, offset: u32, target_arena_id: u32)
                 remap_stmt_kind(&mut stmt.kind, offset, target_arena_id);
             }
         }
+
+        StructLiteral { fields, .. } => {
+            for (_, id) in fields {
+                remap_id(id, offset, target_arena_id);
+            }
+        }
+        EnumVariant { .. } => {}
+        FieldAccess { target, .. } => remap_id(target, offset, target_arena_id),
+        FieldAssign { target, value, .. } => {
+            remap_id(target, offset, target_arena_id);
+            remap_id(value, offset, target_arena_id);
+        }
     }
 }
 
@@ -158,7 +170,9 @@ fn remap_stmt_kind(kind: &mut StatementKind, offset: u32, target_arena_id: u32) 
         | Range(_)
         | Import { .. }
         | ImportFile { .. }
-        | ImportFileNamed { .. } => {}
+        | ImportFileNamed { .. }
+        | RecordDeclaration { .. }
+        | TagDeclaration { .. } => {}
 
         VariableDeclaration { value, .. }
         | ResolvedVariableDeclaration { value, .. }
