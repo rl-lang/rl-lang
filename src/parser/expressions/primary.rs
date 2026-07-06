@@ -107,6 +107,38 @@ impl Parser {
                     return self.parse_struct_literal(name, start);
                 }
 
+                // --- enum variant reference: Name.Variant ---
+                if self.tag_names.contains(&name) && self.peek() == TokenType::Dot {
+                    self.advance();
+                    let variant = match self.peek() {
+                        TokenType::Identifier(v) => {
+                            self.advance();
+                            v
+                        }
+                        _ => {
+                            return Err(
+                                self.err("expected variant name after `.`", self.peek_span())
+                            );
+                        }
+                    };
+                    let span = start.join(self.previous_span());
+                    #[cfg(feature = "debug")]
+                    log::trace!(
+                        "alloc EnumVariant expr: enum_name={:?} variant={:?} @ {:?}",
+                        name,
+                        variant,
+                        span
+                    );
+                    let expr = self.ast_arena.alloc_expr(
+                        ExpressionKind::EnumVariant {
+                            enum_name: name,
+                            variant,
+                        },
+                        span,
+                    );
+                    return self.parse_postfix(expr, start);
+                }
+
                 // --- assign expression ---
                 if self.match_type(&[TokenType::Assign]) {
                     #[cfg(feature = "debug")]
@@ -154,10 +186,7 @@ impl Parser {
                     );
 
                     let mut expr = self.ast_arena.alloc_expr(
-                        ExpressionKind::Index {
-                            target,
-                            index,
-                        },
+                        ExpressionKind::Index { target, index },
                         start.join(after_index_span),
                     );
 
