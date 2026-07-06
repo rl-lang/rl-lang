@@ -4,7 +4,7 @@ use crate::{
     ast::statements::{Param, Statement, TypeAnnotation},
     interpreter::evaluator::EnvironmentItem,
 };
-use std::{fmt, rc::Rc};
+use std::{cell::RefCell, fmt, rc::Rc};
 
 /// A runtime value produced by evaluating an rl expression.
 #[derive(Debug, Clone, PartialEq)]
@@ -39,6 +39,15 @@ pub enum Value {
     Error(Box<Value>),
     Ok(Box<Value>),
     Err(Box<Value>),
+
+    Struct {
+        name: String,
+        fields: Rc<RefCell<Vec<(String, Value)>>>,
+    },
+    Enum {
+        name: String,
+        variant: String,
+    },
 }
 
 /// Payload for `Value::Function`
@@ -69,6 +78,8 @@ impl Value {
             Value::Error(_) => "error",
             Value::Ok(_) => "ok",
             Value::Err(_) => "err",
+            Value::Struct { .. } => "record",
+            Value::Enum { .. } => "tag",
         }
     }
 
@@ -108,6 +119,15 @@ impl fmt::Display for Value {
             Value::Error(inner) => write!(f, "error({})", inner),
             Value::Ok(inner) => write!(f, "ok({})", inner),
             Value::Err(inner) => write!(f, "err({})", inner),
+            Value::Struct { name, fields } => {
+                let fields = fields.borrow();
+                let formatted: Vec<String> = fields
+                    .iter()
+                    .map(|(field_name, value)| format!("{}: {}", field_name, value))
+                    .collect();
+                write!(f, "{} {{ {} }}", name, formatted.join(", "))
+            }
+            Value::Enum { name, variant } => write!(f, "{}.{}", name, variant),
         }
     }
 }
