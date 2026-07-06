@@ -141,4 +141,26 @@ pub enum ExpressionKind {
     ErrLiteral(ExprId),
 
     Propagate(ExprId),
+
+    /// A record (struct) literal: `Name { field: value, ... }`.
+    StructLiteral {
+        name: String,
+        fields: Vec<(String, ExprId)>,
+    },
+    /// A field access: `target.field`.
+    FieldAccess {
+        target: ExprId,
+        field: String,
+    },
+    /// A field assignment: `target.field = value`.
+    FieldAssign {
+        target: ExprId,
+        field: String,
+        value: ExprId,
+    },
+    /// A tag (enum) variant reference: `EnumName.Variant`.
+    EnumVariant {
+        enum_name: String,
+        variant: String,
+    },
 }
