@@ -102,6 +102,11 @@ impl Parser {
                 }
                 let name = path.pop().unwrap();
 
+                // --- struct literal: Name { field: value, ... } ---
+                if self.record_names.contains(&name) && self.peek() == TokenType::LeftBrace {
+                    return self.parse_struct_literal(name, start);
+                }
+
                 // --- assign expression ---
                 if self.match_type(&[TokenType::Assign]) {
                     #[cfg(feature = "debug")]
