@@ -7,7 +7,6 @@ use crate::{
     utils::{errors::Error, span::Span},
 };
 
-/// assert_ne(a, b, msg?) - errors if `a == b`.
 pub fn func(eval: &mut Evaluator, args: Vec<Value>, span: Span) -> Result<Value, Error> {
     if args.len() < 2 || args.len() > 3 {
         return Err(eval.err(
