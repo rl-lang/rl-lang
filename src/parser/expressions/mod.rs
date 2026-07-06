@@ -24,6 +24,7 @@ mod factor;
 mod logical;
 mod postfix;
 mod primary;
+mod struct_literal;
 mod term;
 mod unary;
 
