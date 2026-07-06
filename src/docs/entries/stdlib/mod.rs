@@ -6,6 +6,7 @@ pub mod fs;
 pub mod io;
 pub mod math;
 pub mod math_consts;
+pub mod net;
 pub mod path;
 pub mod process;
 pub mod random;
