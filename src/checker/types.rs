@@ -75,7 +75,11 @@ impl CheckType {
 
             // checks the TypeAnnotation and compare then returns [`bool`]
             (CheckType::Known(a), CheckType::Known(b)) => {
-                a == b || null_array_elision(a, b) || const_matches(a, b)
+                a == b
+                    || null_array_elision(a, b)
+                    || const_matches(a, b)
+                    || record_matches(a, b)
+                    || enum_matches(a, b)
             }
 
             _ => false,
@@ -135,8 +139,30 @@ fn const_variant(ty: TypeAnnotation) -> TypeAnnotation {
         TypeAnnotation::Tuple(inner) => TypeAnnotation::CTuple(inner),
         TypeAnnotation::Error => TypeAnnotation::CError,
         TypeAnnotation::Result(inner) => TypeAnnotation::CResult(inner),
+        TypeAnnotation::Record(name) => TypeAnnotation::CRecord(name),
+        TypeAnnotation::Enum(name) => TypeAnnotation::CEnum(name),
         other => other,
     }
+}
+
+/// Returns `true` if `a` and `b` are the same named record, regardless of
+/// `Record`/`CRecord` (mutable/const) mismatch.
+fn record_matches(a: &TypeAnnotation, b: &TypeAnnotation) -> bool {
+    matches!(
+        (a, b),
+        (TypeAnnotation::Record(x) | TypeAnnotation::CRecord(x),
+         TypeAnnotation::Record(y) | TypeAnnotation::CRecord(y)) if x == y
+    )
+}
+
+/// Returns `true` if `a` and `b` are the same named tag (enum), regardless of
+/// `Enum`/`CEnum` (mutable/const) mismatch.
+fn enum_matches(a: &TypeAnnotation, b: &TypeAnnotation) -> bool {
+    matches!(
+        (a, b),
+        (TypeAnnotation::Enum(x) | TypeAnnotation::CEnum(x),
+         TypeAnnotation::Enum(y) | TypeAnnotation::CEnum(y)) if x == y
+    )
 }
 
 /// Returns `true` if `a` is the const variant of `b` or vice versa (e.g. `CInt` <-> `Int`).
