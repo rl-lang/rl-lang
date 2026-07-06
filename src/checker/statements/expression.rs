@@ -381,6 +381,53 @@ impl TypeChecker {
                 }
             }
 
+            ExpressionKind::FieldAssign {
+                target,
+                field,
+                value,
+            } => {
+                let target_type = self.check_expression(target);
+                let value_type = self.check_expression(value);
+                match &target_type {
+                    CheckType::Known(
+                        TypeAnnotation::Record(name) | TypeAnnotation::CRecord(name),
+                    ) => {
+                        match self.records.get(name).and_then(|fs| {
+                            fs.iter().find(|(n, _)| *n == field).map(|(_, t)| t.clone())
+                        }) {
+                            Some(field_type) => {
+                                let expected = CheckType::Known(field_type);
+                                if !value_type.matches(&expected) {
+                                    self.error(
+                                        format!(
+                                            "field `{}` of record `{}` expects {}, got {}",
+                                            field,
+                                            name,
+                                            expected.info(),
+                                            value_type.info()
+                                        ),
+                                        expr_span,
+                                    );
+                                }
+                            }
+                            None => {
+                                self.error(
+                                    format!("record `{}` has no field `{}`", name, field),
+                                    expr_span,
+                                );
+                            }
+                        }
+                    }
+                    CheckType::Unknown => {}
+                    other => {
+                        self.error(
+                            format!("cannot assign field `{}` on {}", field, other.info()),
+                            expr_span,
+                        );
+                    }
+                }
+                value_type
+            }
             _ => CheckType::Unknown,
         }
     }
