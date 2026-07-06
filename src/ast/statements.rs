@@ -217,6 +217,15 @@ pub enum StatementKind {
         value: ExprId,
         arms: Vec<(MatchPattern, Vec<Statement>)>,
     },
+
+    /// A record (struct) type declaration: `record Name { int a, string b }`.
+    RecordDeclaration {
+        name: String,
+        fields: Vec<(String, TypeAnnotation)>,
+    },
+
+    /// A tag (enum) type declaration: `tag Name { VariantA, VariantB }`.
+    TagDeclaration { name: String, variants: Vec<String> },
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -281,6 +290,16 @@ pub enum TypeAnnotation {
 
     Result(Box<TypeAnnotation>),
     CResult(Box<TypeAnnotation>),
+
+    /// A named record (struct) type, mutable binding.
+    Record(String),
+    /// A named record (struct) type, constant binding.
+    CRecord(String),
+
+    /// A named tag (enum) type, mutable binding.
+    Enum(String),
+    /// A named tag (enum) type, constant binding.
+    CEnum(String),
 }
 
 /// A single function or lambda parameter: a name and its type annotation.

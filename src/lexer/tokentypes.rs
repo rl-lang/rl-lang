@@ -105,6 +105,8 @@ pub enum TokenType {
     Ok,
     Err,
     Match,
+    Record,
+    Tag,
 
     // -- type keywords --
     Int,

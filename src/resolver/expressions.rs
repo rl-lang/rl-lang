@@ -32,11 +32,14 @@ impl Resolver {
         let kind = self.ast_arena.exprs.get(id).kind.clone();
 
         let new_kind = match kind {
-            ExpressionKind::Identifier(name) => self.resolve_name(&name).map(|(depth, slot)| ExpressionKind::ResolvedIdentifier { name, depth, slot }),
+            ExpressionKind::Identifier(name) => self
+                .resolve_name(&name)
+                .map(|(depth, slot)| ExpressionKind::ResolvedIdentifier { name, depth, slot }),
 
             ExpressionKind::Assign { name, value } => {
                 self.resolve_expression(value);
-                self.resolve_name(&name).map(|(depth, slot)| ExpressionKind::ResolvedAssign {
+                self.resolve_name(&name)
+                    .map(|(depth, slot)| ExpressionKind::ResolvedAssign {
                         name,
                         depth,
                         slot,
@@ -157,6 +160,22 @@ impl Resolver {
                 for item in &items {
                     self.resolve_expression(*item);
                 }
+                None
+            }
+
+            ExpressionKind::StructLiteral { fields, .. } => {
+                for (_, value) in &fields {
+                    self.resolve_expression(*value);
+                }
+                None
+            }
+            ExpressionKind::FieldAccess { target, .. } => {
+                self.resolve_expression(target);
+                None
+            }
+            ExpressionKind::FieldAssign { target, value, .. } => {
+                self.resolve_expression(target);
+                self.resolve_expression(value);
                 None
             }
 

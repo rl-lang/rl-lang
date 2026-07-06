@@ -34,6 +34,10 @@ pub struct TypeChecker {
     pub importing: Vec<PathBuf>,
     pub imported: HashSet<PathBuf>,
     pub ast_arena: Ast,
+    /// Maps `record` type names to their declared `(field name, field type)` list.
+    pub records: HashMap<String, Vec<(String, TypeAnnotation)>>,
+    /// Maps `tag` (enum) type names to their declared variant name list.
+    pub tags: HashMap<String, Vec<String>>,
 }
 
 /// A single entry in a type checker scope.

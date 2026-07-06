@@ -74,10 +74,10 @@ will have random stuff that should be tracked
 
 ## New Types
 - [ ] `record` a struct like
-  - [ ] implement simple `record` with no internal functions
+  - [x] implement simple `record` with no internal functions
   - [ ] allow `record` to store function thus transforming it into class like
 - [ ] `tag` an enum
-  - [ ] implement simple `tag` that hold no value just tags
+  - [x] implement simple `tag` that hold no value just tags
   - [ ] allow storing data in `tag` items
 - [ ] `map` an array with key and value
 - [ ] `set` an array with unique keys

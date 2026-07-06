@@ -123,6 +123,12 @@ impl TypeChecker {
                     ) | (
                         CheckType::Known(TypeAnnotation::Bool | TypeAnnotation::CBool),
                         CheckType::Known(TypeAnnotation::Bool | TypeAnnotation::CBool),
+                    ) | (
+                        CheckType::Known(TypeAnnotation::Enum(_) | TypeAnnotation::CEnum(_)),
+                        CheckType::Known(TypeAnnotation::Enum(_) | TypeAnnotation::CEnum(_)),
+                    ) | (
+                        CheckType::Known(TypeAnnotation::Record(_) | TypeAnnotation::CRecord(_)),
+                        CheckType::Known(TypeAnnotation::Record(_) | TypeAnnotation::CRecord(_)),
                     )
                 );
                 if !ok {

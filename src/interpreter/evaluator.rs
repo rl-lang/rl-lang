@@ -87,6 +87,12 @@ pub struct Evaluator {
     pub http_handles: HashMap<i64, HttpHandle>,
     /// Next handle id to hand out for `std::http` resources; only ever increments.
     pub http_next_handle: i64,
+    /// Maps `record` type names to their declared `(field name, field type)` list,
+    /// in declaration order. Populated when a `RecordDeclaration` statement runs.
+    pub records: HashMap<String, Vec<(String, TypeAnnotation)>>,
+    /// Maps `tag` (enum) type names to their declared variant name list,
+    /// in declaration order. Populated when a `TagDeclaration` statement runs.
+    pub tags: HashMap<String, Vec<String>>,
 }
 
 impl Default for Evaluator {
@@ -115,6 +121,8 @@ impl Evaluator {
             net_next_handle: 1,
             http_handles: HashMap::new(),
             http_next_handle: 1,
+            records: HashMap::new(),
+            tags: HashMap::new(),
         }
     }
 
@@ -243,6 +251,20 @@ impl Evaluator {
                     TypeAnnotation::Array(Box::new(inner))
                 }
             }
+            Value::Struct { name, .. } => {
+                if is_const {
+                    TypeAnnotation::CRecord(name.clone())
+                } else {
+                    TypeAnnotation::Record(name.clone())
+                }
+            }
+            Value::Enum { name, .. } => {
+                if is_const {
+                    TypeAnnotation::CEnum(name.clone())
+                } else {
+                    TypeAnnotation::Enum(name.clone())
+                }
+            }
             Value::Null => TypeAnnotation::Null,
             Value::Function { .. } => TypeAnnotation::Fn,
             Value::Tuple(items) => {
@@ -313,9 +335,17 @@ impl Evaluator {
                 TypeAnnotation::Error | TypeAnnotation::CError,
             ) => true,
             (
+                TypeAnnotation::Record(a) | TypeAnnotation::CRecord(a),
+                TypeAnnotation::Record(b) | TypeAnnotation::CRecord(b),
+            ) => a == b,
+            (
                 TypeAnnotation::Result(_) | TypeAnnotation::CResult(_),
                 TypeAnnotation::Result(_) | TypeAnnotation::CResult(_),
             ) => true,
+            (
+                TypeAnnotation::Enum(a) | TypeAnnotation::CEnum(a),
+                TypeAnnotation::Enum(b) | TypeAnnotation::CEnum(b),
+            ) => a == b,
             _ => false,
         }
     }
@@ -716,6 +746,159 @@ impl Evaluator {
                     }
                     other => Ok(other),
                 }
+            }
+
+            ExpressionKind::StructLiteral { .. } => {
+                let (name, fields) = match &self.resolver.ast_arena.exprs.get(id).kind {
+                    ExpressionKind::StructLiteral { name, fields } => {
+                        (name.clone(), fields.clone())
+                    }
+                    _ => unreachable!(),
+                };
+
+                let mut evaluated: Vec<(String, Value)> = Vec::with_capacity(fields.len());
+                for (field_name, value_id) in &fields {
+                    let value = self.evaluate(*value_id)?;
+                    evaluated.push((field_name.clone(), value));
+                }
+
+                if let Some(declared_fields) = self.records.get(&name).cloned() {
+                    if declared_fields.len() != evaluated.len() {
+                        return Err(self.err(
+                            format!(
+                                "record `{}` expects {} field(s), got {}",
+                                name,
+                                declared_fields.len(),
+                                evaluated.len()
+                            ),
+                            span,
+                        ));
+                    }
+
+                    let mut ordered: Vec<(String, Value)> =
+                        Vec::with_capacity(declared_fields.len());
+                    for (field_name, field_type) in &declared_fields {
+                        let Some((_, value)) = evaluated.iter().find(|(n, _)| n == field_name)
+                        else {
+                            return Err(self.err(
+                                format!("record `{}` is missing field `{}`", name, field_name),
+                                span,
+                            ));
+                        };
+                        let value_type = Self::infer_type(value, false);
+                        if !Self::types_compatible(&value_type, field_type)
+                            && value_type != TypeAnnotation::Null
+                        {
+                            return Err(self.err(
+                                format!(
+                                    "field `{}` of record `{}` expects {:?}, got {:?}",
+                                    field_name, name, field_type, value_type
+                                ),
+                                span,
+                            ));
+                        }
+                        ordered.push((field_name.clone(), value.clone()));
+                    }
+                    for (field_name, _) in &evaluated {
+                        if !declared_fields.iter().any(|(n, _)| n == field_name) {
+                            return Err(self.err(
+                                format!("record `{}` has no field `{}`", name, field_name),
+                                span,
+                            ));
+                        }
+                    }
+
+                    Ok(Value::Struct {
+                        name,
+                        fields: Rc::new(std::cell::RefCell::new(ordered)),
+                    })
+                } else {
+                    Ok(Value::Struct {
+                        name,
+                        fields: Rc::new(std::cell::RefCell::new(evaluated)),
+                    })
+                }
+            }
+
+            ExpressionKind::FieldAccess { .. } => {
+                let (target, field) = match &self.resolver.ast_arena.exprs.get(id).kind {
+                    ExpressionKind::FieldAccess { target, field } => (*target, field.clone()),
+                    _ => unreachable!(),
+                };
+                let target_span = self.resolver.ast_arena.exprs.get(target).span;
+                let target_val = self.evaluate(target)?;
+                match target_val {
+                    Value::Struct { name, fields } => {
+                        let fields = fields.borrow();
+                        match fields.iter().find(|(n, _)| *n == field) {
+                            Some((_, value)) => Ok(value.clone()),
+                            None => Err(self
+                                .err(format!("record `{}` has no field `{}`", name, field), span)),
+                        }
+                    }
+                    other => Err(self
+                        .err(
+                            format!("cannot access field `{}` on {}", field, other.type_name()),
+                            span,
+                        )
+                        .with_label(target_span, format!("this is {}", other.type_name()))),
+                }
+            }
+
+            ExpressionKind::FieldAssign { .. } => {
+                let (target, field, value) = match &self.resolver.ast_arena.exprs.get(id).kind {
+                    ExpressionKind::FieldAssign {
+                        target,
+                        field,
+                        value,
+                    } => (*target, field.clone(), *value),
+                    _ => unreachable!(),
+                };
+                let target_span = self.resolver.ast_arena.exprs.get(target).span;
+                let target_val = self.evaluate(target)?;
+                let new_val = self.evaluate(value)?;
+                match target_val {
+                    Value::Struct { name, fields } => {
+                        let mut fields = fields.borrow_mut();
+                        match fields.iter_mut().find(|(n, _)| *n == field) {
+                            Some((_, slot)) => {
+                                *slot = new_val.clone();
+                                Ok(new_val)
+                            }
+                            None => Err(self
+                                .err(format!("record `{}` has no field `{}`", name, field), span)),
+                        }
+                    }
+                    other => Err(self
+                        .err(
+                            format!("cannot assign field `{}` on {}", field, other.type_name()),
+                            span,
+                        )
+                        .with_label(target_span, format!("this is {}", other.type_name()))),
+                }
+            }
+
+            ExpressionKind::EnumVariant { .. } => {
+                let (enum_name, variant) = match &self.resolver.ast_arena.exprs.get(id).kind {
+                    ExpressionKind::EnumVariant { enum_name, variant } => {
+                        (enum_name.clone(), variant.clone())
+                    }
+                    _ => unreachable!(),
+                };
+
+                if let Some(declared_variants) = self.tags.get(&enum_name)
+                    && !declared_variants.contains(&variant)
+                {
+                    return Err(self.err(
+                        format!("tag `{}` has no variant `{}`", enum_name, variant),
+                        span,
+                    ));
+                }
+
+                Ok(Value::Enum {
+                    name: enum_name,
+                    variant,
+                })
             }
 
             _ => Ok(Value::Null),

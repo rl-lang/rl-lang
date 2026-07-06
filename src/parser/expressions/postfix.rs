@@ -20,16 +20,64 @@ impl Parser {
     /// argument list is not opened with `(`.
     pub fn parse_postfix(&mut self, mut expr: ExprId, start: Span) -> Result<ExprId, Error> {
         loop {
-            // --- method call ---
+            // --- method call / field access ---
             if self.match_type(&[TokenType::Dot]) {
                 if !self.match_type(&[TokenType::Identifier(String::new())]) {
-                    return Err(self.err("expected method name after '.'", self.peek_span()));
+                    return Err(self.err("expected name after '.'", self.peek_span()));
                 }
                 let first = if let TokenType::Identifier(name) = self.previous() {
                     name
                 } else {
-                    return Err(self.err("expected method name after '.'", self.peek_span()));
+                    return Err(self.err("expected name after '.'", self.peek_span()));
                 };
+
+                // a bare `.name` not followed by `::` or `(` is a field access,
+                // not a method call.
+                if self.peek() != TokenType::ColonColon && self.peek() != TokenType::LeftParen {
+                    let span = start.join(self.previous_span());
+                    #[cfg(feature = "debug")]
+                    log::trace!(
+                        "alloc FieldAccess expr: target={:?} field={:?} @ {:?}",
+                        expr,
+                        first,
+                        span
+                    );
+                    expr = self.ast_arena.alloc_expr(
+                        ExpressionKind::FieldAccess {
+                            target: expr,
+                            field: first,
+                        },
+                        span,
+                    );
+
+                    // --- field assignment: target.field = value ---
+                    if self.match_type(&[TokenType::Assign]) {
+                        let value = self.parse_expression()?;
+                        let value_id = self.ast_arena.exprs.get(value);
+                        let assign_span = start.join(value_id.span);
+                        let expr_kind = self.ast_arena.exprs.get(expr).kind.clone();
+                        if let ExpressionKind::FieldAccess { target, field } = expr_kind {
+                            #[cfg(feature = "debug")]
+                            log::trace!(
+                                "alloc FieldAssign expr: target={:?} field={:?} value={:?} @ {:?}",
+                                target,
+                                field,
+                                value,
+                                assign_span
+                            );
+                            return Ok(self.ast_arena.alloc_expr(
+                                ExpressionKind::FieldAssign {
+                                    target,
+                                    field,
+                                    value,
+                                },
+                                assign_span,
+                            ));
+                        }
+                    }
+
+                    continue;
+                }
 
                 let mut method = vec![first];
                 while self.match_type(&[TokenType::ColonColon]) {
