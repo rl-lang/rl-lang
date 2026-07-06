@@ -25,11 +25,11 @@ pub fn func(eval: &mut Evaluator, id: Value, max_bytes: Value) -> Value {
         Some(NetHandle::UdpSocket(socket)) => socket,
         Some(_) => {
             return verr!(vs!(format!(
-                "udp_recv_from(): handle {} is not a UDP socket",
+                "udp_recv_from: handle {} is not a UDP socket",
                 id
             )));
         }
-        None => return verr!(vs!(format!("udp_recv_from(): unknown handle {}", id))),
+        None => return verr!(vs!(format!("udp_recv_from: unknown handle {}", id))),
     };
     let mut buf = vec![0u8; max_bytes];
     match socket.recv_from(&mut buf) {
@@ -38,6 +38,6 @@ pub fn func(eval: &mut Evaluator, id: Value, max_bytes: Value) -> Value {
             let data = String::from_utf8_lossy(&buf).into_owned();
             vok!(Value::Tuple(vec![vs!(data), vs!(sender.to_string())]))
         }
-        Err(e) => verr!(vs!(format!("udp_recv_from(): {}", e))),
+        Err(e) => verr!(vs!(format!("udp_recv_from: {}", e))),
     }
 }
