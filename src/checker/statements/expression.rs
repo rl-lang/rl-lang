@@ -428,6 +428,24 @@ impl TypeChecker {
                 }
                 value_type
             }
+
+            ExpressionKind::EnumVariant { enum_name, variant } => {
+                match self.tags.get(&enum_name) {
+                    Some(variants) => {
+                        if !variants.contains(&variant) {
+                            self.error(
+                                format!("tag `{}` has no variant `{}`", enum_name, variant),
+                                expr_span,
+                            );
+                        }
+                    }
+                    None => {
+                        self.error(format!("unknown tag type `{}`", enum_name), expr_span);
+                    }
+                }
+                CheckType::Known(TypeAnnotation::Enum(enum_name))
+            }
+
             _ => CheckType::Unknown,
         }
     }
