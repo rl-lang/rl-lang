@@ -87,6 +87,12 @@ pub struct Evaluator {
     pub http_handles: HashMap<i64, HttpHandle>,
     /// Next handle id to hand out for `std::http` resources; only ever increments.
     pub http_next_handle: i64,
+    /// Maps `record` type names to their declared `(field name, field type)` list,
+    /// in declaration order. Populated when a `RecordDeclaration` statement runs.
+    pub records: HashMap<String, Vec<(String, TypeAnnotation)>>,
+    /// Maps `tag` (enum) type names to their declared variant name list,
+    /// in declaration order. Populated when a `TagDeclaration` statement runs.
+    pub tags: HashMap<String, Vec<String>>,
 }
 
 impl Default for Evaluator {
@@ -115,6 +121,8 @@ impl Evaluator {
             net_next_handle: 1,
             http_handles: HashMap::new(),
             http_next_handle: 1,
+            records: HashMap::new(),
+            tags: HashMap::new(),
         }
     }
 
