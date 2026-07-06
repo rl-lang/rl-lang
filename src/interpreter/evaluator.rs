@@ -748,6 +748,78 @@ impl Evaluator {
                 }
             }
 
+            ExpressionKind::StructLiteral { .. } => {
+                let (name, fields) = match &self.resolver.ast_arena.exprs.get(id).kind {
+                    ExpressionKind::StructLiteral { name, fields } => {
+                        (name.clone(), fields.clone())
+                    }
+                    _ => unreachable!(),
+                };
+
+                let mut evaluated: Vec<(String, Value)> = Vec::with_capacity(fields.len());
+                for (field_name, value_id) in &fields {
+                    let value = self.evaluate(*value_id)?;
+                    evaluated.push((field_name.clone(), value));
+                }
+
+                if let Some(declared_fields) = self.records.get(&name).cloned() {
+                    if declared_fields.len() != evaluated.len() {
+                        return Err(self.err(
+                            format!(
+                                "record `{}` expects {} field(s), got {}",
+                                name,
+                                declared_fields.len(),
+                                evaluated.len()
+                            ),
+                            span,
+                        ));
+                    }
+
+                    let mut ordered: Vec<(String, Value)> =
+                        Vec::with_capacity(declared_fields.len());
+                    for (field_name, field_type) in &declared_fields {
+                        let Some((_, value)) = evaluated.iter().find(|(n, _)| n == field_name)
+                        else {
+                            return Err(self.err(
+                                format!("record `{}` is missing field `{}`", name, field_name),
+                                span,
+                            ));
+                        };
+                        let value_type = Self::infer_type(value, false);
+                        if !Self::types_compatible(&value_type, field_type)
+                            && value_type != TypeAnnotation::Null
+                        {
+                            return Err(self.err(
+                                format!(
+                                    "field `{}` of record `{}` expects {:?}, got {:?}",
+                                    field_name, name, field_type, value_type
+                                ),
+                                span,
+                            ));
+                        }
+                        ordered.push((field_name.clone(), value.clone()));
+                    }
+                    for (field_name, _) in &evaluated {
+                        if !declared_fields.iter().any(|(n, _)| n == field_name) {
+                            return Err(self.err(
+                                format!("record `{}` has no field `{}`", name, field_name),
+                                span,
+                            ));
+                        }
+                    }
+
+                    Ok(Value::Struct {
+                        name,
+                        fields: Rc::new(std::cell::RefCell::new(ordered)),
+                    })
+                } else {
+                    Ok(Value::Struct {
+                        name,
+                        fields: Rc::new(std::cell::RefCell::new(evaluated)),
+                    })
+                }
+            }
+
             _ => Ok(Value::Null),
         }
     }
