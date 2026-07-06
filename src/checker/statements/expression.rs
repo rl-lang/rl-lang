@@ -302,6 +302,55 @@ impl TypeChecker {
                 CheckType::Unknown
             }
 
+            ExpressionKind::StructLiteral { name, fields } => {
+                if let Some(declared_fields) = self.records.get(&name).cloned() {
+                    for (field_name, value) in &fields {
+                        let value_span = self.ast_arena.exprs.get(*value).span;
+                        let value_type = self.check_expression(*value);
+                        match declared_fields.iter().find(|(n, _)| n == field_name) {
+                            Some((_, field_type)) => {
+                                let expected = CheckType::Known(field_type.clone());
+                                if !value_type.matches(&expected) {
+                                    self.error(
+                                        format!(
+                                            "field `{}` of record `{}` expects {}, got {}",
+                                            field_name,
+                                            name,
+                                            expected.info(),
+                                            value_type.info()
+                                        ),
+                                        value_span,
+                                    );
+                                }
+                            }
+                            None => {
+                                self.error(
+                                    format!("record `{}` has no field `{}`", name, field_name),
+                                    value_span,
+                                );
+                            }
+                        }
+                    }
+                    if fields.len() != declared_fields.len() {
+                        self.error(
+                            format!(
+                                "record `{}` expects {} field(s), got {}",
+                                name,
+                                declared_fields.len(),
+                                fields.len()
+                            ),
+                            expr_span,
+                        );
+                    }
+                } else {
+                    self.error(format!("unknown record type `{}`", name), expr_span);
+                    for (_, value) in &fields {
+                        self.check_expression(*value);
+                    }
+                }
+                CheckType::Known(TypeAnnotation::Record(name))
+            }
+
             _ => CheckType::Unknown,
         }
     }
