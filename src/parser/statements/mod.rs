@@ -15,6 +15,7 @@ mod if_statement;
 mod import_statement;
 mod match_statement;
 mod record_declaration;
+mod tag_declaration;
 mod variable_declaration;
 mod while_statement;
 
@@ -157,6 +158,13 @@ impl Parser {
                 #[cfg(feature = "debug")]
                 log::info!("found `record` while parsing");
                 self.parse_record_declaration(start)
+            }
+
+            TokenType::Tag => {
+                self.advance();
+                #[cfg(feature = "debug")]
+                log::info!("found `tag` while parsing");
+                self.parse_tag_declaration(start)
             }
 
             _ => {
