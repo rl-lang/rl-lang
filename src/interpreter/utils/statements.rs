@@ -21,6 +21,12 @@ impl Evaluator {
     /// rather than exceptions, so callers must check these flags after each statement.
     pub fn evaluate_statement(&mut self, statement: &Statement) -> Result<(), Error> {
         match &statement.kind {
+            StatementKind::RecordDeclaration { name, fields } => {
+                self.records.insert(name.clone(), fields.clone());
+            }
+            StatementKind::TagDeclaration { name, variants } => {
+                self.tags.insert(name.clone(), variants.clone());
+            }
             StatementKind::ResolvedVariableDeclaration {
                 slot,
                 value,
@@ -780,9 +786,9 @@ impl Evaluator {
                 | StatementKind::ResolvedVariableDeclaration { .. }
                 | StatementKind::ResolvedConstantDeclaration { .. }
                 | StatementKind::ResolvedArray { .. }
-                | StatementKind::ResolvedConstantArray { .. } => {
-                    self.evaluate_statement(statement)?
-                }
+                | StatementKind::ResolvedConstantArray { .. }
+                | StatementKind::TagDeclaration { .. }
+                | StatementKind::RecordDeclaration { .. } => self.evaluate_statement(statement)?,
                 _ => {}
             }
         }
