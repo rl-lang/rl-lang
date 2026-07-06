@@ -15,8 +15,8 @@ will have random stuff that should be tracked
   - [x] finish documentation
   - [ ] finish tests
 - [ ] finish `net` std module
-  - [ ] finish implementation
-  - [ ] finish documentation
+  - [x] finish implementation
+  - [x] finish documentation
   - [ ] finish tests
 - [ ] finish `http` std module
   - [ ] finish implementation
