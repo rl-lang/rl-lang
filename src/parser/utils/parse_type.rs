@@ -86,6 +86,14 @@ impl Parser {
                     self.advance();
                     TypeAnnotation::Error
                 }
+                TokenType::Identifier(name) => {
+                    self.advance();
+                    if self.tag_names.contains(&name) {
+                        TypeAnnotation::Enum(name)
+                    } else {
+                        TypeAnnotation::Record(name)
+                    }
+                }
                 _ => return Err(self.err("expected a type", span)),
             },
             false => match self.peek() {
@@ -148,6 +156,14 @@ impl Parser {
                 TokenType::Error => {
                     self.advance();
                     TypeAnnotation::CError
+                }
+                TokenType::Identifier(name) => {
+                    self.advance();
+                    if self.tag_names.contains(&name) {
+                        TypeAnnotation::CEnum(name)
+                    } else {
+                        TypeAnnotation::CRecord(name)
+                    }
                 }
                 _ => return Err(self.err("expected a type", span)),
             },
