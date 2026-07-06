@@ -8,6 +8,7 @@ mod resolve;
 mod tcp_accept;
 mod tcp_close;
 mod tcp_connect;
+mod tcp_listen;
 pub const KEYWORDS: &[&str] = &[
     "tcp_listen",
     "tcp_accept",
@@ -39,6 +40,7 @@ pub enum NetHandle {
 
 pub fn module() -> Module {
     Module::new("net")
+        .with_function("tcp_listen", tcp_listen::func)
         .with_function("tcp_accept", tcp_accept::func)
         .with_function("tcp_connect", tcp_connect::func)
         .with_function("tcp_close", tcp_close::func)
