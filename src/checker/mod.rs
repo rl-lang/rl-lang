@@ -69,6 +69,8 @@ impl TypeChecker {
             importing: Vec::new(),
             imported: HashSet::new(),
             ast_arena: Ast::new(),
+            records: HashMap::new(),
+            tags: HashMap::new(),
         }
     }
 
@@ -105,6 +107,12 @@ impl TypeChecker {
                     return_type: return_type.clone(),
                 };
                 self.declare(name.clone(), fn_type, false, statement.span);
+            }
+            if let StatementKind::RecordDeclaration { name, fields } = &statement.kind {
+                self.records.insert(name.clone(), fields.clone());
+            }
+            if let StatementKind::TagDeclaration { name, variants } = &statement.kind {
+                self.tags.insert(name.clone(), variants.clone());
             }
         }
         for statement in statements {
