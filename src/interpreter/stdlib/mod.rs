@@ -5,6 +5,7 @@ pub mod bitwise;
 mod common;
 pub mod debug;
 pub mod fs;
+pub mod http;
 pub mod io;
 pub mod len;
 pub mod math;

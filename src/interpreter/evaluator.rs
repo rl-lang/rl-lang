@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use crate::interpreter::stdlib::http::HttpHandle;
 use crate::interpreter::stdlib::net::NetHandle;
 use crate::interpreter::stdlib::random::xoshiro::Xoshiro256;
 use crate::interpreter::values::FunctionData;
@@ -75,13 +76,17 @@ pub struct Evaluator {
     /// anywhere else; everything reads/writes through `self.resolver.ast_arena`.
     pub resolver: Resolver,
     /// Maps top-level function names to their environment slot for `call_path` shortcut.
-    pub fn_names: std::collections::HashMap<String, usize>,
+    pub fn_names: HashMap<String, usize>,
     // for diffrent calls
     pub user_args_offset: usize,
     /// Side-table of native networking resources (`std::net`), keyed by handle id.
-    pub net_handles: std::collections::HashMap<i64, NetHandle>,
+    pub net_handles: HashMap<i64, NetHandle>,
     /// Next handle id to hand out for `std::net` resources; only ever increments.
     pub net_next_handle: i64,
+    /// Side-table of native HTTP resources (`std::http`), keyed by handle id.
+    pub http_handles: HashMap<i64, HttpHandle>,
+    /// Next handle id to hand out for `std::http` resources; only ever increments.
+    pub http_next_handle: i64,
 }
 
 impl Default for Evaluator {
@@ -108,6 +113,8 @@ impl Evaluator {
             user_args_offset: 1,
             net_handles: HashMap::new(),
             net_next_handle: 1,
+            http_handles: HashMap::new(),
+            http_next_handle: 1,
         }
     }
 
@@ -158,7 +165,8 @@ impl Evaluator {
                 .with_module(stdlib::terminal::module())
                 .with_module(stdlib::rl::module())
                 .with_module(stdlib::debug::module())
-                .with_module(stdlib::net::module()),
+                .with_module(stdlib::net::module())
+                .with_module(stdlib::http::module()),
         )
     }
 
@@ -830,6 +838,7 @@ impl Evaluator {
                 .chain(stdlib::rl::KEYWORDS)
                 .chain(stdlib::debug::KEYWORDS)
                 .chain(stdlib::net::KEYWORDS)
+                .chain(stdlib::http::KEYWORDS)
                 .copied();
             if let Some(suggestion) = closest_match(last, candidates) {
                 err = err.with_help(format!("did you mean `{}`?", suggestion));

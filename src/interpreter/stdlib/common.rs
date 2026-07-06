@@ -19,6 +19,28 @@ pub fn check_arity(args: &[Value], expected: usize, name: &str, span: Span) -> R
     Ok(())
 }
 
+pub fn check_arity_range(
+    args: &[Value],
+    expected_from: usize,
+    expected_to: usize,
+    name: &str,
+    span: Span,
+) -> Result<(), Error> {
+    let len = args.len();
+    if !(expected_from..expected_to).contains(&len) {
+        let message = format!(
+            "{}: expected from {} to {} arg(s), got {}",
+            name,
+            expected_from,
+            expected_to,
+            args.len()
+        );
+
+        return Err(Error::at(Reason::Runtime, message, span));
+    }
+    Ok(())
+}
+
 pub fn check_type(value: &Value, expected: &str, name: &str) -> Result<(), String> {
     match (value, expected) {
         (Value::Bool(_), "bool")
