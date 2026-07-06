@@ -3,6 +3,7 @@ pub mod array;
 pub mod bitwise;
 pub mod debug;
 pub mod fs;
+pub mod http;
 pub mod io;
 pub mod math;
 pub mod math_consts;
