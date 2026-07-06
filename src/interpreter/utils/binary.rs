@@ -135,6 +135,16 @@ impl Evaluator {
                 (Value::Char(a), Value::Char(b)) => Value::Bool(a != b),
                 (Value::Bool(a), Value::Bool(b)) => Value::Bool(a != b),
                 (Value::Byte(a), Value::Byte(b)) => Value::Bool(a != b),
+                (
+                    Value::Enum {
+                        name: a_name,
+                        variant: a_var,
+                    },
+                    Value::Enum {
+                        name: b_name,
+                        variant: b_var,
+                    },
+                ) => Value::Bool(a_name != b_name || a_var != b_var),
                 _ => {
                     return Err(
                         self.type_mismatch_binary("!=", &left, left_span, &right, right_span, span)
@@ -148,6 +158,16 @@ impl Evaluator {
                 (Value::Char(a), Value::Char(b)) => Value::Bool(a == b),
                 (Value::Bool(a), Value::Bool(b)) => Value::Bool(a == b),
                 (Value::Byte(a), Value::Byte(b)) => Value::Bool(a == b),
+                (
+                    Value::Enum {
+                        name: a_name,
+                        variant: a_var,
+                    },
+                    Value::Enum {
+                        name: b_name,
+                        variant: b_var,
+                    },
+                ) => Value::Bool(a_name == b_name && a_var == b_var),
                 _ => {
                     return Err(
                         self.type_mismatch_binary("==", &left, left_span, &right, right_span, span)
