@@ -43,6 +43,7 @@ pub fn module() -> Module {
         .with_function("tcp_listen", tcp_listen::func)
         .with_function("tcp_accept", tcp_accept::func)
         .with_function("tcp_connect", tcp_connect::func)
+        .with_function("tcp_local_addr", tcp_local_addr::func)
         .with_function("tcp_close", tcp_close::func)
         .with_function("resolve", resolve::func)
 }
