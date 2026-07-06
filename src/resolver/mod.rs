@@ -70,7 +70,7 @@ impl Resolver {
     /// that scope. Returns `None` if the name is not declared in any scope.
     pub fn resolve_name(&self, name: &str) -> Option<(usize, usize)> {
         for (depth, frame) in self.scopes.iter().rev().enumerate() {
-            if let Some(slot) = frame.iter().position(|n| n == name) {
+            if let Some(slot) = frame.iter().rposition(|n| n == name) {
                 return Some((depth, slot));
             }
         }
