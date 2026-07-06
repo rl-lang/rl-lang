@@ -8,6 +8,7 @@ pub mod fs;
 pub mod io;
 pub mod len;
 pub mod math;
+pub mod net;
 pub mod path;
 pub mod process;
 pub mod random;

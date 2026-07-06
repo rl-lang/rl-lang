@@ -1,8 +1,10 @@
 //! Core evaluator - expression evaluation, function calls, and the runtime state.
 
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use crate::interpreter::stdlib::net::NetHandle;
 use crate::interpreter::stdlib::random::xoshiro::Xoshiro256;
 use crate::interpreter::values::FunctionData;
 use crate::lexer::tokentypes::TokenType;
@@ -76,6 +78,10 @@ pub struct Evaluator {
     pub fn_names: std::collections::HashMap<String, usize>,
     // for diffrent calls
     pub user_args_offset: usize,
+    /// Side-table of native networking resources (`std::net`), keyed by handle id.
+    pub net_handles: std::collections::HashMap<i64, NetHandle>,
+    /// Next handle id to hand out for `std::net` resources; only ever increments.
+    pub net_next_handle: i64,
 }
 
 impl Default for Evaluator {
@@ -98,8 +104,10 @@ impl Evaluator {
             output_buffer: None,
             rng: Xoshiro256::default(),
             resolver: Resolver::new(),
-            fn_names: std::collections::HashMap::new(),
+            fn_names: HashMap::new(),
             user_args_offset: 1,
+            net_handles: HashMap::new(),
+            net_next_handle: 1,
         }
     }
 
@@ -149,7 +157,8 @@ impl Evaluator {
                 .with_module(stdlib::result::module())
                 .with_module(stdlib::terminal::module())
                 .with_module(stdlib::rl::module())
-                .with_module(stdlib::debug::module()),
+                .with_module(stdlib::debug::module())
+                .with_module(stdlib::net::module()),
         )
     }
 
@@ -820,6 +829,7 @@ impl Evaluator {
                 .chain(stdlib::terminal::KEYWORDS)
                 .chain(stdlib::rl::KEYWORDS)
                 .chain(stdlib::debug::KEYWORDS)
+                .chain(stdlib::net::KEYWORDS)
                 .copied();
             if let Some(suggestion) = closest_match(last, candidates) {
                 err = err.with_help(format!("did you mean `{}`?", suggestion));

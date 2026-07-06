@@ -1,1 +1,37 @@
+//! `std::net` - TCP/UDP networking built directly on `std::net`.
 
+use crate::interpreter::native::Module;
+use std::net::{TcpListener, TcpStream, UdpSocket};
+
+pub const KEYWORDS: &[&str] = &[
+    "tcp_listen",
+    "tcp_accept",
+    "tcp_connect",
+    "tcp_read",
+    "tcp_write",
+    "tcp_peer_addr",
+    "tcp_local_addr",
+    "tcp_set_timeout",
+    "tcp_set_nonblocking",
+    "tcp_shutdown",
+    "tcp_close",
+    "udp_bind",
+    "udp_connect",
+    "udp_send",
+    "udp_send_to",
+    "udp_recv",
+    "udp_recv_from",
+    "udp_close",
+    "resolve",
+];
+
+/// A single native networking resource, stored behind an `int` handle.
+pub enum NetHandle {
+    TcpListener(TcpListener),
+    TcpStream(TcpStream),
+    UdpSocket(UdpSocket),
+}
+
+pub fn module() -> Module {
+    Module::new("net")
+}
