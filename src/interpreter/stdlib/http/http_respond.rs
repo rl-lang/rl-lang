@@ -62,9 +62,10 @@ pub fn func(eval: &mut Evaluator, args: Vec<Value>, span: Span) -> Result<Value,
 
     let mut response = tiny_http::Response::from_string(body).with_status_code(status);
     if let Some(ct) = content_type
-        && let Ok(header) = tiny_http::Header::from_bytes(&b"Content-Type"[..], ct.as_bytes()) {
-            response = response.with_header(header);
-        }
+        && let Ok(header) = tiny_http::Header::from_bytes(&b"Content-Type"[..], ct.as_bytes())
+    {
+        response = response.with_header(header);
+    }
 
     match request.respond(response) {
         Ok(()) => Ok(vok!(Value::Null)),
