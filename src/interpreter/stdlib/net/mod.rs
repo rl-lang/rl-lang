@@ -3,6 +3,7 @@
 use crate::interpreter::native::Module;
 use std::net::{TcpListener, TcpStream, UdpSocket};
 
+mod common;
 pub const KEYWORDS: &[&str] = &[
     "tcp_listen",
     "tcp_accept",
