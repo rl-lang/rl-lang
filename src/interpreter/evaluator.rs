@@ -251,6 +251,20 @@ impl Evaluator {
                     TypeAnnotation::Array(Box::new(inner))
                 }
             }
+            Value::Struct { name, .. } => {
+                if is_const {
+                    TypeAnnotation::CRecord(name.clone())
+                } else {
+                    TypeAnnotation::Record(name.clone())
+                }
+            }
+            Value::Enum { name, .. } => {
+                if is_const {
+                    TypeAnnotation::CEnum(name.clone())
+                } else {
+                    TypeAnnotation::Enum(name.clone())
+                }
+            }
             Value::Null => TypeAnnotation::Null,
             Value::Function { .. } => TypeAnnotation::Fn,
             Value::Tuple(items) => {
