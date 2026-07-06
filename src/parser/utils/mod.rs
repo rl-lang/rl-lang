@@ -188,6 +188,15 @@ impl Parser {
                 Ok(TypeAnnotation::Null)
             }
 
+            TokenType::Identifier(name) => {
+                self.advance();
+                if self.tag_names.contains(&name) {
+                    Ok(TypeAnnotation::Enum(name))
+                } else {
+                    Ok(TypeAnnotation::Record(name))
+                }
+            }
+
             _ => Err(self.err("expected type", self.peek_span())),
         }
     }
