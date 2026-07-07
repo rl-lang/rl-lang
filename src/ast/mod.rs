@@ -193,6 +193,8 @@ fn remap_stmt_kind(kind: &mut StatementKind, offset: u32, target_arena_id: u32) 
         | ResolvedMap { value, .. }
         | ResolvedConstantMap { value, .. }
         | ResolvedConstantArray { value, .. }
+        | ResolvedSet { value, .. }
+        | ResolvedConstantSet { value, .. }
         | Expression(value)
         | ResolvedDestructureDeclaration { value, .. }
         | DestructureDeclaration { value, .. } => remap_id(value, offset, target_arena_id),
@@ -277,6 +279,12 @@ fn remap_stmt_kind(kind: &mut StatementKind, offset: u32, target_arena_id: u32) 
             for (k, v) in entries {
                 remap_id(k, offset, target_arena_id);
                 remap_id(v, offset, target_arena_id);
+            }
+        }
+
+        Set { items, .. } | ConstantSet { items, .. } => {
+            for id in items {
+                remap_id(id, offset, target_arena_id);
             }
         }
     }
