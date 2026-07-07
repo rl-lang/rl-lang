@@ -38,7 +38,7 @@ impl Evaluator {
             let is_set = matches!(self.slot_ref(depth, slot),
             Some(EnvironmentItem::PItem(p)) if matches!(p.value, Value::Set { .. }));
             if is_set {
-                self.err("sets does not support direct indexical assignments", span);
+                return Err(self.err("sets does not support direct indexical assignments", span));
             }
 
             if is_map {
