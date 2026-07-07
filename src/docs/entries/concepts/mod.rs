@@ -11,6 +11,7 @@ pub mod generals;
 pub mod imports;
 pub mod lambdas;
 pub mod logical_operators;
+pub mod maps;
 pub mod r#match;
 pub mod nulls;
 pub mod operators;
