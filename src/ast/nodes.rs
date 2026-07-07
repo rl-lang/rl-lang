@@ -71,6 +71,7 @@ pub enum ExpressionKind {
     /// An array literal `[a, b, c]`.
     ArrayLiteral(Vec<ExprId>),
     MapLiteral(Vec<(ExprId, ExprId)>),
+    SetLiteral(Vec<ExprId>),
     /// An unresolved variable assignment `name = value`.
     /// Replaced by [`ResolvedAssign`] after the resolver pass.
     Assign {

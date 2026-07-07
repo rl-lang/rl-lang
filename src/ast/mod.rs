@@ -114,6 +114,11 @@ fn remap_expr_kind(kind: &mut ExpressionKind, offset: u32, target_arena_id: u32)
                 remap_id(v, offset, target_arena_id);
             }
         }
+        SetLiteral(items) => {
+            for id in items {
+                remap_id(id, offset, target_arena_id);
+            }
+        }
         Assign { value, .. } | ResolvedAssign { value, .. } => {
             remap_id(value, offset, target_arena_id)
         }
