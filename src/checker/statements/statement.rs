@@ -567,6 +567,31 @@ impl TypeChecker {
                     );
                 }
 
+                StatementKind::Map {
+                    name,
+                    type_annotation,
+                    ..
+                } => {
+                    self.declare(
+                        name.clone(),
+                        CheckType::Known(type_annotation.clone()),
+                        false,
+                        stmt.span,
+                    );
+                }
+                StatementKind::ConstantMap {
+                    name,
+                    type_annotation,
+                    ..
+                } => {
+                    self.declare(
+                        name.clone(),
+                        CheckType::Known(type_annotation.clone()),
+                        true,
+                        stmt.span,
+                    );
+                }
+
                 StatementKind::ImportFile { path: nested }
                 | StatementKind::ImportFileNamed { path: nested, .. } => {
                     self.import_module(nested, stmt.span);
