@@ -149,6 +149,80 @@ impl Evaluator {
                 self.insert_value(*slot, val, declared_type, statement.span)?;
             }
 
+            StatementKind::ResolvedSet {
+                slot,
+                value,
+                type_annotation,
+                ..
+            } => {
+                let val = self.evaluate(*value)?;
+                let val = match val {
+                    Value::Set { items, .. } => {
+                        for item in &items {
+                            let actual = Self::infer_type(item, false);
+                            if !Self::types_compatible(&actual, type_annotation) {
+                                return Err(self.err(
+                                    format!(
+                                        "set element type mismatch: expected {:?}, found {:?}",
+                                        type_annotation, actual
+                                    ),
+                                    statement.span,
+                                ));
+                            }
+                        }
+                        Value::Set {
+                            items_type: type_annotation.clone(),
+                            items,
+                        }
+                    }
+                    other => {
+                        return Err(self.err(
+                            format!("expected set value found {}", other.type_name()),
+                            statement.span,
+                        ));
+                    }
+                };
+                let declared_type = TypeAnnotation::Set(Box::new(type_annotation.clone()));
+                self.insert_value(*slot, val, declared_type, statement.span)?;
+            }
+
+            StatementKind::ResolvedConstantSet {
+                slot,
+                value,
+                type_annotation,
+                ..
+            } => {
+                let val = self.evaluate(*value)?;
+                let val = match val {
+                    Value::Set { items, .. } => {
+                        for item in &items {
+                            let actual = Self::infer_type(item, false);
+                            if !Self::types_compatible(&actual, type_annotation) {
+                                return Err(self.err(
+                                    format!(
+                                        "set element type mismatch: expected {:?}, found {:?}",
+                                        type_annotation, actual
+                                    ),
+                                    statement.span,
+                                ));
+                            }
+                        }
+                        Value::Set {
+                            items_type: type_annotation.clone(),
+                            items,
+                        }
+                    }
+                    other => {
+                        return Err(self.err(
+                            format!("expected set value found {}", other.type_name()),
+                            statement.span,
+                        ));
+                    }
+                };
+                let declared_type = TypeAnnotation::CSet(Box::new(type_annotation.clone()));
+                self.insert_value(*slot, val, declared_type, statement.span)?;
+            }
+
             StatementKind::ResolvedMap {
                 slot,
                 value,
