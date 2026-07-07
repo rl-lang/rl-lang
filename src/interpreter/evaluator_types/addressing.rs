@@ -168,6 +168,30 @@ impl Evaluator {
                     .cloned()
                     .ok_or_else(|| self.err(format!("key {} not found in map", key), index_span))
             }
+            (Value::Set { items, .. }, Value::Integer(i)) => {
+                let i_usize = *i as usize;
+                if i_usize >= items.len() {
+                    return Err(self
+                        .err(
+                            format!("index {} out of bounds (len {})", i, items.len()),
+                            span,
+                        )
+                        .with_label(target_span, format!("this set has length {}", items.len())));
+                }
+                Ok(items[i_usize].clone())
+            }
+            (Value::Set { items, .. }, Value::Byte(b)) => {
+                let b_usize = *b as usize;
+                if b_usize >= items.len() {
+                    return Err(self
+                        .err(
+                            format!("index {} out of bounds (len {})", b, items.len()),
+                            span,
+                        )
+                        .with_label(target_span, format!("this set has length {}", items.len())));
+                }
+                Ok(items[b_usize].clone())
+            }
             _ => Err(self
                 .err("invalid index operation", span)
                 .with_label(target_span, format!("this is {}", arr.type_name()))
