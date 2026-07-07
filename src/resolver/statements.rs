@@ -115,6 +115,49 @@ impl Resolver {
                 }
             }
 
+            StatementKind::Set {
+                name,
+                type_annotation,
+                items,
+            } => {
+                let value = items
+                    .into_iter()
+                    .map(|e| self.resolve_expression(e))
+                    .collect();
+                let slot = self.declare(name.clone());
+                let value = self
+                    .ast_arena
+                    .alloc_expr(ExpressionKind::SetLiteral(value), span);
+
+                StatementKind::ResolvedSet {
+                    name,
+                    slot,
+                    type_annotation,
+                    value,
+                }
+            }
+            StatementKind::ConstantSet {
+                name,
+                type_annotation,
+                items,
+            } => {
+                let value = items
+                    .into_iter()
+                    .map(|e| self.resolve_expression(e))
+                    .collect();
+                let slot = self.declare(name.clone());
+                let value = self
+                    .ast_arena
+                    .alloc_expr(ExpressionKind::SetLiteral(value), span);
+
+                StatementKind::ResolvedConstantSet {
+                    name,
+                    slot,
+                    type_annotation,
+                    value,
+                }
+            }
+
             StatementKind::Map {
                 name,
                 type_annotation,
