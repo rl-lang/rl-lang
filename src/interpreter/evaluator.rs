@@ -251,6 +251,17 @@ impl Evaluator {
                     TypeAnnotation::Array(Box::new(inner))
                 }
             }
+            Value::Set { items, .. } => {
+                let inner = items
+                    .first()
+                    .map(|v| Self::infer_type(v, false))
+                    .unwrap_or(TypeAnnotation::Null);
+                if is_const {
+                    TypeAnnotation::CSet(Box::new(inner))
+                } else {
+                    TypeAnnotation::Set(Box::new(inner))
+                }
+            }
             Value::Map {
                 key_type,
                 value_type,
@@ -361,6 +372,10 @@ impl Evaluator {
                 TypeAnnotation::Map(ak, av) | TypeAnnotation::CMap(ak, av),
                 TypeAnnotation::Map(bk, bv) | TypeAnnotation::CMap(bk, bv),
             ) => Self::types_compatible(ak, bk) && Self::types_compatible(av, bv),
+            (
+                TypeAnnotation::Set(a) | TypeAnnotation::CSet(a),
+                TypeAnnotation::Set(b) | TypeAnnotation::CSet(b),
+            ) => Self::types_compatible(a, b),
             _ => false,
         }
     }
