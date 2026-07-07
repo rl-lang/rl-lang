@@ -473,6 +473,59 @@ impl Evaluator {
                 })
             }
 
+            ExpressionKind::MapLiteral(entries) => {
+                let len = entries.len();
+                let mut map = HashMap::with_capacity(len);
+                let mut key_type = TypeAnnotation::Null;
+                let mut value_type = TypeAnnotation::Null;
+
+                for i in 0..len {
+                    let (key_id, value_id) = match &self.resolver.ast_arena.exprs.get(id).kind {
+                        ExpressionKind::MapLiteral(entries) => entries[i],
+                        _ => unreachable!(),
+                    };
+                    let key_val = self.evaluate(key_id)?;
+                    let value_val = self.evaluate(value_id)?;
+
+                    if i == 0 {
+                        key_type = Self::infer_type(&key_val, false);
+                        value_type = Self::infer_type(&value_val, false);
+                    } else {
+                        let actual_key = Self::infer_type(&key_val, false);
+                        if !Self::types_compatible(&actual_key, &key_type) {
+                            return Err(self.err(
+                                format!(
+                                    "map key type mismatch: entry {} key is {:?}, expected {:?}",
+                                    i, actual_key, key_type
+                                ),
+                                span,
+                            ));
+                        }
+                        let actual_value = Self::infer_type(&value_val, false);
+                        if !Self::types_compatible(&actual_value, &value_type) {
+                            return Err(self.err(
+                                            format!("map value type mismatch: entry {} value is {:?}, expected {:?}", i, actual_value, value_type),
+                                            span,
+                                        ));
+                        }
+                    }
+
+                    let map_key = MapKey::from_value(&key_val).ok_or_else(|| {
+                        self.err(
+                            format!("type {} cannot be used as a map key", key_val.type_name()),
+                            span,
+                        )
+                    })?;
+                    map.insert(map_key, value_val);
+                }
+
+                Ok(Value::Map {
+                    key_type,
+                    value_type,
+                    entries: Rc::new(RefCell::new(map)),
+                })
+            }
+
             ExpressionKind::IndexAssign {
                 target,
                 index,
