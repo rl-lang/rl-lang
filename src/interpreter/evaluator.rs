@@ -488,6 +488,41 @@ impl Evaluator {
                 })
             }
 
+            ExpressionKind::SetLiteral(items) => {
+                let len = items.len();
+                let mut values = Vec::with_capacity(len);
+                for i in 0..len {
+                    let item_id = match &self.resolver.ast_arena.exprs.get(id).kind {
+                        ExpressionKind::SetLiteral(items) => items[i],
+                        _ => unreachable!(),
+                    };
+                    values.push(self.evaluate(item_id)?);
+                }
+                let items_type = values
+                    .first()
+                    .map(|v| Self::infer_type(v, false))
+                    .unwrap_or(TypeAnnotation::Null);
+
+                if items_type != TypeAnnotation::Null {
+                    for (i, v) in values.iter().enumerate() {
+                        let actual = Self::infer_type(v, false);
+                        if !Self::types_compatible(&actual, &items_type) {
+                            return Err(self.err(
+                                format!(
+                                    "set element type mismatch: element {} is {:?}, expected {:?}",
+                                    i, actual, items_type,
+                                ),
+                                span,
+                            ));
+                        }
+                    }
+                }
+                Ok(Value::Set {
+                    items_type,
+                    items: values,
+                })
+            }
+
             ExpressionKind::MapLiteral(entries) => {
                 let len = entries.len();
                 let mut map = HashMap::with_capacity(len);
