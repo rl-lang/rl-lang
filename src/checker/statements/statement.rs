@@ -120,6 +120,61 @@ impl TypeChecker {
                 self.declare(name.clone(), array_type, true, statement.span);
             }
 
+            StatementKind::Set {
+                name,
+                type_annotation,
+                items,
+            } => {
+                for item in items {
+                    let item_span = self.ast_arena.exprs.get(*item).span;
+                    let item_type = self.check_expression(*item);
+                    let expected = CheckType::Known(type_annotation.clone());
+
+                    if !item_type.matches(&expected) {
+                        self.error(
+                            format!(
+                                "type mismatch: array expects {}, got {}",
+                                expected.info(),
+                                item_type.info()
+                            ),
+                            item_span,
+                        );
+                    }
+                }
+
+                let array_type =
+                    CheckType::Known(TypeAnnotation::Set(Box::new(type_annotation.clone())));
+
+                self.declare(name.clone(), array_type, false, statement.span);
+            }
+            StatementKind::ConstantSet {
+                name,
+                type_annotation,
+                items,
+            } => {
+                for item in items {
+                    let item_span = self.ast_arena.exprs.get(*item).span;
+                    let item_type = self.check_expression(*item);
+                    let expected = CheckType::Known(type_annotation.clone());
+
+                    if !item_type.matches(&expected) {
+                        self.error(
+                            format!(
+                                "type mismatch: array expects {}, got {}",
+                                expected.info(),
+                                item_type.info()
+                            ),
+                            item_span,
+                        );
+                    }
+                }
+
+                let array_type =
+                    CheckType::Known(TypeAnnotation::CSet(Box::new(type_annotation.clone())));
+
+                self.declare(name.clone(), array_type, true, statement.span);
+            }
+
             // checks map entries against the declared key/value types and
             // declares it with the correct mutability.
             StatementKind::Map {
