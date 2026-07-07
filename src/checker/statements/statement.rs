@@ -729,6 +729,31 @@ impl TypeChecker {
                     );
                 }
 
+                StatementKind::Set {
+                    name,
+                    type_annotation,
+                    ..
+                } => {
+                    self.declare(
+                        name.clone(),
+                        CheckType::Known(TypeAnnotation::Set(Box::new(type_annotation.clone()))),
+                        false,
+                        stmt.span,
+                    );
+                }
+                StatementKind::ConstantSet {
+                    name,
+                    type_annotation,
+                    ..
+                } => {
+                    self.declare(
+                        name.clone(),
+                        CheckType::Known(TypeAnnotation::CSet(Box::new(type_annotation.clone()))),
+                        true,
+                        stmt.span,
+                    );
+                }
+
                 StatementKind::Map {
                     name,
                     type_annotation,
