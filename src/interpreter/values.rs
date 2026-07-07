@@ -4,7 +4,7 @@ use crate::{
     ast::statements::{Param, Statement, TypeAnnotation},
     interpreter::evaluator::EnvironmentItem,
 };
-use std::{cell::RefCell, fmt, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, fmt, rc::Rc};
 
 /// A runtime value produced by evaluating an rl expression.
 #[derive(Debug, Clone, PartialEq)]
@@ -48,6 +48,12 @@ pub enum Value {
         name: String,
         variant: String,
     },
+
+    Map {
+        key_type: TypeAnnotation,
+        value_type: TypeAnnotation,
+        entries: Rc<RefCell<HashMap<MapKey, Value>>>,
+    },
 }
 
 /// Payload for `Value::Function`
@@ -61,6 +67,38 @@ pub struct FunctionData {
     pub captured_env: Vec<Vec<EnvironmentItem>>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum MapKey {
+    Integer(i64),
+    String(String),
+    Bool(bool),
+    Byte(u8),
+    Char(char),
+}
+
+impl MapKey {
+    pub fn from_value(value: &Value) -> Option<MapKey> {
+        match value {
+            Value::Integer(i) => Some(MapKey::Integer(*i)),
+            Value::String(s) => Some(MapKey::String(s.clone())),
+            Value::Bool(b) => Some(MapKey::Bool(*b)),
+            Value::Byte(b) => Some(MapKey::Byte(*b)),
+            Value::Char(c) => Some(MapKey::Char(*c)),
+            _ => None,
+        }
+    }
+
+    pub fn into_value(self) -> Value {
+        match self {
+            MapKey::Integer(i) => Value::Integer(i),
+            MapKey::String(s) => Value::String(s),
+            MapKey::Bool(b) => Value::Bool(b),
+            MapKey::Byte(b) => Value::Byte(b),
+            MapKey::Char(c) => Value::Char(c),
+        }
+    }
+}
+
 impl Value {
     /// Human-readable type name used in error labels (e.g. "int", "bool", "array").
     pub fn type_name(&self) -> &'static str {
@@ -72,6 +110,7 @@ impl Value {
             Value::Byte(_) => "byte",
             Value::Char(_) => "char",
             Value::Values { .. } => "array",
+            Value::Map { .. } => "map",
             Value::Null => "null",
             Value::Function { .. } => "function",
             Value::Tuple(_) => "tuple",
@@ -128,6 +167,14 @@ impl fmt::Display for Value {
                 write!(f, "{} {{ {} }}", name, formatted.join(", "))
             }
             Value::Enum { name, variant } => write!(f, "{}.{}", name, variant),
+            Value::Map { entries, .. } => {
+                let entries = entries.borrow();
+                let formatted: Vec<String> = entries
+                    .iter()
+                    .map(|(k, v)| format!("{}: {}", k.clone().into_value(), v))
+                    .collect();
+                write!(f, "{{{}}}", formatted.join(", "))
+            }
         }
     }
 }
