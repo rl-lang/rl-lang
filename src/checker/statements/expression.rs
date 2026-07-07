@@ -135,16 +135,24 @@ impl TypeChecker {
                 let index_type = self.check_expression(index);
                 self.check_is_null(&index_type, index_span);
 
-                // is it integer?
-                if !matches!(
-                    index_type,
-                    CheckType::Known(
-                        TypeAnnotation::Int
-                            | TypeAnnotation::CInt
-                            | TypeAnnotation::Byte
-                            | TypeAnnotation::CByte
-                    ) | CheckType::Unknown
-                ) {
+                // is it integer? (only enforced for array/tuple targets -
+                // maps validate the index against their declared key type
+                // further down instead)
+                let target_is_map = matches!(
+                    target_type,
+                    CheckType::Known(TypeAnnotation::Map(_, _) | TypeAnnotation::CMap(_, _))
+                );
+                if !target_is_map
+                    && !matches!(
+                        index_type,
+                        CheckType::Known(
+                            TypeAnnotation::Int
+                                | TypeAnnotation::CInt
+                                | TypeAnnotation::Byte
+                                | TypeAnnotation::CByte
+                        ) | CheckType::Unknown
+                    )
+                {
                     self.error(
                         format!("invalid index operation: index is {}", index_type.info()),
                         expr_span,
@@ -157,6 +165,21 @@ impl TypeChecker {
                     CheckType::Known(TypeAnnotation::Array(inner))
                     | CheckType::Known(TypeAnnotation::CArray(inner)) => {
                         CheckType::Known((**inner).clone())
+                    }
+                    CheckType::Known(TypeAnnotation::Map(key_ty, value_ty))
+                    | CheckType::Known(TypeAnnotation::CMap(key_ty, value_ty)) => {
+                        let expected_key = CheckType::Known((**key_ty).clone());
+                        if !index_type.matches(&expected_key) {
+                            self.error(
+                                format!(
+                                    "map key type mismatch: expected {}, got {}",
+                                    expected_key.info(),
+                                    index_type.info()
+                                ),
+                                index_span,
+                            );
+                        }
+                        CheckType::Known((**value_ty).clone())
                     }
                     CheckType::Unknown | CheckType::Known(TypeAnnotation::Null) => {
                         CheckType::Unknown
