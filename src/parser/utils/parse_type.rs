@@ -75,6 +75,13 @@ impl Parser {
                     self.match_type(&[TokenType::RightBracket]);
                     TypeAnnotation::Map(Box::new(key_type), Box::new(value_type))
                 }
+                TokenType::Set => {
+                    self.advance();
+                    self.match_type(&[TokenType::LeftBracket]);
+                    let inner = self.parse_type(true)?;
+                    self.match_type(&[TokenType::RightBracket]);
+                    TypeAnnotation::Set(Box::new(inner))
+                }
                 TokenType::LeftParen => {
                     self.advance();
                     let mut inner = vec![];
@@ -159,6 +166,13 @@ impl Parser {
                     let value_type = self.parse_type(false)?;
                     self.match_type(&[TokenType::RightBracket]);
                     TypeAnnotation::CMap(Box::new(key_type), Box::new(value_type))
+                }
+                TokenType::Set => {
+                    self.advance();
+                    self.match_type(&[TokenType::LeftBracket]);
+                    let inner = self.parse_type(false)?;
+                    self.match_type(&[TokenType::RightBracket]);
+                    TypeAnnotation::CSet(Box::new(inner))
                 }
                 TokenType::LeftParen => {
                     self.advance();
