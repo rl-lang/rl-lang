@@ -129,6 +129,10 @@ impl Parser {
             self.advance();
             return Ok(*self.nested_map_type()?);
         }
+        if matches!(self.peek(), TokenType::Set) {
+            self.advance();
+            return Ok(*self.set_type()?);
+        }
         match self.peek() {
             TokenType::Int => {
                 self.advance();
@@ -252,6 +256,24 @@ impl Parser {
                             Box::new(key),
                             Box::new(value),
                         )))
+                    }
+                    _ => Err(self.err("expected ']'", self.peek_span())),
+                }
+            }
+
+            _ => Err(self.err("expected '['", self.peek_span())),
+        }
+    }
+
+    pub fn set_type(&mut self) -> Result<Box<TypeAnnotation>, Error> {
+        match self.peek() {
+            TokenType::LeftBracket => {
+                self.advance();
+                let a = self.parse_param_type()?;
+                match self.peek() {
+                    TokenType::RightBracket => {
+                        self.advance();
+                        Ok(Box::new(TypeAnnotation::Set(Box::new(a))))
                     }
                     _ => Err(self.err("expected ']'", self.peek_span())),
                 }
