@@ -54,6 +54,11 @@ pub enum Value {
         value_type: TypeAnnotation,
         entries: Rc<RefCell<HashMap<MapKey, Value>>>,
     },
+    Set {
+        /// The declared element type of this set.
+        items_type: TypeAnnotation,
+        items: Vec<Value>,
+    },
 }
 
 /// Payload for `Value::Function`
@@ -119,6 +124,7 @@ impl Value {
             Value::Err(_) => "err",
             Value::Struct { .. } => "record",
             Value::Enum { .. } => "tag",
+            Value::Set { .. } => "set",
         }
     }
 
@@ -173,6 +179,10 @@ impl fmt::Display for Value {
                     .iter()
                     .map(|(k, v)| format!("{}: {}", k.clone().into_value(), v))
                     .collect();
+                write!(f, "{{{}}}", formatted.join(", "))
+            }
+            Value::Set { items, .. } => {
+                let formatted: Vec<String> = items.iter().map(|v| v.to_string()).collect();
                 write!(f, "{{{}}}", formatted.join(", "))
             }
         }
