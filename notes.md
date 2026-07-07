@@ -79,8 +79,8 @@ will have random stuff that should be tracked
 - [ ] `tag` an enum
   - [x] implement simple `tag` that hold no value just tags
   - [ ] allow storing data in `tag` items
-- [ ] `map` an array with key and value
-- [ ] `set` an array with unique keys
+- [x] `map` an array with key and value
+- [x] `set` an array with unique keys
 - [ ] `num` an unsigned integer with 64 bit
 - [ ] `path` path type
 - [ ] `value` generic value type that should hold any other type
