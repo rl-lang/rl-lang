@@ -120,6 +120,113 @@ impl TypeChecker {
                 self.declare(name.clone(), array_type, true, statement.span);
             }
 
+            // checks map entries against the declared key/value types and
+            // declares it with the correct mutability.
+            StatementKind::Map {
+                name,
+                type_annotation,
+                entries,
+            } => {
+                let (key_ty, value_ty) = match type_annotation {
+                    TypeAnnotation::Map(k, v) => (k.as_ref().clone(), v.as_ref().clone()),
+                    other => (TypeAnnotation::Null, other.clone()),
+                };
+                let expected_key = CheckType::Known(key_ty.clone());
+                let expected_value = CheckType::Known(value_ty.clone());
+
+                for (key, value) in entries {
+                    let key_span = self.ast_arena.exprs.get(*key).span;
+                    let value_span = self.ast_arena.exprs.get(*value).span;
+                    let key_type = self.check_expression(*key);
+                    let value_type = self.check_expression(*value);
+
+                    if !key_type.matches(&expected_key) {
+                        self.error(
+                            format!(
+                                "type mismatch: map key expects {}, got {}",
+                                expected_key.info(),
+                                key_type.info()
+                            ),
+                            key_span,
+                        );
+                    }
+                    if !value_type.matches(&expected_value) {
+                        self.error(
+                            format!(
+                                "type mismatch: map value expects {}, got {}",
+                                expected_value.info(),
+                                value_type.info()
+                            ),
+                            value_span,
+                        );
+                    }
+                }
+
+                if !Self::is_hashable_key_type(&key_ty) {
+                    self.error(
+                        format!("type {:?} cannot be used as a map key", key_ty),
+                        statement.span,
+                    );
+                }
+
+                let map_type =
+                    CheckType::Known(TypeAnnotation::Map(Box::new(key_ty), Box::new(value_ty)));
+
+                self.declare(name.clone(), map_type, false, statement.span);
+            }
+            StatementKind::ConstantMap {
+                name,
+                type_annotation,
+                entries,
+            } => {
+                let (key_ty, value_ty) = match type_annotation {
+                    TypeAnnotation::CMap(k, v) => (k.as_ref().clone(), v.as_ref().clone()),
+                    other => (TypeAnnotation::Null, other.clone()),
+                };
+                let expected_key = CheckType::Known(key_ty.clone());
+                let expected_value = CheckType::Known(value_ty.clone());
+
+                for (key, value) in entries {
+                    let key_span = self.ast_arena.exprs.get(*key).span;
+                    let value_span = self.ast_arena.exprs.get(*value).span;
+                    let key_type = self.check_expression(*key).into_const();
+                    let value_type = self.check_expression(*value).into_const();
+
+                    if !key_type.matches(&expected_key) {
+                        self.error(
+                            format!(
+                                "type mismatch: map key expects {}, got {}",
+                                expected_key.info(),
+                                key_type.info()
+                            ),
+                            key_span,
+                        );
+                    }
+                    if !value_type.matches(&expected_value) {
+                        self.error(
+                            format!(
+                                "type mismatch: map value expects {}, got {}",
+                                expected_value.info(),
+                                value_type.info()
+                            ),
+                            value_span,
+                        );
+                    }
+                }
+
+                if !Self::is_hashable_key_type(&key_ty) {
+                    self.error(
+                        format!("type {:?} cannot be used as a map key", key_ty),
+                        statement.span,
+                    );
+                }
+
+                let map_type =
+                    CheckType::Known(TypeAnnotation::CMap(Box::new(key_ty), Box::new(value_ty)));
+
+                self.declare(name.clone(), map_type, true, statement.span);
+            }
+
             // offloads to expression checker
             StatementKind::Expression(expr) => {
                 self.check_expression(*expr);
