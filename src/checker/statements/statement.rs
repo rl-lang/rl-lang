@@ -133,7 +133,7 @@ impl TypeChecker {
                     if !item_type.matches(&expected) {
                         self.error(
                             format!(
-                                "type mismatch: array expects {}, got {}",
+                                "type mismatch: set expects {}, got {}",
                                 expected.info(),
                                 item_type.info()
                             ),
@@ -160,7 +160,7 @@ impl TypeChecker {
                     if !item_type.matches(&expected) {
                         self.error(
                             format!(
-                                "type mismatch: array expects {}, got {}",
+                                "type mismatch: set expects {}, got {}",
                                 expected.info(),
                                 item_type.info()
                             ),
