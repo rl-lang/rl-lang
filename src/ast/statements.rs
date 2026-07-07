@@ -310,6 +310,7 @@ pub enum TypeAnnotation {
     /// Mutable array with a typed element.
     Array(Box<TypeAnnotation>),
     Map(Box<TypeAnnotation>, Box<TypeAnnotation>),
+    Set(Box<TypeAnnotation>),
     /// Constant 64-bit signed integer.
     CInt,
     /// Constant 64-bit float.
@@ -325,6 +326,7 @@ pub enum TypeAnnotation {
     /// Constant array with a typed element.
     CArray(Box<TypeAnnotation>),
     CMap(Box<TypeAnnotation>, Box<TypeAnnotation>),
+    CSet(Box<TypeAnnotation>),
     /// A function value (used for `fn`-typed parameters and variables).
     Fn,
     /// Absence of a type - used as the default return type when none is annotated.
