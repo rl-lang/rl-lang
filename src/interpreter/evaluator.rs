@@ -1,5 +1,6 @@
 //! Core evaluator - expression evaluation, function calls, and the runtime state.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -12,11 +13,10 @@ use crate::lexer::tokentypes::TokenType;
 use crate::resolver::Resolver;
 use crate::{
     ast::{ExprId, nodes::ExpressionKind, statements::TypeAnnotation},
-    interpreter::evaluator_types::addressing::{get_indices_as_vec, try_get_root_addr},
     interpreter::{
         native::{IntoNativeFn, Module},
         stdlib,
-        values::Value,
+        values::{MapKey, Value},
     },
     utils::{
         errors::{Error, Reason},
@@ -251,6 +251,17 @@ impl Evaluator {
                     TypeAnnotation::Array(Box::new(inner))
                 }
             }
+            Value::Map {
+                key_type,
+                value_type,
+                ..
+            } => {
+                if is_const {
+                    TypeAnnotation::CMap(Box::new(key_type.clone()), Box::new(value_type.clone()))
+                } else {
+                    TypeAnnotation::Map(Box::new(key_type.clone()), Box::new(value_type.clone()))
+                }
+            }
             Value::Struct { name, .. } => {
                 if is_const {
                     TypeAnnotation::CRecord(name.clone())
@@ -346,6 +357,10 @@ impl Evaluator {
                 TypeAnnotation::Enum(a) | TypeAnnotation::CEnum(a),
                 TypeAnnotation::Enum(b) | TypeAnnotation::CEnum(b),
             ) => a == b,
+            (
+                TypeAnnotation::Map(ak, av) | TypeAnnotation::CMap(ak, av),
+                TypeAnnotation::Map(bk, bv) | TypeAnnotation::CMap(bk, bv),
+            ) => Self::types_compatible(ak, bk) && Self::types_compatible(av, bv),
             _ => false,
         }
     }
