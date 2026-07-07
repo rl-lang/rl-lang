@@ -394,92 +394,46 @@ impl Evaluator {
 
             ExpressionKind::Index { target, index } => {
                 let (target, index) = (*target, *index);
-                if let Some((depth, slot)) = try_get_root_addr(target, &self.resolver.ast_arena) {
-                    let indices = get_indices_as_vec(id, self, span)?;
-                    Ok(self.index_read(depth, slot, &indices, span)?)
-                } else {
-                    let target_span = self.resolver.ast_arena.exprs.get(target).span;
-                    let index_span = self.resolver.ast_arena.exprs.get(index).span;
+                let target_span = self.resolver.ast_arena.exprs.get(target).span;
+                let index_span = self.resolver.ast_arena.exprs.get(index).span;
 
-                    let arr = self.evaluate(target)?;
-                    self.check_not_null(&arr, target_span)?;
+                if let ExpressionKind::ResolvedIdentifier { depth, slot, .. } =
+                    &self.resolver.ast_arena.exprs.get(target).kind
+                {
+                    let (depth, slot) = (*depth, *slot);
                     let idx = self.evaluate(index)?;
                     self.check_not_null(&idx, index_span)?;
-                    match (&arr, &idx) {
-                        (Value::Values { items, .. }, Value::Integer(i)) => {
-                            let i_usize = *i as usize;
-                            if i_usize >= items.len() {
-                                return Err(self
-                                    .err(
-                                        format!("index {} out of bounds (len {})", i, items.len()),
-                                        span,
-                                    )
-                                    .with_label(
-                                        target_span,
-                                        format!("this array has length {}", items.len()),
-                                    ));
+                    match idx {
+                        Value::Integer(i) => {
+                            if i < 0 {
+                                return Err(
+                                    self.err(format!("index cannot be negative: {}", i), span)
+                                );
                             }
-                            Ok(items[i_usize].clone())
+                            return self.index_read(depth, slot, &[i as usize], span);
                         }
-                        (Value::Values { items, .. }, Value::Byte(b)) => {
-                            let b_usize = *b as usize;
-                            if b_usize >= items.len() {
-                                return Err(self
-                                    .err(
-                                        format!("index {} out of bounds (len {})", b, items.len()),
-                                        span,
-                                    )
-                                    .with_label(
-                                        target_span,
-                                        format!("this array has length {}", items.len()),
-                                    ));
-                            }
-                            Ok(items[b_usize].clone())
+                        Value::Byte(b) => {
+                            return self.index_read(depth, slot, &[b as usize], span);
                         }
-                        (Value::Tuple(items), Value::Integer(i)) => {
-                            let i_usize = *i as usize;
-                            if i_usize >= items.len() {
-                                return Err(self
-                                    .err(
-                                        format!(
-                                            "tuple index {} out of bounds (len {})",
-                                            i,
-                                            items.len()
-                                        ),
-                                        span,
-                                    )
-                                    .with_label(
-                                        target_span,
-                                        format!("this tuple has {} elements", items.len()),
-                                    ));
-                            }
-                            Ok(items[i_usize].clone())
+                        _ => {
+                            let arr = self.evaluate(target)?;
+                            self.check_not_null(&arr, target_span)?;
+                            return self.index_read_value(
+                                &arr,
+                                &idx,
+                                target_span,
+                                index_span,
+                                span,
+                            );
                         }
-                        (Value::Tuple(items), Value::Byte(b)) => {
-                            let b_usize = *b as usize;
-                            if b_usize >= items.len() {
-                                return Err(self
-                                    .err(
-                                        format!(
-                                            "tuple index {} out of bounds (len {})",
-                                            b,
-                                            items.len()
-                                        ),
-                                        span,
-                                    )
-                                    .with_label(
-                                        target_span,
-                                        format!("this tuple has {} elements", items.len()),
-                                    ));
-                            }
-                            Ok(items[b_usize].clone())
-                        }
-                        _ => Err(self
-                            .err("invalid index operation", span)
-                            .with_label(target_span, format!("this is {}", arr.type_name()))
-                            .with_label(index_span, format!("this is {}", idx.type_name()))),
                     }
                 }
+
+                let arr = self.evaluate(target)?;
+                self.check_not_null(&arr, target_span)?;
+                let idx = self.evaluate(index)?;
+                self.check_not_null(&idx, index_span)?;
+                self.index_read_value(&arr, &idx, target_span, index_span, span)
             }
 
             ExpressionKind::ArrayLiteral(items) => {
