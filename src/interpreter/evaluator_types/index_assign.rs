@@ -35,6 +35,12 @@ impl Evaluator {
                 self.slot_ref(depth, slot),
                 Some(EnvironmentItem::PItem(p)) if matches!(p.value, Value::Map { .. })
             );
+            let is_set = matches!(self.slot_ref(depth, slot),
+            Some(EnvironmentItem::PItem(p)) if matches!(p.value, Value::Set { .. }));
+            if is_set {
+                self.err("sets does not support direct indexical assignments", span);
+            }
+
             if is_map {
                 let Some(EnvironmentItem::PItem(p)) = self.slot_ref(depth, slot) else {
                     unreachable!("checked is_map above");
@@ -85,6 +91,7 @@ impl Evaluator {
                 entries.borrow_mut().insert(map_key, val.clone());
                 return Ok(val);
             }
+            if is_set {}
         }
 
         let idx = self.evaluate(index)?;
