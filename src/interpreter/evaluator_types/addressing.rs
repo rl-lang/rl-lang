@@ -219,6 +219,7 @@ impl Evaluator {
             current = match current {
                 Value::Values { items, .. } => items.get(i),
                 Value::Tuple(items) => items.get(i),
+                Value::Set { items, .. } => items.get(i),
                 _ => None,
             }
             .ok_or_else(|| self.err(format!("index {} out of bounds", i), span))?;
