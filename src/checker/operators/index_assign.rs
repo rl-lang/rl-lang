@@ -56,6 +56,11 @@ impl TypeChecker {
                 }
                 value_type
             }
+            CheckType::Known(TypeAnnotation::Set(_))
+            | CheckType::Known(TypeAnnotation::CSet(_)) => {
+                self.error("sets does not support index assigning", span);
+                CheckType::Unknown
+            }
             CheckType::Known(TypeAnnotation::Map(key_ty, value_ty))
             | CheckType::Known(TypeAnnotation::CMap(key_ty, value_ty)) => {
                 let expected_key = CheckType::Known((**key_ty).clone());
