@@ -26,6 +26,68 @@ impl TypeChecker {
             ExpressionKind::Grouping(inner) => self.check_expression(inner),
             // does this identifier exist?
             ExpressionKind::Identifier(name) => self.lookup(&name, expr_span),
+            ExpressionKind::MapLiteral(entries) => {
+                let mut key_types = Vec::with_capacity(entries.len());
+                let mut value_types = Vec::with_capacity(entries.len());
+                for (key, value) in entries {
+                    let key_span = self.ast_arena.exprs.get(key).span;
+                    let value_span = self.ast_arena.exprs.get(value).span;
+                    key_types.push((self.check_expression(key), key_span));
+                    value_types.push((self.check_expression(value), value_span));
+                }
+
+                let key_type = key_types
+                    .first()
+                    .map(|(t, _)| Self::to_type_annotation(t))
+                    .unwrap_or(TypeAnnotation::Null);
+                let value_type = value_types
+                    .first()
+                    .map(|(t, _)| Self::to_type_annotation(t))
+                    .unwrap_or(TypeAnnotation::Null);
+
+                if let Some((first_key, _)) = key_types.first().cloned() {
+                    for (kt, span) in key_types.iter().skip(1) {
+                        if !kt.is_null() && !first_key.is_null() && !kt.matches(&first_key) {
+                            self.error(
+                                format!(
+                                    "map key type mismatch: expected {}, got {}",
+                                    first_key.info(),
+                                    kt.info()
+                                ),
+                                *span,
+                            );
+                        }
+                    }
+                }
+                if let Some((first_value, _)) = value_types.first().cloned() {
+                    for (vt, span) in value_types.iter().skip(1) {
+                        if !vt.is_null() && !first_value.is_null() && !vt.matches(&first_value) {
+                            self.error(
+                                format!(
+                                    "map value type mismatch: expected {}, got {}",
+                                    first_value.info(),
+                                    vt.info()
+                                ),
+                                *span,
+                            );
+                        }
+                    }
+                }
+
+                for (kt, span) in &key_types {
+                    if !kt.is_null() && !Self::is_hashable_key_type(&Self::to_type_annotation(kt)) {
+                        self.error(
+                            format!("type {} cannot be used as a map key", kt.info()),
+                            *span,
+                        );
+                    }
+                }
+
+                CheckType::Known(TypeAnnotation::Map(
+                    Box::new(key_type),
+                    Box::new(value_type),
+                ))
+            }
             // checks array items
             ExpressionKind::ArrayLiteral(items) => {
                 // checks every item type in items then push it to the new
@@ -73,16 +135,24 @@ impl TypeChecker {
                 let index_type = self.check_expression(index);
                 self.check_is_null(&index_type, index_span);
 
-                // is it integer?
-                if !matches!(
-                    index_type,
-                    CheckType::Known(
-                        TypeAnnotation::Int
-                            | TypeAnnotation::CInt
-                            | TypeAnnotation::Byte
-                            | TypeAnnotation::CByte
-                    ) | CheckType::Unknown
-                ) {
+                // is it integer? (only enforced for array/tuple targets -
+                // maps validate the index against their declared key type
+                // further down instead)
+                let target_is_map = matches!(
+                    target_type,
+                    CheckType::Known(TypeAnnotation::Map(_, _) | TypeAnnotation::CMap(_, _))
+                );
+                if !target_is_map
+                    && !matches!(
+                        index_type,
+                        CheckType::Known(
+                            TypeAnnotation::Int
+                                | TypeAnnotation::CInt
+                                | TypeAnnotation::Byte
+                                | TypeAnnotation::CByte
+                        ) | CheckType::Unknown
+                    )
+                {
                     self.error(
                         format!("invalid index operation: index is {}", index_type.info()),
                         expr_span,
@@ -95,6 +165,25 @@ impl TypeChecker {
                     CheckType::Known(TypeAnnotation::Array(inner))
                     | CheckType::Known(TypeAnnotation::CArray(inner)) => {
                         CheckType::Known((**inner).clone())
+                    }
+                    CheckType::Known(TypeAnnotation::Set(inner))
+                    | CheckType::Known(TypeAnnotation::CSet(inner)) => {
+                        CheckType::Known((**inner).clone())
+                    }
+                    CheckType::Known(TypeAnnotation::Map(key_ty, value_ty))
+                    | CheckType::Known(TypeAnnotation::CMap(key_ty, value_ty)) => {
+                        let expected_key = CheckType::Known((**key_ty).clone());
+                        if !index_type.matches(&expected_key) {
+                            self.error(
+                                format!(
+                                    "map key type mismatch: expected {}, got {}",
+                                    expected_key.info(),
+                                    index_type.info()
+                                ),
+                                index_span,
+                            );
+                        }
+                        CheckType::Known((**value_ty).clone())
                     }
                     CheckType::Unknown | CheckType::Known(TypeAnnotation::Null) => {
                         CheckType::Unknown
@@ -444,6 +533,39 @@ impl TypeChecker {
                     }
                 }
                 CheckType::Known(TypeAnnotation::Enum(enum_name))
+            }
+
+            ExpressionKind::SetLiteral(items) => {
+                let mut item_types = Vec::with_capacity(items.len());
+                for item in items {
+                    let item_span = self.ast_arena.exprs.get(item).span;
+                    item_types.push((self.check_expression(item), item_span));
+                }
+
+                let items_type = item_types
+                    .first()
+                    .map(|(t, _)| Self::to_type_annotation(t))
+                    .unwrap_or(TypeAnnotation::Null);
+
+                if let Some((first_type, _)) = item_types.first().cloned() {
+                    for (item_type, span) in item_types.iter().skip(1) {
+                        if !item_type.is_null()
+                            && !first_type.is_null()
+                            && !item_type.matches(&first_type)
+                        {
+                            self.error(
+                                format!(
+                                    "set element type mismatch: expected {}, got {}",
+                                    first_type.info(),
+                                    item_type.info()
+                                ),
+                                *span,
+                            );
+                        }
+                    }
+                }
+
+                CheckType::Known(TypeAnnotation::Set(Box::new(items_type)))
             }
 
             _ => CheckType::Unknown,

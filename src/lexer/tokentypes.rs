@@ -118,6 +118,8 @@ pub enum TokenType {
     Array,
     Error,
     Result,
+    Map,
+    Set,
 
     // -- special --
     /// Emitted for each newline in the source

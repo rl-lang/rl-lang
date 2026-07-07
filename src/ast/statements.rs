@@ -91,6 +91,52 @@ pub enum StatementKind {
         type_annotation: TypeAnnotation,
         value: ExprId,
     },
+
+    Map {
+        name: String,
+        type_annotation: TypeAnnotation,
+        entries: Vec<(ExprId, ExprId)>,
+    },
+    ConstantMap {
+        name: String,
+        type_annotation: TypeAnnotation,
+        entries: Vec<(ExprId, ExprId)>,
+    },
+    ResolvedMap {
+        name: String,
+        slot: usize,
+        type_annotation: TypeAnnotation,
+        value: ExprId,
+    },
+    ResolvedConstantMap {
+        name: String,
+        slot: usize,
+        type_annotation: TypeAnnotation,
+        value: ExprId,
+    },
+
+    Set {
+        name: String,
+        type_annotation: TypeAnnotation,
+        items: Vec<ExprId>,
+    },
+    ConstantSet {
+        name: String,
+        type_annotation: TypeAnnotation,
+        items: Vec<ExprId>,
+    },
+    ResolvedSet {
+        name: String,
+        slot: usize,
+        type_annotation: TypeAnnotation,
+        value: ExprId,
+    },
+    ResolvedConstantSet {
+        name: String,
+        slot: usize,
+        type_annotation: TypeAnnotation,
+        value: ExprId,
+    },
     /// A bare expression used as a statement (e.g. a function call whose
     /// return value is discarded, or a newline placeholder).
     Expression(ExprId),
@@ -263,6 +309,8 @@ pub enum TypeAnnotation {
     Char,
     /// Mutable array with a typed element.
     Array(Box<TypeAnnotation>),
+    Map(Box<TypeAnnotation>, Box<TypeAnnotation>),
+    Set(Box<TypeAnnotation>),
     /// Constant 64-bit signed integer.
     CInt,
     /// Constant 64-bit float.
@@ -277,6 +325,8 @@ pub enum TypeAnnotation {
     CChar,
     /// Constant array with a typed element.
     CArray(Box<TypeAnnotation>),
+    CMap(Box<TypeAnnotation>, Box<TypeAnnotation>),
+    CSet(Box<TypeAnnotation>),
     /// A function value (used for `fn`-typed parameters and variables).
     Fn,
     /// Absence of a type - used as the default return type when none is annotated.

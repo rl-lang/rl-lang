@@ -125,6 +125,14 @@ impl Parser {
             self.advance();
             return Ok(*self.nested_array_type()?);
         }
+        if matches!(self.peek(), TokenType::Map) {
+            self.advance();
+            return Ok(*self.nested_map_type()?);
+        }
+        if matches!(self.peek(), TokenType::Set) {
+            self.advance();
+            return Ok(*self.set_type()?);
+        }
         match self.peek() {
             TokenType::Int => {
                 self.advance();
@@ -220,6 +228,52 @@ impl Parser {
                     TokenType::RightBracket => {
                         self.advance();
                         Ok(Box::new(TypeAnnotation::Array(Box::new(a))))
+                    }
+                    _ => Err(self.err("expected ']'", self.peek_span())),
+                }
+            }
+
+            _ => Err(self.err("expected '['", self.peek_span())),
+        }
+    }
+
+    pub fn nested_map_type(&mut self) -> Result<Box<TypeAnnotation>, Error> {
+        match self.peek() {
+            TokenType::LeftBracket => {
+                self.advance();
+                let key = self.parse_param_type()?;
+                if !self.match_type(&[TokenType::Comma]) {
+                    return Err(self.err(
+                        "expected `,` between map key and value types",
+                        self.peek_span(),
+                    ));
+                }
+                let value = self.parse_param_type()?;
+                match self.peek() {
+                    TokenType::RightBracket => {
+                        self.advance();
+                        Ok(Box::new(TypeAnnotation::Map(
+                            Box::new(key),
+                            Box::new(value),
+                        )))
+                    }
+                    _ => Err(self.err("expected ']'", self.peek_span())),
+                }
+            }
+
+            _ => Err(self.err("expected '['", self.peek_span())),
+        }
+    }
+
+    pub fn set_type(&mut self) -> Result<Box<TypeAnnotation>, Error> {
+        match self.peek() {
+            TokenType::LeftBracket => {
+                self.advance();
+                let a = self.parse_param_type()?;
+                match self.peek() {
+                    TokenType::RightBracket => {
+                        self.advance();
+                        Ok(Box::new(TypeAnnotation::Set(Box::new(a))))
                     }
                     _ => Err(self.err("expected ']'", self.peek_span())),
                 }

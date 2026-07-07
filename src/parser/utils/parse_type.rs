@@ -61,6 +61,27 @@ impl Parser {
                     self.match_type(&[TokenType::RightBracket]);
                     TypeAnnotation::Array(Box::new(inner))
                 }
+                TokenType::Map => {
+                    self.advance();
+                    self.match_type(&[TokenType::LeftBracket]);
+                    let key_type = self.parse_type(true)?;
+                    if !self.match_type(&[TokenType::Comma]) {
+                        return Err(self.err(
+                            "expected `,` between map key and value types",
+                            self.peek_span(),
+                        ));
+                    }
+                    let value_type = self.parse_type(true)?;
+                    self.match_type(&[TokenType::RightBracket]);
+                    TypeAnnotation::Map(Box::new(key_type), Box::new(value_type))
+                }
+                TokenType::Set => {
+                    self.advance();
+                    self.match_type(&[TokenType::LeftBracket]);
+                    let inner = self.parse_type(true)?;
+                    self.match_type(&[TokenType::RightBracket]);
+                    TypeAnnotation::Set(Box::new(inner))
+                }
                 TokenType::LeftParen => {
                     self.advance();
                     let mut inner = vec![];
@@ -131,6 +152,27 @@ impl Parser {
                     let inner = self.parse_type(false)?;
                     self.match_type(&[TokenType::RightBracket]);
                     TypeAnnotation::CArray(Box::new(inner))
+                }
+                TokenType::Map => {
+                    self.advance();
+                    self.match_type(&[TokenType::LeftBracket]);
+                    let key_type = self.parse_type(false)?;
+                    if !self.match_type(&[TokenType::Comma]) {
+                        return Err(self.err(
+                            "expected `,` between map key and value types",
+                            self.peek_span(),
+                        ));
+                    }
+                    let value_type = self.parse_type(false)?;
+                    self.match_type(&[TokenType::RightBracket]);
+                    TypeAnnotation::CMap(Box::new(key_type), Box::new(value_type))
+                }
+                TokenType::Set => {
+                    self.advance();
+                    self.match_type(&[TokenType::LeftBracket]);
+                    let inner = self.parse_type(false)?;
+                    self.match_type(&[TokenType::RightBracket]);
+                    TypeAnnotation::CSet(Box::new(inner))
                 }
                 TokenType::LeftParen => {
                     self.advance();

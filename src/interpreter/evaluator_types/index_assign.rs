@@ -8,11 +8,11 @@
 //! structure mutably to perform the assignment, enforcing type compatibility and bounds.
 
 use crate::{
-    ast::{ExprId, statements::TypeAnnotation},
+    ast::{ExprId, nodes::ExpressionKind, statements::TypeAnnotation},
     interpreter::{
         evaluator::{EnvironmentItem, Evaluator},
         evaluator_types::addressing::{get_indices_as_vec, get_root_addr},
-        values::Value,
+        values::{MapKey, Value},
     },
     utils::{errors::Error, span::Span},
 };
@@ -25,6 +25,75 @@ impl Evaluator {
         value: ExprId,
         span: Span,
     ) -> Result<Value, Error> {
+        // Map assignment: `target[key] = value` where `target` evaluates to
+        // a map.
+        if let ExpressionKind::ResolvedIdentifier { depth, slot, .. } =
+            &self.resolver.ast_arena.exprs.get(target).kind
+        {
+            let (depth, slot) = (*depth, *slot);
+            let is_map = matches!(
+                self.slot_ref(depth, slot),
+                Some(EnvironmentItem::PItem(p)) if matches!(p.value, Value::Map { .. })
+            );
+            let is_set = matches!(self.slot_ref(depth, slot),
+            Some(EnvironmentItem::PItem(p)) if matches!(p.value, Value::Set { .. }));
+            if is_set {
+                return Err(self.err("sets does not support direct indexical assignments", span));
+            }
+
+            if is_map {
+                let Some(EnvironmentItem::PItem(p)) = self.slot_ref(depth, slot) else {
+                    unreachable!("checked is_map above");
+                };
+                let Value::Map {
+                    key_type,
+                    value_type,
+                    entries,
+                } = p.value.clone()
+                else {
+                    unreachable!("checked is_map above");
+                };
+                if p.is_const {
+                    return Err(self.err("cannot assign to constant", span));
+                }
+
+                let idx = self.evaluate(index)?;
+                let val = self.evaluate(value)?;
+
+                let map_key = MapKey::from_value(&idx).ok_or_else(|| {
+                    self.err(
+                        format!("type {} cannot be used as a map key", idx.type_name()),
+                        span,
+                    )
+                })?;
+
+                let idx_type = Evaluator::infer_type(&idx, false);
+                if idx_type != key_type && idx_type != TypeAnnotation::Null {
+                    return Err(self.err(
+                        format!(
+                            "type mismatch: map key is {:?}, got {:?}",
+                            key_type, idx_type
+                        ),
+                        span,
+                    ));
+                }
+                let val_type = Evaluator::infer_type(&val, false);
+                if val_type != value_type && val_type != TypeAnnotation::Null {
+                    return Err(self.err(
+                        format!(
+                            "type mismatch: map value is {:?}, cannot assign {:?}",
+                            value_type, val_type
+                        ),
+                        span,
+                    ));
+                }
+
+                entries.borrow_mut().insert(map_key, val.clone());
+                return Ok(val);
+            }
+            if is_set {}
+        }
+
         let idx = self.evaluate(index)?;
         let val = self.evaluate(value)?;
         let (depth, slot) = get_root_addr(target, &self.resolver.ast_arena);
@@ -34,6 +103,13 @@ impl Evaluator {
                 return Err(self.err(format!("index cannot be negative: {}", i), span));
             }
             indices.push(i as usize);
+        } else if let Value::Byte(b) = idx {
+            indices.push(b as usize);
+        } else {
+            return Err(self.err(
+                format!("invalid index operation: index is {}", idx.type_name()),
+                span,
+            ));
         }
 
         let index_error = self.err("index assignment requires at least one index", span);

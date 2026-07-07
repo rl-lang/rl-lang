@@ -108,6 +108,17 @@ fn remap_expr_kind(kind: &mut ExpressionKind, offset: u32, target_arena_id: u32)
                 remap_id(id, offset, target_arena_id);
             }
         }
+        MapLiteral(entries) => {
+            for (k, v) in entries {
+                remap_id(k, offset, target_arena_id);
+                remap_id(v, offset, target_arena_id);
+            }
+        }
+        SetLiteral(items) => {
+            for id in items {
+                remap_id(id, offset, target_arena_id);
+            }
+        }
         Assign { value, .. } | ResolvedAssign { value, .. } => {
             remap_id(value, offset, target_arena_id)
         }
@@ -179,7 +190,11 @@ fn remap_stmt_kind(kind: &mut StatementKind, offset: u32, target_arena_id: u32) 
         | ConstantDeclaration { value, .. }
         | ResolvedConstantDeclaration { value, .. }
         | ResolvedArray { value, .. }
+        | ResolvedMap { value, .. }
+        | ResolvedConstantMap { value, .. }
         | ResolvedConstantArray { value, .. }
+        | ResolvedSet { value, .. }
+        | ResolvedConstantSet { value, .. }
         | Expression(value)
         | ResolvedDestructureDeclaration { value, .. }
         | DestructureDeclaration { value, .. } => remap_id(value, offset, target_arena_id),
@@ -257,6 +272,19 @@ fn remap_stmt_kind(kind: &mut StatementKind, offset: u32, target_arena_id: u32) 
                     remap_id(id, offset, target_arena_id);
                 }
                 remap_stmts(body, offset, target_arena_id);
+            }
+        }
+
+        Map { entries, .. } | ConstantMap { entries, .. } => {
+            for (k, v) in entries {
+                remap_id(k, offset, target_arena_id);
+                remap_id(v, offset, target_arena_id);
+            }
+        }
+
+        Set { items, .. } | ConstantSet { items, .. } => {
+            for id in items {
+                remap_id(id, offset, target_arena_id);
             }
         }
     }

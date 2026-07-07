@@ -77,9 +77,11 @@ impl CheckType {
             (CheckType::Known(a), CheckType::Known(b)) => {
                 a == b
                     || null_array_elision(a, b)
+                    || null_map_elision(a, b)
                     || const_matches(a, b)
                     || record_matches(a, b)
                     || enum_matches(a, b)
+                    || set_matches(a, b)
             }
 
             _ => false,
@@ -126,6 +128,25 @@ fn null_array_elision(a: &TypeAnnotation, b: &TypeAnnotation) -> bool {
     }
 }
 
+fn null_map_elision(a: &TypeAnnotation, b: &TypeAnnotation) -> bool {
+    match (a, b) {
+        (
+            TypeAnnotation::Map(ak, av) | TypeAnnotation::CMap(ak, av),
+            TypeAnnotation::Map(bk, bv) | TypeAnnotation::CMap(bk, bv),
+        ) => {
+            (**ak == TypeAnnotation::Null
+                || **bk == TypeAnnotation::Null
+                || null_array_elision(ak, bk)
+                || null_map_elision(ak, bk))
+                && (**av == TypeAnnotation::Null
+                    || **bv == TypeAnnotation::Null
+                    || null_array_elision(av, bv)
+                    || null_map_elision(av, bv))
+        }
+        _ => false,
+    }
+}
+
 /// Converts a mutable [`TypeAnnotation`] to its immutable (`C`-prefixed) variant.
 fn const_variant(ty: TypeAnnotation) -> TypeAnnotation {
     match ty {
@@ -136,11 +157,13 @@ fn const_variant(ty: TypeAnnotation) -> TypeAnnotation {
         TypeAnnotation::Byte => TypeAnnotation::CByte,
         TypeAnnotation::Char => TypeAnnotation::CChar,
         TypeAnnotation::Array(inner) => TypeAnnotation::CArray(inner),
+        TypeAnnotation::Map(key, value) => TypeAnnotation::CMap(key, value),
         TypeAnnotation::Tuple(inner) => TypeAnnotation::CTuple(inner),
         TypeAnnotation::Error => TypeAnnotation::CError,
         TypeAnnotation::Result(inner) => TypeAnnotation::CResult(inner),
         TypeAnnotation::Record(name) => TypeAnnotation::CRecord(name),
         TypeAnnotation::Enum(name) => TypeAnnotation::CEnum(name),
+        TypeAnnotation::Set(items) => TypeAnnotation::CSet(items),
         other => other,
     }
 }
@@ -165,6 +188,14 @@ fn enum_matches(a: &TypeAnnotation, b: &TypeAnnotation) -> bool {
     )
 }
 
+fn set_matches(a: &TypeAnnotation, b: &TypeAnnotation) -> bool {
+    matches!(
+        (a, b),
+        (TypeAnnotation::Set(x) | TypeAnnotation::CSet(x),
+         TypeAnnotation::Set(y) | TypeAnnotation::CSet(y)) if x == y
+    )
+}
+
 /// Returns `true` if `a` is the const variant of `b` or vice versa (e.g. `CInt` <-> `Int`).
 fn const_matches(a: &TypeAnnotation, b: &TypeAnnotation) -> bool {
     matches!(
@@ -181,5 +212,9 @@ fn const_matches(a: &TypeAnnotation, b: &TypeAnnotation) -> bool {
             | (TypeAnnotation::Error, TypeAnnotation::CError)
             | (TypeAnnotation::CResult(_), TypeAnnotation::Result(_))
             | (TypeAnnotation::Result(_), TypeAnnotation::CResult(_))
+            | (TypeAnnotation::CMap(_, _), TypeAnnotation::Map(_, _))
+            | (TypeAnnotation::Map(_, _), TypeAnnotation::CMap(_, _))
+            | (TypeAnnotation::Set(_), TypeAnnotation::CSet(_))
+            | (TypeAnnotation::CSet(_), TypeAnnotation::Set(_))
     )
 }

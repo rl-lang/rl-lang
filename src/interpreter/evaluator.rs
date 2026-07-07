@@ -1,5 +1,6 @@
 //! Core evaluator - expression evaluation, function calls, and the runtime state.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -12,11 +13,10 @@ use crate::lexer::tokentypes::TokenType;
 use crate::resolver::Resolver;
 use crate::{
     ast::{ExprId, nodes::ExpressionKind, statements::TypeAnnotation},
-    interpreter::evaluator_types::addressing::{get_indices_as_vec, try_get_root_addr},
     interpreter::{
         native::{IntoNativeFn, Module},
         stdlib,
-        values::Value,
+        values::{MapKey, Value},
     },
     utils::{
         errors::{Error, Reason},
@@ -251,6 +251,28 @@ impl Evaluator {
                     TypeAnnotation::Array(Box::new(inner))
                 }
             }
+            Value::Set { items, .. } => {
+                let inner = items
+                    .first()
+                    .map(|v| Self::infer_type(v, false))
+                    .unwrap_or(TypeAnnotation::Null);
+                if is_const {
+                    TypeAnnotation::CSet(Box::new(inner))
+                } else {
+                    TypeAnnotation::Set(Box::new(inner))
+                }
+            }
+            Value::Map {
+                key_type,
+                value_type,
+                ..
+            } => {
+                if is_const {
+                    TypeAnnotation::CMap(Box::new(key_type.clone()), Box::new(value_type.clone()))
+                } else {
+                    TypeAnnotation::Map(Box::new(key_type.clone()), Box::new(value_type.clone()))
+                }
+            }
             Value::Struct { name, .. } => {
                 if is_const {
                     TypeAnnotation::CRecord(name.clone())
@@ -346,6 +368,14 @@ impl Evaluator {
                 TypeAnnotation::Enum(a) | TypeAnnotation::CEnum(a),
                 TypeAnnotation::Enum(b) | TypeAnnotation::CEnum(b),
             ) => a == b,
+            (
+                TypeAnnotation::Map(ak, av) | TypeAnnotation::CMap(ak, av),
+                TypeAnnotation::Map(bk, bv) | TypeAnnotation::CMap(bk, bv),
+            ) => Self::types_compatible(ak, bk) && Self::types_compatible(av, bv),
+            (
+                TypeAnnotation::Set(a) | TypeAnnotation::CSet(a),
+                TypeAnnotation::Set(b) | TypeAnnotation::CSet(b),
+            ) => Self::types_compatible(a, b),
             _ => false,
         }
     }
@@ -379,92 +409,46 @@ impl Evaluator {
 
             ExpressionKind::Index { target, index } => {
                 let (target, index) = (*target, *index);
-                if let Some((depth, slot)) = try_get_root_addr(target, &self.resolver.ast_arena) {
-                    let indices = get_indices_as_vec(id, self, span)?;
-                    Ok(self.index_read(depth, slot, &indices, span)?)
-                } else {
-                    let target_span = self.resolver.ast_arena.exprs.get(target).span;
-                    let index_span = self.resolver.ast_arena.exprs.get(index).span;
+                let target_span = self.resolver.ast_arena.exprs.get(target).span;
+                let index_span = self.resolver.ast_arena.exprs.get(index).span;
 
-                    let arr = self.evaluate(target)?;
-                    self.check_not_null(&arr, target_span)?;
+                if let ExpressionKind::ResolvedIdentifier { depth, slot, .. } =
+                    &self.resolver.ast_arena.exprs.get(target).kind
+                {
+                    let (depth, slot) = (*depth, *slot);
                     let idx = self.evaluate(index)?;
                     self.check_not_null(&idx, index_span)?;
-                    match (&arr, &idx) {
-                        (Value::Values { items, .. }, Value::Integer(i)) => {
-                            let i_usize = *i as usize;
-                            if i_usize >= items.len() {
-                                return Err(self
-                                    .err(
-                                        format!("index {} out of bounds (len {})", i, items.len()),
-                                        span,
-                                    )
-                                    .with_label(
-                                        target_span,
-                                        format!("this array has length {}", items.len()),
-                                    ));
+                    match idx {
+                        Value::Integer(i) => {
+                            if i < 0 {
+                                return Err(
+                                    self.err(format!("index cannot be negative: {}", i), span)
+                                );
                             }
-                            Ok(items[i_usize].clone())
+                            return self.index_read(depth, slot, &[i as usize], span);
                         }
-                        (Value::Values { items, .. }, Value::Byte(b)) => {
-                            let b_usize = *b as usize;
-                            if b_usize >= items.len() {
-                                return Err(self
-                                    .err(
-                                        format!("index {} out of bounds (len {})", b, items.len()),
-                                        span,
-                                    )
-                                    .with_label(
-                                        target_span,
-                                        format!("this array has length {}", items.len()),
-                                    ));
-                            }
-                            Ok(items[b_usize].clone())
+                        Value::Byte(b) => {
+                            return self.index_read(depth, slot, &[b as usize], span);
                         }
-                        (Value::Tuple(items), Value::Integer(i)) => {
-                            let i_usize = *i as usize;
-                            if i_usize >= items.len() {
-                                return Err(self
-                                    .err(
-                                        format!(
-                                            "tuple index {} out of bounds (len {})",
-                                            i,
-                                            items.len()
-                                        ),
-                                        span,
-                                    )
-                                    .with_label(
-                                        target_span,
-                                        format!("this tuple has {} elements", items.len()),
-                                    ));
-                            }
-                            Ok(items[i_usize].clone())
+                        _ => {
+                            let arr = self.evaluate(target)?;
+                            self.check_not_null(&arr, target_span)?;
+                            return self.index_read_value(
+                                &arr,
+                                &idx,
+                                target_span,
+                                index_span,
+                                span,
+                            );
                         }
-                        (Value::Tuple(items), Value::Byte(b)) => {
-                            let b_usize = *b as usize;
-                            if b_usize >= items.len() {
-                                return Err(self
-                                    .err(
-                                        format!(
-                                            "tuple index {} out of bounds (len {})",
-                                            b,
-                                            items.len()
-                                        ),
-                                        span,
-                                    )
-                                    .with_label(
-                                        target_span,
-                                        format!("this tuple has {} elements", items.len()),
-                                    ));
-                            }
-                            Ok(items[b_usize].clone())
-                        }
-                        _ => Err(self
-                            .err("invalid index operation", span)
-                            .with_label(target_span, format!("this is {}", arr.type_name()))
-                            .with_label(index_span, format!("this is {}", idx.type_name()))),
                     }
                 }
+
+                let arr = self.evaluate(target)?;
+                self.check_not_null(&arr, target_span)?;
+                let idx = self.evaluate(index)?;
+                self.check_not_null(&idx, index_span)?;
+                self.index_read_value(&arr, &idx, target_span, index_span, span)
             }
 
             ExpressionKind::ArrayLiteral(items) => {
@@ -501,6 +485,94 @@ impl Evaluator {
                 Ok(Value::Values {
                     items_type,
                     items: values,
+                })
+            }
+
+            ExpressionKind::SetLiteral(items) => {
+                let len = items.len();
+                let mut values = Vec::with_capacity(len);
+                for i in 0..len {
+                    let item_id = match &self.resolver.ast_arena.exprs.get(id).kind {
+                        ExpressionKind::SetLiteral(items) => items[i],
+                        _ => unreachable!(),
+                    };
+                    values.push(self.evaluate(item_id)?);
+                }
+                let items_type = values
+                    .first()
+                    .map(|v| Self::infer_type(v, false))
+                    .unwrap_or(TypeAnnotation::Null);
+
+                if items_type != TypeAnnotation::Null {
+                    for (i, v) in values.iter().enumerate() {
+                        let actual = Self::infer_type(v, false);
+                        if !Self::types_compatible(&actual, &items_type) {
+                            return Err(self.err(
+                                format!(
+                                    "set element type mismatch: element {} is {:?}, expected {:?}",
+                                    i, actual, items_type,
+                                ),
+                                span,
+                            ));
+                        }
+                    }
+                }
+                Ok(Value::Set {
+                    items_type,
+                    items: values,
+                })
+            }
+
+            ExpressionKind::MapLiteral(entries) => {
+                let len = entries.len();
+                let mut map = HashMap::with_capacity(len);
+                let mut key_type = TypeAnnotation::Null;
+                let mut value_type = TypeAnnotation::Null;
+
+                for i in 0..len {
+                    let (key_id, value_id) = match &self.resolver.ast_arena.exprs.get(id).kind {
+                        ExpressionKind::MapLiteral(entries) => entries[i],
+                        _ => unreachable!(),
+                    };
+                    let key_val = self.evaluate(key_id)?;
+                    let value_val = self.evaluate(value_id)?;
+
+                    if i == 0 {
+                        key_type = Self::infer_type(&key_val, false);
+                        value_type = Self::infer_type(&value_val, false);
+                    } else {
+                        let actual_key = Self::infer_type(&key_val, false);
+                        if !Self::types_compatible(&actual_key, &key_type) {
+                            return Err(self.err(
+                                format!(
+                                    "map key type mismatch: entry {} key is {:?}, expected {:?}",
+                                    i, actual_key, key_type
+                                ),
+                                span,
+                            ));
+                        }
+                        let actual_value = Self::infer_type(&value_val, false);
+                        if !Self::types_compatible(&actual_value, &value_type) {
+                            return Err(self.err(
+                                            format!("map value type mismatch: entry {} value is {:?}, expected {:?}", i, actual_value, value_type),
+                                            span,
+                                        ));
+                        }
+                    }
+
+                    let map_key = MapKey::from_value(&key_val).ok_or_else(|| {
+                        self.err(
+                            format!("type {} cannot be used as a map key", key_val.type_name()),
+                            span,
+                        )
+                    })?;
+                    map.insert(map_key, value_val);
+                }
+
+                Ok(Value::Map {
+                    key_type,
+                    value_type,
+                    entries: Rc::new(RefCell::new(map)),
                 })
             }
 

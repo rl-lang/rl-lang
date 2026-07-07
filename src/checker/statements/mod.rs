@@ -62,4 +62,21 @@ impl TypeChecker {
             CheckType::Unknown => TypeAnnotation::Null,
         }
     }
+
+    pub(crate) fn is_hashable_key_type(ty: &TypeAnnotation) -> bool {
+        matches!(
+            ty,
+            TypeAnnotation::Int
+                | TypeAnnotation::CInt
+                | TypeAnnotation::String
+                | TypeAnnotation::CString
+                | TypeAnnotation::Bool
+                | TypeAnnotation::CBool
+                | TypeAnnotation::Byte
+                | TypeAnnotation::CByte
+                | TypeAnnotation::Char
+                | TypeAnnotation::CChar
+                | TypeAnnotation::Null
+        )
+    }
 }

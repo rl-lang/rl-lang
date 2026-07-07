@@ -149,6 +149,166 @@ impl Evaluator {
                 self.insert_value(*slot, val, declared_type, statement.span)?;
             }
 
+            StatementKind::ResolvedSet {
+                slot,
+                value,
+                type_annotation,
+                ..
+            } => {
+                let val = self.evaluate(*value)?;
+                let val = match val {
+                    Value::Set { items, .. } => {
+                        for item in &items {
+                            let actual = Self::infer_type(item, false);
+                            if !Self::types_compatible(&actual, type_annotation) {
+                                return Err(self.err(
+                                    format!(
+                                        "set element type mismatch: expected {:?}, found {:?}",
+                                        type_annotation, actual
+                                    ),
+                                    statement.span,
+                                ));
+                            }
+                        }
+                        Value::Set {
+                            items_type: type_annotation.clone(),
+                            items,
+                        }
+                    }
+                    other => {
+                        return Err(self.err(
+                            format!("expected set value found {}", other.type_name()),
+                            statement.span,
+                        ));
+                    }
+                };
+                let declared_type = TypeAnnotation::Set(Box::new(type_annotation.clone()));
+                self.insert_value(*slot, val, declared_type, statement.span)?;
+            }
+
+            StatementKind::ResolvedConstantSet {
+                slot,
+                value,
+                type_annotation,
+                ..
+            } => {
+                let val = self.evaluate(*value)?;
+                let val = match val {
+                    Value::Set { items, .. } => {
+                        for item in &items {
+                            let actual = Self::infer_type(item, false);
+                            if !Self::types_compatible(&actual, type_annotation) {
+                                return Err(self.err(
+                                    format!(
+                                        "set element type mismatch: expected {:?}, found {:?}",
+                                        type_annotation, actual
+                                    ),
+                                    statement.span,
+                                ));
+                            }
+                        }
+                        Value::Set {
+                            items_type: type_annotation.clone(),
+                            items,
+                        }
+                    }
+                    other => {
+                        return Err(self.err(
+                            format!("expected set value found {}", other.type_name()),
+                            statement.span,
+                        ));
+                    }
+                };
+                let declared_type = TypeAnnotation::CSet(Box::new(type_annotation.clone()));
+                self.insert_value(*slot, val, declared_type, statement.span)?;
+            }
+
+            StatementKind::ResolvedMap {
+                slot,
+                value,
+                type_annotation,
+                ..
+            } => {
+                let (declared_key, declared_value) = match type_annotation {
+                    TypeAnnotation::Map(k, v) => (k.as_ref().clone(), v.as_ref().clone()),
+                    other => (TypeAnnotation::Null, other.clone()),
+                };
+                let val = self.evaluate(*value)?;
+                let val = match val {
+                    Value::Map { entries, .. } => {
+                        for (_, v) in entries.borrow().iter() {
+                            let actual = Self::infer_type(v, false);
+                            if !Self::types_compatible(&actual, &declared_value) {
+                                return Err(self.err(
+                                    format!(
+                                        "map value type mismatch: expected {:?}, found {:?}",
+                                        declared_value, actual
+                                    ),
+                                    statement.span,
+                                ));
+                            }
+                        }
+                        Value::Map {
+                            key_type: declared_key.clone(),
+                            value_type: declared_value.clone(),
+                            entries,
+                        }
+                    }
+                    other => {
+                        return Err(self.err(
+                            format!("expected map value found {}", other.type_name()),
+                            statement.span,
+                        ));
+                    }
+                };
+                let declared_type =
+                    TypeAnnotation::Map(Box::new(declared_key), Box::new(declared_value));
+                self.insert_value(*slot, val, declared_type, statement.span)?;
+            }
+
+            StatementKind::ResolvedConstantMap {
+                slot,
+                value,
+                type_annotation,
+                ..
+            } => {
+                let (declared_key, declared_value) = match type_annotation {
+                    TypeAnnotation::CMap(k, v) => (k.as_ref().clone(), v.as_ref().clone()),
+                    other => (TypeAnnotation::Null, other.clone()),
+                };
+                let val = self.evaluate(*value)?;
+                let val = match val {
+                    Value::Map { entries, .. } => {
+                        for (_, v) in entries.borrow().iter() {
+                            let actual = Self::infer_type(v, false);
+                            if !Self::types_compatible(&actual, &declared_value) {
+                                return Err(self.err(
+                                    format!(
+                                        "map value type mismatch: expected {:?}, found {:?}",
+                                        declared_value, actual
+                                    ),
+                                    statement.span,
+                                ));
+                            }
+                        }
+                        Value::Map {
+                            key_type: declared_key.clone(),
+                            value_type: declared_value.clone(),
+                            entries,
+                        }
+                    }
+                    other => {
+                        return Err(self.err(
+                            format!("expected map value found {}", other.type_name()),
+                            statement.span,
+                        ));
+                    }
+                };
+                let declared_type =
+                    TypeAnnotation::CMap(Box::new(declared_key), Box::new(declared_value));
+                self.insert_const(*slot, val, declared_type, statement.span)?;
+            }
+
             StatementKind::Expression(expr) => {
                 self.evaluate(*expr)?;
             }
@@ -787,6 +947,8 @@ impl Evaluator {
                 | StatementKind::ResolvedConstantDeclaration { .. }
                 | StatementKind::ResolvedArray { .. }
                 | StatementKind::ResolvedConstantArray { .. }
+                | StatementKind::ResolvedMap { .. }
+                | StatementKind::ResolvedConstantMap { .. }
                 | StatementKind::TagDeclaration { .. }
                 | StatementKind::RecordDeclaration { .. } => self.evaluate_statement(statement)?,
                 _ => {}
