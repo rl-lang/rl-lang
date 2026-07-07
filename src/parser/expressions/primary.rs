@@ -333,6 +333,33 @@ impl Parser {
             return self.parse_postfix(expr, start);
         }
 
+        // --- set literal ---
+        if self.match_type(&[TokenType::LeftBrace]) {
+            let mut items = Vec::new();
+            while self.match_type(&[TokenType::Newline]) {}
+            while self.peek() != TokenType::RightBrace {
+                items.push(self.parse_expression()?);
+                while self.match_type(&[TokenType::Newline]) {}
+                if self.peek() == TokenType::RightBrace {
+                    break;
+                }
+                if !self.match_type(&[TokenType::Comma]) {
+                    return Err(self.err("expected `,` between set items", self.peek_span()));
+                }
+                while self.match_type(&[TokenType::Newline]) {}
+            }
+            self.match_type(&[TokenType::RightBrace]);
+            let span = start.join(self.previous_span());
+
+            #[cfg(feature = "debug")]
+            log::trace!("alloc SetLiteral expr: items={} @ {:?}", items.len(), span);
+
+            let expr = self
+                .ast_arena
+                .alloc_expr(ExpressionKind::SetLiteral(items), span);
+            return self.parse_postfix(expr, start);
+        }
+
         // --- array literal ---
         if self.match_type(&[TokenType::LeftBracket]) {
             let mut items = Vec::new();
