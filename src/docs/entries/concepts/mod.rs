@@ -15,6 +15,8 @@ pub mod r#match;
 pub mod nulls;
 pub mod operators;
 pub mod propagate;
+pub mod records;
+pub mod tags;
 pub mod tooling;
 pub mod tuples;
 pub mod types;
