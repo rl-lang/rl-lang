@@ -114,6 +114,50 @@ impl Resolver {
                     value,
                 }
             }
+
+            StatementKind::Map {
+                name,
+                type_annotation,
+                entries,
+            } => {
+                let entries = entries
+                    .into_iter()
+                    .map(|(k, v)| (self.resolve_expression(k), self.resolve_expression(v)))
+                    .collect();
+                let slot = self.declare(name.clone());
+                let value = self
+                    .ast_arena
+                    .alloc_expr(ExpressionKind::MapLiteral(entries), span);
+
+                StatementKind::ResolvedMap {
+                    name,
+                    slot,
+                    type_annotation,
+                    value,
+                }
+            }
+            StatementKind::ConstantMap {
+                name,
+                type_annotation,
+                entries,
+            } => {
+                let entries = entries
+                    .into_iter()
+                    .map(|(k, v)| (self.resolve_expression(k), self.resolve_expression(v)))
+                    .collect();
+                let slot = self.declare(name.clone());
+                let value = self
+                    .ast_arena
+                    .alloc_expr(ExpressionKind::MapLiteral(entries), span);
+
+                StatementKind::ResolvedConstantMap {
+                    name,
+                    slot,
+                    type_annotation,
+                    value,
+                }
+            }
+
             StatementKind::FunctionDeclaration {
                 name,
                 params,
@@ -218,6 +262,8 @@ impl Resolver {
                             | StatementKind::ConstantDeclaration { .. }
                             | StatementKind::Array { .. }
                             | StatementKind::ConstantArray { .. }
+                            | StatementKind::Map { .. }
+                            | StatementKind::ConstantMap { .. }
                             | StatementKind::FunctionDeclaration { .. }
                     )
                 });
@@ -295,6 +341,8 @@ impl Resolver {
                         | StatementKind::ConstantDeclaration { name, .. } => names.contains(name),
                         StatementKind::Array { name, .. }
                         | StatementKind::ConstantArray { name, .. } => names.contains(name),
+                        StatementKind::Map { name, .. }
+                        | StatementKind::ConstantMap { name, .. } => names.contains(name),
                         _ => false,
                     })
                     .collect();
