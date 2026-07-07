@@ -255,6 +255,74 @@ impl Parser {
             }
         }
 
+        // -- set: dec set[T] name = {...} --
+        if self.match_type(&[TokenType::Set]) && self.peek() == TokenType::LeftBracket {
+            self.advance();
+            while self.match_type(&[TokenType::Newline]) {}
+            let annoation_type = self.parse_param_type()?;
+            while self.match_type(&[TokenType::Newline]) {}
+            if !self.match_type(&[TokenType::RightBracket]) {
+                return Err(self.err("expected `]` after type", self.peek_span()));
+            }
+
+            while self.match_type(&[TokenType::Newline]) {}
+            let name = match self.peek() {
+                TokenType::Identifier(n) => {
+                    self.advance();
+                    n
+                }
+                _ => return Err(self.err("expected name after set type", self.peek_span())),
+            };
+
+            while self.match_type(&[TokenType::Newline]) {}
+            if !self.match_type(&[TokenType::Assign]) {
+                return Err(self.err("expected `=` after name", self.peek_span()));
+            }
+
+            while self.match_type(&[TokenType::Newline]) {}
+            if self.peek() == TokenType::LeftBrace {
+                self.advance();
+                let mut items = Vec::new();
+                while self.match_type(&[TokenType::Newline]) {}
+
+                while self.peek() != TokenType::RightBrace {
+                    let value = self.parse_expression()?;
+                    items.push(value);
+                    while self.match_type(&[TokenType::Newline]) {}
+                    if self.peek() == TokenType::RightBrace {
+                        break;
+                    }
+                    if !self.match_type(&[TokenType::Comma]) {
+                        return Err(self.err("expected `,` between set items", self.peek_span()));
+                    }
+                    while self.match_type(&[TokenType::Newline]) {}
+                }
+                self.match_type(&[TokenType::RightBrace]);
+                let span = start.join(self.previous_span());
+                return Ok(Statement::new(
+                    StatementKind::Set {
+                        name,
+                        type_annotation: annoation_type,
+                        items,
+                    },
+                    span,
+                ));
+            } else {
+                while self.match_type(&[TokenType::Newline]) {}
+                let value = self.parse_expression()?;
+                let value_id = self.ast_arena.exprs.get(value);
+                let span = start.join(value_id.span);
+                return Ok(Statement::new(
+                    StatementKind::ConstantDeclaration {
+                        name,
+                        type_annotation: TypeAnnotation::Set(Box::new(annoation_type)),
+                        value,
+                    },
+                    span,
+                ));
+            }
+        }
+
         // -- array: dec array[T] name = [...] --
         if self.match_type(&[TokenType::Array]) && self.peek() == TokenType::LeftBracket {
             self.advance();
