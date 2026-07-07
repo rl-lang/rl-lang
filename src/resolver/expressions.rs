@@ -178,6 +178,13 @@ impl Resolver {
                 self.resolve_expression(value);
                 None
             }
+            ExpressionKind::MapLiteral(entries) => {
+                for (key, value) in &entries {
+                    self.resolve_expression(*key);
+                    self.resolve_expression(*value);
+                }
+                None
+            }
 
             _ => None,
         };
