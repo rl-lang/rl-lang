@@ -171,6 +171,93 @@ impl Parser {
             }
         }
 
+        // -- map: CONST map[K,V] NAME = {...} --
+        if self.match_type(&[TokenType::Map]) && self.peek() == TokenType::LeftBracket {
+            self.advance();
+            while self.match_type(&[TokenType::Newline]) {}
+            let key_type = self.parse_param_type()?;
+
+            while self.match_type(&[TokenType::Newline]) {}
+            if !self.match_type(&[TokenType::Comma]) {
+                return Err(self.err(
+                    "expected `,` between map key and value types",
+                    self.peek_span(),
+                ));
+            }
+
+            while self.match_type(&[TokenType::Newline]) {}
+            let value_type = self.parse_param_type()?;
+
+            while self.match_type(&[TokenType::Newline]) {}
+            if !self.match_type(&[TokenType::RightBracket]) {
+                return Err(self.err("expected `]` after type", self.peek_span()));
+            }
+
+            while self.match_type(&[TokenType::Newline]) {}
+            let name = match self.peek() {
+                TokenType::Identifier(n) => {
+                    self.advance();
+                    n
+                }
+                _ => return Err(self.err("expected name after map type", self.peek_span())),
+            };
+
+            while self.match_type(&[TokenType::Newline]) {}
+            if !self.match_type(&[TokenType::Assign]) {
+                return Err(self.err("expected `=` after name", self.peek_span()));
+            }
+
+            let annoation_type = TypeAnnotation::CMap(Box::new(key_type), Box::new(value_type));
+
+            while self.match_type(&[TokenType::Newline]) {}
+            if self.peek() == TokenType::LeftBrace {
+                self.advance();
+                let mut entries = Vec::new();
+                while self.match_type(&[TokenType::Newline]) {}
+
+                while self.peek() != TokenType::RightBrace {
+                    let key = self.parse_expression()?;
+                    while self.match_type(&[TokenType::Newline]) {}
+                    if !self.match_type(&[TokenType::Colon]) {
+                        return Err(self.err("expected `:` after map key", self.peek_span()));
+                    }
+                    while self.match_type(&[TokenType::Newline]) {}
+                    let value = self.parse_expression()?;
+                    entries.push((key, value));
+                    while self.match_type(&[TokenType::Newline]) {}
+                    if self.peek() == TokenType::RightBrace {
+                        break;
+                    }
+                    if !self.match_type(&[TokenType::Comma]) {
+                        return Err(self.err("expected `,` between map entries", self.peek_span()));
+                    }
+                    while self.match_type(&[TokenType::Newline]) {}
+                }
+                self.match_type(&[TokenType::RightBrace]);
+                let span = start.join(self.previous_span());
+                return Ok(Statement::new(
+                    StatementKind::ConstantMap {
+                        name,
+                        type_annotation: annoation_type,
+                        entries,
+                    },
+                    span,
+                ));
+            } else {
+                let value = self.parse_expression()?;
+                let value_id = self.ast_arena.exprs.get(value);
+                let span = start.join(value_id.span);
+                return Ok(Statement::new(
+                    StatementKind::ConstantDeclaration {
+                        name,
+                        type_annotation: annoation_type,
+                        value,
+                    },
+                    span,
+                ));
+            }
+        }
+
         // -- array: CONST array[T] NAME = [...] --
         if self.match_type(&[TokenType::Array]) && self.peek() == TokenType::LeftBracket {
             self.advance();
