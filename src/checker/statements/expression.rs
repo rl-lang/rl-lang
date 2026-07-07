@@ -166,6 +166,10 @@ impl TypeChecker {
                     | CheckType::Known(TypeAnnotation::CArray(inner)) => {
                         CheckType::Known((**inner).clone())
                     }
+                    CheckType::Known(TypeAnnotation::Set(inner))
+                    | CheckType::Known(TypeAnnotation::CSet(inner)) => {
+                        CheckType::Known((**inner).clone())
+                    }
                     CheckType::Known(TypeAnnotation::Map(key_ty, value_ty))
                     | CheckType::Known(TypeAnnotation::CMap(key_ty, value_ty)) => {
                         let expected_key = CheckType::Known((**key_ty).clone());
@@ -529,6 +533,39 @@ impl TypeChecker {
                     }
                 }
                 CheckType::Known(TypeAnnotation::Enum(enum_name))
+            }
+
+            ExpressionKind::SetLiteral(items) => {
+                let mut item_types = Vec::with_capacity(items.len());
+                for item in items {
+                    let item_span = self.ast_arena.exprs.get(item).span;
+                    item_types.push((self.check_expression(item), item_span));
+                }
+
+                let items_type = item_types
+                    .first()
+                    .map(|(t, _)| Self::to_type_annotation(t))
+                    .unwrap_or(TypeAnnotation::Null);
+
+                if let Some((first_type, _)) = item_types.first().cloned() {
+                    for (item_type, span) in item_types.iter().skip(1) {
+                        if !item_type.is_null()
+                            && !first_type.is_null()
+                            && !item_type.matches(&first_type)
+                        {
+                            self.error(
+                                format!(
+                                    "set element type mismatch: expected {}, got {}",
+                                    first_type.info(),
+                                    item_type.info()
+                                ),
+                                *span,
+                            );
+                        }
+                    }
+                }
+
+                CheckType::Known(TypeAnnotation::Set(Box::new(items_type)))
             }
 
             _ => CheckType::Unknown,
