@@ -294,6 +294,45 @@ impl Parser {
         }
         // ---- identifier end ----
 
+        // --- map literal ---
+        if self.peek() == TokenType::LeftBrace {
+            self.advance();
+            let mut entries = Vec::new();
+            while self.match_type(&[TokenType::Newline]) {}
+            while self.peek() != TokenType::RightBrace {
+                let key = self.parse_expression()?;
+                while self.match_type(&[TokenType::Newline]) {}
+                if !self.match_type(&[TokenType::Colon]) {
+                    return Err(self.err("expected `:` after map key", self.peek_span()));
+                }
+                while self.match_type(&[TokenType::Newline]) {}
+                let value = self.parse_expression()?;
+                entries.push((key, value));
+                while self.match_type(&[TokenType::Newline]) {}
+                if self.peek() == TokenType::RightBrace {
+                    break;
+                }
+                if !self.match_type(&[TokenType::Comma]) {
+                    return Err(self.err("expected `,` between map entries", self.peek_span()));
+                }
+                while self.match_type(&[TokenType::Newline]) {}
+            }
+            self.match_type(&[TokenType::RightBrace]);
+            let span = start.join(self.previous_span());
+
+            #[cfg(feature = "debug")]
+            log::trace!(
+                "alloc MapLiteral expr: entries={} @ {:?}",
+                entries.len(),
+                span
+            );
+
+            let expr = self
+                .ast_arena
+                .alloc_expr(ExpressionKind::MapLiteral(entries), span);
+            return self.parse_postfix(expr, start);
+        }
+
         // --- array literal ---
         if self.match_type(&[TokenType::LeftBracket]) {
             let mut items = Vec::new();
