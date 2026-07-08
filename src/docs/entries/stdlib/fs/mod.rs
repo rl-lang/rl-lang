@@ -35,10 +35,10 @@ copy_file("a.txt", "b.txt")?"#,
         r#"
 Will return errors on the following:
 
-- `src` does not exists
+- `src` does not exist
 - `src` not regular file nor symlink to regular file
 - the current process does not have permission rights to read from `src` and write to `dst`
-- the parent directory of `dst` does not exists"#,
+- the parent directory of `dst` does not exist"#,
     ),
     see_also: &["move_file"],
     since: Some("v0.1.5"),
