@@ -2,6 +2,7 @@ use crate::docs::entry::{FnEntry, StdEntry};
 
 mod copy_file;
 mod move_file;
+mod rename_file;
 
 pub static FS: StdEntry = StdEntry {
     name: "fs",
@@ -19,7 +20,7 @@ static FUNCTIONS: &[&FnEntry] = &[
     &MKDIR,
     &MKDIR_ALL,
     &move_file::MOVE_FILE,
-    &RENAME_FILE,
+    &rename_file::RENAME_FILE,
     &RMDIR,
     &RMDIR_ALL,
     &TEMP_DIR,
@@ -73,17 +74,6 @@ static MKDIR_ALL: FnEntry = FnEntry {
     signature: "mkdir_all(path)",
     description: "creates a directory along with any missing parent directories",
     example: "get std::fs::mkdir_all\n\nmkdir_all(\"./build/assets/css\")",
-    expected_output: None,
-    returns: "",
-    errors: None,
-    see_also: &[],
-    since: None,
-};
-
-static RENAME_FILE: FnEntry = FnEntry {
-    signature: "rename_file(path, new_name)",
-    description: "renames a file, keeping it in its current directory, and returns the new path",
-    example: "get std::fs::rename_file\n\nrename_file(\"/usr/bin/rl\", \"rl-old\") // \"/usr/bin/rl-old\"",
     expected_output: None,
     returns: "",
     errors: None,
