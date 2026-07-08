@@ -1,6 +1,7 @@
 use crate::docs::entry::{FnEntry, StdEntry};
 
 mod copy_file;
+mod move_file;
 
 pub static FS: StdEntry = StdEntry {
     name: "fs",
@@ -17,7 +18,7 @@ static FUNCTIONS: &[&FnEntry] = &[
     &LIST_DIR,
     &MKDIR,
     &MKDIR_ALL,
-    &MOVE_FILE,
+    &move_file::MOVE_FILE,
     &RENAME_FILE,
     &RMDIR,
     &RMDIR_ALL,
@@ -72,17 +73,6 @@ static MKDIR_ALL: FnEntry = FnEntry {
     signature: "mkdir_all(path)",
     description: "creates a directory along with any missing parent directories",
     example: "get std::fs::mkdir_all\n\nmkdir_all(\"./build/assets/css\")",
-    expected_output: None,
-    returns: "",
-    errors: None,
-    see_also: &[],
-    since: None,
-};
-
-static MOVE_FILE: FnEntry = FnEntry {
-    signature: "move_file(src, dst)",
-    description: "moves a file from src to dst",
-    example: "get std::fs::move_file\n\nmove_file(\"/tmp/a.txt\", \"/tmp/b.txt\")",
     expected_output: None,
     returns: "",
     errors: None,
