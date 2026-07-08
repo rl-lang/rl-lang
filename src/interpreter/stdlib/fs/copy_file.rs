@@ -9,7 +9,7 @@ pub fn std_copy_file(_: &mut Evaluator, src: String, dst: String) -> Value {
         Ok(b) => b,
         Err(e) => {
             return verr!(vs!(format!(
-                "copy_file(): failed to copy \"{}\" to \"{}\": {}",
+                "copy_file: failed to copy \"{}\" to \"{}\": {}",
                 src, dst, e
             )));
         }
