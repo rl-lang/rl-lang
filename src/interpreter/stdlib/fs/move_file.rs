@@ -5,14 +5,11 @@ use crate::interpreter::{
 };
 
 pub fn std_move_file(_: &mut Evaluator, src: String, dst: String) -> Value {
-    match std::fs::rename(&src, &dst) {
-        Err(e) => {
-            return verr!(vs!(format!(
-                "move_file: failed to move \"{}\" to \"{}\": {}",
-                src, dst, e
-            )));
-        }
-        Ok(_) => {}
+    if let Err(e) = std::fs::rename(&src, &dst) {
+        return verr!(vs!(format!(
+            "move_file: failed to move \"{}\" to \"{}\": {}",
+            src, dst, e
+        )));
     };
     vok!(vnl!())
 }
