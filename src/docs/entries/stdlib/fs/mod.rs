@@ -1,5 +1,7 @@
 use crate::docs::entry::{FnEntry, StdEntry};
 
+mod copy_file;
+
 pub static FS: StdEntry = StdEntry {
     name: "fs",
     description: "functions for working with the filesystem",
@@ -9,7 +11,7 @@ pub static FS: StdEntry = StdEntry {
 };
 
 static FUNCTIONS: &[&FnEntry] = &[
-    &COPY_FILE,
+    &copy_file::COPY_FILE,
     &FILE_MODIFIED,
     &FILE_SIZE,
     &LIST_DIR,
@@ -21,28 +23,6 @@ static FUNCTIONS: &[&FnEntry] = &[
     &RMDIR_ALL,
     &TEMP_DIR,
 ];
-
-static COPY_FILE: FnEntry = FnEntry {
-    signature: "copy_file(src, dst)",
-    description: "copies a file from src to dst, returns the number of bytes copied",
-    example: r#"
-get std::fs::copy_file
-
-copy_file("a.txt", "b.txt")?"#,
-    expected_output: None,
-    returns: "result[int]",
-    errors: Some(
-        r#"
-Will return errors on the following:
-
-- `src` does not exist
-- `src` not regular file nor symlink to regular file
-- the current process does not have permission rights to read from `src` and write to `dst`
-- the parent directory of `dst` does not exist"#,
-    ),
-    see_also: &["move_file"],
-    since: Some("v0.1.5"),
-};
 
 static FILE_MODIFIED: FnEntry = FnEntry {
     signature: "file_modified(path)",
