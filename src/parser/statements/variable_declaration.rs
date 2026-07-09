@@ -99,6 +99,11 @@ impl Parser {
                 | TokenType::Char
                 | TokenType::Fn
                 | TokenType::Error
+                | TokenType::Array
+                | TokenType::Map
+                | TokenType::Set
+                | TokenType::Result
+                | TokenType::Identifier(_)
         ) {
             let saved = self.current;
             while self.match_type(&[TokenType::Newline]) {}
@@ -149,25 +154,19 @@ impl Parser {
                     span,
                 ));
             } else {
-                while self.match_type(&[TokenType::Newline]) {}
-                if !self.match_type(&[TokenType::Assign]) {
-                    return Err(self.err("expected `=` after name", self.peek_span()));
-                }
-                while self.match_type(&[TokenType::Newline]) {}
-                let value = self.parse_expression()?;
-                let value_id = self.ast_arena.exprs.get(value);
-                let span = start.join(value_id.span);
-                return Ok(Statement::new(
-                    StatementKind::VariableDeclaration {
-                        name: first_name,
-                        type_annotation: first_type,
-                        value,
-                    },
-                    span,
-                ));
+                self.current = saved;
+                return self.parse_variable_declartion_single(start);
             }
         }
 
+        self.parse_variable_declartion_single(start)
+    }
+
+    /// Parses a single (non-destructure) `dec` declaration: map, set, array,
+    /// or scalar. Assumes the destructure/tuple-type possibilities have
+    /// already been ruled out (or the parser position has been rewound past
+    /// a failed destructure attempt) by the caller.
+    fn parse_variable_declartion_single(&mut self, start: Span) -> Result<Statement, Error> {
         // -- map: dec map[K,V] name = {...} --
         if self.match_type(&[TokenType::Map]) && self.peek() == TokenType::LeftBracket {
             self.advance();
