@@ -199,7 +199,7 @@ fn char_at() {
     let ev = eval_program(
         r#"
 get char_at from std::str
-dec char x = char_at("hello", 1)
+dec char x = char_at("hello", 1)?
 "#,
     )
     .unwrap();
