@@ -85,12 +85,21 @@ impl Parser {
                 TokenType::LeftParen => {
                     self.advance();
                     let mut inner = vec![];
-                    while !self.match_type(&[TokenType::RightParen]) {
-                        let item_type = self.parse_type(true)?;
-                        inner.push(item_type);
-                        if !self.match_type(&[TokenType::Comma]) {
+                    while self.match_type(&[TokenType::Newline]) {}
+                    if !self.match_type(&[TokenType::RightParen]) {
+                        inner.push(self.parse_type(true)?);
+                        while self.match_type(&[TokenType::Newline]) {}
+                        while self.match_type(&[TokenType::Comma]) {
+                            while self.match_type(&[TokenType::Newline]) {}
+                            if self.peek() == TokenType::RightParen {
+                                break;
+                            }
+                            inner.push(self.parse_type(true)?);
+                            while self.match_type(&[TokenType::Newline]) {}
+                        }
+                        if !self.match_type(&[TokenType::RightParen]) {
                             return Err(
-                                self.err("expected `,` between tuple types", self.peek_span())
+                                self.err("expected `,` or `)` in tuple type", self.peek_span())
                             );
                         }
                     }
@@ -177,12 +186,21 @@ impl Parser {
                 TokenType::LeftParen => {
                     self.advance();
                     let mut inner = vec![];
-                    while !self.match_type(&[TokenType::RightParen]) {
-                        let item_type = self.parse_type(false)?;
-                        inner.push(item_type);
-                        if !self.match_type(&[TokenType::Comma]) {
+                    while self.match_type(&[TokenType::Newline]) {}
+                    if !self.match_type(&[TokenType::RightParen]) {
+                        inner.push(self.parse_type(false)?);
+                        while self.match_type(&[TokenType::Newline]) {}
+                        while self.match_type(&[TokenType::Comma]) {
+                            while self.match_type(&[TokenType::Newline]) {}
+                            if self.peek() == TokenType::RightParen {
+                                break;
+                            }
+                            inner.push(self.parse_type(false)?);
+                            while self.match_type(&[TokenType::Newline]) {}
+                        }
+                        if !self.match_type(&[TokenType::RightParen]) {
                             return Err(
-                                self.err("expected `,` between tuple types", self.peek_span())
+                                self.err("expected `,` or `)` in tuple type", self.peek_span())
                             );
                         }
                     }
