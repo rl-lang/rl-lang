@@ -26,6 +26,7 @@ pub struct Tokenizer {
     /// Current line number, incremented on every `\n`.
     pub line: usize,
     pub pending_trivia: Vec<Trivia>,
+    pub newlines_since_trivia: usize,
 }
 
 impl Tokenizer {
@@ -75,6 +76,7 @@ impl Tokenizer {
             start: 0,
             line: 1,
             pending_trivia: Vec::new(),
+            newlines_since_trivia: 0,
         };
 
         while !lexer.is_at_end() {

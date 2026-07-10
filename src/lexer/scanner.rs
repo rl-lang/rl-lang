@@ -188,6 +188,12 @@ impl Tokenizer {
 
             '\n' => {
                 self.line += 1;
+                if !self.pending_trivia.is_empty() {
+                    self.newlines_since_trivia += 1;
+                    if self.newlines_since_trivia > 2 {
+                        self.flush_orphaned_trivia();
+                    }
+                }
                 self.add_token(TokenType::Newline)
             }
 
