@@ -1,14 +1,15 @@
-use crate::{
-    interpreter::{evaluator::Evaluator, values::Value},
-    utils::{errors::Error, span::Span},
+use crate::interpreter::{
+    evaluator::Evaluator,
+    stdlib::common::{verr, vnl, vok, vs},
+    values::Value,
 };
 
-pub fn std_mkdir_all(eval: &mut Evaluator, path: String, span: Span) -> Result<Value, Error> {
-    std::fs::create_dir_all(&path).map_err(|e| {
-        eval.err(
-            format!("mkdir_all(): failed to create \"{}\": {}", path, e),
-            span,
-        )
-    })?;
-    Ok(Value::Null)
+pub fn std_mkdir_all(_: &mut Evaluator, path: String) -> Value {
+    if let Err(e) = std::fs::create_dir_all(&path) {
+        return verr!(vs!(format!(
+            "mkdir_all: failed to create \"{}\": {}",
+            path, e
+        )));
+    };
+    vok!(vnl!())
 }
