@@ -1,6 +1,8 @@
 use crate::docs::entry::{FnEntry, StdEntry};
 
 mod copy_file;
+mod mkdir;
+mod mkdir_all;
 mod move_file;
 mod rename_file;
 mod rmdir;
@@ -20,8 +22,8 @@ static FUNCTIONS: &[&FnEntry] = &[
     &FILE_MODIFIED,
     &FILE_SIZE,
     &LIST_DIR,
-    &MKDIR,
-    &MKDIR_ALL,
+    &mkdir::MKDIR,
+    &mkdir_all::MKDIR_ALL,
     &move_file::MOVE_FILE,
     &rename_file::RENAME_FILE,
     &rmdir::RMDIR,
@@ -55,28 +57,6 @@ static LIST_DIR: FnEntry = FnEntry {
     signature: "list_dir(path)",
     description: "returns an array of paths for the entries in the directory",
     example: "get std::fs::list_dir\n\nlist_dir(\"./src\") // [\"./src/main.rl\", \"./src/html_tags\"]",
-    expected_output: None,
-    returns: "",
-    errors: None,
-    see_also: &[],
-    since: None,
-};
-
-static MKDIR: FnEntry = FnEntry {
-    signature: "mkdir(path)",
-    description: "creates a directory, fails if the parent directory does not exist",
-    example: "get std::fs::mkdir\n\nmkdir(\"./build\")",
-    expected_output: None,
-    returns: "",
-    errors: None,
-    see_also: &[],
-    since: None,
-};
-
-static MKDIR_ALL: FnEntry = FnEntry {
-    signature: "mkdir_all(path)",
-    description: "creates a directory along with any missing parent directories",
-    example: "get std::fs::mkdir_all\n\nmkdir_all(\"./build/assets/css\")",
     expected_output: None,
     returns: "",
     errors: None,
