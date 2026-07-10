@@ -236,7 +236,7 @@ impl Evaluator {
                 let val = self.evaluate(*value)?;
                 let val = match val {
                     Value::Map { entries, .. } => {
-                        for (_, v) in entries.borrow().iter() {
+                        for v in entries.borrow().values() {
                             let actual = Self::infer_type(v, false);
                             if !Self::types_compatible(&actual, &declared_value) {
                                 return Err(self.err(
@@ -279,7 +279,7 @@ impl Evaluator {
                 let val = self.evaluate(*value)?;
                 let val = match val {
                     Value::Map { entries, .. } => {
-                        for (_, v) in entries.borrow().iter() {
+                        for v in entries.borrow().values() {
                             let actual = Self::infer_type(v, false);
                             if !Self::types_compatible(&actual, &declared_value) {
                                 return Err(self.err(
