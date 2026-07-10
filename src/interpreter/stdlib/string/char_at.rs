@@ -1,28 +1,21 @@
 use crate::{
     interpreter::evaluator::Evaluator,
-    utils::{errors::Error, span::Span},
+    interpreter::stdlib::common::{vc, verr, vok, vs},
+    interpreter::values::Value,
 };
 
-pub fn std_char_at(
-    eval: &mut Evaluator,
-    string: String,
-    index: i64,
-    span: Span,
-) -> Result<char, Error> {
+pub fn std_char_at(_: &mut Evaluator, string: String, index: i64) -> Value {
     if index < 0 {
-        return Err(eval.err(format!("index cannot be negative: {}", index), span));
+        return verr!(vs!(format!("index cannot be negative: {}", index)));
     }
     let mut chars = string.chars();
     let chars_count = chars.clone().count();
     if index as usize >= chars_count {
-        Err(eval.err(
-            format!(
-                "index out of bounds string length is {} , used {}",
-                chars_count, index
-            ),
-            span,
-        ))
+        verr!(vs!(format!(
+            "index out of bounds string length is {} , used {}",
+            chars_count, index
+        )))
     } else {
-        Ok(chars.nth(index as usize).unwrap())
+        vok!(vc!(chars.nth(index as usize).unwrap()))
     }
 }

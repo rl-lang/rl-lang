@@ -51,7 +51,7 @@ impl Parser {
         #[cfg(feature = "debug")]
         log::debug!(
             "returning current token: [{:?}]",
-            &self.tokens[self.current].token
+            self.tokens[self.current].token
         );
         self.tokens[self.current].token.clone()
     }
@@ -64,7 +64,7 @@ impl Parser {
         #[cfg(feature = "debug")]
         log::debug!(
             "returning previous token: [{:?}]",
-            &self.tokens[self.current - 1].token
+            self.tokens[self.current - 1].token
         );
         self.tokens[self.current - 1].token.clone()
     }

@@ -1,14 +1,10 @@
 use crate::{
-    interpreter::{evaluator::Evaluator, values::Value},
-    utils::{errors::Error, span::Span},
+    interpreter::evaluator::Evaluator,
+    interpreter::stdlib::common::{verr, vok, vs},
+    interpreter::values::Value,
 };
 
-pub fn std_join(
-    eval: &mut Evaluator,
-    strings_array: Value,
-    delim: String,
-    span: Span,
-) -> Result<Value, Error> {
+pub fn std_join(_: &mut Evaluator, strings_array: Value, delim: String) -> Value {
     match strings_array {
         Value::Values { items: array, .. } => {
             let mut strings: Vec<String> = vec![];
@@ -21,19 +17,15 @@ pub fn std_join(
                     Value::Char(c) => strings.push(c.to_string()),
                     Value::Null => strings.push("null".to_string()),
                     Value::Function { .. } => {
-                        return Err(eval.err(
-                            "functions/lambdas/enclosures are not supported via join()".to_string(),
-                            span,
+                        return verr!(vs!(
+                            "functions/lambdas/enclosures are not supported via join()".to_string()
                         ));
                     }
                     _ => {}
                 }
             }
-            Ok(Value::String(strings.join(&delim)))
+            vok!(vs!(strings.join(&delim)))
         }
-        _ => Err(eval.err(
-            "join() expects an array as first argument".to_string(),
-            span,
-        )),
+        _ => verr!(vs!("join() expects an array as first argument".to_string())),
     }
 }
