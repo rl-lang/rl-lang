@@ -329,40 +329,8 @@ impl Parser {
         if self.match_type(&[TokenType::Array]) && self.peek() == TokenType::LeftBracket {
             self.advance();
             while self.match_type(&[TokenType::Newline]) {}
-            let annoation_type = match self.peek() {
-                TokenType::Int => {
-                    self.advance();
-                    TypeAnnotation::Int
-                }
-                TokenType::Byte => {
-                    self.advance();
-                    TypeAnnotation::Byte
-                }
-                TokenType::Float => {
-                    self.advance();
-                    TypeAnnotation::Float
-                }
-                TokenType::Bool => {
-                    self.advance();
-                    TypeAnnotation::Bool
-                }
-                TokenType::String => {
-                    self.advance();
-                    TypeAnnotation::String
-                }
-                TokenType::Char => {
-                    self.advance();
-                    TypeAnnotation::Char
-                }
-                TokenType::Array => {
-                    self.advance();
-                    self.match_type(&[TokenType::LeftBracket]);
-                    let inner = self.parse_type(false)?;
-                    self.match_type(&[TokenType::RightBracket]);
-                    TypeAnnotation::Array(Box::new(inner))
-                }
-                _ => return Err(self.err("expected type after `CONST`", self.peek_span())),
-            };
+            let annoation_type = self.parse_param_type()?;
+
             while self.match_type(&[TokenType::Newline]) {}
             if !self.match_type(&[TokenType::RightBracket]) {
                 return Err(self.err("expected `]` after type", self.peek_span()));
