@@ -1,38 +1,32 @@
-use crate::{
-    interpreter::{evaluator::Evaluator, values::Value},
-    utils::{errors::Error, span::Span},
+use crate::interpreter::{
+    evaluator::Evaluator,
+    stdlib::common::{verr, vi, vok, vs},
+    values::Value,
 };
 
-pub fn std_file_modified(eval: &mut Evaluator, path: String, span: Span) -> Result<Value, Error> {
-    let metadata = std::fs::metadata(&path).map_err(|e| {
-        eval.err(
-            format!("file_modified(): failed to read \"{}\": {}", path, e),
-            span,
-        )
-    })?;
+pub fn std_file_modified(_: &mut Evaluator, path: String) -> Value {
+    match std::fs::metadata(&path) {
+        Err(e) => verr!(vs!(format!(
+            "file_modified: failed to read \"{}\": {}",
+            path, e
+        ))),
 
-    let modified = metadata.modified().map_err(|e| {
-        eval.err(
-            format!(
-                "file_modified(): could not get modification time for \"{}\": {}",
+        Ok(metadata) => match metadata.modified() {
+            Err(e) => verr!(vs!(format!(
+                "file_modified: could not get modification time for \"{}\": {}",
                 path, e
-            ),
-            span,
-        )
-    })?;
-
-    let secs = modified
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|e| {
-            eval.err(
-                format!(
-                    "file_modified(): modification time before epoch for \"{}\": {}",
-                    path, e
-                ),
-                span,
-            )
-        })?
-        .as_secs();
-
-    Ok(Value::Integer(secs as i64))
+            ))),
+            Ok(modified) => match modified.duration_since(std::time::UNIX_EPOCH) {
+                Err(e) => {
+                    verr!(vs!(format!(
+                        "file_modified: modification time before epoch for \"{}\": {}",
+                        path, e
+                    )))
+                }
+                Ok(t) => {
+                    vok!(vi!(t.as_secs() as i64))
+                }
+            },
+        },
+    }
 }
