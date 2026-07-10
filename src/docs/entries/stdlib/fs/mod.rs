@@ -5,6 +5,7 @@ mod move_file;
 mod rename_file;
 mod rmdir;
 mod rmdir_all;
+mod temp_dir;
 
 pub static FS: StdEntry = StdEntry {
     name: "fs",
@@ -25,7 +26,7 @@ static FUNCTIONS: &[&FnEntry] = &[
     &rename_file::RENAME_FILE,
     &rmdir::RMDIR,
     &rmdir_all::RMDIR_ALL,
-    &TEMP_DIR,
+    &temp_dir::TEMP_DIR,
 ];
 
 static FILE_MODIFIED: FnEntry = FnEntry {
@@ -76,17 +77,6 @@ static MKDIR_ALL: FnEntry = FnEntry {
     signature: "mkdir_all(path)",
     description: "creates a directory along with any missing parent directories",
     example: "get std::fs::mkdir_all\n\nmkdir_all(\"./build/assets/css\")",
-    expected_output: None,
-    returns: "",
-    errors: None,
-    see_also: &[],
-    since: None,
-};
-
-static TEMP_DIR: FnEntry = FnEntry {
-    signature: "temp_dir()",
-    description: "returns the path of the system's temporary directory",
-    example: "get std::fs::temp_dir\n\ntemp_dir() // \"/tmp\"",
     expected_output: None,
     returns: "",
     errors: None,
