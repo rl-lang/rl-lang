@@ -6,7 +6,7 @@ pub static MKDIR_ALL: FnEntry = FnEntry {
     example: r#"
 get std::fs::mkdir_all
 
-mkdir_all("./build/assets/css")"#,
+mkdir_all("./build/assets/css")?"#,
     expected_output: None,
     returns: "result[null]",
     errors: Some(

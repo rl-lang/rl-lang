@@ -6,7 +6,7 @@ pub static RENAME_FILE: FnEntry = FnEntry {
     example: r#"
 get std::fs::rename_file
 
-rename_file("/usr/bin/rl", "rl-old")"#,
+rename_file("/usr/bin/rl", "rl-old")?"#,
     expected_output: Some("/usr/bin/rl-old"),
     returns: "result[string]",
     errors: Some(

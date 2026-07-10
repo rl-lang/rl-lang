@@ -6,7 +6,7 @@ pub static MKDIR: FnEntry = FnEntry {
     example: r#"
 get std::fs::mkdir
 
-mkdir("./build")"#,
+mkdir("./build")?"#,
     expected_output: None,
     returns: "result[null]",
     errors: Some(
