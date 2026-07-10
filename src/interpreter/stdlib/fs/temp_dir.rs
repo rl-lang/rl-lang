@@ -1,11 +1,7 @@
 use std::env::temp_dir;
 
-use crate::{
-    interpreter::{evaluator::Evaluator, values::Value},
-    utils::{errors::Error, span::Span},
-};
+use crate::interpreter::{evaluator::Evaluator, stdlib::common::vs, values::Value};
 
-pub fn std_temp_dir(_: &mut Evaluator, _: Vec<Value>, _: Span) -> Result<Value, Error> {
-    let temp = temp_dir().to_string_lossy().to_string();
-    Ok(Value::String(temp))
+pub fn std_temp_dir(_: &mut Evaluator) -> Value {
+    vs!(temp_dir().to_string_lossy().to_string())
 }

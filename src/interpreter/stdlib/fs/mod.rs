@@ -42,6 +42,6 @@ pub fn module() -> Module {
         .with_function("move_file", move_file::std_move_file)
         .with_function("file_size", file_size::std_file_size)
         .with_function("file_modified", file_modified::std_file_modified)
-        .with_raw_function("temp_dir", temp_dir::std_temp_dir)
+        .with_function("temp_dir", temp_dir::std_temp_dir)
         .with_function("rename_file", rename_file::std_rename_file)
 }
