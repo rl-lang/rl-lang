@@ -3,6 +3,8 @@ use crate::docs::entry::{FnEntry, StdEntry};
 mod copy_file;
 mod move_file;
 mod rename_file;
+mod rmdir;
+mod rmdir_all;
 
 pub static FS: StdEntry = StdEntry {
     name: "fs",
@@ -21,8 +23,8 @@ static FUNCTIONS: &[&FnEntry] = &[
     &MKDIR_ALL,
     &move_file::MOVE_FILE,
     &rename_file::RENAME_FILE,
-    &RMDIR,
-    &RMDIR_ALL,
+    &rmdir::RMDIR,
+    &rmdir_all::RMDIR_ALL,
     &TEMP_DIR,
 ];
 
@@ -74,28 +76,6 @@ static MKDIR_ALL: FnEntry = FnEntry {
     signature: "mkdir_all(path)",
     description: "creates a directory along with any missing parent directories",
     example: "get std::fs::mkdir_all\n\nmkdir_all(\"./build/assets/css\")",
-    expected_output: None,
-    returns: "",
-    errors: None,
-    see_also: &[],
-    since: None,
-};
-
-static RMDIR: FnEntry = FnEntry {
-    signature: "rmdir(path)",
-    description: "removes an empty directory, fails if it is not empty",
-    example: "get std::fs::rmdir\n\nrmdir(\"./build\")",
-    expected_output: None,
-    returns: "",
-    errors: None,
-    see_also: &[],
-    since: None,
-};
-
-static RMDIR_ALL: FnEntry = FnEntry {
-    signature: "rmdir_all(path)",
-    description: "removes a directory and all of its contents recursively",
-    example: "get std::fs::rmdir_all\n\nrmdir_all(\"./build\")",
     expected_output: None,
     returns: "",
     errors: None,
