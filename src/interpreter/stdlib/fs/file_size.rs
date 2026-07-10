@@ -1,16 +1,16 @@
-use crate::{
-    interpreter::{evaluator::Evaluator, values::Value},
-    utils::{errors::Error, span::Span},
+use crate::interpreter::{
+    evaluator::Evaluator,
+    stdlib::common::{verr, vi, vok, vs},
+    values::Value,
 };
 
-pub fn std_file_size(eval: &mut Evaluator, path: String, span: Span) -> Result<Value, Error> {
-    let size = std::fs::metadata(&path)
-        .map_err(|e| {
-            eval.err(
-                format!("file_size(): failed to read \"{}\": {}", path, e),
-                span,
-            )
-        })?
-        .len();
-    Ok(Value::Integer(size as i64))
+pub fn std_file_size(_: &mut Evaluator, path: String) -> Value {
+    match std::fs::metadata(&path) {
+        Err(e) => verr!(vs!(format!(
+            "file_size: failed to read \"{}\": {}",
+            path, e
+        ))),
+
+        Ok(metadata) => vok!(vi!(metadata.len() as i64)),
+    }
 }
