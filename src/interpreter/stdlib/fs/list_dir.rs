@@ -1,24 +1,26 @@
 use crate::{
     ast::statements::TypeAnnotation,
-    interpreter::{evaluator::Evaluator, values::Value},
-    utils::{errors::Error, span::Span},
+    interpreter::{
+        evaluator::Evaluator,
+        stdlib::common::{verr, vok, vs},
+        values::Value,
+    },
 };
 
-pub fn std_list_dir(eval: &mut Evaluator, path: String, span: Span) -> Result<Value, Error> {
-    let data = std::fs::read_dir(&path)
-        .map_err(|e| {
-            eval.err(
-                format!("list_dir(): failed to read \"{}\": {}", path, e),
-                span,
-            )
-        })?
-        .filter_map(|i| i.ok())
-        .map(|i| i.path().to_string_lossy().to_string())
-        .map(Value::String)
-        .collect::<Vec<Value>>();
-
-    Ok(Value::Values {
-        items_type: TypeAnnotation::String,
-        items: data,
-    })
+pub fn std_list_dir(_: &mut Evaluator, path: String) -> Value {
+    match std::fs::read_dir(&path) {
+        Err(e) => {
+            verr!(vs!(format!("list_dir: failed to read \"{}\": {}", path, e)))
+        }
+        Ok(d) => {
+            vok!(Value::Values {
+                items_type: TypeAnnotation::String,
+                items: d
+                    .filter_map(|i| i.ok())
+                    .map(|i| i.path().to_string_lossy().to_string())
+                    .map(Value::String)
+                    .collect::<Vec<Value>>()
+            })
+        }
+    }
 }
