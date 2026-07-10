@@ -93,7 +93,10 @@ impl Tokenizer {
                         };
 
                         if let Some(last) = self.tokens.last_mut() {
-                            if last.line == self.line && !is_doc {
+                            if last.line == self.line
+                                && !is_doc
+                                && !matches!(last.token, TokenType::Newline)
+                            {
                                 last.trailing_trivia.push(trivia);
                                 return Ok(());
                             }
