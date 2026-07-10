@@ -92,15 +92,14 @@ impl Tokenizer {
                             Trivia::LineComment(text)
                         };
 
-                        if let Some(last) = self.tokens.last_mut() {
-                            if last.line == self.line
+                        if let Some(last) = self.tokens.last_mut()
+                            && last.line == self.line
                                 && !is_doc
                                 && !matches!(last.token, TokenType::Newline)
                             {
                                 last.trailing_trivia.push(trivia);
                                 return Ok(());
                             }
-                        }
                         self.pending_trivia.push(trivia);
                     }
                 } else if self.peek() == '=' {
