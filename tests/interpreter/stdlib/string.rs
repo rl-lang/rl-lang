@@ -211,7 +211,7 @@ fn slice_str() {
     let ev = eval_program(
         r#"
 get slice from std::str
-dec string x = slice("hello world", 6, 11)
+dec string x = slice("hello world", 6, 11)?
 "#,
     )
     .unwrap();
@@ -338,7 +338,7 @@ fn slice_string() {
     let ev = eval_program(
         r#"
 get slice from std::str
-dec string x = slice("hello world", 6, 11)
+dec string x = slice("hello world", 6, 11)?
 "#,
     )
     .unwrap();
