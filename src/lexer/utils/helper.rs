@@ -49,7 +49,8 @@ impl Tokenizer {
     pub fn add_token(&mut self, tokentype: TokenType) {
         let lexeme = self.source[self.start..self.current].iter().collect();
         let span = self.current_span();
-        self.tokens
-            .push(Token::new(tokentype, lexeme, self.line, span));
+        let mut tok = Token::new(tokentype, lexeme, self.line, span);
+        tok.leading_trivia = std::mem::take(&mut self.pending_trivia);
+        self.tokens.push(tok);
     }
 }

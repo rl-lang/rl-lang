@@ -2,6 +2,7 @@
 //!
 //! Exposes the single entry point that the pipeline calls to turn a source
 //! string into a token stream. Delegates all real work to [`Tokenizer`].
+use crate::lexer::tokentypes::Trivia;
 use crate::lexer::{tokenizer::Tokenizer, tokentypes::TokenType};
 use crate::utils::errors::Error;
 
@@ -71,8 +72,33 @@ impl Tokenizer {
 
             '/' => {
                 if self.peek() == '/' {
-                    while self.peek() != '\n' {
+                    while self.peek() != '\n' && !self.is_at_end() {
                         self.advance();
+                        let is_doc = self.peek() == '/';
+                        if is_doc {
+                            self.advance();
+                        }
+
+                        let start = self.current;
+                        while self.peek() != '\n' && !self.is_at_end() {
+                            self.advance();
+                        }
+                        let text: String = self.source[start..self.current].iter().collect();
+                        let text = text.trim().to_string();
+
+                        let trivia = if is_doc {
+                            Trivia::DocComment(text)
+                        } else {
+                            Trivia::LineComment(text)
+                        };
+
+                        if let Some(last) = self.tokens.last_mut() {
+                            if last.line == self.line && !is_doc {
+                                last.trailing_trivia.push(trivia);
+                                return Ok(());
+                            }
+                        }
+                        self.pending_trivia.push(trivia);
                     }
                 } else if self.peek() == '=' {
                     self.advance();

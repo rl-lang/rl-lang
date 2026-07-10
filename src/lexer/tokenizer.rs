@@ -3,7 +3,7 @@
 //! Holds the source text, the current byte cursor, and the accumulated token
 //! list. The scan loop in here dispatches each character to the appropriate
 //! sub-scanner in `types/` or handles single/double-character operators inline.
-use crate::lexer::tokentypes::{Token, TokenType};
+use crate::lexer::tokentypes::{Token, TokenType, Trivia};
 use crate::utils::errors::Error;
 use crate::utils::source::SourceFile;
 use crate::utils::span::Span;
@@ -25,6 +25,7 @@ pub struct Tokenizer {
     pub start: usize,
     /// Current line number, incremented on every `\n`.
     pub line: usize,
+    pub pending_trivia: Vec<Trivia>,
 }
 
 impl Tokenizer {
@@ -73,6 +74,7 @@ impl Tokenizer {
             current: 0,
             start: 0,
             line: 1,
+            pending_trivia: Vec::new(),
         };
 
         while !lexer.is_at_end() {
