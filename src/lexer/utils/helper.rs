@@ -49,7 +49,25 @@ impl Tokenizer {
     pub fn add_token(&mut self, tokentype: TokenType) {
         let lexeme = self.source[self.start..self.current].iter().collect();
         let span = self.current_span();
-        self.tokens
-            .push(Token::new(tokentype, lexeme, self.line, span));
+        let mut tok = Token::new(tokentype, lexeme, self.line, span);
+        if !matches!(tok.token, TokenType::Newline) {
+            tok.leading_trivia = std::mem::take(&mut self.pending_trivia);
+            self.newlines_since_trivia = 0;
+        }
+        self.tokens.push(tok);
+    }
+
+    pub fn flush_orphaned_trivia(&mut self) {
+        if let Some(last) = self
+            .tokens
+            .iter_mut()
+            .rev()
+            .find(|t| !matches!(t.token, TokenType::Newline))
+        {
+            last.trailing_trivia.append(&mut self.pending_trivia);
+        } else {
+            self.pending_trivia.clear();
+        }
+        self.newlines_since_trivia = 0;
     }
 }

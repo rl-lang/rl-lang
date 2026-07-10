@@ -14,6 +14,7 @@
 //! | `lsp` | start the LSP server over stdio (`lsp` feature) |
 use clap::{Parser, Subcommand};
 use rl_lang::docs;
+use rl_lang::tooling::format::format_tokens;
 use rl_lang::tooling::new::create_project;
 use rl_lang::tooling::package::{find_embedded, package};
 use rl_lang::tooling::workflows::generate;
@@ -174,6 +175,11 @@ enum Commands {
         /// Output binary path
         #[arg(short, long, value_name = "PATH", default_value = "program")]
         output: String,
+    },
+
+    Format {
+        #[arg(value_name = "FILE")]
+        file: PathBuf,
     },
 }
 
@@ -424,6 +430,27 @@ fn main() {
                 std::process::exit(1);
             });
             package(path, &output);
+        }
+
+        Commands::Format { file } => {
+            let path = file
+                .to_str()
+                .unwrap_or_else(|| {
+                    eprintln!("error: invalid file path");
+                    std::process::exit(1);
+                })
+                .to_string();
+            let source_text = std::fs::read_to_string(&file).unwrap_or_else(|_| {
+                eprintln!("error: could not read file '{}'", file.display());
+                std::process::exit(1);
+            });
+            let source = SourceFile::new(&*path, source_text);
+
+            let tokens = lexing_loop(source);
+            let formatted = format_tokens(&tokens);
+            if let Err(e) = std::fs::write(path, formatted) {
+                eprintln!("error: {}", e);
+            };
         }
     }
 }

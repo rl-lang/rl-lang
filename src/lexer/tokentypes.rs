@@ -141,6 +141,8 @@ pub struct Token {
     pub lexeme: String,
     /// Byte offsets into the source for error reporting.
     pub span: Span,
+    pub leading_trivia: Vec<Trivia>,
+    pub trailing_trivia: Vec<Trivia>,
 }
 
 impl Token {
@@ -151,6 +153,16 @@ impl Token {
             lexeme,
             line,
             span,
+            leading_trivia: Vec::new(),
+            trailing_trivia: Vec::new(),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Trivia {
+    LineComment(String),
+    BlockComment(String),
+    DocComment(String),
+    BlankLine,
 }
