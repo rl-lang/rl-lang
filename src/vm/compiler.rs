@@ -73,7 +73,60 @@ impl<'a> Compiler<'a> {
         }
     }
 
+    fn compile_conditional(
+        &mut self,
+        if_branch: &Statement,
+        else_branch: Option<&Statement>,
+        line: u32,
+    ) -> Result<(), CompileError> {
+        let StatementKind::ConditionalBranch {
+            condition,
+            body,
+            needs_scope,
+        } = &if_branch.kind
+        else {
+            return Err(CompileError(
+                "malformed if-branch reached the vm compiler".into(),
+            ));
+        };
+        let condition =
+            condition.ok_or_else(|| CompileError("if-branch is missing its condition".into()))?;
 
+        self.compile_expr(condition)?;
+        let else_jump = self.emit_jump(OpCode::JumpIfFalse, line);
+        self.compile_block(body, *needs_scope, line)?;
+
+        let end_jump = if else_branch.is_some() {
+            Some(self.emit_jump(OpCode::Jump, line))
+        } else {
+            None
+        };
+        self.patch_jump(else_jump);
+
+        if let Some(else_stmt) = else_branch {
+            match &else_stmt.kind {
+                StatementKind::Conditional {
+                    if_branch,
+                    else_branch,
+                } => self.compile_conditional(if_branch, else_branch.as_deref(), line)?,
+                StatementKind::ConditionalBranch {
+                    body, needs_scope, ..
+                } => {
+                    self.compile_block(body, *needs_scope, line)?;
+                }
+                other => {
+                    return Err(CompileError(format!(
+                        "unexpected else-branch kind: {other:?}"
+                    )));
+                }
+            }
+        }
+
+        if let Some(end_jump) = end_jump {
+            self.patch_jump(end_jump);
+        }
+        Ok(())
+    }
 
     /// Compiles a `{ }` body. Every expression statement inside a block is
     /// always discarded (Pop) - only the top-level program's trailing
