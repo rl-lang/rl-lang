@@ -32,7 +32,7 @@ pub struct TypeChecker {
     pub hovers: Vec<(Span, String)>,
     pub base_dir: Option<PathBuf>,
     pub importing: Vec<PathBuf>,
-    pub imported: HashSet<PathBuf>,
+    pub imported: HashMap<PathBuf, Option<HashSet<String>>>,
     pub ast_arena: Ast,
     /// Maps `record` type names to their declared `(field name, field type)` list.
     pub records: HashMap<String, Vec<(String, TypeAnnotation)>>,
