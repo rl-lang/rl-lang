@@ -29,7 +29,8 @@ struct CallFrame<'a> {
 pub struct Vm {
     stack: Vec<VmValue>,
     globals: Vec<VmValue>,
-    locals: Vec<Vec<VmValue>>,
+    locals: Vec<VmValue>,
+    scope_starts: Vec<usize>,
 }
 
 impl Vm {
@@ -38,6 +39,7 @@ impl Vm {
             stack: Vec::new(),
             globals: Vec::new(),
             locals: Vec::new(),
+            scope_starts: Vec::new(),
         }
     }
 
