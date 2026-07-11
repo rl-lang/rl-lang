@@ -7,7 +7,7 @@ use std::collections::HashSet;
 
 use crate::{
     ast::{Ast, statements::Statement},
-    lexer::tokentypes::Token,
+    lexer::tokentypes::{Token, TokenType},
     utils::{
         errors::{Error, Reason},
         source::SourceFile,
@@ -71,6 +71,10 @@ impl Parser {
         let mut statements = Vec::new();
 
         while !parser.is_at_end() {
+            if matches!(parser.peek(), TokenType::Newline) {
+                parser.advance();
+                continue;
+            }
             statements.push(parser.parse_statement_to_ast()?);
         }
 
