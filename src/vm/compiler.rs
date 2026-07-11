@@ -25,8 +25,20 @@ impl<'a> Compiler<'a> {
     /// stops on first error
     /// will consume and discard the Compiler
     pub fn compile(mut self, statements: &[Statement]) -> Result<Chunk, CompileError> {
-        for stmt in statements {
-            self.compile_statement(stmt)?;
+        let last_expr_idx = statements
+            .iter()
+            .rposition(|s| matches!(s.kind, StatementKind::Expression(_)));
+
+        for (i, stmt) in statements.iter().enumerate() {
+            if let StatementKind::Expression(id) = &stmt.kind {
+                if Some(i) == last_expr_idx {
+                    self.compile_expr(*id)?;
+                } else {
+                    self.compile_expr_statement(*id)?;
+                }
+            } else {
+                self.compile_statement(stmt)?;
+            }
         }
         self.chunk.write_op(OpCode::Return, 0);
         Ok(self.chunk)
@@ -55,8 +67,6 @@ impl<'a> Compiler<'a> {
                 "unresolved declaration reached the compiler - run the resolver pass first".into(),
             )),
 
-            StatementKind::Expression(id) => self.compile_expr(*id),
-
             other => Err(CompileError(format!(
                 "statement kind not yet supported by the vm compiler: {other:?}"
             ))),
@@ -64,8 +74,6 @@ impl<'a> Compiler<'a> {
     }
 
     /// Expression statement entry function
-    /// currently unused
-    #[allow(dead_code)]
     fn compile_expr_statement(&mut self, id: ExprId) -> Result<(), CompileError> {
         self.compile_expr(id)?;
         self.chunk.write_op(OpCode::Pop, 0);
