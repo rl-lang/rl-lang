@@ -146,6 +146,38 @@ impl Vm {
                 }
                 // halts the program
                 OpCode::Return => return Ok(self.stack.pop()),
+
+                OpCode::PushScope => self.locals.push(Vec::new()),
+                OpCode::PopScope => {
+                    if self.locals.len() == 1 {
+                        return Err(VmError("cannot pop the global scope".into()));
+                    }
+                    self.locals.pop();
+                }
+
+                OpCode::Jump => {
+                    let offset = chunk.read_u16(ip) as usize;
+                    ip += 2;
+                    ip += offset;
+                }
+                OpCode::JumpIfFalse => {
+                    let offset = chunk.read_u16(ip) as usize;
+                    ip += 2;
+                    match self.pop()? {
+                        VmValue::Bool(false) => ip += offset,
+                        VmValue::Bool(true) => {}
+                        other => {
+                            return Err(VmError(format!(
+                                "if/while condition must be bool, got {other:?}"
+                            )));
+                        }
+                    }
+                }
+                OpCode::Loop => {
+                    let offset = chunk.read_u16(ip) as usize;
+                    ip += 2;
+                    ip -= offset;
+                }
             }
         }
         Ok(self.stack.pop())
