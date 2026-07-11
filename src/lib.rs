@@ -27,3 +27,5 @@ pub mod repl;
 pub mod resolver;
 pub mod tooling;
 pub mod utils;
+#[cfg(feature = "vm")]
+pub mod vm;
