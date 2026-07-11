@@ -8,3 +8,18 @@ pub struct Vm {
     locals: Vec<VmValue>,
 }
 
+impl Vm {
+    pub fn new() -> Self {
+        Self {
+            stack: Vec::new(),
+            locals: Vec::new(),
+        }
+    }
+
+}
+
+impl Default for Vm {
+    fn default() -> Self {
+        Self::new()
+    }
+}
