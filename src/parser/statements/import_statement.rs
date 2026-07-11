@@ -36,6 +36,43 @@ use crate::{
 };
 
 impl Parser {
+    fn get_imported_type_names(&mut self, path: &[String], only: Option<&[String]>) {
+        let import_name = format!("{}.rl", path.join("/"));
+        let file_path = std::path::Path::new(self.source_file.name.as_ref())
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new(""))
+            .join(&import_name);
+
+        let Ok(source_text) = std::fs::read_to_string(&file_path) else {
+            return;
+        };
+        let source_file = crate::utils::source::SourceFile::new(
+            file_path.to_string_lossy().as_ref().to_string(),
+            source_text,
+        );
+        let Ok(tokens) = crate::lexer::tokenizer::Tokenizer::lex(source_file.clone()) else {
+            return;
+        };
+        let Ok((_, stmts)) = Parser::parse(tokens, source_file) else {
+            return;
+        };
+
+        for stmt in &stmts {
+            let (name, set): (&String, &mut std::collections::HashSet<String>) = match &stmt.kind {
+                StatementKind::RecordDeclaration { name, .. } => (name, &mut self.record_names),
+                StatementKind::TagDeclaration { name, .. } => (name, &mut self.tag_names),
+                _ => continue,
+            };
+            let wanted = match only {
+                Some(names) => names.contains(name),
+                None => true,
+            };
+            if wanted {
+                set.insert(name.clone());
+            }
+        }
+    }
+
     /// Parses a `get` import statement.
     ///
     /// Called after `get` has been consumed. Dispatches on the tokens that
@@ -93,6 +130,7 @@ impl Parser {
                     span,
                 ))
             } else {
+                self.get_imported_type_names(&segments, None);
                 Ok(Statement::new(
                     StatementKind::ImportFile { path: segments },
                     span,
@@ -103,10 +141,9 @@ impl Parser {
         // single-segment file import: get mymodule
         if !matches!(self.peek(), TokenType::Comma | TokenType::From) {
             let span = start.join(self.previous_span());
-            return Ok(Statement::new(
-                StatementKind::ImportFile { path: vec![first] },
-                span,
-            ));
+            let path = vec![first];
+            self.get_imported_type_names(&path, None);
+            return Ok(Statement::new(StatementKind::ImportFile { path }, span));
         }
 
         // named imports: get add, sub from …
@@ -150,6 +187,7 @@ impl Parser {
         if is_std {
             Ok(Statement::new(StatementKind::Import { names, path }, span))
         } else {
+            self.get_imported_type_names(&path, Some(&names));
             Ok(Statement::new(
                 StatementKind::ImportFileNamed { path, names },
                 span,
