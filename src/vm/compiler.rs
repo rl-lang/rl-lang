@@ -1,3 +1,7 @@
+use crate::ast::{
+    Ast, ExprId, nodes::ExpressionKind, statements::Statement, statements::StatementKind,
+};
+use crate::lexer::tokentypes::TokenType;
 use crate::vm::chunk::{Chunk, OpCode, VmValue};
 
 #[derive(Debug)]
@@ -8,3 +12,11 @@ pub struct Compiler<'a> {
     chunk: Chunk,
 }
 
+impl<'a> Compiler<'a> {
+    pub fn new(ast: &'a Ast) -> Self {
+        Self {
+            ast,
+            chunk: Chunk::new(),
+        }
+    }
+}
