@@ -21,7 +21,11 @@ use tower_lsp::lsp_types::{Hover, HoverContents, MarkupContent, MarkupKind, Posi
 /// positions short-circuit early before running the parser and type-checker.
 pub fn run_hover(source: &str, position: Position, uri: &Url) -> Option<Hover> {
     let offset = position_to_offset(source, position);
-    let file = SourceFile::new("buffer", source.to_string());
+    let file_name = uri
+        .to_file_path()
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| "buffer".to_string());
+    let file = SourceFile::new(file_name, source.to_string());
 
     let tokens = Tokenizer::lex(file.clone()).ok()?;
 
