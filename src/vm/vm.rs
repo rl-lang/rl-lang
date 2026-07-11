@@ -85,19 +85,20 @@ impl Vm {
                 // - out of range lookup
                 // if no errors push the value to stack
                 OpCode::GetLocal => {
-                    let depth = chunk.read_u16(ip);
+                    let depth = chunk.read_u16(ip) as usize;
                     ip += 2;
                     let slot = chunk.read_u16(ip) as usize;
                     ip += 2;
-                    if depth != 0 {
-                        return Err(VmError(
-                            "vm v0 supports only depth 0 (no closures/calls yet)".into(),
-                        ));
-                    }
-                    let val = self
-                        .locals
+                    let frame_idx = self.locals.len().checked_sub(1 + depth).ok_or_else(|| {
+                        VmError(format!("read: depth {depth} exceeds active scopes"))
+                    })?;
+                    let val = self.locals[frame_idx]
                         .get(slot)
-                        .ok_or_else(|| VmError(format!("read of undefined local slot {slot}")))?
+                        .ok_or_else(|| {
+                            VmError(format!(
+                                "read of undefined local slot {slot} at depth {depth}"
+                            ))
+                        })?
                         .clone();
                     self.stack.push(val);
                 }
@@ -107,26 +108,24 @@ impl Vm {
                 // - more than one frame/depth
                 // - out of range lookup
                 OpCode::SetLocal => {
-                    let depth = chunk.read_u16(ip);
+                    let depth = chunk.read_u16(ip) as usize;
                     ip += 2;
                     let slot = chunk.read_u16(ip) as usize;
                     ip += 2;
-                    if depth != 0 {
-                        return Err(VmError(
-                            "vm v0 supports only depth 0 (no closures/calls yet)".into(),
-                        ));
-                    }
+                    let frame_idx = self.locals.len().checked_sub(1 + depth).ok_or_else(|| {
+                        VmError(format!("assign: depth {depth} exceeds active scopes"))
+                    })?;
                     let val = self
                         .stack
                         .last()
                         .cloned()
                         .ok_or_else(|| VmError("stack underflow on assignment".into()))?;
-                    if slot >= self.locals.len() {
+                    if slot >= self.locals[frame_idx].len() {
                         return Err(VmError(format!(
-                            "assignment to undefined local slot {slot}"
+                            "assignment to undefined local slot {slot} at depth {depth}"
                         )));
                     }
-                    self.locals[slot] = val;
+                    self.locals[frame_idx][slot] = val;
                 }
                 // reads slot only (no other depth than 0)
                 // pops the value then grow the locals vector with Null value
@@ -135,10 +134,11 @@ impl Vm {
                     let slot = chunk.read_u16(ip) as usize;
                     ip += 2;
                     let val = self.pop()?;
-                    if slot >= self.locals.len() {
-                        self.locals.resize(slot + 1, VmValue::Null);
+                    let frame = self.locals.last_mut().expect("global frame always present");
+                    if slot >= frame.len() {
+                        frame.resize(slot + 1, VmValue::Null);
                     }
-                    self.locals[slot] = val;
+                    frame[slot] = val;
                 }
                 // pops and discard one value
                 OpCode::Pop => {
