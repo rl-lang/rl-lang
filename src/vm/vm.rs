@@ -16,6 +16,19 @@ impl Vm {
         }
     }
 
+
+    /// Helper functions that wraps the Vec::pop to return valid VmError or VmValue
+    fn pop(&mut self) -> Result<VmValue, VmError> {
+        self.stack
+            .pop()
+            .ok_or_else(|| VmError("stack underflow".into()))
+    }
+    fn pop_two(&mut self) -> Result<(VmValue, VmValue), VmError> {
+        let b = self.pop()?;
+        let a = self.pop()?;
+        Ok((a, b))
+    }
+
 }
 
 impl Default for Vm {
