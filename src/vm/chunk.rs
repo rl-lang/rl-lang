@@ -1,3 +1,14 @@
+#[derive(Debug, Clone, PartialEq)]
+pub enum VmValue {
+    Null,
+    Int(i64),
+    Float(f64),
+    Bool(bool),
+    Byte(u8),
+    Char(char),
+    Str(String),
+}
+
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum OpCode {
