@@ -76,3 +76,10 @@ impl OpCode {
     }
 }
 
+#[derive(Debug, Default)]
+pub struct Chunk {
+    pub code: Vec<u8>,
+    pub constants: Vec<VmValue>,
+    pub lines: Vec<u32>,
+}
+
