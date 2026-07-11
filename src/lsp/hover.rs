@@ -30,9 +30,17 @@ pub fn run_hover(source: &str, position: Position, uri: &Url) -> Option<Hover> {
     let token_span = find_identifier_span_at(&tokens, offset)?;
 
     let (ast, statements) = Parser::parse(tokens, file.clone()).ok()?;
+
+    let base_dir = uri
+        .to_file_path()
+        .ok()
+        .and_then(|p| p.parent().map(std::path::Path::to_path_buf))
+        .unwrap_or_else(|| std::path::PathBuf::from("."));
+
     let mut checker = TypeChecker::new()
         .with_source_file(file)
-        .with_ast_arena(ast);
+        .with_ast_arena(ast)
+        .with_base_dir(base_dir);
     if let Ok(doc_path) = uri.to_file_path()
         && let Some(doc_dir) = doc_path.parent()
     {
