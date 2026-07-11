@@ -182,4 +182,12 @@ impl<'a> Compiler<'a> {
         self.chunk.code[operand_pos] = bytes[0];
         self.chunk.code[operand_pos + 1] = bytes[1];
     }
+
+    /// Emits a backward `Loop` jump targeting `loop_start`.
+    fn emit_loop(&mut self, loop_start: usize, line: u32) {
+        self.chunk.write_op(OpCode::Loop, line);
+        let pos_after_operand = self.chunk.code.len() + 2;
+        let offset = (pos_after_operand - loop_start) as u16;
+        self.chunk.write_u16(offset, line);
+    }
 }
