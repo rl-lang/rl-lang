@@ -165,4 +165,21 @@ impl<'a> Compiler<'a> {
         self.chunk.write_op(OpCode::Const, line);
         self.chunk.write_u16(idx, line);
     }
+
+    /// Emits `op` with a placeholder u16 operand; returns the byte offset
+    /// of that operand so it can be filled in later via `patch_jump`.
+    fn emit_jump(&mut self, op: OpCode, line: u32) -> usize {
+        self.chunk.write_op(op, line);
+        self.chunk.write_u16(0xFFFF, line);
+        self.chunk.code.len() - 2
+    }
+
+    /// Backpatches a previously-emitted forward jump to land at the
+    /// current end of the chunk.
+    fn patch_jump(&mut self, operand_pos: usize) {
+        let jump = self.chunk.code.len() - (operand_pos + 2);
+        let bytes = (jump as u16).to_le_bytes();
+        self.chunk.code[operand_pos] = bytes[0];
+        self.chunk.code[operand_pos + 1] = bytes[1];
+    }
 }
