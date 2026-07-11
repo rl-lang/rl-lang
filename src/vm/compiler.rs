@@ -67,6 +67,24 @@ impl<'a> Compiler<'a> {
                 "unresolved declaration reached the compiler - run the resolver pass first".into(),
             )),
 
+            StatementKind::While { condition, body } => {
+                let loop_start = self.chunk.code.len();
+                self.compile_expr(*condition)?;
+                let exit_jump = self.emit_jump(OpCode::JumpIfFalse, line);
+                // resolver unconditionally pushes a scope for `while` bodies
+                self.compile_block(body, true, line)?;
+                self.emit_loop(loop_start, line);
+                self.patch_jump(exit_jump);
+                Ok(())
+            }
+
+            StatementKind::Conditional {
+                if_branch,
+                else_branch,
+            } => self.compile_conditional(if_branch, else_branch.as_deref(), line),
+
+            StatementKind::Expression(id) => self.compile_expr_statement(*id),
+
             other => Err(CompileError(format!(
                 "statement kind not yet supported by the vm compiler: {other:?}"
             ))),
