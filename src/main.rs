@@ -221,7 +221,15 @@ fn main() {
             let source = SourceFile::new(&*path, source_text);
             let tokens = lexing_loop(source.clone());
             let (ast, statements) = parsing_loop(source.clone(), tokens);
-            if cfg!(feature = "eval") {
+            if vm {
+                #[cfg(feature = "eval")]
+                rl_lang::logic_loops::vm_loop(source, ast, statements);
+                #[cfg(not(feature = "eval"))]
+                {
+                    eprintln!("error: --vm requres the `eval` feature");
+                    std::process::exit(1)
+                }
+            } else if cfg!(feature = "eval") {
                 eval_loop(source, ast, statements, 3);
             }
         }
