@@ -20,6 +20,12 @@ impl<'a> FrameSource<'a> {
     }
 }
 
+struct CallFrame<'a> {
+    source: FrameSource<'a>,
+    ip: usize,
+    scope_base: usize,
+}
+
 pub struct Vm {
     stack: Vec<VmValue>,
     globals: Vec<VmValue>,
