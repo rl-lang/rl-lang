@@ -1,93 +1,86 @@
 use crate::{
     ast::statements::TypeAnnotation,
-    interpreter::{evaluator::Evaluator, values::Value},
-    utils::{errors::Error, span::Span},
+    interpreter::evaluator::Evaluator,
+    interpreter::stdlib::common::{verr, vi, vok, vs},
+    interpreter::values::Value,
 };
 
-pub fn dice(eval: &mut Evaluator, sides: i64, span: Span) -> Result<Value, Error> {
+pub fn dice(eval: &mut Evaluator, sides: i64) -> Value {
     if sides <= 0 {
-        return Err(eval.err("sides should be 1 or higher", span));
+        return verr!(vs!("sides should be 1 or higher".to_string()));
     }
-    Ok(Value::Integer(eval.rng.generate_random_int_range(1, sides)))
+    vok!(vi!(eval.rng.generate_random_int_range(1, sides)))
 }
 
-pub fn dices(eval: &mut Evaluator, count: i64, sides: i64, span: Span) -> Result<Value, Error> {
+pub fn dices(eval: &mut Evaluator, count: i64, sides: i64) -> Value {
     if count <= 0 {
-        return Err(eval.err("count should be 1 or higher", span));
+        return verr!(vs!("count should be 1 or higher".to_string()));
     }
     if sides <= 0 {
-        return Err(eval.err("sides should be 1 or higher", span));
+        return verr!(vs!("sides should be 1 or higher".to_string()));
     }
 
     let result: Vec<Value> = (0..count)
-        .map(|_| Value::Integer(eval.rng.generate_random_int_range(1, sides)))
+        .map(|_| vi!(eval.rng.generate_random_int_range(1, sides)))
         .collect();
 
-    Ok(Value::Values {
+    vok!(Value::Values {
         items_type: TypeAnnotation::Int,
         items: result,
     })
 }
 
-pub fn range(eval: &mut Evaluator, stop: i64, span: Span) -> Result<Value, Error> {
+pub fn range(eval: &mut Evaluator, stop: i64) -> Value {
     if 0 == stop {
-        return Err(eval.err("rand_range() stop shouldn't be zero", span));
+        return verr!(vs!("rand_range() stop shouldn't be zero".to_string()));
     }
     if 0 > stop {
-        return Err(eval.err("rand_range() stop shouldn't be less than zero", span));
+        return verr!(vs!(
+            "rand_range() stop shouldn't be less than zero".to_string()
+        ));
     }
 
-    Ok(Value::Integer(eval.rng.generate_random_int_range(0, stop)))
+    vok!(vi!(eval.rng.generate_random_int_range(0, stop)))
 }
 
-pub fn range_step(
-    eval: &mut Evaluator,
-    start: i64,
-    end: i64,
-    step: i64,
-    span: Span,
-) -> Result<Value, Error> {
+pub fn range_step(eval: &mut Evaluator, start: i64, end: i64, step: i64) -> Value {
     if 0 == step {
-        return Err(eval.err("rand_range_step() stop shouldn't be zero", span));
+        return verr!(vs!("rand_range_step() stop shouldn't be zero".to_string()));
     }
     if start >= end {
-        return Err(eval.err(
-            format!(
-                "rand_range_step() end shouldn't be less than or equal to {}",
-                start
-            ),
-            span,
-        ));
+        return verr!(vs!(format!(
+            "rand_range_step() end shouldn't be less than or equal to {}",
+            start
+        )));
     }
 
     let count = ((end - start) / step) + 1;
     let i = eval.rng.generate_random_int_range(0, count - 1);
-    Ok(Value::Integer(start + i * step))
+    vok!(vi!(start + i * step))
 }
 
-pub fn choice(eval: &mut Evaluator, array: Value, span: Span) -> Result<Value, Error> {
+pub fn choice(eval: &mut Evaluator, array: Value) -> Value {
     match array {
         Value::Values { items, .. } => {
             if items.is_empty() {
-                return Err(eval.err("array is empty", span));
+                return verr!(vs!("array is empty".to_string()));
             }
-            Ok(items[eval
-                .rng
-                .generate_random_int_range(0, items.len() as i64 - 1)
-                as usize]
-                .clone())
+            vok!(
+                items[eval
+                    .rng
+                    .generate_random_int_range(0, items.len() as i64 - 1)
+                    as usize]
+                    .clone()
+            )
         }
 
-        other => Err(eval.err(
-            format!("rand_choice() expected array found {}", other),
-            span,
-        )),
+        other => verr!(vs!(format!("rand_choice() expected array found {}", other))),
     }
 }
 
-pub fn choices(eval: &mut Evaluator, array: Value, count: i64, span: Span) -> Result<Value, Error> {
+pub fn choices(eval: &mut Evaluator, array: Value, count: i64) -> Value {
     if count <= 0 {
-        return Err(eval.err("count should be 1 or higher", span));
+        return verr!(vs!("count should be 1 or higher".to_string()));
     }
 
     match array.clone() {
@@ -101,28 +94,28 @@ pub fn choices(eval: &mut Evaluator, array: Value, count: i64, span: Span) -> Re
                         .clone()
                 })
                 .collect();
-            Ok(Value::Values {
+            vok!(Value::Values {
                 items_type,
                 items: result,
             })
         }
 
-        other => Err(eval.err(
-            format!("rand_choices() expected array found {}", other),
-            span,
-        )),
+        other => verr!(vs!(format!(
+            "rand_choices() expected array found {}",
+            other
+        ))),
     }
 }
 
-pub fn sample(eval: &mut Evaluator, array: Value, count: i64, span: Span) -> Result<Value, Error> {
+pub fn sample(eval: &mut Evaluator, array: Value, count: i64) -> Value {
     if count <= 0 {
-        return Err(eval.err("count should be 1 or higher", span));
+        return verr!(vs!("count should be 1 or higher".to_string()));
     }
 
     match array.clone() {
         Value::Values { items_type, items } => {
             if count as usize > items.len() {
-                return Err(eval.err("count larger than array", span));
+                return verr!(vs!("count larger than array".to_string()));
             }
             let mut indices: Vec<usize> = (0..items.len()).collect();
             for i in (1..items.len()).rev() {
@@ -135,16 +128,13 @@ pub fn sample(eval: &mut Evaluator, array: Value, count: i64, span: Span) -> Res
                 .map(|&i| items[i].clone())
                 .collect();
 
-            Ok(Value::Values {
+            vok!(Value::Values {
                 items_type,
                 items: result,
             })
         }
 
-        other => Err(eval.err(
-            format!("rand_sample() expected array found {}", other),
-            span,
-        )),
+        other => verr!(vs!(format!("rand_sample() expected array found {}", other))),
     }
 }
 
@@ -156,34 +146,34 @@ pub fn byte(eval: &mut Evaluator) -> i64 {
     eval.rng.generate_random_int_range(0, 255)
 }
 
-pub fn string(eval: &mut Evaluator, count: i64, span: Span) -> Result<Value, Error> {
+pub fn string(eval: &mut Evaluator, count: i64) -> Value {
     if count as usize <= 0 {
-        return Err(eval.err("count cannot be less than zero", span));
+        return verr!(vs!("count cannot be less than zero".to_string()));
     }
 
     let result: String = (0..count).map(|_| char(eval)).collect();
 
-    Ok(Value::String(result))
+    vok!(vs!(result))
 }
 
-pub fn bytes(eval: &mut Evaluator, count: i64, span: Span) -> Result<Value, Error> {
+pub fn bytes(eval: &mut Evaluator, count: i64) -> Value {
     if count as usize <= 0 {
-        return Err(eval.err("count cannot be less than zero", span));
+        return verr!(vs!("count cannot be less than zero".to_string()));
     }
 
-    let result: Vec<Value> = (0..count).map(|_| Value::Integer(byte(eval))).collect();
+    let result: Vec<Value> = (0..count).map(|_| vi!(byte(eval))).collect();
 
-    Ok(Value::Values {
+    vok!(Value::Values {
         items_type: TypeAnnotation::Int,
         items: result,
     })
 }
 
-pub fn shuffle(eval: &mut Evaluator, array: Value, span: Span) -> Result<Value, Error> {
+pub fn shuffle(eval: &mut Evaluator, array: Value) -> Value {
     match array {
         Value::Values { items, items_type } => {
             if items.is_empty() {
-                return Err(eval.err("array is empty", span));
+                return verr!(vs!("array is empty".to_string()));
             }
 
             let mut items = items;
@@ -192,12 +182,12 @@ pub fn shuffle(eval: &mut Evaluator, array: Value, span: Span) -> Result<Value, 
                 items.swap(i, j);
             }
 
-            Ok(Value::Values { items_type, items })
+            vok!(Value::Values { items_type, items })
         }
 
-        other => Err(eval.err(
-            format!("rand_shuffle() expected array found {}", other),
-            span,
-        )),
+        other => verr!(vs!(format!(
+            "rand_shuffle() expected array found {}",
+            other
+        ))),
     }
 }
