@@ -5,6 +5,7 @@ pub struct VmError(pub String);
 
 pub struct Vm {
     stack: Vec<VmValue>,
+    globals: Vec<VmValue>,
     locals: Vec<Vec<VmValue>>,
 }
 
@@ -12,7 +13,8 @@ impl Vm {
     pub fn new() -> Self {
         Self {
             stack: Vec::new(),
-            locals: vec![Vec::new()],
+            globals: Vec::new(),
+            locals: Vec::new(),
         }
     }
 
@@ -89,17 +91,22 @@ impl Vm {
                     ip += 2;
                     let slot = chunk.read_u16(ip) as usize;
                     ip += 2;
-                    let frame_idx = self.locals.len().checked_sub(1 + depth).ok_or_else(|| {
-                        VmError(format!("read: depth {depth} exceeds active scopes"))
-                    })?;
-                    let val = self.locals[frame_idx]
-                        .get(slot)
-                        .ok_or_else(|| {
-                            VmError(format!(
-                                "read of undefined local slot {slot} at depth {depth}"
-                            ))
-                        })?
-                        .clone();
+
+                    let val = if depth == self.locals.len() {
+                        self.globals.get(slot)
+                    } else {
+                        let frame_idx =
+                            self.locals.len().checked_sub(1 + depth).ok_or_else(|| {
+                                VmError(format!("read: depth {depth} exceeds active scopes"))
+                            })?;
+                        self.locals[frame_idx].get(slot)
+                    }
+                    .ok_or_else(|| {
+                        VmError(format!(
+                            "read of undefined local slot {slot} at depth {depth}"
+                        ))
+                    })?
+                    .clone();
                     self.stack.push(val);
                 }
                 // reads two operands depth then slot
@@ -112,20 +119,33 @@ impl Vm {
                     ip += 2;
                     let slot = chunk.read_u16(ip) as usize;
                     ip += 2;
-                    let frame_idx = self.locals.len().checked_sub(1 + depth).ok_or_else(|| {
-                        VmError(format!("assign: depth {depth} exceeds active scopes"))
-                    })?;
+
                     let val = self
                         .stack
                         .last()
                         .cloned()
                         .ok_or_else(|| VmError("stack underflow on assignment".into()))?;
-                    if slot >= self.locals[frame_idx].len() {
-                        return Err(VmError(format!(
-                            "assignment to undefined local slot {slot} at depth {depth}"
-                        )));
+
+                    if depth == self.locals.len() {
+                        if slot >= self.globals.len() {
+                            return Err(VmError(format!(
+                                "assignment to undefined global slot {slot}"
+                            )));
+                        }
+                        self.globals[slot] = val;
+                    } else {
+                        let frame_idx =
+                            self.locals.len().checked_sub(1 + depth).ok_or_else(|| {
+                                VmError(format!("assign: depth {depth} exceeds active scopes"))
+                            })?;
+
+                        if slot >= self.locals[frame_idx].len() {
+                            return Err(VmError(format!(
+                                "assignment to undefined local slot {slot} at depth {depth}"
+                            )));
+                        }
+                        self.locals[frame_idx][slot] = val;
                     }
-                    self.locals[frame_idx][slot] = val;
                 }
                 // reads slot only (no other depth than 0)
                 // pops the value then grow the locals vector with Null value
@@ -134,11 +154,19 @@ impl Vm {
                     let slot = chunk.read_u16(ip) as usize;
                     ip += 2;
                     let val = self.pop()?;
-                    let frame = self.locals.last_mut().expect("global frame always present");
-                    if slot >= frame.len() {
-                        frame.resize(slot + 1, VmValue::Null);
+
+                    if self.locals.is_empty() {
+                        if slot >= self.globals.len() {
+                            self.globals.resize(slot + 1, VmValue::Null);
+                        }
+                        self.globals[slot] = val;
+                    } else {
+                        let frame = self.locals.last_mut().expect("locals is not empty");
+                        if slot >= frame.len() {
+                            frame.resize(slot + 1, VmValue::Null);
+                        }
+                        frame[slot] = val;
                     }
-                    frame[slot] = val;
                 }
                 // pops and discard one value
                 OpCode::Pop => {
@@ -202,17 +230,12 @@ impl Vm {
                         )));
                     }
 
-                    // isolate the callee: exactly [global, params], regardless of the
-                    // caller's own loop/if nesting
-                    let caller_frames = self.locals.split_off(1); // keep locals[0] = global
+                    let caller_frames = std::mem::take(&mut self.locals);
                     self.locals.push(args);
 
                     let result = self.run(&func.chunk);
 
-                    // drop params + anything the function's own body left un-popped
-                    // (an early `return` inside a while/if skips its PopScope)
-                    self.locals.truncate(1);
-                    self.locals.extend(caller_frames);
+                    self.locals = caller_frames;
 
                     self.stack.push(result?.unwrap_or(VmValue::Null));
                 }
