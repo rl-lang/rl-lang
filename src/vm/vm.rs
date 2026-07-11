@@ -1,7 +1,24 @@
-use crate::vm::chunk::{Chunk, OpCode, VmValue};
+use std::rc::Rc;
+
+use crate::vm::chunk::{Chunk, OpCode, VmFunction, VmValue};
 
 #[derive(Debug)]
 pub struct VmError(pub String);
+
+enum FrameSource<'a> {
+    Top(&'a Chunk),
+    Func(Rc<VmFunction>),
+}
+
+impl<'a> FrameSource<'a> {
+    #[inline]
+    fn chunk(&self) -> &Chunk {
+        match self {
+            FrameSource::Top(c) => c,
+            FrameSource::Func(f) => &f.chunk,
+        }
+    }
+}
 
 pub struct Vm {
     stack: Vec<VmValue>,
