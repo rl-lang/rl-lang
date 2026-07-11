@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum VmValue {
     Null,
@@ -7,6 +9,22 @@ pub enum VmValue {
     Byte(u8),
     Char(char),
     Str(String),
+    Function(Rc<VmFunction>),
+}
+
+#[derive(Debug)]
+pub struct VmFunction {
+    pub name: String,
+    pub arity: usize,
+    pub chunk: Chunk,
+}
+
+// VmValue derives PartialEq, so VmFunction needs it too - compare by
+// identity (name+arity) rather than deep-comparing bytecode
+impl PartialEq for VmFunction {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name && self.arity == other.arity
+    }
 }
 
 #[repr(u8)]
@@ -58,6 +76,8 @@ pub enum OpCode {
     JumpIfFalse = 21,
     /// unconditional backward jump by u16 offset (loop back-edge)
     Loop = 22,
+    /// call function
+    Call = 23,
 }
 
 impl OpCode {
@@ -86,6 +106,7 @@ impl OpCode {
             20 => OpCode::Jump,
             21 => OpCode::JumpIfFalse,
             22 => OpCode::Loop,
+            23 => OpCode::Call,
             other => panic!("corrupt bytecode: unknown opcode byte {other}"),
         }
     }
