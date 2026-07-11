@@ -50,3 +50,29 @@ pub enum OpCode {
     Return = 17,
 }
 
+impl OpCode {
+    pub fn from_u8(byte: u8) -> Self {
+        match byte {
+            0 => OpCode::Const,
+            1 => OpCode::Add,
+            2 => OpCode::Sub,
+            3 => OpCode::Mul,
+            4 => OpCode::Div,
+            5 => OpCode::Negate,
+            6 => OpCode::Not,
+            7 => OpCode::Eq,
+            8 => OpCode::NotEq,
+            9 => OpCode::Less,
+            10 => OpCode::LessEq,
+            11 => OpCode::Greater,
+            12 => OpCode::GreaterEq,
+            13 => OpCode::GetLocal,
+            14 => OpCode::SetLocal,
+            15 => OpCode::DefineLocal,
+            16 => OpCode::Pop,
+            17 => OpCode::Return,
+            other => panic!("corrupt bytecode: unknown opcode byte {other}"),
+        }
+    }
+}
+
