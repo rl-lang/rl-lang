@@ -28,7 +28,7 @@ ureq = "2"
 criterion = "0.5"
 
 [features]
-default = ["repl", "repl_tui", "run", "eval"]
+default = ["repl", "repl_tui", "run", "eval", "vm"]
 run = []
 repl = []
 repl_tui = ["dep:ratatui"]
