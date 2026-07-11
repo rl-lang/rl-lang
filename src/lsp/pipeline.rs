@@ -17,7 +17,11 @@ use tower_lsp::lsp_types::{Diagnostic, Url};
 /// [`TypeChecker`] walks the same AST without executing anything, so it is
 /// always safe to run on in-progress or even non-terminating source.
 pub fn run_pipeline(source: &str, uri: &Url) -> Vec<Diagnostic> {
-    let file = SourceFile::new("buffer", source.to_string());
+    let file_name = uri
+        .to_file_path()
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| "buffer".to_string());
+    let file = SourceFile::new(file_name, source.to_string());
 
     let tokens = match Tokenizer::lex(file.clone()) {
         Ok(t) => t,
@@ -29,9 +33,16 @@ pub fn run_pipeline(source: &str, uri: &Url) -> Vec<Diagnostic> {
         Err(e) => return vec![error_to_diagnostic(source, &e)],
     };
 
+    let base_dir = uri
+        .to_file_path()
+        .ok()
+        .and_then(|p| p.parent().map(std::path::Path::to_path_buf))
+        .unwrap_or_else(|| std::path::PathBuf::from("."));
+
     let mut checker = TypeChecker::new()
         .with_source_file(file)
-        .with_ast_arena(ast);
+        .with_ast_arena(ast)
+        .with_base_dir(base_dir);
     if let Ok(doc_path) = uri.to_file_path()
         && let Some(doc_dir) = doc_path.parent()
     {

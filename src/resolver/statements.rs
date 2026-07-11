@@ -386,6 +386,10 @@ impl Resolver {
                         | StatementKind::ConstantArray { name, .. } => names.contains(name),
                         StatementKind::Map { name, .. }
                         | StatementKind::ConstantMap { name, .. } => names.contains(name),
+                        StatementKind::Set { name, .. }
+                        | StatementKind::ConstantSet { name, .. } => names.contains(name),
+                        StatementKind::RecordDeclaration { name, .. }
+                        | StatementKind::TagDeclaration { name, .. } => names.contains(name),
                         _ => false,
                     })
                     .collect();

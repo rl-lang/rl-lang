@@ -1,7 +1,7 @@
 //! Statement type checking - walks every [`StatementKind`] variant,
 //! declares names into scope, and validates control flow constraints.
 
-use std::path::PathBuf;
+use std::{collections::HashSet, path::PathBuf};
 
 use crate::{
     ast::statements::{MatchPattern, StatementKind, TypeAnnotation},
@@ -520,9 +520,11 @@ impl TypeChecker {
                 self.error("continue outside of loop", statement.span);
             }
 
-            // runtime job maybe revisting later
-            StatementKind::ImportFile { path } | StatementKind::ImportFileNamed { path, .. } => {
-                self.import_module(path, statement.span);
+            StatementKind::ImportFile { path } => {
+                self.import_module(path, None, statement.span);
+            }
+            StatementKind::ImportFileNamed { path, names } => {
+                self.import_module(path, Some(names), statement.span);
             }
             StatementKind::Import { .. } => {}
 
@@ -604,7 +606,7 @@ impl TypeChecker {
         }
     }
 
-    fn import_module(&mut self, path: &[String], span: Span) {
+    fn import_module(&mut self, path: &[String], names: Option<&[String]>, span: Span) {
         let import_name = format!("{}.rl", path.join("/"));
         let import_path = match &self.base_dir {
             Some(dir) => dir.join(&import_name),
@@ -619,9 +621,41 @@ impl TypeChecker {
             self.error(format!("import cycle detected: {}", path.join("::")), span);
             return;
         }
-        if self.imported.contains(&canonical) {
-            return;
-        }
+
+        let prior: Option<HashSet<String>> = self.imported.get(&canonical).cloned().flatten();
+        let missing: Option<Vec<String>> = match self.imported.get(&canonical) {
+            Some(None) => return,
+            Some(Some(already)) => match names {
+                None => None,
+                Some(requested) => {
+                    let missing: Vec<String> = requested
+                        .iter()
+                        .filter(|n| !already.contains(*n))
+                        .cloned()
+                        .collect();
+                    if missing.is_empty() {
+                        return;
+                    }
+                    Some(missing)
+                }
+            },
+            None => names.map(<[String]>::to_vec),
+        };
+
+        let new_cache_entry: Option<HashSet<String>> = match &missing {
+            None => None,
+            Some(added) => {
+                let mut set = prior.unwrap_or_default();
+                set.extend(added.iter().cloned());
+                Some(set)
+            }
+        };
+        let wanted = |name: &String| -> bool {
+            match &missing {
+                None => true, // whole module
+                Some(only) => only.contains(name),
+            }
+        };
 
         let Ok(source_text) = std::fs::read_to_string(&import_path) else {
             self.error(
@@ -669,7 +703,7 @@ impl TypeChecker {
                     params,
                     return_type,
                     ..
-                } => {
+                } if wanted(name) => {
                     self.declare(
                         name.clone(),
                         CheckType::Function {
@@ -684,7 +718,7 @@ impl TypeChecker {
                     name,
                     type_annotation,
                     ..
-                } => {
+                } if wanted(name) => {
                     self.declare(
                         name.clone(),
                         CheckType::Known(type_annotation.clone()),
@@ -696,7 +730,7 @@ impl TypeChecker {
                     name,
                     type_annotation,
                     ..
-                } => {
+                } if wanted(name) => {
                     self.declare(
                         name.clone(),
                         CheckType::Known(type_annotation.clone()),
@@ -708,7 +742,7 @@ impl TypeChecker {
                     name,
                     type_annotation,
                     ..
-                } => {
+                } if wanted(name) => {
                     self.declare(
                         name.clone(),
                         CheckType::Known(TypeAnnotation::Array(Box::new(type_annotation.clone()))),
@@ -720,7 +754,7 @@ impl TypeChecker {
                     name,
                     type_annotation,
                     ..
-                } => {
+                } if wanted(name) => {
                     self.declare(
                         name.clone(),
                         CheckType::Known(TypeAnnotation::CArray(Box::new(type_annotation.clone()))),
@@ -733,7 +767,7 @@ impl TypeChecker {
                     name,
                     type_annotation,
                     ..
-                } => {
+                } if wanted(name) => {
                     self.declare(
                         name.clone(),
                         CheckType::Known(TypeAnnotation::Set(Box::new(type_annotation.clone()))),
@@ -745,7 +779,7 @@ impl TypeChecker {
                     name,
                     type_annotation,
                     ..
-                } => {
+                } if wanted(name) => {
                     self.declare(
                         name.clone(),
                         CheckType::Known(TypeAnnotation::CSet(Box::new(type_annotation.clone()))),
@@ -758,7 +792,7 @@ impl TypeChecker {
                     name,
                     type_annotation,
                     ..
-                } => {
+                } if wanted(name) => {
                     self.declare(
                         name.clone(),
                         CheckType::Known(type_annotation.clone()),
@@ -770,7 +804,7 @@ impl TypeChecker {
                     name,
                     type_annotation,
                     ..
-                } => {
+                } if wanted(name) => {
                     self.declare(
                         name.clone(),
                         CheckType::Known(type_annotation.clone()),
@@ -779,9 +813,28 @@ impl TypeChecker {
                     );
                 }
 
-                StatementKind::ImportFile { path: nested }
-                | StatementKind::ImportFileNamed { path: nested, .. } => {
-                    self.import_module(nested, stmt.span);
+                StatementKind::RecordDeclaration { name, fields } if wanted(name) => {
+                    self.records.insert(name.clone(), fields.clone());
+                }
+                StatementKind::TagDeclaration { name, variants } if wanted(name) => {
+                    self.tags.insert(name.clone(), variants.clone());
+                }
+
+                StatementKind::ImportFile { path: nested } => {
+                    self.import_module(nested, None, stmt.span);
+                }
+                StatementKind::ImportFileNamed {
+                    path: nested,
+                    names: nested_names,
+                } => {
+                    self.import_module(nested, Some(nested_names), stmt.span);
+                }
+
+                StatementKind::RecordDeclaration { name, fields } => {
+                    self.records.insert(name.clone(), fields.clone());
+                }
+                StatementKind::TagDeclaration { name, variants } => {
+                    self.tags.insert(name.clone(), variants.clone());
                 }
 
                 _ => {}
@@ -790,6 +843,6 @@ impl TypeChecker {
 
         self.ast_arena = prev_ast;
         self.importing.pop();
-        self.imported.insert(canonical);
+        self.imported.insert(canonical, new_cache_entry);
     }
 }

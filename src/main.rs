@@ -259,9 +259,14 @@ fn main() {
             #[cfg(feature = "eval")]
             {
                 use rl_lang::checker::TypeChecker;
+                let base_dir = file
+                    .parent()
+                    .map(std::path::Path::to_path_buf)
+                    .unwrap_or_else(|| std::path::PathBuf::from("."));
                 let mut checker = TypeChecker::new()
                     .with_source_file(source)
-                    .with_ast_arena(ast);
+                    .with_ast_arena(ast)
+                    .with_base_dir(base_dir);
                 let errors = checker.check(&statements);
                 if errors.is_empty() {
                     println!("ok");

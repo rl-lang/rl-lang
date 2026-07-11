@@ -37,10 +37,7 @@ use crate::{
         span::Span,
     },
 };
-use std::{
-    collections::{HashMap, HashSet},
-    path::PathBuf,
-};
+use std::{collections::HashMap, path::PathBuf};
 pub use structs::TypeChecker;
 
 impl Default for TypeChecker {
@@ -67,7 +64,7 @@ impl TypeChecker {
             hovers: Vec::new(),
             base_dir: None,
             importing: Vec::new(),
-            imported: HashSet::new(),
+            imported: HashMap::new(),
             ast_arena: Ast::new(),
             records: HashMap::new(),
             tags: HashMap::new(),
