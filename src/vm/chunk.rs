@@ -48,6 +48,16 @@ pub enum OpCode {
     Pop = 16,
     /// end of program
     Return = 17,
+    /// enter a new local-variable frame
+    PushScope = 18,
+    /// discard the innermost local-variable frame
+    PopScope = 19,
+    /// unconditional forward jump by u16 offset
+    Jump = 20,
+    /// pop a bool; jump forward by u16 offset if false
+    JumpIfFalse = 21,
+    /// unconditional backward jump by u16 offset (loop back-edge)
+    Loop = 22,
 }
 
 impl OpCode {
@@ -71,6 +81,11 @@ impl OpCode {
             15 => OpCode::DefineLocal,
             16 => OpCode::Pop,
             17 => OpCode::Return,
+            18 => OpCode::PushScope,
+            19 => OpCode::PopScope,
+            20 => OpCode::Jump,
+            21 => OpCode::JumpIfFalse,
+            22 => OpCode::Loop,
             other => panic!("corrupt bytecode: unknown opcode byte {other}"),
         }
     }
