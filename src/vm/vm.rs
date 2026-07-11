@@ -45,22 +45,34 @@ impl Vm {
 
     /// Vm entry function
     pub fn run(&mut self, chunk: &Chunk) -> Result<Option<VmValue>, VmError> {
-        let mut ip = 0usize; // intruction pointer
-        while ip < chunk.code.len() {
-            let op = OpCode::from_u8(chunk.code[ip]);
-            ip += 1; // advance the pointer
-            match op {
-                // reads two bytes
-                // advances the pointer twice
-                // and pushes to stack
-                OpCode::Const => {
-                    let idx = chunk.read_u16(ip) as usize;
-                    ip += 2;
-                    self.stack.push(chunk.constants[idx].clone());
+        let mut frames: Vec<CallFrame> = vec![CallFrame {
+            source: FrameSource::Top(chunk),
+            ip: 0,
+            scope_base: self.scope_starts.len(),
+        }];
+
+        loop {
+            let top = frames.len() - 1;
+
+            if frames[top].ip >= frames[top].source.chunk().code.len() {
+                self.stack.push(VmValue::Null);
+                if !self.finish_call(&mut frames)? {
+                    return Ok(self.stack.pop());
                 }
-                // pops two values
-                // applying the operator on operands
-                // pushes the result into stack
+                continue;
+            }
+
+            let op = OpCode::from_u8(frames[top].source.chunk().code[frames[top].ip]);
+            frames[top].ip += 1;
+
+            match op {
+                OpCode::Const => {
+                    let idx = frames[top].source.chunk().read_u16(frames[top].ip) as usize;
+                    frames[top].ip += 2;
+                    let val = frames[top].source.chunk().constants[idx].clone();
+                    self.stack.push(val);
+                }
+
                 OpCode::Add => self.binary_numeric(|a, b| a + b, |a, b| a + b)?,
                 OpCode::Sub => self.binary_numeric(|a, b| a - b, |a, b| a - b)?,
                 OpCode::Mul => self.binary_numeric(|a, b| a * b, |a, b| a * b)?,
@@ -112,19 +124,15 @@ impl Vm {
                 // - out of range lookup
                 // if no errors push the value to stack
                 OpCode::GetLocal => {
-                    let depth = chunk.read_u16(ip) as usize;
-                    ip += 2;
-                    let slot = chunk.read_u16(ip) as usize;
-                    ip += 2;
+                    let depth = frames[top].source.chunk().read_u16(frames[top].ip) as usize;
+                    frames[top].ip += 2;
+                    let slot = frames[top].source.chunk().read_u16(frames[top].ip) as usize;
+                    frames[top].ip += 2;
 
-                    let val = if depth == self.locals.len() {
-                        self.globals.get(slot)
-                    } else {
-                        let frame_idx =
-                            self.locals.len().checked_sub(1 + depth).ok_or_else(|| {
-                                VmError(format!("read: depth {depth} exceeds active scopes"))
-                            })?;
-                        self.locals[frame_idx].get(slot)
+                    let scope_base = frames[top].scope_base;
+                    let val = match self.resolve(scope_base, depth)? {
+                        None => self.globals.get(slot),
+                        Some(scope_idx) => self.local_slot(scope_idx, slot),
                     }
                     .ok_or_else(|| {
                         VmError(format!(
@@ -140,10 +148,10 @@ impl Vm {
                 // - more than one frame/depth
                 // - out of range lookup
                 OpCode::SetLocal => {
-                    let depth = chunk.read_u16(ip) as usize;
-                    ip += 2;
-                    let slot = chunk.read_u16(ip) as usize;
-                    ip += 2;
+                    let depth = frames[top].source.chunk().read_u16(frames[top].ip) as usize;
+                    frames[top].ip += 2;
+                    let slot = frames[top].source.chunk().read_u16(frames[top].ip) as usize;
+                    frames[top].ip += 2;
 
                     let val = self
                         .stack
@@ -151,46 +159,47 @@ impl Vm {
                         .cloned()
                         .ok_or_else(|| VmError("stack underflow on assignment".into()))?;
 
-                    if depth == self.locals.len() {
-                        if slot >= self.globals.len() {
-                            return Err(VmError(format!(
-                                "assignment to undefined global slot {slot}"
-                            )));
+                    let scope_base = frames[top].scope_base;
+                    match self.resolve(scope_base, depth)? {
+                        None => {
+                            if slot >= self.globals.len() {
+                                return Err(VmError(format!(
+                                    "assignment to undefined global slot {slot}"
+                                )));
+                            }
+                            self.globals[slot] = val;
                         }
-                        self.globals[slot] = val;
-                    } else {
-                        let frame_idx =
-                            self.locals.len().checked_sub(1 + depth).ok_or_else(|| {
-                                VmError(format!("assign: depth {depth} exceeds active scopes"))
-                            })?;
-
-                        if slot >= self.locals[frame_idx].len() {
-                            return Err(VmError(format!(
-                                "assignment to undefined local slot {slot} at depth {depth}"
-                            )));
+                        Some(scope_idx) => {
+                            let (base, end) = self.scope_range(scope_idx);
+                            if base + slot >= end {
+                                return Err(VmError(format!(
+                                    "assignment to undefined local slot {slot} at depth {depth}"
+                                )));
+                            }
+                            self.locals[base + slot] = val;
                         }
-                        self.locals[frame_idx][slot] = val;
                     }
                 }
                 // reads slot only (no other depth than 0)
                 // pops the value then grow the locals vector with Null value
                 // replace Null value with the actual popped value
                 OpCode::DefineLocal => {
-                    let slot = chunk.read_u16(ip) as usize;
-                    ip += 2;
+                    let slot = frames[top].source.chunk().read_u16(frames[top].ip) as usize;
+                    frames[top].ip += 2;
                     let val = self.pop()?;
 
-                    if self.locals.is_empty() {
+                    let scope_base = frames[top].scope_base;
+                    if self.scope_starts.len() == scope_base {
                         if slot >= self.globals.len() {
                             self.globals.resize(slot + 1, VmValue::Null);
                         }
                         self.globals[slot] = val;
                     } else {
-                        let frame = self.locals.last_mut().expect("locals is not empty");
-                        if slot >= frame.len() {
-                            frame.resize(slot + 1, VmValue::Null);
+                        let base = *self.scope_starts.last().unwrap();
+                        if base + slot >= self.locals.len() {
+                            self.locals.resize(base + slot + 1, VmValue::Null);
                         }
-                        frame[slot] = val;
+                        self.locals[base + slot] = val;
                     }
                 }
                 // pops and discard one value
@@ -200,24 +209,35 @@ impl Vm {
                 // halts the program
                 OpCode::Return => return Ok(self.stack.pop()),
 
-                OpCode::PushScope => self.locals.push(Vec::new()),
-                OpCode::PopScope => {
-                    if self.locals.len() == 1 {
-                        return Err(VmError("cannot pop the global scope".into()));
+                OpCode::Return => {
+                    let ret = self.pop().ok();
+                    self.stack.push(ret.unwrap_or(VmValue::Null));
+                    if !self.finish_call(&mut frames)? {
+                        return Ok(self.stack.pop());
                     }
-                    self.locals.pop();
+                }
+
+                OpCode::PushScope => self.scope_starts.push(self.locals.len()),
+                OpCode::PopScope => {
+                    let scope_base = frames[top].scope_base;
+                    let num_active = self.scope_starts.len() - scope_base;
+                    if num_active <= 1 {
+                        return Err(VmError("cannot pop the base call frame".into()));
+                    }
+                    let start = self.scope_starts.pop().unwrap();
+                    self.locals.truncate(start);
                 }
 
                 OpCode::Jump => {
-                    let offset = chunk.read_u16(ip) as usize;
-                    ip += 2;
-                    ip += offset;
+                    let offset = frames[top].source.chunk().read_u16(frames[top].ip) as usize;
+                    frames[top].ip += 2;
+                    frames[top].ip += offset;
                 }
                 OpCode::JumpIfFalse => {
-                    let offset = chunk.read_u16(ip) as usize;
-                    ip += 2;
+                    let offset = frames[top].source.chunk().read_u16(frames[top].ip) as usize;
+                    frames[top].ip += 2;
                     match self.pop()? {
-                        VmValue::Bool(false) => ip += offset,
+                        VmValue::Bool(false) => frames[top].ip += offset,
                         VmValue::Bool(true) => {}
                         other => {
                             return Err(VmError(format!(
@@ -227,46 +247,84 @@ impl Vm {
                     }
                 }
                 OpCode::Loop => {
-                    let offset = chunk.read_u16(ip) as usize;
-                    ip += 2;
-                    ip -= offset;
+                    let offset = frames[top].source.chunk().read_u16(frames[top].ip) as usize;
+                    frames[top].ip += 2;
+                    frames[top].ip -= offset;
                 }
 
                 OpCode::Call => {
-                    let arg_count = chunk.read_u16(ip) as usize;
-                    ip += 2;
+                    let arg_count = frames[top].source.chunk().read_u16(frames[top].ip) as usize;
+                    frames[top].ip += 2;
 
-                    let mut args = Vec::with_capacity(arg_count);
-                    for _ in 0..arg_count {
-                        args.push(self.pop()?);
+                    let base = self.locals.len();
+                    self.locals.resize(base + arg_count, VmValue::Null);
+                    for i in (0..arg_count).rev() {
+                        self.locals[base + i] = self.pop()?;
                     }
-                    args.reverse(); // popped LIFO, restore left-to-right param order
 
                     let func = match self.pop()? {
                         VmValue::Function(f) => f,
                         other => return Err(VmError(format!("cannot call {other:?}"))),
                     };
-                    if args.len() != func.arity {
+                    if arg_count != func.arity {
                         return Err(VmError(format!(
                             "{} expects {} args, got {}",
-                            func.name,
-                            func.arity,
-                            args.len()
+                            func.name, func.arity, arg_count
                         )));
                     }
 
-                    let caller_frames = std::mem::take(&mut self.locals);
-                    self.locals.push(args);
-
-                    let result = self.run(&func.chunk);
-
-                    self.locals = caller_frames;
-
-                    self.stack.push(result?.unwrap_or(VmValue::Null));
+                    self.scope_starts.push(base);
+                    let scope_base = self.scope_starts.len() - 1;
+                    frames.push(CallFrame {
+                        source: FrameSource::Func(func),
+                        ip: 0,
+                        scope_base,
+                    });
                 }
             }
         }
-        Ok(self.stack.pop())
+    }
+
+    fn finish_call(&mut self, frames: &mut Vec<CallFrame>) -> Result<bool, VmError> {
+        let finished = frames.pop().expect("frame stack must not be empty");
+        if finished.scope_base < self.scope_starts.len() {
+            let cut = self.scope_starts[finished.scope_base];
+            self.scope_starts.truncate(finished.scope_base);
+            self.locals.truncate(cut);
+        }
+        Ok(!frames.is_empty())
+    }
+
+    fn resolve(&self, frame_scope_base: usize, depth: usize) -> Result<Option<usize>, VmError> {
+        let num_active = self.scope_starts.len() - frame_scope_base;
+        if depth == num_active {
+            return Ok(None);
+        }
+        self.scope_starts
+            .len()
+            .checked_sub(1 + depth)
+            .filter(|&idx| idx >= frame_scope_base)
+            .map(Some)
+            .ok_or_else(|| VmError(format!("depth {depth} exceeds active scopes")))
+    }
+
+    fn scope_range(&self, scope_idx: usize) -> (usize, usize) {
+        let start = self.scope_starts[scope_idx];
+        let end = self
+            .scope_starts
+            .get(scope_idx + 1)
+            .copied()
+            .unwrap_or(self.locals.len());
+        (start, end)
+    }
+
+    fn local_slot(&self, scope_idx: usize, slot: usize) -> Option<&VmValue> {
+        let (base, end) = self.scope_range(scope_idx);
+        if base + slot < end {
+            self.locals.get(base + slot)
+        } else {
+            None
+        }
     }
 
     /// Helper functions that wraps the Vec::pop to return valid VmError or VmValue
