@@ -288,4 +288,13 @@ impl<'a> Compiler<'a> {
         let offset = (pos_after_operand - loop_start) as u16;
         self.chunk.write_u16(offset, line);
     }
+
+    fn compile_function_chunk(ast: &Ast, body: &[Statement]) -> Result<Chunk, CompileError> {
+        let mut sub = Compiler::new(ast);
+        for stmt in body {
+            sub.compile_statement(stmt)?;
+        }
+        sub.chunk.write_op(OpCode::Return, 0); // implicit `return null` on fallthrough
+        Ok(sub.chunk)
+    }
 }
