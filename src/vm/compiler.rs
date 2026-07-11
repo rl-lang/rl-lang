@@ -73,6 +73,33 @@ impl<'a> Compiler<'a> {
         }
     }
 
+
+
+    /// Compiles a `{ }` body. Every expression statement inside a block is
+    /// always discarded (Pop) - only the top-level program's trailing
+    /// expression statement keeps its value.
+    fn compile_block(
+        &mut self,
+        body: &[Statement],
+        needs_scope: bool,
+        line: u32,
+    ) -> Result<(), CompileError> {
+        if needs_scope {
+            self.chunk.write_op(OpCode::PushScope, line);
+        }
+        for stmt in body {
+            if let StatementKind::Expression(id) = &stmt.kind {
+                self.compile_expr_statement(*id)?;
+            } else {
+                self.compile_statement(stmt)?;
+            }
+        }
+        if needs_scope {
+            self.chunk.write_op(OpCode::PopScope, line);
+        }
+        Ok(())
+    }
+
     /// Expression statement entry function
     fn compile_expr_statement(&mut self, id: ExprId) -> Result<(), CompileError> {
         self.compile_expr(id)?;
