@@ -219,7 +219,7 @@ impl<'a> Compiler<'a> {
             ExpressionKind::Bool(v) => self.emit_const(VmValue::Bool(*v), line),
             ExpressionKind::Byte(v) => self.emit_const(VmValue::Byte(*v), line),
             ExpressionKind::Character(v) => self.emit_const(VmValue::Char(*v), line),
-            ExpressionKind::String(v) => self.emit_const(VmValue::Str(v.clone()), line),
+            ExpressionKind::String(v) => self.emit_const(VmValue::Str(Rc::from(v.as_str())), line),
 
             ExpressionKind::Grouping(inner) => self.compile_expr(*inner)?,
 

@@ -8,7 +8,7 @@ pub enum VmValue {
     Bool(bool),
     Byte(u8),
     Char(char),
-    Str(String),
+    Str(Rc<str>),
     Function(Rc<VmFunction>),
 }
 
