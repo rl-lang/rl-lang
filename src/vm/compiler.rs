@@ -1,8 +1,10 @@
+use std::rc::Rc;
+
 use crate::ast::{
     Ast, ExprId, nodes::ExpressionKind, statements::Statement, statements::StatementKind,
 };
 use crate::lexer::tokentypes::TokenType;
-use crate::vm::chunk::{Chunk, OpCode, VmValue};
+use crate::vm::chunk::{Chunk, OpCode, VmFunction, VmValue};
 
 #[derive(Debug)]
 pub struct CompileError(pub String);
@@ -274,6 +276,15 @@ impl<'a> Compiler<'a> {
                 self.chunk.write_op(OpCode::SetLocal, line);
                 self.chunk.write_u16(*depth as u16, line);
                 self.chunk.write_u16(*slot as u16, line);
+            }
+
+            ExpressionKind::CallExpr { callee, args } => {
+                self.compile_expr(*callee)?;
+                for arg in args {
+                    self.compile_expr(*arg)?;
+                }
+                self.chunk.write_op(OpCode::Call, line);
+                self.chunk.write_u16(args.len() as u16, line);
             }
 
             other => {
