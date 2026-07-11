@@ -78,8 +78,49 @@ impl OpCode {
 
 #[derive(Debug, Default)]
 pub struct Chunk {
+    /// instructions
     pub code: Vec<u8>,
+    /// value/literals storage
     pub constants: Vec<VmValue>,
+    /// instruction location in source
     pub lines: Vec<u32>,
 }
 
+impl Chunk {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Helper function for appending one OpCode to Chunk.code
+    /// also appends the line of OpCode of source to lines
+    pub fn write_op(&mut self, op: OpCode, line: u32) {
+        self.code.push(op as u8);
+        self.lines.push(line);
+    }
+
+    /// Helpder function same as write_op() but for 2 byte operand
+    pub fn write_u16(&mut self, val: u16, line: u32) {
+        let bytes = val.to_le_bytes();
+        self.code.push(bytes[0]);
+        self.code.push(bytes[1]);
+        self.lines.push(line);
+        self.lines.push(line);
+    }
+
+    /// Helper function appends the given constant/literal to Chunk.constants
+    /// search for same value in constants vector and return its index
+    /// if no similar values found it will append new value and return its index
+    pub fn add_constant(&mut self, value: VmValue) -> u16 {
+        if let Some(pos) = self.constants.iter().position(|c| *c == value) {
+            return pos as u16;
+        }
+        self.constants.push(value);
+        (self.constants.len() - 1) as u16
+    }
+
+    /// Inverse function of write_u16
+    /// returns 2 byte operand
+    pub fn read_u16(&self, offset: usize) -> u16 {
+        u16::from_le_bytes([self.code[offset], self.code[offset + 1]])
+    }
+}
