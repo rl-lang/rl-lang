@@ -178,6 +178,44 @@ impl Vm {
                     ip += 2;
                     ip -= offset;
                 }
+
+                OpCode::Call => {
+                    let arg_count = chunk.read_u16(ip) as usize;
+                    ip += 2;
+
+                    let mut args = Vec::with_capacity(arg_count);
+                    for _ in 0..arg_count {
+                        args.push(self.pop()?);
+                    }
+                    args.reverse(); // popped LIFO, restore left-to-right param order
+
+                    let func = match self.pop()? {
+                        VmValue::Function(f) => f,
+                        other => return Err(VmError(format!("cannot call {other:?}"))),
+                    };
+                    if args.len() != func.arity {
+                        return Err(VmError(format!(
+                            "{} expects {} args, got {}",
+                            func.name,
+                            func.arity,
+                            args.len()
+                        )));
+                    }
+
+                    // isolate the callee: exactly [global, params], regardless of the
+                    // caller's own loop/if nesting
+                    let caller_frames = self.locals.split_off(1); // keep locals[0] = global
+                    self.locals.push(args);
+
+                    let result = self.run(&func.chunk);
+
+                    // drop params + anything the function's own body left un-popped
+                    // (an early `return` inside a while/if skips its PopScope)
+                    self.locals.truncate(1);
+                    self.locals.extend(caller_frames);
+
+                    self.stack.push(result?.unwrap_or(VmValue::Null));
+                }
             }
         }
         Ok(self.stack.pop())
