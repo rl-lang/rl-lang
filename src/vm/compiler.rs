@@ -85,6 +85,34 @@ impl<'a> Compiler<'a> {
 
             StatementKind::Expression(id) => self.compile_expr_statement(*id),
 
+            StatementKind::ResolvedFunctionDeclaration {
+                name,
+                slot,
+                params,
+                body,
+                ..
+            } => {
+                let func_chunk = Self::compile_function_chunk(self.ast, body)?;
+                let func = VmValue::Function(Rc::new(VmFunction {
+                    name: name.clone(),
+                    arity: params.len(),
+                    chunk: func_chunk,
+                }));
+                self.emit_const(func, line);
+                self.chunk.write_op(OpCode::DefineLocal, line);
+                self.chunk.write_u16(*slot as u16, line);
+                Ok(())
+            }
+
+            StatementKind::Return(expr_opt) => {
+                match expr_opt {
+                    Some(e) => self.compile_expr(*e)?,
+                    None => self.emit_const(VmValue::Null, line),
+                }
+                self.chunk.write_op(OpCode::Return, line);
+                Ok(())
+            }
+
             other => Err(CompileError(format!(
                 "statement kind not yet supported by the vm compiler: {other:?}"
             ))),
