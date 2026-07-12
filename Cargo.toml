@@ -23,19 +23,24 @@ toml = "0.8"
 serde = { version = "1", features = ["derive"] }
 tiny_http = "0.12"
 ureq = "2"
+cranelift-jit = { version = "0.116", optional = true}
+cranelift-module = { version = "0.116", optional = true}
+cranelift-codegen = { version = "0.116", optional = true}
+cranelift-frontend = { version = "0.116", optional = true}
+target-lexicon = { version = "0.12", optional = true}
 
 [dev-dependencies]
 criterion = "0.5"
 
 [features]
-default = ["repl", "repl_tui", "run", "eval"]
+default = ["repl", "repl_tui", "run", "eval", "cranelift"]
 run = []
 repl = []
 repl_tui = ["dep:ratatui"]
 debug = ["dep:env_logger", "dep:log"]
 eval = []
 vm = []
-cranelift = []
+cranelift = ["dep:cranelift-jit", "dep:cranelift-module", "dep:cranelift-codegen", "dep:cranelift-frontend", "dep:target-lexicon"]
 lsp = ["dep:tower-lsp", "dep:tokio"]
 
 

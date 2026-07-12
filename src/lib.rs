@@ -14,6 +14,8 @@
 pub mod ast;
 #[cfg(feature = "eval")]
 pub mod checker;
+#[cfg(feature = "cranelift")]
+pub mod cranelift;
 pub mod docs;
 #[cfg(feature = "eval")]
 pub mod interpreter;

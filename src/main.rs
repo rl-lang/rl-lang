@@ -59,6 +59,11 @@ enum Commands {
         #[arg(long)]
         vm: bool,
 
+        /// JIT compile via cranelift instead
+        /// (this is very very highly experimental)
+        #[arg(long)]
+        cranelift: bool,
+
         /// Arguments forwarded to the script (accessible as argv inside .rl)
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         extra_args: Vec<String>,
