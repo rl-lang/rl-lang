@@ -1331,6 +1331,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "rl-tests"
+version = "0.1.4"
+dependencies = [
+ "rl-ast",
+ "rl-interpreter",
+ "rl-lexer",
+ "rl-parser",
+ "rl-utils",
+]
+
+[[package]]
 name = "rl-tooling"
 version = "0.1.4"
 dependencies = [

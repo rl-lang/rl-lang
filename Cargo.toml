@@ -15,7 +15,8 @@ members = [
     "crates/rl-repl",
     "crates/rl-lsp",
     "crates/rl-cli",
-    "crates/rl-commons"
+    "crates/rl-commons",
+    "crates/rl-tests",
 ]
 
 [workspace.package]
