@@ -3,6 +3,7 @@ use crate::{
     stdlib::common::{extract_string, verr, vok, vs},
     values::Value,
 };
+use rl_ast::statements::TypeAnnotation;
 use rl_checker::TypeChecker;
 use rl_lexer::tokenizer::Tokenizer;
 use rl_parser::parser_logic::Parser;
@@ -36,7 +37,7 @@ pub fn func(_: &mut Evaluator, value: Value) -> Value {
         return vok!(Value::Null);
     }
     verr!(Value::Values {
-        items_type: crate::ast::statements::TypeAnnotation::String,
+        items_type: TypeAnnotation::String,
         items: errors
             .iter()
             .map(|e| vs!(e.message().to_string()))
