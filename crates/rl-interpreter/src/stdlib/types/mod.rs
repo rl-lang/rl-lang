@@ -17,26 +17,7 @@ mod string;
 
 use crate::native::Module;
 
-pub const KEYWORDS: &[&str] = &[
-    "to_bin",
-    "to_bool",
-    "to_char",
-    "to_float",
-    "to_hex",
-    "to_int",
-    "to_oct",
-    "to_string",
-    "is_bool",
-    "is_null",
-    "is_char",
-    "is_int",
-    "is_string",
-    "is_float",
-    "is_error",
-    "error_unwrap",
-    "to_byte",
-    "is_byte",
-];
+pub use rl_commons::keywords::types::KEYWORDS;
 
 pub fn module() -> Module {
     Module::new("types")

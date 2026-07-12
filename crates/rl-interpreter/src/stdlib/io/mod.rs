@@ -19,20 +19,7 @@ mod write_file;
 
 use crate::native::Module;
 
-pub const KEYWORDS: &[&str] = &[
-    "read",
-    "read_int",
-    "read_float",
-    "read_file",
-    "read_lines",
-    "delete_file",
-    "write_file",
-    "append_file",
-    "print",
-    "println",
-    "eprint",
-    "read_bytes",
-];
+pub use rl_commons::keywords::io::KEYWORDS;
 
 pub fn module() -> Module {
     Module::new("io")

@@ -7,15 +7,7 @@ mod is_ok;
 mod result_map;
 mod result_unwrap;
 
-pub const KEYWORDS: &[&str] = &[
-    "is_ok",
-    "is_err",
-    "result_unwrap",
-    "result_unwrap_err",
-    "result_unwrap_or",
-    "result_map",
-    "result_map_err",
-];
+pub use rl_commons::keywords::result::KEYWORDS;
 
 pub fn module() -> Module {
     Module::new("res")

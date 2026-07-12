@@ -12,16 +12,7 @@ mod time_parts;
 
 use crate::native::Module;
 
-pub const KEYWORDS: &[&str] = &[
-    "time_now",
-    "time_now_ms",
-    "format_time",
-    "format_date_str",
-    "format_time_str",
-    "time_add",
-    "time_diff",
-    "time_parts",
-];
+pub use rl_commons::keywords::time::KEYWORDS;
 
 pub fn module() -> Module {
     Module::new("time")

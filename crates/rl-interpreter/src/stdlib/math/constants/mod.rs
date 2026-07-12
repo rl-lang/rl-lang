@@ -31,33 +31,7 @@ mod tau;
 
 use crate::native::Module;
 
-pub const KEYWORDS: &[&str] = &[
-    "E",
-    "PI",
-    "FRAC_1_PI",
-    "FRAC_1_SQRT_2",
-    "FRAC_2_PI",
-    "FRAC_2_SQRT_PI",
-    "FRAC_PI_2",
-    "FRAC_PI_3",
-    "FRAC_PI_4",
-    "FRAC_PI_6",
-    "FRAC_PI_8",
-    "INF",
-    "NAN",
-    "is_inf",
-    "is_nan",
-    "LN_10",
-    "LN_2",
-    "LOG10_2",
-    "LOG10_E",
-    "LOG2_10",
-    "LOG2_E",
-    "SQRT_2",
-    "EULER_GAMMA",
-    "PHI",
-    "TAU",
-];
+pub use rl_commons::keywords::math::constants::KEYWORDS;
 
 pub fn module() -> Module {
     Module::new("consts")

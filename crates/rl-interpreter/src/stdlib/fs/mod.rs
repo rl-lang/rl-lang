@@ -17,19 +17,7 @@ mod temp_dir;
 
 use crate::native::Module;
 
-pub const KEYWORDS: &[&str] = &[
-    "mkdir",
-    "mkdir_all",
-    "rmdir",
-    "rmdir_all",
-    "list_dir",
-    "copy_file",
-    "move_file",
-    "file_size",
-    "file_modified",
-    "temp_dir",
-    "rename_file",
-];
+pub use rl_commons::keywords::fs::KEYWORDS;
 
 pub fn module() -> Module {
     Module::new("fs")

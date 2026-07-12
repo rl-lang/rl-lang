@@ -33,31 +33,7 @@ mod trim_start;
 
 use crate::native::Module;
 
-pub const KEYWORDS: &[&str] = &[
-    "to_lower",
-    "to_upper",
-    "trim",
-    "trim_end",
-    "trim_start",
-    "repeat",
-    "is_empty",
-    "concat",
-    "char_at",
-    "bytes",
-    "chars",
-    "slice",
-    "contains",
-    "starts_with",
-    "ends_with",
-    "replace",
-    "pad_left",
-    "pad_right",
-    "split",
-    "join",
-    "count",
-    "index_of",
-    "format",
-];
+pub use rl_commons::keywords::string::KEYWORDS;
 
 pub fn module() -> Module {
     Module::new("str")

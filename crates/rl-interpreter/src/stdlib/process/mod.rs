@@ -16,18 +16,7 @@ mod sleep;
 
 use crate::native::Module;
 
-pub const KEYWORDS: &[&str] = &[
-    "args",
-    "exit",
-    "env",
-    "cwd",
-    "set_cwd",
-    "pid",
-    "sleep",
-    "exec",
-    "exec_code",
-    "exec_lines",
-];
+pub use rl_commons::keywords::process::KEYWORDS;
 
 pub fn module() -> Module {
     Module::new("process")

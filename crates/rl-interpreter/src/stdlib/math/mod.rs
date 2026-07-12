@@ -40,40 +40,7 @@ mod tan;
 
 use crate::native::Module;
 
-pub const KEYWORDS: &[&str] = &[
-    "sin",
-    "cos",
-    "tan",
-    "pow",
-    "mod",
-    "abs",
-    "ceil",
-    "clamp",
-    "floor",
-    "round",
-    "log",
-    "log2",
-    "log10",
-    "max",
-    "min",
-    "sqrt",
-    "atan",
-    "acos",
-    "asin",
-    "atan2",
-    "radians",
-    "degrees",
-    "exp",
-    "factorial",
-    "fibonacci",
-    "gcd",
-    "lcm",
-    "hypot",
-    "lerp",
-    "map_range",
-    "sign",
-    "is_prime",
-];
+pub use rl_commons::keywords::math::KEYWORDS;
 
 pub fn module() -> Module {
     Module::new("math")

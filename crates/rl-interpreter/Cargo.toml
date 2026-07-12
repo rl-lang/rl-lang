@@ -4,6 +4,8 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+rl-commons.workspace = true
+rl-checker.workspace = true
 rl-ast.workspace = true
 rl-lexer.workspace = true
 rl-parser.workspace = true

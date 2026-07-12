@@ -41,42 +41,7 @@ mod arr_sum;
 mod arr_unique;
 mod arr_zip;
 
-pub const KEYWORDS: &[&str] = &[
-    "arr_push",
-    "arr_pop",
-    "arr_insert",
-    "arr_remove",
-    "arr_reverse",
-    "arr_concat",
-    "arr_first",
-    "arr_last",
-    "arr_max",
-    "arr_min",
-    "arr_sum",
-    "arr_product",
-    "arr_unique",
-    "arr_is_empty",
-    "arr_count",
-    "arr_contains",
-    "arr_index_of",
-    "arr_sort",
-    "arr_slice",
-    "arr_flatten",
-    "arr_range",
-    "arr_fill",
-    "arr_map",
-    "len",
-    "arr_filter",
-    "arr_all",
-    "arr_any",
-    "arr_find",
-    "arr_find_index",
-    "arr_reduce",
-    "arr_sort_by",
-    "arr_flat_map",
-    "arr_for_each",
-    "arr_zip",
-];
+pub use rl_commons::keywords::array::KEYWORDS;
 
 pub fn module() -> Module {
     Module::new("array")

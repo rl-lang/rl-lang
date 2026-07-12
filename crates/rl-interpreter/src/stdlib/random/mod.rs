@@ -14,26 +14,7 @@ pub mod xoshiro;
 
 use crate::native::Module;
 
-pub const KEYWORDS: &[&str] = &[
-    "rand_int",
-    "rand_int_range",
-    "rand_float",
-    "rand_float_range",
-    "rand_bool",
-    "rand_bool_weighted",
-    "rand_dice",
-    "rand_dices",
-    "rand_range",
-    "rand_range_step",
-    "rand_choice",
-    "rand_choices",
-    "rand_sample",
-    "rand_shuffle",
-    "rand_byte",
-    "rand_bytes",
-    "rand_char",
-    "rand_string",
-];
+pub use rl_commons::keywords::random::KEYWORDS;
 
 pub fn module() -> Module {
     Module::new("random")

@@ -18,22 +18,7 @@ mod todo;
 mod type_of;
 mod unreachable;
 
-pub const KEYWORDS: &[&str] = &[
-    "assert",
-    "assert_eq",
-    "assert_ne",
-    "assert_lt",
-    "assert_le",
-    "assert_gt",
-    "assert_ge",
-    "assert_approx_eq",
-    "panic",
-    "unreachable",
-    "todo",
-    "dbg",
-    "type_of",
-    "bench",
-];
+pub use rl_commons::keywords::debug::KEYWORDS;
 
 pub fn module() -> Module {
     use crate::native::Module;

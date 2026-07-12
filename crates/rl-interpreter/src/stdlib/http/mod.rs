@@ -16,20 +16,7 @@ mod http_server_start;
 mod http_server_stop;
 mod http_server_try_recv;
 
-pub const KEYWORDS: &[&str] = &[
-    "http_server_start",
-    "http_server_recv",
-    "http_server_try_recv",
-    "http_request_method",
-    "http_request_url",
-    "http_request_header",
-    "http_request_body",
-    "http_respond",
-    "http_server_stop",
-    "http_get",
-    "http_post",
-    "http_request",
-];
+pub use rl_commons::keywords::http::KEYWORDS;
 
 /// A single native HTTP resource, stored behind an `int` handle.
 pub enum HttpHandle {

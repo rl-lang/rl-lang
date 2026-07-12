@@ -18,19 +18,7 @@ mod path_stem;
 
 use crate::native::Module;
 
-pub const KEYWORDS: &[&str] = &[
-    "path_exists",
-    "path_extension",
-    "path_filename",
-    "path_is_dir",
-    "path_is_file",
-    "path_join",
-    "path_parent",
-    "path_pop",
-    "path_push",
-    "path_set_extension",
-    "path_stem",
-];
+pub use rl_commons::keywords::path::KEYWORDS;
 
 pub fn module() -> Module {
     Module::new("path")

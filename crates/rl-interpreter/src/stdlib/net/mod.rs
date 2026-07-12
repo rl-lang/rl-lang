@@ -24,27 +24,7 @@ mod udp_recv_from;
 mod udp_send;
 mod udp_send_to;
 
-pub const KEYWORDS: &[&str] = &[
-    "tcp_listen",
-    "tcp_accept",
-    "tcp_connect",
-    "tcp_read",
-    "tcp_write",
-    "tcp_peer_addr",
-    "tcp_local_addr",
-    "tcp_set_timeout",
-    "tcp_set_nonblocking",
-    "tcp_shutdown",
-    "tcp_close",
-    "udp_bind",
-    "udp_connect",
-    "udp_send",
-    "udp_send_to",
-    "udp_recv",
-    "udp_recv_from",
-    "udp_close",
-    "resolve",
-];
+pub use rl_commons::keywords::net::KEYWORDS;
 
 /// A single native networking resource, stored behind an `int` handle.
 pub enum NetHandle {
