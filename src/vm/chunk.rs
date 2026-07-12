@@ -196,4 +196,9 @@ impl Chunk {
     pub fn read_u16(&self, offset: usize) -> u16 {
         u16::from_le_bytes([self.code[offset], self.code[offset + 1]])
     }
+
+    #[inline(always)]
+    pub unsafe fn read_op_unchecked(&self, ip: usize) -> OpCode {
+        unsafe { OpCode::from_u8_unchecked(*self.code.get_unchecked(ip)) }
+    }
 }

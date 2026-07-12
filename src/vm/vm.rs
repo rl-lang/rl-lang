@@ -60,6 +60,9 @@ impl Vm {
             () => {
                 unsafe { &*cur_chunk }
             };
+            (raw) => {
+                &*cur_chunk
+            };
         }
 
         loop {
@@ -76,14 +79,14 @@ impl Vm {
                 continue;
             }
 
-            let op = OpCode::from_u8_unchecked(chunk!().code[ip]);
+            let op = unsafe { chunk!(raw).read_op_unchecked(ip) };
             ip += 1;
 
             match op {
                 OpCode::Const => {
-                    let idx = chunk!().read_u16(ip) as usize;
+                    let idx = unsafe { chunk!(raw).read_u16_unchecked(ip) } as usize;
                     ip += 2;
-                    let val = chunk!().constants[idx].clone();
+                    let val = unsafe { chunk!(raw).get_constant_unchecked(idx) }.clone();
                     self.stack.push(val);
                 }
 
@@ -93,7 +96,7 @@ impl Vm {
                 OpCode::Div => self.binary_div()?,
 
                 OpCode::Negate => {
-                    let v = self.pop()?;
+                    let v = self.pop_unchecked();
                     let out = match v {
                         VmValue::Int(n) => VmValue::Int(-n),
                         VmValue::Float(n) => VmValue::Float(-n),
@@ -102,7 +105,7 @@ impl Vm {
                     self.stack.push(out);
                 }
                 OpCode::Not => {
-                    let v = self.pop()?;
+                    let v = self.pop_unchecked();
                     let out = match v {
                         VmValue::Bool(b) => VmValue::Bool(!b),
                         other => return Err(VmError(format!("cannot apply ! to {other:?}"))),
@@ -110,11 +113,11 @@ impl Vm {
                     self.stack.push(out);
                 }
                 OpCode::Eq => {
-                    let (a, b) = self.pop_two()?;
+                    let (a, b) = self.pop_two_unchecked();
                     self.stack.push(VmValue::Bool(a == b));
                 }
                 OpCode::NotEq => {
-                    let (a, b) = self.pop_two()?;
+                    let (a, b) = self.pop_two_unchecked();
                     self.stack.push(VmValue::Bool(a != b));
                 }
                 OpCode::Less => self.binary_cmp(|o| o.is_lt())?,
@@ -123,25 +126,27 @@ impl Vm {
                 OpCode::GreaterEq => self.binary_cmp(|o| o.is_ge())?,
 
                 OpCode::GetLocal => {
-                    let flat = chunk!().read_u16(ip) as usize;
+                    let flat = unsafe { chunk!(raw).read_u16_unchecked(ip) } as usize;
                     ip += 2;
-                    let frame_base = self.scope_starts[scope_base];
-                    let val = self.locals[frame_base + flat].clone();
+                    let idx = self.scope_starts[scope_base] + flat;
+                    let val = unsafe { self.get_local_unchecked(idx) }.clone();
                     self.stack.push(val);
                 }
                 OpCode::SetLocal => {
-                    let flat = chunk!().read_u16(ip) as usize;
+                    let flat = unsafe { chunk!(raw).read_u16_unchecked(ip) } as usize;
                     ip += 2;
                     let val = self
                         .stack
                         .last()
                         .cloned()
                         .ok_or_else(|| VmError("stack underflow on assignment".into()))?;
-                    let frame_base = self.scope_starts[scope_base];
-                    self.locals[frame_base + flat] = val;
+                    let idx = self.scope_starts[scope_base] + flat;
+                    unsafe {
+                        self.set_local_unchcked(idx, val);
+                    }
                 }
                 OpCode::GetGlobal => {
-                    let slot = chunk!().read_u16(ip) as usize;
+                    let slot = unsafe { chunk!(raw).read_u16_unchecked(ip) } as usize;
                     ip += 2;
                     let val =
                         self.globals.get(slot).cloned().ok_or_else(|| {
@@ -150,7 +155,7 @@ impl Vm {
                     self.stack.push(val);
                 }
                 OpCode::SetGlobal => {
-                    let slot = chunk!().read_u16(ip) as usize;
+                    let slot = unsafe { chunk!(raw).read_u16_unchecked(ip) } as usize;
                     ip += 2;
                     let val = self
                         .stack
@@ -165,7 +170,7 @@ impl Vm {
                     self.globals[slot] = val;
                 }
                 OpCode::DefineLocal => {
-                    let slot = chunk!().read_u16(ip) as usize;
+                    let slot = unsafe { chunk!(raw).read_u16_unchecked(ip) } as usize;
                     ip += 2;
                     let val = self.pop()?;
 
@@ -210,12 +215,12 @@ impl Vm {
                 }
 
                 OpCode::Jump => {
-                    let offset = chunk!().read_u16(ip) as usize;
+                    let offset = unsafe { chunk!(raw).read_u16_unchecked(ip) } as usize;
                     ip += 2;
                     ip += offset;
                 }
                 OpCode::JumpIfFalse => {
-                    let offset = chunk!().read_u16(ip) as usize;
+                    let offset = unsafe { chunk!(raw).read_u16_unchecked(ip) } as usize;
                     ip += 2;
                     match self.pop()? {
                         VmValue::Bool(false) => ip += offset,
@@ -228,13 +233,13 @@ impl Vm {
                     }
                 }
                 OpCode::Loop => {
-                    let offset = chunk!().read_u16(ip) as usize;
+                    let offset = unsafe { chunk!(raw).read_u16_unchecked(ip) } as usize;
                     ip += 2;
                     ip -= offset;
                 }
 
                 OpCode::Call => {
-                    let arg_count = chunk!().read_u16(ip) as usize;
+                    let arg_count = unsafe { chunk!(raw).read_u16_unchecked(ip) } as usize;
                     ip += 2;
 
                     let base = self.locals.len();
@@ -304,6 +309,7 @@ impl Vm {
             .pop()
             .ok_or_else(|| VmError("stack underflow".into()))
     }
+    #[allow(dead_code)]
     fn pop_two(&mut self) -> Result<(VmValue, VmValue), VmError> {
         let b = self.pop()?;
         let a = self.pop()?;
