@@ -28,7 +28,7 @@ use std::path::PathBuf;
 
 use crate::logic_loops::{eval_loop, lexing_loop, parsing_loop};
 #[cfg(feature = "lsp")]
-use rl_lang::lsp::run_lsp;
+use rl_lsp::run_lsp;
 #[cfg(feature = "repl")]
 use rl_repl;
 use rl_tooling::dev::read_rl_toml;
