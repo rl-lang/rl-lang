@@ -6,11 +6,9 @@
 //! - `byte` widens to `int` when the array element type is `int`
 //! - Assigning `null` is always allowed (absence of value)
 
-use crate::{
-    ast::{ExprId, statements::TypeAnnotation},
-    checker::structs::{CheckType, TypeChecker},
-    utils::span::Span,
-};
+use crate::structs::{CheckType, TypeChecker};
+use rl_ast::{ExprId, statements::TypeAnnotation};
+use rl_utils::span::Span;
 
 impl TypeChecker {
     pub fn check_index_assign(

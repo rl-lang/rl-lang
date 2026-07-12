@@ -3,11 +3,9 @@
 mod expression;
 mod statement;
 
-use crate::{
-    ast::statements::TypeAnnotation,
-    checker::structs::{CheckType, TypeChecker},
-    utils::span::Span,
-};
+use crate::{TypeChecker, structs::CheckType};
+use rl_ast::statements::{Statement, TypeAnnotation};
+use rl_utils::span::Span;
 
 impl TypeChecker {
     /// Returns the expected return type of the current function or lambda, if any.
@@ -34,7 +32,7 @@ impl TypeChecker {
         self.loop_depth = self.loop_depth.saturating_sub(1);
     }
     /// Checks all statements in `statements` inside a fresh scope.
-    pub fn check_block(&mut self, statements: &[crate::ast::statements::Statement]) {
+    pub fn check_block(&mut self, statements: &[Statement]) {
         self.push_scope();
         for stmt in statements {
             self.check_statement(stmt);

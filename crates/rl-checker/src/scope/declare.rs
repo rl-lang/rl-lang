@@ -1,9 +1,7 @@
 //! Variable and constant declaration for the type checker scope.
 
-use crate::{
-    checker::structs::{CheckType, ScopeItem, TypeChecker},
-    utils::span::Span,
-};
+use crate::structs::{CheckType, ScopeItem, TypeChecker};
+use rl_utils::span::Span;
 
 impl TypeChecker {
     /// Declares `name` in the current (innermost) scope.

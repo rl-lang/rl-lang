@@ -3,11 +3,9 @@
 
 use std::rc::Rc;
 
-use crate::{
-    ast::{ExprId, nodes::ExpressionKind, statements::TypeAnnotation},
-    checker::{TypeChecker, structs::CheckType},
-    utils::span::Span,
-};
+use crate::{TypeChecker, structs::CheckType};
+use rl_ast::{ExprId, nodes::ExpressionKind, statements::TypeAnnotation};
+use rl_utils::span::Span;
 
 impl TypeChecker {
     pub fn check_expression(&mut self, expression: ExprId) -> CheckType {

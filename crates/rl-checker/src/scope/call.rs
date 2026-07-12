@@ -1,11 +1,9 @@
 //! Function call type checking - path resolution and argument validation.
 
-use crate::{
-    ast::statements::TypeAnnotation,
-    checker::structs::{CheckType, TypeChecker},
-    interpreter::stdlib,
-    utils::{span::Span, suggest::closest_match},
-};
+use crate::structs::{CheckType, TypeChecker};
+use rl_ast::statements::TypeAnnotation;
+use rl_interpreter::stdlib;
+use rl_utils::{span::Span, suggest::closest_match};
 
 impl TypeChecker {
     /// Resolves a call path and checks argument types.

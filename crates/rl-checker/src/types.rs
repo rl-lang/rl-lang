@@ -1,9 +1,7 @@
 //! Helper methods on [`CheckType`] and [`ScopeItem`], plus private type-matching utilities.
 
-use crate::{
-    ast::statements::TypeAnnotation,
-    checker::structs::{CheckType, ScopeItem},
-};
+use crate::structs::{CheckType, ScopeItem};
+use rl_ast::statements::TypeAnnotation;
 
 impl ScopeItem {
     pub fn new(type_annotation: CheckType, is_const: bool) -> Self {

@@ -1,14 +1,11 @@
 //! Core data structures for the type checker.
 //!
+use rl_ast::{Ast, statements::TypeAnnotation};
+use rl_interpreter::native::Module;
+use rl_utils::{errors::Error, source::SourceFile, span::Span};
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,
-};
-
-use crate::{
-    ast::{Ast, statements::TypeAnnotation},
-    interpreter::native::Module,
-    utils::{errors::Error, source::SourceFile, span::Span},
 };
 
 /// The stateful type checker, threaded through the entire AST walk.

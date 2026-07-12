@@ -15,14 +15,12 @@
 //! Any side being `Unknown` short-circuits to `Unknown` to suppress cascading errors.
 
 use crate::{
-    ast::statements::TypeAnnotation,
-    checker::{
-        operators::op_str,
-        structs::{CheckType, TypeChecker},
-    },
-    lexer::tokentypes::TokenType,
-    utils::span::Span,
+    operators::op_str,
+    structs::{CheckType, TypeChecker},
 };
+use rl_ast::statements::TypeAnnotation;
+use rl_lexer::tokentypes::TokenType;
+use rl_utils::span::Span;
 
 impl TypeChecker {
     pub fn check_binary_operator(

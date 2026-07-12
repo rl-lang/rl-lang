@@ -4,10 +4,9 @@ mod assign;
 mod call;
 mod declare;
 
-use crate::{
-    checker::structs::{CheckType, TypeChecker},
-    utils::{span::Span, suggest::closest_match},
-};
+use crate::structs::{CheckType, TypeChecker};
+use rl_utils::{span::Span, suggest::closest_match};
+
 use std::collections::HashMap;
 
 impl TypeChecker {

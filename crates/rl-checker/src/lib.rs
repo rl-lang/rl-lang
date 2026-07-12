@@ -24,18 +24,18 @@ pub mod statements;
 pub mod structs;
 pub mod types;
 
-use crate::{
-    ast::{
-        Ast,
-        statements::{Statement, StatementKind},
-    },
-    checker::structs::CheckType,
-    interpreter::evaluator::Evaluator,
-    utils::{
-        errors::{Error, Reason},
-        source::SourceFile,
-        span::Span,
-    },
+use crate::structs::CheckType;
+use rl_ast::{
+    Ast,
+    statements::{Statement, StatementKind},
+};
+use rl_docs::find_fn_doc;
+use rl_interpreter::evaluator::Evaluator;
+use rl_interpreter::native::Module;
+use rl_utils::{
+    errors::{Error, Reason},
+    source::SourceFile,
+    span::Span,
 };
 use std::{collections::HashMap, path::PathBuf};
 pub use structs::TypeChecker;
@@ -163,9 +163,7 @@ impl TypeChecker {
             None
         };
 
-        let text = match crate::docs::find_fn_doc(module, fn_name)
-            .or_else(|| crate::docs::find_fn_doc(None, fn_name))
-        {
+        let text = match find_fn_doc(module, fn_name).or_else(|| find_fn_doc(None, fn_name)) {
             Some((std_entry, func)) => format!(
                 "```rl\nstd::{}::{}\n```\n{}",
                 std_entry.name, func.signature, func.description
@@ -178,10 +176,7 @@ impl TypeChecker {
 }
 
 /// Collects all function names from a stdlib [`Module`] tree into `out`.
-fn collect_fn_names(
-    module: &crate::interpreter::native::Module,
-    out: &mut std::collections::HashSet<String>,
-) {
+fn collect_fn_names(module: &Module, out: &mut std::collections::HashSet<String>) {
     for name in module.functions.keys() {
         out.insert(name.clone());
     }

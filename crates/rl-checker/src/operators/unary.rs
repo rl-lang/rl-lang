@@ -6,12 +6,10 @@
 //! | `-`      | int             | int    |
 //! | `-`      | float           | float  |
 
-use crate::{
-    ast::statements::TypeAnnotation,
-    checker::structs::{CheckType, TypeChecker},
-    lexer::tokentypes::TokenType,
-    utils::span::Span,
-};
+use crate::structs::{CheckType, TypeChecker};
+use rl_ast::statements::TypeAnnotation;
+use rl_lexer::tokentypes::TokenType;
+use rl_utils::span::Span;
 
 impl TypeChecker {
     pub fn check_unary_operator(

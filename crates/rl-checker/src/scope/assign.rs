@@ -1,9 +1,7 @@
 //! Assignment type checking - validates reassignment against the declared type.
 
-use crate::{
-    checker::structs::{CheckType, TypeChecker},
-    utils::{span::Span, suggest::closest_match},
-};
+use crate::structs::{CheckType, TypeChecker};
+use rl_utils::{span::Span, suggest::closest_match};
 
 impl TypeChecker {
     /// Checks that assigning `value_type` to `name` is valid.
