@@ -17,6 +17,7 @@ members = [
     "crates/rl-cli",
     "crates/rl-commons",
     "crates/rl-tests",
+    "crates/rl-benches",
 ]
 
 [workspace.package]
@@ -41,6 +42,7 @@ rl-tooling = { path = "crates/rl-tooling" }
 rl-repl = { path = "crates/rl-repl" }
 rl-lsp = { path = "crates/rl-lsp" }
 
+criterion = { version = "0.5", features = ["html_reports"] }
 ariadne = "0.5"
 crossterm = "0.28"
 ratatui = "0.29"
