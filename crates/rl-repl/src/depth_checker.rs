@@ -1,8 +1,7 @@
 //! Determines whether a multiline input block is complete and ready to evaluate.
-use crate::{
-    lexer::{tokenizer::Tokenizer, tokentypes::TokenType},
-    utils::source::SourceFile,
-};
+
+use rl_lexer::{tokenizer::Tokenizer, tokentypes::TokenType};
+use rl_utils::source::SourceFile;
 
 /// Returns `true` if `input` is a syntactically complete expression or statement.
 ///

@@ -1,9 +1,10 @@
 //! Small shared utilities for the REPL.
 
-use crate::repl::lines_types::OutputLine;
+use crate::lines_types::OutputLine;
+use rl_utils::errors::Error;
 
 /// Appends an [`OutputLine::Error`] derived from `e` to `output`.
-pub fn push_error(output: &mut Vec<OutputLine>, e: &crate::utils::errors::Error) {
+pub fn push_error(output: &mut Vec<OutputLine>, e: &Error) {
     output.push(OutputLine::Error(format!("error: {}", e.message())));
 }
 

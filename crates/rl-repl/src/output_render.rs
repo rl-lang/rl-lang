@@ -12,7 +12,7 @@ use ratatui::{
     text::{Line, Span},
 };
 
-use crate::repl::{lines_types::OutputLine, syntax_highlighting::highlight};
+use crate::{lines_types::OutputLine, syntax_highlighting::highlight};
 
 /// Converts the output buffer into a list of styled ratatui lines ready to render.
 pub fn render_output(output: &[OutputLine]) -> Vec<Line<'static>> {

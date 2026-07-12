@@ -27,11 +27,8 @@ use ratatui::{
     style::{Color, Modifier, Style},
     text::Span,
 };
-
-use crate::{
-    lexer::{tokenizer::Tokenizer, tokentypes::TokenType},
-    utils::source::SourceFile,
-};
+use rl_lexer::{tokenizer::Tokenizer, tokentypes::TokenType};
+use rl_utils::source::SourceFile;
 
 /// Returns the ratatui [`Style`] for a given [`TokenType`].
 fn token_color(tt: &TokenType) -> Style {

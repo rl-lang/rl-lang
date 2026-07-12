@@ -45,9 +45,8 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Wrap},
 };
+use rl_interpreter::evaluator::Evaluator;
 use std::path::PathBuf;
-
-use crate::interpreter::evaluator::Evaluator;
 
 /// Runs the REPL event loop until the user exits with `Ctrl+C` or `:exit`.
 ///

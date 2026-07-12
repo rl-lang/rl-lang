@@ -1,11 +1,11 @@
 //! Evaluates a complete input string and appends results to the output buffer.
-use crate::{
-    interpreter::evaluator::Evaluator,
-    lexer::tokenizer::Tokenizer,
-    parser::parser_logic::Parser,
-    repl::{lines_types::OutputLine, syntax_highlighting::highlight},
-    utils::source::SourceFile,
-};
+use rl_ast::statements::StatementKind;
+use rl_interpreter::{evaluator::Evaluator, values::Value};
+use rl_lexer::tokenizer::Tokenizer;
+use rl_parser::parser_logic::Parser;
+use rl_utils::source::SourceFile;
+
+use crate::{lines_types::OutputLine, syntax_highlighting::highlight};
 
 /// Lexes, parses, and evaluates `input`, appending results to `output`.
 ///
@@ -42,10 +42,10 @@ pub fn eval_input(input: &str, evaluator: &mut Evaluator, output: &mut Vec<Outpu
     let mut success = true;
 
     for statement in &statements {
-        if let crate::ast::statements::StatementKind::Expression(expr) = &statement.kind {
+        if let StatementKind::Expression(expr) = &statement.kind {
             match evaluator.evaluate(*expr) {
                 Ok(val) => {
-                    if !matches!(val, crate::interpreter::values::Value::Null) {
+                    if !matches!(val, Value::Null) {
                         let val_str = format!("{}", val);
                         let spans = highlight(&val_str);
                         output.push(OutputLine::Styled(

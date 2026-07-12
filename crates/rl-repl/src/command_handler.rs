@@ -19,14 +19,13 @@
 use std::{fs, path::PathBuf};
 
 use ratatui::style::{Color, Modifier, Style};
+use rl_docs::entries;
 
-use crate::{
-    interpreter::evaluator::Evaluator,
-    lexer::tokenizer::Tokenizer,
-    parser::parser_logic::Parser,
-    repl::{lines_types::OutputLine, utils::push_error},
-    utils::source::SourceFile,
-};
+use crate::{lines_types::OutputLine, utils::push_error};
+use rl_interpreter::evaluator::Evaluator;
+use rl_lexer::tokenizer::Tokenizer;
+use rl_parser::parser_logic::Parser;
+use rl_utils::source::SourceFile;
 
 /// Dispatches a `:command` string, mutating `output`, `evaluator`, and `attached` as needed.
 pub fn handle_command(
@@ -95,7 +94,7 @@ pub fn handle_command(
                     "stdlib modules".to_string(),
                     header,
                 )]));
-                for entry in crate::docs::entries::stdlib_entries() {
+                for entry in entries::stdlib_entries() {
                     output.push(OutputLine::Styled(vec![
                         ("  std".to_string(), sep),
                         ("::".to_string(), sep),
@@ -104,7 +103,7 @@ pub fn handle_command(
                 }
             } else {
                 let mod_name = parts[1].trim();
-                let entries = crate::docs::entries::stdlib_entries();
+                let entries = entries::stdlib_entries();
                 if let Some(entry) = entries.iter().find(|e| e.name == mod_name) {
                     output.push(OutputLine::Styled(vec![
                         ("std".to_string(), sep),
