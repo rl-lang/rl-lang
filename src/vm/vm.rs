@@ -51,25 +51,39 @@ impl Vm {
             scope_base: self.scope_starts.len(),
         }];
 
-        loop {
-            let top = frames.len() - 1;
+        // caching method
+        let mut cur_chunk: *const Chunk = frames[0].source.chunk();
+        let mut ip: usize = 0;
+        let mut scope_base: usize = frames[0].scope_base;
 
-            if frames[top].ip >= frames[top].source.chunk().code.len() {
+        macro_rules! chunk {
+            () => {
+                unsafe { &*cur_chunk }
+            };
+        }
+
+        loop {
+            if ip >= chunk!().code.len() {
                 self.stack.push(VmValue::Null);
+                frames.last_mut().unwrap().ip = ip;
                 if !self.finish_call(&mut frames)? {
                     return Ok(self.stack.pop());
                 }
+                let top = frames.last().unwrap();
+                cur_chunk = top.source.chunk();
+                ip = top.ip;
+                scope_base = top.scope_base;
                 continue;
             }
 
-            let op = OpCode::from_u8(frames[top].source.chunk().code[frames[top].ip]);
-            frames[top].ip += 1;
+            let op = OpCode::from_u8(chunk!().code[ip]);
+            ip += 1;
 
             match op {
                 OpCode::Const => {
-                    let idx = frames[top].source.chunk().read_u16(frames[top].ip) as usize;
-                    frames[top].ip += 2;
-                    let val = frames[top].source.chunk().constants[idx].clone();
+                    let idx = chunk!().read_u16(ip) as usize;
+                    ip += 2;
+                    let val = chunk!().constants[idx].clone();
                     self.stack.push(val);
                 }
 
@@ -109,12 +123,11 @@ impl Vm {
                 OpCode::GreaterEq => self.binary_cmp(|o| o.is_ge())?,
 
                 OpCode::GetLocal => {
-                    let depth = frames[top].source.chunk().read_u16(frames[top].ip) as usize;
-                    frames[top].ip += 2;
-                    let slot = frames[top].source.chunk().read_u16(frames[top].ip) as usize;
-                    frames[top].ip += 2;
+                    let depth = chunk!().read_u16(ip) as usize;
+                    ip += 2;
+                    let slot = chunk!().read_u16(ip) as usize;
+                    ip += 2;
 
-                    let scope_base = frames[top].scope_base;
                     let val = match self.resolve(scope_base, depth)? {
                         None => self.globals.get(slot),
                         Some(scope_idx) => self.local_slot(scope_idx, slot),
@@ -128,10 +141,10 @@ impl Vm {
                     self.stack.push(val);
                 }
                 OpCode::SetLocal => {
-                    let depth = frames[top].source.chunk().read_u16(frames[top].ip) as usize;
-                    frames[top].ip += 2;
-                    let slot = frames[top].source.chunk().read_u16(frames[top].ip) as usize;
-                    frames[top].ip += 2;
+                    let depth = chunk!().read_u16(ip) as usize;
+                    ip += 2;
+                    let slot = chunk!().read_u16(ip) as usize;
+                    ip += 2;
 
                     let val = self
                         .stack
@@ -139,7 +152,6 @@ impl Vm {
                         .cloned()
                         .ok_or_else(|| VmError("stack underflow on assignment".into()))?;
 
-                    let scope_base = frames[top].scope_base;
                     match self.resolve(scope_base, depth)? {
                         None => {
                             if slot >= self.globals.len() {
@@ -161,11 +173,10 @@ impl Vm {
                     }
                 }
                 OpCode::DefineLocal => {
-                    let slot = frames[top].source.chunk().read_u16(frames[top].ip) as usize;
-                    frames[top].ip += 2;
+                    let slot = chunk!().read_u16(ip) as usize;
+                    ip += 2;
                     let val = self.pop()?;
 
-                    let scope_base = frames[top].scope_base;
                     if self.scope_starts.len() == scope_base {
                         if slot >= self.globals.len() {
                             self.globals.resize(slot + 1, VmValue::Null);
@@ -186,14 +197,18 @@ impl Vm {
                 OpCode::Return => {
                     let ret = self.pop().ok();
                     self.stack.push(ret.unwrap_or(VmValue::Null));
+                    frames.last_mut().unwrap().ip = ip;
                     if !self.finish_call(&mut frames)? {
                         return Ok(self.stack.pop());
                     }
+                    let top = frames.last().unwrap();
+                    cur_chunk = top.source.chunk();
+                    ip = top.ip;
+                    scope_base = top.scope_base;
                 }
 
                 OpCode::PushScope => self.scope_starts.push(self.locals.len()),
                 OpCode::PopScope => {
-                    let scope_base = frames[top].scope_base;
                     let num_active = self.scope_starts.len() - scope_base;
                     if num_active <= 1 {
                         return Err(VmError("cannot pop the base call frame".into()));
@@ -203,15 +218,15 @@ impl Vm {
                 }
 
                 OpCode::Jump => {
-                    let offset = frames[top].source.chunk().read_u16(frames[top].ip) as usize;
-                    frames[top].ip += 2;
-                    frames[top].ip += offset;
+                    let offset = chunk!().read_u16(ip) as usize;
+                    ip += 2;
+                    ip += offset;
                 }
                 OpCode::JumpIfFalse => {
-                    let offset = frames[top].source.chunk().read_u16(frames[top].ip) as usize;
-                    frames[top].ip += 2;
+                    let offset = chunk!().read_u16(ip) as usize;
+                    ip += 2;
                     match self.pop()? {
-                        VmValue::Bool(false) => frames[top].ip += offset,
+                        VmValue::Bool(false) => ip += offset,
                         VmValue::Bool(true) => {}
                         other => {
                             return Err(VmError(format!(
@@ -221,14 +236,14 @@ impl Vm {
                     }
                 }
                 OpCode::Loop => {
-                    let offset = frames[top].source.chunk().read_u16(frames[top].ip) as usize;
-                    frames[top].ip += 2;
-                    frames[top].ip -= offset;
+                    let offset = chunk!().read_u16(ip) as usize;
+                    ip += 2;
+                    ip -= offset;
                 }
 
                 OpCode::Call => {
-                    let arg_count = frames[top].source.chunk().read_u16(frames[top].ip) as usize;
-                    frames[top].ip += 2;
+                    let arg_count = chunk!().read_u16(ip) as usize;
+                    ip += 2;
 
                     let base = self.locals.len();
                     self.locals.resize(base + arg_count, VmValue::Null);
@@ -248,12 +263,17 @@ impl Vm {
                     }
 
                     self.scope_starts.push(base);
-                    let scope_base = self.scope_starts.len() - 1;
+                    let new_scope_base = self.scope_starts.len() - 1;
+
+                    frames.last_mut().unwrap().ip = ip;
+                    cur_chunk = &func.chunk as *const Chunk;
                     frames.push(CallFrame {
                         source: FrameSource::Func(func),
                         ip: 0,
-                        scope_base,
+                        scope_base: new_scope_base,
                     });
+                    ip = 0;
+                    scope_base = new_scope_base;
                 }
             }
         }
