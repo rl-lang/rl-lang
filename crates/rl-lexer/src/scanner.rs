@@ -2,9 +2,9 @@
 //!
 //! Exposes the single entry point that the pipeline calls to turn a source
 //! string into a token stream. Delegates all real work to [`Tokenizer`].
-use crate::lexer::tokentypes::Trivia;
-use crate::lexer::{tokenizer::Tokenizer, tokentypes::TokenType};
-use crate::utils::errors::Error;
+use crate::tokentypes::Trivia;
+use crate::{tokenizer::Tokenizer, tokentypes::TokenType};
+use rl_utils::errors::Error;
 
 impl Tokenizer {
     /// Scans the source file and return token stream
@@ -94,12 +94,12 @@ impl Tokenizer {
 
                         if let Some(last) = self.tokens.last_mut()
                             && last.line == self.line
-                                && !is_doc
-                                && !matches!(last.token, TokenType::Newline)
-                            {
-                                last.trailing_trivia.push(trivia);
-                                return Ok(());
-                            }
+                            && !is_doc
+                            && !matches!(last.token, TokenType::Newline)
+                        {
+                            last.trailing_trivia.push(trivia);
+                            return Ok(());
+                        }
                         self.pending_trivia.push(trivia);
                     }
                 } else if self.peek() == '=' {

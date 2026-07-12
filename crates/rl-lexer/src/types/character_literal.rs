@@ -1,8 +1,8 @@
 //! Single-quoted character literal scanner.
 //!
 //! Handles `'x'` and simple escape sequences, emitting [`TokenType::CharacterLiteral`].
-use crate::lexer::{tokenizer::Tokenizer, tokentypes::TokenType};
-use crate::utils::errors::Error;
+use crate::{tokenizer::Tokenizer, tokentypes::TokenType};
+use rl_utils::errors::Error;
 
 impl Tokenizer {
     /// Scans a single-quoted character literal and emits [`TokenType::CharacterLiteral`].

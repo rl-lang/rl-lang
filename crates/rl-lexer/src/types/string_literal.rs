@@ -2,8 +2,8 @@
 //!
 //! Consumes everything between `"…"`, handling escape sequences, and emits
 //! [`TokenType::StringLiteral`].
-use crate::lexer::{tokenizer::Tokenizer, tokentypes::TokenType};
-use crate::utils::errors::Error;
+use crate::{tokenizer::Tokenizer, tokentypes::TokenType};
+use rl_utils::errors::Error;
 
 impl Tokenizer {
     /// Scans a double-quoted string literal and emits [`TokenType::StringLiteral`].

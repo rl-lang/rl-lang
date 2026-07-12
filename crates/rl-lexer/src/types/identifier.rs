@@ -2,7 +2,7 @@
 //!
 //! Consumes a run of alphanumeric/underscore characters and maps the result to
 //! the appropriate keyword [`TokenType`] or falls back to [`TokenType::Identifier`].
-use crate::lexer::{tokenizer::Tokenizer, tokentypes::TokenType};
+use crate::{tokenizer::Tokenizer, tokentypes::TokenType};
 
 impl Tokenizer {
     /// Scans an identifier or keyword starting at the current position.

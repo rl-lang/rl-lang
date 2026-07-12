@@ -3,10 +3,10 @@
 //! Holds the source text, the current byte cursor, and the accumulated token
 //! list. The scan loop in here dispatches each character to the appropriate
 //! sub-scanner in `types/` or handles single/double-character operators inline.
-use crate::lexer::tokentypes::{Token, TokenType, Trivia};
-use crate::utils::errors::Error;
-use crate::utils::source::SourceFile;
-use crate::utils::span::Span;
+use crate::tokentypes::{Token, TokenType, Trivia};
+use rl_utils::errors::Error;
+use rl_utils::source::SourceFile;
+use rl_utils::span::Span;
 
 /// Converts raw source text into a flat list of [`Token`]s.
 ///
@@ -109,7 +109,7 @@ impl Tokenizer {
     /// Attaches the source file so Ariadne can render the relevant source line
     /// alongside the error message.
     pub fn err(&self, message: impl Into<String>, span: Span) -> Error {
-        Error::at(crate::utils::errors::Reason::Lexer, message, span)
+        Error::at(rl_utils::errors::Reason::Lexer, message, span)
             .with_source_file(&self.source_file)
     }
 }
