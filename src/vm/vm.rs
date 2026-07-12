@@ -281,6 +281,22 @@ impl Vm {
         Ok(!frames.is_empty())
     }
 
+    #[inline(always)]
+    fn pop_unchecked(&mut self) -> VmValue {
+        debug_assert!(!self.stack.is_empty(), "stack underflow");
+        let new_len = self.stack.len() - 1;
+        unsafe {
+            self.stack.set_len(new_len);
+            std::ptr::read(self.stack.as_ptr().add(new_len))
+        }
+    }
+    #[inline(always)]
+    fn pop_two_unchecked(&mut self) -> (VmValue, VmValue) {
+        let a = self.pop_unchecked();
+        let b = self.pop_unchecked();
+        (a, b)
+    }
+
     /// Helper functions that wraps the Vec::pop to return valid VmError or VmValue
     fn pop(&mut self) -> Result<VmValue, VmError> {
         self.stack
