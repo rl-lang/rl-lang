@@ -124,3 +124,35 @@ pub fn vm_loop(source: SourceFile, ast: Ast, statements: Vec<Statement>) {
         }
     }
 }
+
+#[cfg(all(feature = "eval", feature = "cranelift", feature = "vm"))]
+pub fn cranelift_loop(source: SourceFile, ast: Ast, statements: Vec<Statement>) {
+    use rl_vm::Compiler;
+
+    let mut evaluator = Evaluator::default()
+        .with_stdlib()
+        .with_source_file(source.clone());
+
+    evaluator.resolver.current_dir = std::path::Path::new(source.name.as_ref())
+        .parent()
+        .unwrap_or(std::path::Path::new(""))
+        .to_path_buf();
+
+    let statements = evaluator.resolver.resolve_program(ast, statements);
+
+    let chunk = match Compiler::new(&evaluator.resolver.ast_arena).compile(&statements) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("vm compile error: {}", e.0);
+            std::process::exit(1);
+        }
+    };
+
+    match rl_cranelift::run_chunk(&chunk) {
+        Ok(val) => println!("{}", val),
+        Err(e) => {
+            eprintln!("cranelift error: {}", e.0);
+            std::process::exit(1);
+        }
+    }
+}

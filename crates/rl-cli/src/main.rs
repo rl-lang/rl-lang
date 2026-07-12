@@ -246,6 +246,14 @@ fn main() {
                     eprintln!("error: --vm requires the `eval` feature");
                     std::process::exit(1)
                 }
+            } else if cranelift {
+                #[cfg(all(feature = "eval", feature = "vm", feature = "eval"))]
+                crate::logic_loops::cranelift_loop(source, ast, statements);
+                #[cfg(not(all(feature = "eval", feature = "cranelift", feature = "vm")))]
+                {
+                    eprintln!("error: --cranelift requires the vm eval and cranelift features");
+                    std::process::exit(1)
+                }
             } else if cfg!(feature = "eval") {
                 eval_loop(source, ast, statements, 3);
             }
