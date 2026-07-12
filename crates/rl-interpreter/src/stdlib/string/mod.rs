@@ -1,0 +1,64 @@
+//! `std::str` - string manipulation functions.
+//!
+//! Note: the module name in rl imports is `str`, not `string`
+//! (registered as `Module::new("str")`).
+//!
+//! `format` uses `with_raw_function` for variadic `{}` placeholder substitution.
+//! `concat` also variadic - concatenates any number of values as strings.
+
+mod bytes;
+mod char_at;
+mod chars;
+mod concat;
+mod contains;
+mod count;
+mod ends_with;
+mod format;
+mod index_of;
+mod is_empty;
+mod join;
+mod pad_left;
+mod pad_right;
+mod repeat;
+mod replace;
+mod reverse;
+mod slice;
+mod split;
+mod starts_with;
+mod to_lower;
+mod to_upper;
+mod trim;
+mod trim_end;
+mod trim_start;
+
+use crate::native::Module;
+
+pub use rl_commons::keywords::string::KEYWORDS;
+
+pub fn module() -> Module {
+    Module::new("str")
+        .with_function("to_upper", to_upper::std_to_upper)
+        .with_function("to_lower", to_lower::std_to_lower)
+        .with_function("trim", trim::std_trim)
+        .with_function("trim_end", trim_end::std_trim_end)
+        .with_function("trim_start", trim_start::std_trim_start)
+        .with_function("repeat", repeat::std_repeat)
+        .with_function("is_empty", is_empty::std_is_empty)
+        .with_raw_function("concat", concat::std_concat)
+        .with_function("char_at", char_at::std_char_at)
+        .with_function("bytes", bytes::std_bytes)
+        .with_function("chars", chars::std_chars)
+        .with_function("reverse", reverse::std_reverse)
+        .with_function("slice", slice::std_slice)
+        .with_function("contains", contains::std_contains)
+        .with_function("starts_with", starts_with::std_starts_with)
+        .with_function("ends_with", ends_with::std_ends_with)
+        .with_function("join", join::std_join)
+        .with_function("split", split::std_split)
+        .with_function("pad_right", pad_right::std_pad_right)
+        .with_function("pad_left", pad_left::std_pad_left)
+        .with_function("replace", replace::std_replace)
+        .with_function("count", count::std_count)
+        .with_function("index_of", index_of::std_index_of)
+        .with_raw_function("format", format::std_format)
+}

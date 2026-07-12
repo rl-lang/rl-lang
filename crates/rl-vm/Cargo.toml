@@ -1,0 +1,8 @@
+[package]
+name = "rl-vm"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+rl-ast.workspace = true
+rl-lexer.workspace = true

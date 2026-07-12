@@ -1,0 +1,11 @@
+[package]
+name = "rl-tooling"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+rl-lexer.workspace = true
+serde.workspace = true
+toml.workspace = true
+tiny_http.workspace = true
+ureq.workspace = true

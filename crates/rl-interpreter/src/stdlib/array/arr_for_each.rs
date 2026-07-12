@@ -1,0 +1,50 @@
+use crate::{evaluator::Evaluator, values::Value};
+use rl_ast::statements::TypeAnnotation;
+use rl_utils::{errors::Error, span::Span};
+
+pub fn std_arr_for_each(
+    eval: &mut Evaluator,
+    array: Value,
+    function: Value,
+    span: Span,
+) -> Result<Value, Error> {
+    let (_, items) = match array {
+        Value::Values { items_type, items } => (items_type, items),
+
+        other => {
+            return Err(eval.err(
+                format!(
+                    "arr_for_each() accepts only arrays found {}",
+                    other.type_name()
+                )
+                .to_string(),
+                span,
+            ));
+        }
+    };
+    let Value::Function(data) = &function else {
+        return Err(eval.err(
+            format!(
+                "arr_for_each() expected function or lambda found {}",
+                function.type_name()
+            ),
+            span,
+        ));
+    };
+
+    if !matches!(data.return_type, Some(TypeAnnotation::Null)) {
+        return Err(eval.err(
+            format!(
+                "arr_for_each() expected function or lambda with no (or null) return type found {:?}",
+                data.return_type
+            ),
+            span,
+        ));
+    }
+
+    for item in items {
+        eval.call_value(function.clone(), vec![item.clone()], span)?;
+    }
+
+    Ok(Value::Null)
+}

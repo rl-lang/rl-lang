@@ -1,0 +1,39 @@
+[package]
+name = "rl-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "rl"
+path = "src/main.rs"
+
+[dependencies]
+rl-utils.workspace = true
+rl-lexer.workspace = true
+rl-ast.workspace = true
+rl-parser.workspace = true
+rl-resolver.workspace = true
+rl-vm.workspace = true
+tokio = {workspace = true , optional = true }
+rl-cranelift = { workspace = true, optional = true}
+rl-interpreter.workspace = true
+rl-checker.workspace = true
+rl-docs.workspace = true
+rl-tooling.workspace = true
+rl-repl = { workspace = true, optional = true }
+rl-lsp = { workspace = true, optional = true }
+clap.workspace = true
+toml.workspace = true
+serde.workspace = true
+log = { workspace = true, optional = true }
+env_logger = { workspace = true, optional = true }
+
+[features]
+default = ["repl", "run", "eval"]
+run = []
+repl = ["dep:rl-repl"]
+debug = ["dep:env_logger", "dep:log"]
+eval = []
+vm = []
+cranelift = ["rl-cranelift"]
+lsp = ["dep:rl-lsp", "dep:tokio"]

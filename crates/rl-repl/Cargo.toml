@@ -1,0 +1,14 @@
+[package]
+name = "rl-repl"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+rl-ast.workspace = true
+rl-docs.workspace = true
+rl-interpreter.workspace = true
+rl-parser.workspace = true
+rl-lexer.workspace = true
+rl-utils.workspace = true
+crossterm.workspace = true
+ratatui.workspace = true

@@ -1,0 +1,13 @@
+[package]
+name = "rl-parser"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+rl-ast.workspace = true
+rl-lexer.workspace = true
+rl-utils.workspace = true
+log = { workspace = true, optional = true }
+
+[features]
+debug = ["dep:log"]

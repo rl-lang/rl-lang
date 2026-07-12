@@ -1,0 +1,63 @@
+//! `std::math::consts` - mathematical constants from [`std::f64::consts`].
+//!
+//! All constants are zero-argument functions returning `f64`.
+//! Accessed as `std::math::consts::PI()` in rl.
+
+mod e;
+mod euler_gamma;
+mod frac_1_pi;
+mod frac_1_sqrt_2;
+mod frac_2_pi;
+mod frac_2_sqrt_pi;
+mod frac_pi_2;
+mod frac_pi_3;
+mod frac_pi_4;
+mod frac_pi_6;
+mod frac_pi_8;
+mod inf;
+mod is_inf;
+mod is_nan;
+mod ln_10;
+mod ln_2;
+mod log10_2;
+mod log10_e;
+mod log2_10;
+mod log2_e;
+mod nan;
+mod phi;
+mod pi;
+mod sqrt_2;
+mod tau;
+
+use crate::native::Module;
+
+pub use rl_commons::keywords::math::constants::KEYWORDS;
+
+pub fn module() -> Module {
+    Module::new("consts")
+        .with_function("E", e::std_e)
+        .with_function("PI", pi::std_pi)
+        .with_function("PHI", phi::std_phi)
+        .with_function("TAU", tau::std_tau)
+        .with_function("INF", inf::std_inf)
+        .with_function("NAN", nan::std_nan)
+        .with_function("is_inf", is_inf::std_is_inf)
+        .with_function("is_nan", is_nan::std_is_nan)
+        .with_function("FRAC_1_PI", frac_1_pi::std_frac_1_pi)
+        .with_function("FRAC_2_PI", frac_2_pi::std_frac_2_pi)
+        .with_function("FRAC_1_SQRT_2", frac_1_sqrt_2::std_frac_1_sqrt_2)
+        .with_function("FRAC_2_SQRT_PI", frac_2_sqrt_pi::std_frac_2_sqrt_pi)
+        .with_function("EULER_GAMMA", euler_gamma::std_euler_gamma)
+        .with_function("LN_10", ln_10::std_ln_10)
+        .with_function("LN_2", ln_2::std_ln_2)
+        .with_function("LOG2_E", log2_e::std_log2_e)
+        .with_function("LOG2_10", log2_10::std_log2_10)
+        .with_function("LOG10_2", log10_2::std_log10_2)
+        .with_function("LOG10_E", log10_e::std_log10_e)
+        .with_function("FRAC_PI_2", frac_pi_2::std_frac_pi_2)
+        .with_function("FRAC_PI_3", frac_pi_3::std_frac_pi_3)
+        .with_function("FRAC_PI_4", frac_pi_4::std_frac_pi_4)
+        .with_function("FRAC_PI_6", frac_pi_6::std_frac_pi_6)
+        .with_function("FRAC_PI_8", frac_pi_8::std_frac_pi_8)
+        .with_function("SQRT_2", sqrt_2::std_sqrt_2)
+}

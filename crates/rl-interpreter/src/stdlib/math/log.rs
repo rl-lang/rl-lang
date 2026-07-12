@@ -1,0 +1,20 @@
+use crate::{evaluator::Evaluator, values::Value};
+use rl_utils::{errors::Error, span::Span};
+
+pub fn std_log(eval: &mut Evaluator, a: Value, base: Value, span: Span) -> Result<Value, Error> {
+    match (a, base) {
+        (Value::Integer(i), Value::Integer(base)) => Ok(Value::Float((i as f64).log(base as f64))),
+        (Value::Float(f), Value::Float(base)) => Ok(Value::Float(f.log(base))),
+        (Value::Float(f), Value::Integer(base)) => Ok(Value::Float(f.log(base as f64))),
+        (Value::Integer(i), Value::Float(base)) => Ok(Value::Float((i as f64).log(base))),
+
+        (a, base) => Err(eval.err(
+            format!(
+                "log() expects a number, got ({}, {})",
+                a.type_name(),
+                base.type_name()
+            ),
+            span,
+        )),
+    }
+}
