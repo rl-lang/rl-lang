@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::vm::chunk::{Chunk, OpCode, VmFunction, VmValue};
+use crate::chunk::{Chunk, OpCode, VmFunction, VmValue};
 
 #[derive(Debug)]
 pub struct VmError(pub String);

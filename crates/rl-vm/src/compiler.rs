@@ -1,10 +1,10 @@
 use std::rc::Rc;
 
-use crate::ast::{
+use crate::chunk::{Chunk, OpCode, VmFunction, VmValue};
+use rl_ast::{
     Ast, ExprId, nodes::ExpressionKind, statements::Statement, statements::StatementKind,
 };
-use crate::lexer::tokentypes::TokenType;
-use crate::vm::chunk::{Chunk, OpCode, VmFunction, VmValue};
+use rl_lexer::tokentypes::TokenType;
 
 #[derive(Debug)]
 pub struct CompileError(pub String);
