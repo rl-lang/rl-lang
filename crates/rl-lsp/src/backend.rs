@@ -4,8 +4,8 @@
 //! latest source text. Every file event updates this cache so [`hover`] always
 //! has the most recent content to work with.
 
-use crate::lsp::hover::run_hover;
-use crate::lsp::pipeline::run_pipeline;
+use crate::hover::run_hover;
+use crate::pipeline::run_pipeline;
 use std::collections::HashMap;
 use tokio::sync::RwLock;
 use tower_lsp::jsonrpc::Result;

@@ -4,10 +4,11 @@
 //! keystroke caused the LSP to hang on infinite loops (e.g. `while true {}`).
 //! The [`TypeChecker`] walks the AST without executing anything, making it
 //! always safe to run on in-progress or non-terminating source.
-use crate::{
-    checker::TypeChecker, lexer::tokenizer::Tokenizer, lsp::to_diagnostic::error_to_diagnostic,
-    parser::parser_logic::Parser, utils::source::SourceFile,
-};
+use crate::to_diagnostic::error_to_diagnostic;
+use rl_checker::TypeChecker;
+use rl_lexer::tokenizer::Tokenizer;
+use rl_parser::parser_logic::Parser;
+use rl_utils::source::SourceFile;
 use tower_lsp::lsp_types::{Diagnostic, Url};
 
 /// lex -> parse -> type-check the given source string and return LSP diagnostics.

@@ -19,7 +19,7 @@
 
 use tower_lsp::{LspService, Server};
 
-use crate::lsp::backend::Backend;
+use crate::backend::Backend;
 
 mod backend;
 mod hover;

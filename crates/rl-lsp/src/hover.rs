@@ -5,13 +5,12 @@
 //! [`run_hover`] finds the entry whose span contains the cursor offset and
 //! whose span is the smallest (to prefer the most specific match when multiple
 //! spans overlap on the same line).
-use crate::{
-    checker::TypeChecker,
-    lexer::{tokenizer::Tokenizer, tokentypes::TokenType},
-    lsp::utils::{offset_to_position, position_to_offset},
-    parser::parser_logic::Parser,
-    utils::{source::SourceFile, span::Span},
-};
+use crate::utils::{offset_to_position, position_to_offset};
+use rl_checker::TypeChecker;
+use rl_lexer::{tokenizer::Tokenizer, tokentypes::TokenType};
+use rl_parser::parser_logic::Parser;
+use rl_utils::{source::SourceFile, span::Span};
+
 use tower_lsp::lsp_types::{Hover, HoverContents, MarkupContent, MarkupKind, Position, Range, Url};
 
 /// Runs the full pipeline on `source` and returns a [`Hover`] for `position`,
