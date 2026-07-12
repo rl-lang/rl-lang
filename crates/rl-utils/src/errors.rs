@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use ariadne::{Color, Label, Report, ReportKind, Source};
 
-use rl_utils::source::SourceFile;
-use rl_utils::span::Span;
+use crate::source::SourceFile;
+use crate::span::Span;
 
 /// heavy optional fields, heap-allocated so `Error` stays small on the stack
 #[derive(Debug, Clone)]
@@ -193,7 +193,7 @@ impl Error {
     }
 
     /// Extracts the primary [`Span`] of this error, if one was set.
-    pub fn span(&self) -> Option<crate::utils::span::Span> {
+    pub fn span(&self) -> Option<crate::span::Span> {
         self.detail.as_ref().map(|d| d.primary.0)
     }
 }
