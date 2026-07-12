@@ -26,6 +26,14 @@ impl<'a> Compiler<'a> {
         }
     }
 
+    fn resolve(&self, depth: usize, slot: usize) -> Option<u16> {
+        if depth == self.scope_bases.len() {
+            return None;
+        }
+        let base = self.scope_bases[self.scope_bases.len() - 1 - depth];
+        Some(base + slot as u16)
+    }
+
     /// Entry function
     /// returns compiled Chunk
     /// stops on first error
