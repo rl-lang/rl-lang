@@ -1206,6 +1206,8 @@ dependencies = [
  "rl-docs",
  "rl-interpreter",
  "rl-lexer",
+ "rl-parser",
+ "rl-utils",
 ]
 
 [[package]]
@@ -1229,6 +1231,7 @@ dependencies = [
  "rl-utils",
  "rl-vm",
  "serde",
+ "tokio",
  "toml",
 ]
 
@@ -1257,6 +1260,7 @@ name = "rl-interpreter"
 version = "0.1.4"
 dependencies = [
  "crossterm",
+ "log",
  "rl-ast",
  "rl-lexer",
  "rl-parser",
@@ -1270,6 +1274,7 @@ dependencies = [
 name = "rl-lexer"
 version = "0.1.4"
 dependencies = [
+ "log",
  "rl-utils",
 ]
 
@@ -1277,7 +1282,9 @@ dependencies = [
 name = "rl-lsp"
 version = "0.1.4"
 dependencies = [
+ "rl-checker",
  "rl-lexer",
+ "rl-parser",
  "rl-utils",
  "tokio",
  "tower-lsp",
@@ -1287,6 +1294,7 @@ dependencies = [
 name = "rl-parser"
 version = "0.1.4"
 dependencies = [
+ "log",
  "rl-ast",
  "rl-lexer",
  "rl-utils",
@@ -1301,6 +1309,8 @@ dependencies = [
  "rl-ast",
  "rl-docs",
  "rl-interpreter",
+ "rl-lexer",
+ "rl-parser",
  "rl-utils",
 ]
 
@@ -1309,6 +1319,9 @@ name = "rl-resolver"
 version = "0.1.4"
 dependencies = [
  "rl-ast",
+ "rl-lexer",
+ "rl-parser",
+ "rl-utils",
 ]
 
 [[package]]
@@ -1327,6 +1340,7 @@ name = "rl-utils"
 version = "0.1.4"
 dependencies = [
  "ariadne",
+ "log",
 ]
 
 [[package]]
