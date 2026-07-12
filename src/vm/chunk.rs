@@ -83,6 +83,20 @@ pub enum OpCode {
 }
 
 impl OpCode {
+    /// # Safety
+    /// `byte` must be valid discriminant (0..25)
+    /// and that's only true for bytecode emitted by this compiler
+    #[inline(always)]
+    pub fn from_u8_unchecked(byte: u8) -> Self {
+        debug_assert!(
+            byte <= OpCode::SetGlobal as u8,
+            "corrupt bytecode: opcode {byte}"
+        );
+        unsafe { std::mem::transmute::<u8, OpCode>(byte) }
+    }
+
+    // checked variant of the unsafe function above
+    // might have a use for it later
     pub fn from_u8(byte: u8) -> Self {
         match byte {
             0 => OpCode::Const,

@@ -76,7 +76,7 @@ impl Vm {
                 continue;
             }
 
-            let op = OpCode::from_u8(chunk!().code[ip]);
+            let op = OpCode::from_u8_unchecked(chunk!().code[ip]);
             ip += 1;
 
             match op {
