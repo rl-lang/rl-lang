@@ -1,9 +1,11 @@
 use std::rc::Rc;
 
-use crate::ast::statements::TypeAnnotation;
-use crate::interpreter::{evaluator::Evaluator, values::Value};
-use crate::utils::errors::{Error, Reason};
-use crate::utils::span::Span;
+use crate::{evaluator::Evaluator, values::Value};
+use rl_ast::statements::TypeAnnotation;
+use rl_utils::{
+    errors::{Error, Reason},
+    span::Span,
+};
 
 /// Zips two arrays into an array of tuples.
 ///

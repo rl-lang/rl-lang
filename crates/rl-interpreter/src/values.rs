@@ -1,9 +1,7 @@
 //! Runtime value types for the rl interpreter.
 
-use crate::{
-    ast::statements::{Param, Statement, TypeAnnotation},
-    interpreter::evaluator::EnvironmentItem,
-};
+use crate::evaluator::EnvironmentItem;
+use rl_ast::statements::{Param, Statement, TypeAnnotation};
 use std::{cell::RefCell, collections::HashMap, fmt, rc::Rc};
 
 /// A runtime value produced by evaluating an rl expression.

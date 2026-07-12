@@ -1,7 +1,7 @@
 use crate::{
-    interpreter::evaluator::Evaluator,
-    interpreter::stdlib::common::{verr, vi, vok, vs},
-    interpreter::values::Value,
+    evaluator::Evaluator,
+    stdlib::common::{verr, vi, vok, vs},
+    values::Value,
 };
 
 pub fn func(eval: &mut Evaluator, min: i64, max: i64) -> Value {

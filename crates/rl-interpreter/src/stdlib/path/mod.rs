@@ -16,7 +16,7 @@ mod path_push;
 mod path_set_extension;
 mod path_stem;
 
-use crate::interpreter::native::Module;
+use crate::native::Module;
 
 pub const KEYWORDS: &[&str] = &[
     "path_exists",

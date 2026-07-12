@@ -1,8 +1,6 @@
-use crate::{
-    ast::statements::TypeAnnotation,
-    interpreter::{evaluator::Evaluator, values::Value},
-    utils::{errors::Error, span::Span},
-};
+use crate::{evaluator::Evaluator, values::Value};
+use rl_ast::statements::TypeAnnotation;
+use rl_utils::{errors::Error, span::Span};
 use std::process::Command;
 
 #[cfg(target_os = "windows")]

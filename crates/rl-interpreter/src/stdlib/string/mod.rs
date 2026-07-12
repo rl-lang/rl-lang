@@ -31,7 +31,7 @@ mod trim;
 mod trim_end;
 mod trim_start;
 
-use crate::interpreter::native::Module;
+use crate::native::Module;
 
 pub const KEYWORDS: &[&str] = &[
     "to_lower",

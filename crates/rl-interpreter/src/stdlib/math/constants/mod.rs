@@ -29,7 +29,7 @@ mod pi;
 mod sqrt_2;
 mod tau;
 
-use crate::interpreter::native::Module;
+use crate::native::Module;
 
 pub const KEYWORDS: &[&str] = &[
     "E",

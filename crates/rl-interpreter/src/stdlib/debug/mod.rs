@@ -1,5 +1,7 @@
 //! `std::debug` - assertions, panics, and debug utilities.
 
+use crate::native::Module;
+
 mod assert;
 mod assert_approx_eq;
 mod assert_eq;
@@ -33,8 +35,8 @@ pub const KEYWORDS: &[&str] = &[
     "bench",
 ];
 
-pub fn module() -> crate::interpreter::native::Module {
-    use crate::interpreter::native::Module;
+pub fn module() -> Module {
+    use crate::native::Module;
     Module::new("debug")
         .with_raw_function("assert", assert::func)
         .with_raw_function("assert_eq", assert_eq::func)

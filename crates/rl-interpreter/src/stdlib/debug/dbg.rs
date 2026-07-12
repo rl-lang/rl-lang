@@ -1,4 +1,4 @@
-use crate::interpreter::{evaluator::Evaluator, values::Value};
+use crate::{evaluator::Evaluator, values::Value};
 
 pub fn func(eval: &mut Evaluator, value: Value) -> Value {
     let text = format!("[dbg] {} ({})\n", value, value.type_name());

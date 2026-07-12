@@ -1,5 +1,5 @@
-use crate::interpreter::stdlib::common::{extract_number, vb, verr, vok, vs};
-use crate::interpreter::{evaluator::Evaluator, values::Value};
+use crate::stdlib::common::{extract_number, vb, verr, vok, vs};
+use crate::{evaluator::Evaluator, values::Value};
 use crossterm::event::poll;
 use std::time::Duration;
 

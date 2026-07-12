@@ -1,15 +1,15 @@
 //! Statement evaluation - the main dispatch loop and control flow primitives.
 
 use crate::{
-    ast::statements::{FunctionAttribute, MatchPattern, Statement, StatementKind, TypeAnnotation},
-    interpreter::{
-        evaluator::Evaluator,
-        values::{FunctionData, Value},
-    },
-    lexer::tokenizer::Tokenizer,
-    parser::parser_logic::Parser,
-    utils::{errors::Error, source::SourceFile, span::Span},
+    evaluator::Evaluator,
+    values::{FunctionData, Value},
 };
+use rl_ast::statements::{
+    FunctionAttribute, MatchPattern, Statement, StatementKind, TypeAnnotation,
+};
+use rl_lexer::tokenizer::Tokenizer;
+use rl_parser::parser_logic::Parser;
+use rl_utils::{errors::Error, source::SourceFile, span::Span};
 use std::sync::Arc;
 use std::{path::Path, rc::Rc};
 
@@ -539,7 +539,7 @@ impl Evaluator {
                     self.insert_value(
                         *slot,
                         Value::Integer(item),
-                        crate::ast::statements::TypeAnnotation::Int,
+                        TypeAnnotation::Int,
                         statement.span,
                     )?;
 
@@ -683,12 +683,7 @@ impl Evaluator {
                     captured_env: vec![],
                 }));
                 self.fn_names.insert(name.clone(), *slot);
-                self.insert_value(
-                    *slot,
-                    func,
-                    crate::ast::statements::TypeAnnotation::Fn,
-                    statement.span,
-                )?;
+                self.insert_value(*slot, func, TypeAnnotation::Fn, statement.span)?;
             }
 
             StatementKind::Return(expr) => {

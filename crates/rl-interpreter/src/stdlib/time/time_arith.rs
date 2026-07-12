@@ -1,4 +1,4 @@
-use crate::interpreter::evaluator::Evaluator;
+use crate::evaluator::Evaluator;
 
 // yes... useless... for now
 // should add timestamp or time type later

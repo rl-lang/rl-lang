@@ -1,6 +1,6 @@
 //! `std::net` - TCP/UDP networking built directly on `std::net`.
 
-use crate::interpreter::native::Module;
+use crate::native::Module;
 use std::net::{TcpListener, TcpStream, UdpSocket};
 
 mod common;

@@ -1,11 +1,11 @@
-use crate::interpreter::{
+use crate::{
     evaluator::Evaluator,
     stdlib::common::{extract_string, verr, vok, vs},
     values::Value,
 };
-use crate::lexer::tokenizer::Tokenizer;
-use crate::parser::parser_logic::Parser;
-use crate::utils::source::SourceFile;
+use rl_lexer::tokenizer::Tokenizer;
+use rl_parser::parser_logic::Parser;
+use rl_utils::source::SourceFile;
 
 pub fn func(eval: &mut Evaluator, value: Value) -> Value {
     let code = match extract_string(value, "eval") {

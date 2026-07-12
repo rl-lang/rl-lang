@@ -21,11 +21,11 @@
 //! Module::new("math").with_function("add", my_fn);
 //! ```
 
-use crate::ast::statements::TypeAnnotation;
-use crate::interpreter::evaluator::Evaluator;
-use crate::interpreter::values::Value;
-use crate::utils::errors::{Error, Reason};
-use crate::utils::span::Span;
+use crate::evaluator::Evaluator;
+use crate::values::Value;
+use rl_ast::statements::TypeAnnotation;
+use rl_utils::errors::{Error, Reason};
+use rl_utils::span::Span;
 use std::collections::HashMap;
 use std::sync::Arc;
 

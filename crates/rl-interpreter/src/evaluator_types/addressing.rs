@@ -3,13 +3,11 @@
 //! `Index` nodes), used by both index-read fast paths and index-assign.
 
 use crate::{
-    ast::{Ast, ExprId, nodes::ExpressionKind},
-    interpreter::{
-        evaluator::{EnvironmentItem, Evaluator},
-        values::{MapKey, Value},
-    },
-    utils::{errors::Error, span::Span},
+    evaluator::{EnvironmentItem, Evaluator},
+    values::{MapKey, Value},
 };
+use rl_ast::{Ast, ExprId, nodes::ExpressionKind};
+use rl_utils::{errors::Error, span::Span};
 
 pub fn get_root_addr(id: ExprId, ast: &Ast) -> (usize, usize) {
     match &ast.exprs.get(id).kind {

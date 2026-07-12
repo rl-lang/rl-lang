@@ -15,7 +15,7 @@ mod rmdir;
 mod rmdir_all;
 mod temp_dir;
 
-use crate::interpreter::native::Module;
+use crate::native::Module;
 
 pub const KEYWORDS: &[&str] = &[
     "mkdir",

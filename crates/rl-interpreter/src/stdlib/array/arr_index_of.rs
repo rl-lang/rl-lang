@@ -1,7 +1,5 @@
-use crate::{
-    interpreter::{evaluator::Evaluator, values::Value},
-    utils::{errors::Error, span::Span},
-};
+use crate::{evaluator::Evaluator, values::Value};
+use rl_utils::{errors::Error, span::Span};
 
 pub fn std_arr_index_of(
     eval: &mut Evaluator,

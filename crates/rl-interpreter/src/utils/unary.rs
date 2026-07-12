@@ -6,12 +6,9 @@
 //! | `-`      | `int`         | `int`                   |
 //! | `-`      | `float`       | `float`                 |
 
-use crate::{
-    interpreter::evaluator::Evaluator,
-    interpreter::values::Value,
-    lexer::tokentypes::TokenType,
-    utils::{errors::Error, span::Span},
-};
+use crate::{evaluator::Evaluator, values::Value};
+use rl_lexer::tokentypes::TokenType;
+use rl_utils::{errors::Error, span::Span};
 
 impl Evaluator {
     fn type_mismatch_unary(

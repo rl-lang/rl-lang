@@ -1,4 +1,4 @@
-use crate::interpreter::{
+use crate::{
     stdlib::common::{extract_int, extract_number},
     values::Value,
 };

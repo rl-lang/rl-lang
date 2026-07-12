@@ -1,14 +1,12 @@
 use crate::{
-    interpreter::{
-        evaluator::Evaluator,
-        stdlib::{
-            common::{check_arity_range, extract_string, verr, vs},
-            http::common::ureq_result_to_value,
-        },
-        values::Value,
+    evaluator::Evaluator,
+    stdlib::{
+        common::{check_arity_range, extract_string, verr, vs},
+        http::common::ureq_result_to_value,
     },
-    utils::{errors::Error, span::Span},
+    values::Value,
 };
+use rl_utils::{errors::Error, span::Span};
 
 pub fn func(_: &mut Evaluator, args: Vec<Value>, span: Span) -> Result<Value, Error> {
     check_arity_range(&args, 2, 4, "http_request", span)?;

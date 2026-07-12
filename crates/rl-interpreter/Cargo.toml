@@ -12,3 +12,7 @@ rl-utils.workspace = true
 crossterm.workspace = true
 tiny_http.workspace = true
 ureq.workspace = true
+log = { workspace = true, optional = true }
+
+[features]
+debug = ["dep:log"]

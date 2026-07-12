@@ -1,14 +1,12 @@
-use crate::lexer::tokenizer::Tokenizer;
-use crate::parser::parser_logic::Parser;
-use crate::utils::source::SourceFile;
 use crate::{
-    checker::TypeChecker,
-    interpreter::{
-        evaluator::Evaluator,
-        stdlib::common::{extract_string, verr, vok, vs},
-        values::Value,
-    },
+    evaluator::Evaluator,
+    stdlib::common::{extract_string, verr, vok, vs},
+    values::Value,
 };
+use rl_checker::TypeChecker;
+use rl_lexer::tokenizer::Tokenizer;
+use rl_parser::parser_logic::Parser;
+use rl_utils::source::SourceFile;
 
 pub fn func(_: &mut Evaluator, value: Value) -> Value {
     let code = match extract_string(value, "check") {

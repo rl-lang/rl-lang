@@ -1,6 +1,6 @@
-use crate::interpreter::stdlib::common::{try_fn, verr, vnl, vok, vs};
-use crate::interpreter::stdlib::terminal::common::extract_byte;
-use crate::interpreter::{evaluator::Evaluator, values::Value};
+use crate::stdlib::common::{try_fn, verr, vnl, vok, vs};
+use crate::stdlib::terminal::common::extract_byte;
+use crate::{evaluator::Evaluator, values::Value};
 use crossterm::{
     execute,
     style::{Color, SetForegroundColor},

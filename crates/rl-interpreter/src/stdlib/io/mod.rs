@@ -17,7 +17,7 @@ mod read_file;
 mod read_lines;
 mod write_file;
 
-use crate::interpreter::native::Module;
+use crate::native::Module;
 
 pub const KEYWORDS: &[&str] = &[
     "read",

@@ -1,7 +1,7 @@
 use crate::{
-    interpreter::evaluator::Evaluator,
-    interpreter::stdlib::common::{vc, verr, vok, vs},
-    interpreter::values::Value,
+    evaluator::Evaluator,
+    stdlib::common::{vc, verr, vok, vs},
+    values::Value,
 };
 
 pub fn std_char_at(_: &mut Evaluator, string: String, index: i64) -> Value {

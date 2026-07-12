@@ -10,7 +10,7 @@ mod now;
 mod time_arith;
 mod time_parts;
 
-use crate::interpreter::native::Module;
+use crate::native::Module;
 
 pub const KEYWORDS: &[&str] = &[
     "time_now",

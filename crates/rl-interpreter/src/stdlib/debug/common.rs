@@ -1,11 +1,9 @@
 use crate::{
-    interpreter::{
-        evaluator::Evaluator,
-        stdlib::common::{verr, vok, vs},
-        values::Value,
-    },
-    utils::{errors::Error, span::Span},
+    evaluator::Evaluator,
+    stdlib::common::{verr, vok, vs},
+    values::Value,
 };
+use rl_utils::{errors::Error, span::Span};
 
 pub fn as_f64(value: &Value) -> Option<f64> {
     match value {

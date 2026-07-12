@@ -12,7 +12,7 @@ pub mod count_bits;
 pub mod leading_zeros;
 pub mod trailing_zeros;
 
-use crate::interpreter::native::Module;
+use crate::native::Module;
 
 pub const KEYWORDS: &[&str] = &[
     "bit_and",

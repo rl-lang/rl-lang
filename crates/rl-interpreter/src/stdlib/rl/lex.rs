@@ -1,14 +1,14 @@
 use std::rc::Rc;
 
-use crate::ast::statements::TypeAnnotation;
-use crate::interpreter::stdlib::common::vi;
-use crate::interpreter::{
+use crate::stdlib::common::vi;
+use crate::{
     evaluator::Evaluator,
     stdlib::common::{extract_string, verr, vok, vs},
     values::Value,
 };
-use crate::lexer::tokenizer::Tokenizer;
-use crate::utils::source::SourceFile;
+use rl_ast::statements::TypeAnnotation;
+use rl_lexer::tokenizer::Tokenizer;
+use rl_utils::source::SourceFile;
 
 pub fn func(_: &mut Evaluator, value: Value) -> Value {
     let code = match extract_string(value, "lex") {

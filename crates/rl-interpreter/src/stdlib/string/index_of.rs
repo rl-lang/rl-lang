@@ -1,4 +1,4 @@
-use crate::interpreter::evaluator::Evaluator;
+use crate::evaluator::Evaluator;
 
 pub fn std_index_of(_: &mut Evaluator, string: String, sub: String) -> i64 {
     match string.find(&sub) {

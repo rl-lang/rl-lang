@@ -1,4 +1,4 @@
-use crate::interpreter::evaluator::Evaluator;
+use crate::evaluator::Evaluator;
 
 pub fn std_is_prime(_: &mut Evaluator, x: i64) -> bool {
     let x = x as u64;

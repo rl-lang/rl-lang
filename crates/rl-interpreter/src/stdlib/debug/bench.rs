@@ -1,11 +1,9 @@
 use crate::{
-    interpreter::{
-        evaluator::Evaluator,
-        stdlib::common::{verr, vf, vok, vs},
-        values::Value,
-    },
-    utils::span::Span,
+    evaluator::Evaluator,
+    stdlib::common::{verr, vf, vok, vs},
+    values::Value,
 };
+use rl_utils::span::Span;
 
 pub fn func(eval: &mut Evaluator, function: Value, iterations_val: Value) -> Value {
     if !matches!(function, Value::Function { .. }) {

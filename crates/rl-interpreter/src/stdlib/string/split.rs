@@ -1,7 +1,5 @@
-use crate::{
-    ast::statements::TypeAnnotation,
-    interpreter::{evaluator::Evaluator, values::Value},
-};
+use crate::{evaluator::Evaluator, values::Value};
+use rl_ast::statements::TypeAnnotation;
 
 pub fn std_split(_: &mut Evaluator, string: String, delim: String) -> Value {
     Value::Values {

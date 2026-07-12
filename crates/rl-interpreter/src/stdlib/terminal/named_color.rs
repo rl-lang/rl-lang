@@ -1,5 +1,5 @@
-use crate::interpreter::stdlib::common::{extract_string, try_fn, verr, vs};
-use crate::interpreter::{evaluator::Evaluator, values::Value};
+use crate::stdlib::common::{extract_string, try_fn, verr, vs};
+use crate::{evaluator::Evaluator, values::Value};
 use crossterm::{
     execute,
     style::{Color, SetBackgroundColor, SetForegroundColor},

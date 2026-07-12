@@ -1,4 +1,4 @@
-use crate::interpreter::evaluator::Evaluator;
+use crate::evaluator::Evaluator;
 
 pub fn std_lcm(_: &mut Evaluator, x: i64, y: i64) -> i64 {
     let mut a = x as u64;

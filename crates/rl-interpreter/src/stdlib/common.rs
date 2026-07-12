@@ -1,9 +1,7 @@
-use crate::{
-    interpreter::values::Value,
-    utils::{
-        errors::{Error, Reason},
-        span::Span,
-    },
+use crate::values::Value;
+use rl_utils::{
+    errors::{Error, Reason},
+    span::Span,
 };
 
 pub fn check_arity(args: &[Value], expected: usize, name: &str, span: Span) -> Result<(), Error> {

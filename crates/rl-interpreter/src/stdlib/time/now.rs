@@ -1,4 +1,4 @@
-use crate::interpreter::evaluator::Evaluator;
+use crate::evaluator::Evaluator;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub fn now(_: &mut Evaluator) -> i64 {

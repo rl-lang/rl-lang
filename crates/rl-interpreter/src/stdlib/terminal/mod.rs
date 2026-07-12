@@ -29,7 +29,7 @@ mod size;
 mod sync_output;
 mod wrap;
 
-use crate::interpreter::native::Module;
+use crate::native::Module;
 
 pub const KEYWORDS: &[&str] = &[
     "term_enter",

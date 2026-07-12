@@ -12,7 +12,7 @@ mod rand_int_range;
 mod random_general;
 pub mod xoshiro;
 
-use crate::interpreter::native::Module;
+use crate::native::Module;
 
 pub const KEYWORDS: &[&str] = &[
     "rand_int",

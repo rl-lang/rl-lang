@@ -1,6 +1,6 @@
-use crate::interpreter::stdlib::common::{verr, vnl, vok, vs};
-use crate::interpreter::stdlib::terminal::common::extract_u16;
-use crate::interpreter::{evaluator::Evaluator, values::Value};
+use crate::stdlib::common::{verr, vnl, vok, vs};
+use crate::stdlib::terminal::common::extract_u16;
+use crate::{evaluator::Evaluator, values::Value};
 use crossterm::{cursor::MoveToRow, execute};
 use std::io::stdout;
 

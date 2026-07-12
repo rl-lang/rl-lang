@@ -1,6 +1,6 @@
 //! `std::result` - functions for working with `result[T]` values.
 
-use crate::interpreter::native::Module;
+use crate::native::Module;
 
 mod is_err;
 mod is_ok;

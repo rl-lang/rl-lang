@@ -1,11 +1,9 @@
 use crate::{
-    ast::statements::TypeAnnotation,
-    interpreter::{
-        evaluator::Evaluator,
-        stdlib::common::{verr, vok, vs},
-        values::Value,
-    },
+    evaluator::Evaluator,
+    stdlib::common::{verr, vok, vs},
+    values::Value,
 };
+use rl_ast::statements::TypeAnnotation;
 
 pub fn std_list_dir(_: &mut Evaluator, path: String) -> Value {
     match std::fs::read_dir(&path) {

@@ -1,7 +1,5 @@
-use crate::{
-    interpreter::{evaluator::Evaluator, stdlib::debug::common::as_f64, values::Value},
-    utils::{errors::Error, span::Span},
-};
+use crate::{evaluator::Evaluator, stdlib::debug::common::as_f64, values::Value};
+use rl_utils::{errors::Error, span::Span};
 
 pub fn func(eval: &mut Evaluator, args: Vec<Value>, span: Span) -> Result<Value, Error> {
     // third spot IS NOT MESSAGE it is epsilon

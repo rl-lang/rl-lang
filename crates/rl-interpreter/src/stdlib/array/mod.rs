@@ -5,7 +5,7 @@
 //! with the correct return type annotation.
 
 use super::len;
-use crate::interpreter::native::Module;
+use crate::native::Module;
 
 mod arr_all;
 mod arr_any;

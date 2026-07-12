@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crate::interpreter::{
+use crate::{
     evaluator::Evaluator,
     stdlib::{
         common::{extract_number, verr, vnl, vok, vs},

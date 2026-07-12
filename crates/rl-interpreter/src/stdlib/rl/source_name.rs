@@ -1,4 +1,4 @@
-use crate::interpreter::{evaluator::Evaluator, stdlib::common::vs, values::Value};
+use crate::{evaluator::Evaluator, stdlib::common::vs, values::Value};
 
 pub fn func(eval: &mut Evaluator) -> Value {
     match &eval.source_file {

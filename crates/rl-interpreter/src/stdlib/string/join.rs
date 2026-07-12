@@ -1,7 +1,7 @@
 use crate::{
-    interpreter::evaluator::Evaluator,
-    interpreter::stdlib::common::{verr, vok, vs},
-    interpreter::values::Value,
+    evaluator::Evaluator,
+    stdlib::common::{verr, vok, vs},
+    values::Value,
 };
 
 pub fn std_join(_: &mut Evaluator, strings_array: Value, delim: String) -> Value {

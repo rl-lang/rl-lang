@@ -1,7 +1,5 @@
-use crate::{
-    interpreter::{evaluator::Evaluator, values::Value},
-    utils::{errors::Error, span::Span},
-};
+use crate::{evaluator::Evaluator, values::Value};
+use rl_utils::{errors::Error, span::Span};
 
 /// returns the absolute value of number
 pub fn std_abs(eval: &mut Evaluator, a: Value, span: Span) -> Result<Value, Error> {

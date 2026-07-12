@@ -1,6 +1,6 @@
 use std::net::UdpSocket;
 
-use crate::interpreter::{
+use crate::{
     evaluator::Evaluator,
     stdlib::{
         common::{extract_string, verr, vi, vok, vs},

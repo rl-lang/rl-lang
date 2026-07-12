@@ -1,5 +1,5 @@
-use crate::interpreter::stdlib::common::{try_fn, verr, vnl, vok, vs};
-use crate::interpreter::{evaluator::Evaluator, values::Value};
+use crate::stdlib::common::{try_fn, verr, vnl, vok, vs};
+use crate::{evaluator::Evaluator, values::Value};
 use crossterm::cursor::Show;
 use crossterm::{
     execute,

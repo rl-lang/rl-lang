@@ -1,7 +1,5 @@
-use crate::{
-    ast::statements::TypeAnnotation,
-    interpreter::{evaluator::Evaluator, values::Value},
-};
+use crate::{evaluator::Evaluator, values::Value};
+use rl_ast::statements::TypeAnnotation;
 
 pub fn std_arr_range(_: &mut Evaluator, start: i64, end: i64, step: i64) -> Value {
     Value::Values {

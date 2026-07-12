@@ -5,25 +5,20 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::interpreter::stdlib::http::HttpHandle;
-use crate::interpreter::stdlib::net::NetHandle;
-use crate::interpreter::stdlib::random::xoshiro::Xoshiro256;
-use crate::interpreter::values::FunctionData;
-use crate::lexer::tokentypes::TokenType;
-use crate::resolver::Resolver;
 use crate::{
-    ast::{ExprId, nodes::ExpressionKind, statements::TypeAnnotation},
-    interpreter::{
-        native::{IntoNativeFn, Module},
-        stdlib,
-        values::{MapKey, Value},
-    },
-    utils::{
-        errors::{Error, Reason},
-        source::SourceFile,
-        span::Span,
-        suggest::closest_match,
-    },
+    native::{IntoNativeFn, Module},
+    stdlib,
+    stdlib::{http::HttpHandle, net::NetHandle, random::xoshiro::Xoshiro256},
+    values::{FunctionData, MapKey, Value},
+};
+use rl_ast::{ExprId, nodes::ExpressionKind, statements::TypeAnnotation};
+use rl_lexer::tokentypes::TokenType;
+use rl_resolver::Resolver;
+use rl_utils::{
+    errors::{Error, Reason},
+    source::SourceFile,
+    span::Span,
+    suggest::closest_match,
 };
 
 /// A slot in the environment - holds a value, its declared type, and mutability.

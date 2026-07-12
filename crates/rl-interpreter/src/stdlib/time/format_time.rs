@@ -6,7 +6,7 @@
 //! `apply_pattern` performs simple string substitution on strftime-like tokens:
 //! `%Y` (4-digit year), `%m` (month), `%d` (day), `%H` (hour), `%M` (minute), `%S` (second).
 
-use crate::interpreter::{
+use crate::{
     evaluator::Evaluator,
     stdlib::common::{verr, vok, vs},
     values::Value,

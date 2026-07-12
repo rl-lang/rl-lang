@@ -1,7 +1,5 @@
-use crate::{
-    interpreter::{evaluator::Evaluator, stdlib::common::check_arity, values::Value},
-    utils::{errors::Error, span::Span},
-};
+use crate::{evaluator::Evaluator, stdlib::common::check_arity, values::Value};
+use rl_utils::{errors::Error, span::Span};
 
 pub fn std_result_map(eval: &mut Evaluator, args: Vec<Value>, span: Span) -> Result<Value, Error> {
     check_arity(&args, 2, "result_map", span)?;

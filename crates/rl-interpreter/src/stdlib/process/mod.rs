@@ -14,7 +14,7 @@ mod exit;
 mod pid;
 mod sleep;
 
-use crate::interpreter::native::Module;
+use crate::native::Module;
 
 pub const KEYWORDS: &[&str] = &[
     "args",

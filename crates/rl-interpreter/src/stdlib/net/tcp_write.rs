@@ -1,6 +1,6 @@
 use std::io::Write;
 
-use crate::interpreter::{
+use crate::{
     evaluator::Evaluator,
     stdlib::{
         common::{extract_number, extract_string, verr, vi, vok, vs},

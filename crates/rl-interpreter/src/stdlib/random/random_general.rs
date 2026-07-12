@@ -1,9 +1,9 @@
 use crate::{
-    ast::statements::TypeAnnotation,
-    interpreter::evaluator::Evaluator,
-    interpreter::stdlib::common::{verr, vi, vok, vs},
-    interpreter::values::Value,
+    evaluator::Evaluator,
+    stdlib::common::{verr, vi, vok, vs},
+    values::Value,
 };
+use rl_ast::statements::TypeAnnotation;
 
 pub fn dice(eval: &mut Evaluator, sides: i64) -> Value {
     if sides <= 0 {

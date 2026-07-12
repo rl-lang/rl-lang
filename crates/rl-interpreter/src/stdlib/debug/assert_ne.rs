@@ -1,11 +1,9 @@
 use crate::{
-    interpreter::{
-        evaluator::Evaluator,
-        stdlib::{common::extract_string, debug::common::assert_eq_message},
-        values::Value,
-    },
-    utils::{errors::Error, span::Span},
+    evaluator::Evaluator,
+    stdlib::{common::extract_string, debug::common::assert_eq_message},
+    values::Value,
 };
+use rl_utils::{errors::Error, span::Span};
 
 pub fn func(eval: &mut Evaluator, args: Vec<Value>, span: Span) -> Result<Value, Error> {
     if args.len() < 2 || args.len() > 3 {

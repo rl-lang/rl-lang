@@ -1,6 +1,6 @@
 use std::io::Read;
 
-use crate::interpreter::{
+use crate::{
     evaluator::Evaluator,
     stdlib::{
         common::{extract_number, verr, vok, vs},

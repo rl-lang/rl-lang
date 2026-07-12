@@ -1,8 +1,6 @@
-use crate::{
-    ast::statements::TypeAnnotation,
-    interpreter::{evaluator::Evaluator, values::Value},
-    utils::{errors::Error, span::Span},
-};
+use crate::{evaluator::Evaluator, values::Value};
+use rl_ast::statements::TypeAnnotation;
+use rl_utils::{errors::Error, span::Span};
 
 pub fn std_read_lines(eval: &mut Evaluator, file: String, span: Span) -> Result<Value, Error> {
     let data = std::fs::read_to_string(&file)

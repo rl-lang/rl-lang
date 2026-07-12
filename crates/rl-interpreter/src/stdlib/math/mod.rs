@@ -38,7 +38,7 @@ mod sin;
 mod sqrt;
 mod tan;
 
-use crate::interpreter::native::Module;
+use crate::native::Module;
 
 pub const KEYWORDS: &[&str] = &[
     "sin",

@@ -8,13 +8,14 @@
 //! structure mutably to perform the assignment, enforcing type compatibility and bounds.
 
 use crate::{
-    ast::{ExprId, nodes::ExpressionKind, statements::TypeAnnotation},
-    interpreter::{
-        evaluator::{EnvironmentItem, Evaluator},
-        evaluator_types::addressing::{get_indices_as_vec, get_root_addr},
-        values::{MapKey, Value},
-    },
-    utils::{errors::Error, span::Span},
+    evaluator::{EnvironmentItem, Evaluator},
+    evaluator_types::addressing::{get_indices_as_vec, get_root_addr},
+    values::{MapKey, Value},
+};
+use rl_ast::{ExprId, nodes::ExpressionKind, statements::TypeAnnotation};
+use rl_utils::{
+    errors::{Error, Reason},
+    span::Span,
 };
 
 impl Evaluator {
@@ -115,7 +116,7 @@ impl Evaluator {
         let index_error = self.err("index assignment requires at least one index", span);
         let out_of_bounds_err = |i: usize| {
             Error::at(
-                crate::utils::errors::Reason::Interpreter,
+                Reason::Interpreter,
                 format!("index {} out of bounds", i),
                 span,
             )
@@ -154,7 +155,7 @@ impl Evaluator {
                     let val_type = Evaluator::infer_type(&val, false);
                     if val_type != *items_type && val_type != TypeAnnotation::Null {
                         return Err(Error::at(
-                            crate::utils::errors::Reason::Interpreter,
+                            Reason::Interpreter,
                             format!(
                                 "type mismatch: array is {:?}, cannot assign {:?}",
                                 items_type, val_type

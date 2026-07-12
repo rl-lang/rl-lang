@@ -1,7 +1,7 @@
-use crate::ast::statements::TypeAnnotation;
-use crate::interpreter::stdlib::common::{verr, vok, vs};
-use crate::interpreter::{evaluator::Evaluator, values::Value};
+use crate::stdlib::common::{verr, vok, vs};
+use crate::{evaluator::Evaluator, values::Value};
 use crossterm::event::{Event, KeyCode, KeyModifiers, MouseButton, MouseEventKind, read};
+use rl_ast::statements::TypeAnnotation;
 
 pub fn func(_: &mut Evaluator) -> Value {
     loop {

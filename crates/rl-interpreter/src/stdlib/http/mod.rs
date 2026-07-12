@@ -1,6 +1,6 @@
 //! `std::http` - a minimal HTTP server (`tiny_http`) and client (`ureq`).
 
-use crate::interpreter::native::Module;
+use crate::native::Module;
 
 mod common;
 mod http_get;

@@ -1,7 +1,5 @@
-use crate::{
-    interpreter::{evaluator::Evaluator, values::Value},
-    utils::{errors::Error, span::Span},
-};
+use crate::{evaluator::Evaluator, values::Value};
+use rl_utils::{errors::Error, span::Span};
 
 pub fn std_read_file(eval: &mut Evaluator, file: String, span: Span) -> Result<Value, Error> {
     let data = std::fs::read_to_string(&file).map_err(|e| {

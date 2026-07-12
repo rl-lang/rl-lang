@@ -9,13 +9,11 @@
 //! from ever needing to be cloned in/out on function calls.
 
 use crate::{
-    ast::statements::TypeAnnotation,
-    interpreter::{
-        evaluator::{EnvironmentItem, Evaluator, PItem},
-        values::Value,
-    },
-    utils::{errors::Error, span::Span},
+    evaluator::{EnvironmentItem, Evaluator, PItem},
+    values::Value,
 };
+use rl_ast::statements::TypeAnnotation;
+use rl_utils::{errors::Error, span::Span};
 
 impl Evaluator {
     /// Pushes a new empty scope frame onto the scope pool stack.
@@ -293,12 +291,12 @@ impl Evaluator {
         let (depth, slot) = self.resolver.resolve_name(name)?;
         if depth >= self.environment.len() {
             return match self.globals.get(slot)? {
-                crate::interpreter::evaluator::EnvironmentItem::PItem(p) => Some(p.value.clone()),
+                EnvironmentItem::PItem(p) => Some(p.value.clone()),
             };
         }
         let idx = self.environment.len() - 1 - depth;
         match self.environment.get(idx)?.get(slot)? {
-            crate::interpreter::evaluator::EnvironmentItem::PItem(p) => Some(p.value.clone()),
+            EnvironmentItem::PItem(p) => Some(p.value.clone()),
         }
     }
 

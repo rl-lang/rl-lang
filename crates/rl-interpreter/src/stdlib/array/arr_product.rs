@@ -1,8 +1,6 @@
-use crate::{
-    ast::statements::TypeAnnotation,
-    interpreter::{evaluator::Evaluator, values::Value},
-    utils::{errors::Error, span::Span},
-};
+use crate::{evaluator::Evaluator, values::Value};
+use rl_ast::statements::TypeAnnotation;
+use rl_utils::{errors::Error, span::Span};
 
 pub fn std_arr_product(eval: &mut Evaluator, array: Value, span: Span) -> Result<Value, Error> {
     match array {

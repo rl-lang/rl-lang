@@ -1,7 +1,5 @@
-use crate::{
-    interpreter::{evaluator::Evaluator, values::Value},
-    utils::{errors::Error, span::Span},
-};
+use crate::{evaluator::Evaluator, values::Value};
+use rl_utils::{errors::Error, span::Span};
 
 pub fn std_cwd(eval: &mut Evaluator, _: Vec<Value>, span: Span) -> Result<Value, Error> {
     std::env::current_dir()

@@ -15,7 +15,7 @@ mod null;
 mod oct;
 mod string;
 
-use crate::interpreter::native::Module;
+use crate::native::Module;
 
 pub const KEYWORDS: &[&str] = &[
     "to_bin",

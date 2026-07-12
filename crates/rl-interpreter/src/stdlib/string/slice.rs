@@ -1,7 +1,7 @@
 use crate::{
-    interpreter::evaluator::Evaluator,
-    interpreter::stdlib::common::{verr, vok, vs},
-    interpreter::values::Value,
+    evaluator::Evaluator,
+    stdlib::common::{verr, vok, vs},
+    values::Value,
 };
 
 pub fn std_slice(_: &mut Evaluator, string: String, start: i64, end: i64) -> Value {
