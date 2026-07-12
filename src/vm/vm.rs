@@ -281,6 +281,7 @@ impl Vm {
         Ok(!frames.is_empty())
     }
 
+    // safe (mostly)
     #[inline(always)]
     fn pop_unchecked(&mut self) -> VmValue {
         debug_assert!(!self.stack.is_empty(), "stack underflow");
@@ -367,6 +368,22 @@ impl Vm {
         .ok_or_else(|| VmError("comparison produced no ordering (NaN?)".into()))?;
         self.stack.push(VmValue::Bool(pred(ord)));
         Ok(())
+    }
+
+    /// # Safety
+    /// `idx` must be within `self.locals.len()`
+    #[inline(always)]
+    unsafe fn get_local_unchecked(&self, idx: usize) -> VmValue {
+        unsafe { self.locals.get_unchecked(idx) }.clone()
+    }
+
+    /// # Safety
+    /// `idx` must be within `self.locals.len()`
+    #[inline(always)]
+    unsafe fn set_local_unchcked(&mut self, idx: usize, val: VmValue) {
+        unsafe {
+            *self.locals.get_unchecked_mut(idx) = val;
+        }
     }
 }
 

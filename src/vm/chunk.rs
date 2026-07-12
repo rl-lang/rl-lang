@@ -172,6 +172,25 @@ impl Chunk {
         (self.constants.len() - 1) as u16
     }
 
+    /// # Safety
+    /// `idx` must be within `constants.len()`
+    #[inline(always)]
+    pub unsafe fn get_constant_unchecked(&self, idx: usize) -> &VmValue {
+        unsafe { self.constants.get_unchecked(idx) }
+    }
+
+    /// # Safety
+    /// `ip + 1` must be within `code.len()`
+    #[inline(always)]
+    pub unsafe fn read_u16_unchecked(&self, ip: usize) -> u16 {
+        unsafe {
+            u16::from_le_bytes([
+                *self.code.get_unchecked(ip),
+                *self.code.get_unchecked(ip + 1),
+            ])
+        }
+    }
+
     /// Inverse function of write_u16
     /// returns 2 byte operand
     pub fn read_u16(&self, offset: usize) -> u16 {
