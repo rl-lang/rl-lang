@@ -15,6 +15,7 @@ members = [
     "crates/rl-repl",
     "crates/rl-lsp",
     "crates/rl-cli",
+    "crates/rl-commons"
 ]
 
 [workspace.package]
@@ -24,6 +25,7 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/rl-lang/rl-lang"
 
 [workspace.dependencies]
+rl-commons = { path = "crates/rl-commons" }
 rl-utils = { path = "crates/rl-utils" }
 rl-lexer = { path = "crates/rl-lexer" }
 rl-ast = { path = "crates/rl-ast" }

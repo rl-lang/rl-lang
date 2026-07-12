@@ -1203,8 +1203,8 @@ name = "rl-checker"
 version = "0.1.4"
 dependencies = [
  "rl-ast",
+ "rl-commons",
  "rl-docs",
- "rl-interpreter",
  "rl-lexer",
  "rl-parser",
  "rl-utils",
@@ -1236,6 +1236,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "rl-commons"
+version = "0.1.4"
+
+[[package]]
 name = "rl-cranelift"
 version = "0.1.4"
 dependencies = [
@@ -1262,6 +1266,8 @@ dependencies = [
  "crossterm",
  "log",
  "rl-ast",
+ "rl-checker",
+ "rl-commons",
  "rl-lexer",
  "rl-parser",
  "rl-resolver",
