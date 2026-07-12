@@ -54,6 +54,11 @@ enum Commands {
         #[arg(value_name = "FILE")]
         file: PathBuf,
 
+        /// Run thought the bytecode VM instead of the tree-walking evaluator
+        /// (this is highly experimental)
+        #[arg(long)]
+        vm: bool,
+
         /// Arguments forwarded to the script (accessible as argv inside .rl)
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         extra_args: Vec<String>,
@@ -201,7 +206,7 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Run { file, .. } => {
+        Commands::Run { file, vm, .. } => {
             let path = file
                 .to_str()
                 .unwrap_or_else(|| {
@@ -216,7 +221,15 @@ fn main() {
             let source = SourceFile::new(&*path, source_text);
             let tokens = lexing_loop(source.clone());
             let (ast, statements) = parsing_loop(source.clone(), tokens);
-            if cfg!(feature = "eval") {
+            if vm {
+                #[cfg(feature = "eval")]
+                rl_lang::logic_loops::vm_loop(source, ast, statements);
+                #[cfg(not(feature = "eval"))]
+                {
+                    eprintln!("error: --vm requres the `eval` feature");
+                    std::process::exit(1)
+                }
+            } else if cfg!(feature = "eval") {
                 eval_loop(source, ast, statements, 3);
             }
         }

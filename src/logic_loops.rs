@@ -88,3 +88,39 @@ pub fn eval_loop(
     #[cfg(feature = "debug")]
     info!("evaluation done");
 }
+
+#[cfg(feature = "eval")]
+pub fn vm_loop(source: SourceFile, ast: Ast, statements: Vec<Statement>) {
+    use crate::vm::{Compiler, Vm};
+
+    let mut evaluator = Evaluator::default()
+        .with_stdlib()
+        .with_source_file(source.clone());
+
+    evaluator.resolver.current_dir = std::path::Path::new(source.name.as_ref())
+        .parent()
+        .unwrap_or(std::path::Path::new(""))
+        .to_path_buf();
+
+    let statements = evaluator.resolver.resolve_program(ast, statements);
+
+    let chunk = match Compiler::new(&evaluator.resolver.ast_arena).compile(&statements) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("vm compile error: {}", e.0);
+            std::process::exit(1);
+        }
+    };
+
+    println!("{:?}", chunk);
+
+    let mut vm = Vm::new();
+    match vm.run(&chunk) {
+        Ok(Some(val)) => println!("{:?}", val),
+        Ok(None) => {}
+        Err(e) => {
+            eprintln!("vm runtime error: {}", e.0);
+            std::process::exit(1);
+        }
+    }
+}
