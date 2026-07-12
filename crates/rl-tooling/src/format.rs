@@ -1,4 +1,4 @@
-use crate::lexer::tokentypes::{Token, TokenType, Trivia};
+use rl_lexer::tokentypes::{Token, TokenType, Trivia};
 
 pub fn format_tokens(tokens: &[Token]) -> String {
     let mut out = String::new();
@@ -65,9 +65,10 @@ pub fn format_tokens(tokens: &[Token]) -> String {
                 if at_line_start {
                     out.push_str(&"    ".repeat(indent));
                 } else if let Some(p) = prev
-                    && needs_space(p, &tok.token) {
-                        out.push(' ');
-                    }
+                    && needs_space(p, &tok.token)
+                {
+                    out.push(' ');
+                }
                 out.push_str(&tok.lexeme);
                 at_line_start = false;
                 prev = Some(&tok.token);
@@ -113,9 +114,10 @@ fn needs_space(prev: &TokenType, curr: &TokenType) -> bool {
 
     // function/index calls: identifier immediately followed by ( or [
     if matches!(curr, LeftParen | LeftBracket)
-        && matches!(prev, Identifier(_) | RightParen | RightBracket) {
-            return false;
-        }
+        && matches!(prev, Identifier(_) | RightParen | RightBracket)
+    {
+        return false;
+    }
 
     true
 }
