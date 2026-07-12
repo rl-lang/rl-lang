@@ -77,10 +77,7 @@ impl Vm {
                 OpCode::Sub => self.binary_numeric(|a, b| a - b, |a, b| a - b)?,
                 OpCode::Mul => self.binary_numeric(|a, b| a * b, |a, b| a * b)?,
                 OpCode::Div => self.binary_div()?,
-                // unary operations
-                // if math negation OpCode -> pop once then negate
-                // handles int and float otherwise error
-                // if logical negation OpCode -> pop once then push bool onto stack
+
                 OpCode::Negate => {
                     let v = self.pop()?;
                     let out = match v {
@@ -98,10 +95,6 @@ impl Vm {
                     };
                     self.stack.push(out);
                 }
-                // --- binary operations ---
-                // pops two value and compare them either equal or not equal
-                // then push bool of reuslt into stack
-                // or error
                 OpCode::Eq => {
                     let (a, b) = self.pop_two()?;
                     self.stack.push(VmValue::Bool(a == b));
@@ -110,19 +103,11 @@ impl Vm {
                     let (a, b) = self.pop_two()?;
                     self.stack.push(VmValue::Bool(a != b));
                 }
-                // pops two values
-                // then applies the comparsion ordering
-                // then push bool of result into stack
-                // or error
                 OpCode::Less => self.binary_cmp(|o| o.is_lt())?,
                 OpCode::LessEq => self.binary_cmp(|o| o.is_le())?,
                 OpCode::Greater => self.binary_cmp(|o| o.is_gt())?,
                 OpCode::GreaterEq => self.binary_cmp(|o| o.is_ge())?,
-                // reads two operands depth then slot
-                // errors on:
-                // - more than one frame/depth
-                // - out of range lookup
-                // if no errors push the value to stack
+
                 OpCode::GetLocal => {
                     let depth = frames[top].source.chunk().read_u16(frames[top].ip) as usize;
                     frames[top].ip += 2;
@@ -142,11 +127,6 @@ impl Vm {
                     .clone();
                     self.stack.push(val);
                 }
-                // reads two operands depth then slot
-                // then look/peek at value without popping
-                // errors on:
-                // - more than one frame/depth
-                // - out of range lookup
                 OpCode::SetLocal => {
                     let depth = frames[top].source.chunk().read_u16(frames[top].ip) as usize;
                     frames[top].ip += 2;
@@ -180,9 +160,6 @@ impl Vm {
                         }
                     }
                 }
-                // reads slot only (no other depth than 0)
-                // pops the value then grow the locals vector with Null value
-                // replace Null value with the actual popped value
                 OpCode::DefineLocal => {
                     let slot = frames[top].source.chunk().read_u16(frames[top].ip) as usize;
                     frames[top].ip += 2;
@@ -202,12 +179,9 @@ impl Vm {
                         self.locals[base + slot] = val;
                     }
                 }
-                // pops and discard one value
                 OpCode::Pop => {
                     self.pop()?;
                 }
-                // halts the program
-                OpCode::Return => return Ok(self.stack.pop()),
 
                 OpCode::Return => {
                     let ret = self.pop().ok();
