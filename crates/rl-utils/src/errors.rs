@@ -204,7 +204,7 @@ impl ErrorReason {
     /// # Example
     ///
     /// ```rust
-    /// use rl_lang::utils::errors::{ErrorReason, Reason};
+    /// use rl_utils::errors::{ErrorReason, Reason};
     /// ErrorReason::init(Reason::Lexer, Some(vec!["unknown token `$`".to_string()]));
     /// ```
     pub fn init(error_type: Reason, data: Option<Vec<String>>) -> Self {

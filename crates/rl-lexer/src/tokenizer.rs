@@ -43,12 +43,12 @@ impl Tokenizer {
     /// # Examples
     ///
     /// ```rust
-    /// use rl_lang::{
-    ///     lexer::{
+    /// use {
+    ///     rl_lexer::{
     ///         tokenizer::Tokenizer,
     ///         tokentypes::TokenType,
     ///     },
-    ///     utils::source::SourceFile,
+    ///     rl_utils::source::SourceFile,
     /// };
     ///
     /// let tokens = match Tokenizer::lex(SourceFile::new("source", "1 == 1".to_string())) {

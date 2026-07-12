@@ -15,7 +15,7 @@
 //! # Example
 //!
 //! ```rust
-//! use rl_lang::interpreter::{evaluator::Evaluator, native::Module};
+//! use rl_interpreter::{evaluator::Evaluator, native::Module};
 //!
 //! fn my_fn(_: &mut Evaluator, x: i64, y: i64) -> i64 { x + y }
 //! Module::new("math").with_function("add", my_fn);
