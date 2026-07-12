@@ -30,8 +30,6 @@ use rl_ast::{
     statements::{Statement, StatementKind},
 };
 use rl_docs::find_fn_doc;
-use rl_interpreter::evaluator::Evaluator;
-use rl_interpreter::native::Module;
 use rl_utils::{
     errors::{Error, Reason},
     source::SourceFile,
@@ -49,14 +47,14 @@ impl Default for TypeChecker {
 impl TypeChecker {
     pub fn new() -> Self {
         // getting all stdlib modules
-        let root_module = Evaluator::default().with_stdlib().root_module;
+        let root_module = rl_commons::stdlib_names();
         let mut stdlib_fn_names = std::collections::HashSet::new();
-        collect_fn_names(&root_module, &mut stdlib_fn_names);
+        root_module.collect_fn_names(&mut stdlib_fn_names);
 
         Self {
             scopes: vec![HashMap::new()],
             source_file: None,
-            root_module: Evaluator::default().with_stdlib().root_module,
+            root_module: rl_commons::stdlib_names(),
             errors: Vec::new(),
             return_type_stack: Vec::new(),
             loop_depth: 0,
@@ -172,15 +170,5 @@ impl TypeChecker {
         };
 
         self.push_hover(span, text);
-    }
-}
-
-/// Collects all function names from a stdlib [`Module`] tree into `out`.
-fn collect_fn_names(module: &Module, out: &mut std::collections::HashSet<String>) {
-    for name in module.functions.keys() {
-        out.insert(name.clone());
-    }
-    for sub in module.submodules.values() {
-        collect_fn_names(sub, out);
     }
 }

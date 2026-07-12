@@ -2,7 +2,7 @@
 
 use crate::structs::{CheckType, TypeChecker};
 use rl_ast::statements::TypeAnnotation;
-use rl_interpreter::stdlib;
+use rl_commons::keywords;
 use rl_utils::{span::Span, suggest::closest_match};
 
 impl TypeChecker {
@@ -23,7 +23,7 @@ impl TypeChecker {
         span: Span,
     ) -> CheckType {
         // stdlib path (std::io::print)
-        if self.root_module.resolve(path).is_some() {
+        if self.root_module.resolve(path) {
             self.push_stdlib_hover(path, span);
             return CheckType::Unknown;
         }
@@ -40,15 +40,15 @@ impl TypeChecker {
         }
 
         let suggestion = if let Some(last) = path.last() {
-            let candidates = stdlib::math::KEYWORDS
+            let candidates = keywords::math::KEYWORDS
                 .iter()
-                .chain(stdlib::math::constants::KEYWORDS)
-                .chain(stdlib::io::KEYWORDS)
-                .chain(stdlib::string::KEYWORDS)
-                .chain(stdlib::types::KEYWORDS)
-                .chain(stdlib::array::KEYWORDS)
-                .chain(stdlib::path::KEYWORDS)
-                .chain(stdlib::fs::KEYWORDS)
+                .chain(keywords::math::constants::KEYWORDS)
+                .chain(keywords::io::KEYWORDS)
+                .chain(keywords::string::KEYWORDS)
+                .chain(keywords::types::KEYWORDS)
+                .chain(keywords::array::KEYWORDS)
+                .chain(keywords::path::KEYWORDS)
+                .chain(keywords::fs::KEYWORDS)
                 .copied();
             closest_match(last, candidates)
         } else {

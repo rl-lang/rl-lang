@@ -1,7 +1,7 @@
 //! Core data structures for the type checker.
 //!
 use rl_ast::{Ast, statements::TypeAnnotation};
-use rl_interpreter::native::Module;
+use rl_commons::ModuleNames;
 use rl_utils::{errors::Error, source::SourceFile, span::Span};
 use std::{
     collections::{HashMap, HashSet},
@@ -15,7 +15,7 @@ pub struct TypeChecker {
     /// Source file attached for Ariadne error rendering; `None` in LSP-less contexts.
     pub source_file: Option<SourceFile>,
     /// The stdlib module tree, used to resolve stdlib call paths.
-    pub root_module: Module,
+    pub root_module: ModuleNames,
     /// All type errors accumulated during the check pass.
     pub errors: Vec<Error>,
     /// Stack of expected return types, pushed/popped on function and lambda entry/exit.
