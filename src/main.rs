@@ -222,11 +222,17 @@ fn main() {
             let tokens = lexing_loop(source.clone());
             let (ast, statements) = parsing_loop(source.clone(), tokens);
             if vm {
+                #[cfg(feature = "vm")]
                 #[cfg(feature = "eval")]
                 rl_lang::logic_loops::vm_loop(source, ast, statements);
+                #[cfg(not(feature = "vm"))]
+                {
+                    eprintln!("error: --vm requires the `vm` feature");
+                    std::process::exit(1)
+                }
                 #[cfg(not(feature = "eval"))]
                 {
-                    eprintln!("error: --vm requres the `eval` feature");
+                    eprintln!("error: --vm requires the `eval` feature");
                     std::process::exit(1)
                 }
             } else if cfg!(feature = "eval") {

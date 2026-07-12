@@ -89,6 +89,7 @@ pub fn eval_loop(
     info!("evaluation done");
 }
 
+#[cfg(feature = "vm")]
 #[cfg(feature = "eval")]
 pub fn vm_loop(source: SourceFile, ast: Ast, statements: Vec<Statement>) {
     use crate::vm::{Compiler, Vm};
