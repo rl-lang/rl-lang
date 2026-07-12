@@ -12,6 +12,8 @@ pub struct CompileError(pub String);
 pub struct Compiler<'a> {
     ast: &'a Ast,
     chunk: Chunk,
+    next_slot: u16,
+    scope_bases: Vec<u16>,
 }
 
 impl<'a> Compiler<'a> {
@@ -19,6 +21,8 @@ impl<'a> Compiler<'a> {
         Self {
             ast,
             chunk: Chunk::new(),
+            next_slot: 0,
+            scope_bases: Vec::new(),
         }
     }
 
