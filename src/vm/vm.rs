@@ -317,7 +317,7 @@ impl Vm {
         int_op: fn(i64, i64) -> i64,
         float_op: fn(f64, f64) -> f64,
     ) -> Result<(), VmError> {
-        let (a, b) = self.pop_two()?;
+        let (a, b) = self.pop_two_unchecked();
         let out = match (a, b) {
             (VmValue::Int(a), VmValue::Int(b)) => VmValue::Int(int_op(a, b)),
             (VmValue::Float(a), VmValue::Float(b)) => VmValue::Float(float_op(a, b)),
@@ -339,7 +339,7 @@ impl Vm {
     /// handles /
     /// currently promotes int to float
     fn binary_div(&mut self) -> Result<(), VmError> {
-        let (a, b) = self.pop_two()?;
+        let (a, b) = self.pop_two_unchecked();
         let out = match (a, b) {
             (VmValue::Int(_), VmValue::Int(0)) => return Err(VmError("division by zero".into())),
             (VmValue::Int(a), VmValue::Int(b)) => VmValue::Int(a / b),
@@ -356,7 +356,7 @@ impl Vm {
     /// accepts float/float, int/int and promotes int to float
     /// handles >, <, >=, <=
     fn binary_cmp(&mut self, pred: fn(std::cmp::Ordering) -> bool) -> Result<(), VmError> {
-        let (a, b) = self.pop_two()?;
+        let (a, b) = self.pop_two_unchecked();
         let ord = match (&a, &b) {
             (VmValue::Int(a), VmValue::Int(b)) => a.partial_cmp(b),
             (VmValue::Float(a), VmValue::Float(b)) => a.partial_cmp(b),
