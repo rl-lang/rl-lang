@@ -11,7 +11,9 @@
 //!
 //! [`Expression`]: nodes::Expression
 //! [`Statement`]: statements::Statement
-use crate::ast::{
+use rl_utils::span::Span;
+
+use crate::{
     arena::{Arena, Id},
     nodes::{Expression, ExpressionKind},
     statements::{Statement, StatementKind},
@@ -46,7 +48,7 @@ impl Ast {
         }
     }
 
-    pub fn alloc_expr(&mut self, kind: ExpressionKind, span: crate::utils::span::Span) -> ExprId {
+    pub fn alloc_expr(&mut self, kind: ExpressionKind, span: Span) -> ExprId {
         self.exprs.alloc(Expression { kind, span })
     }
 
@@ -268,7 +270,7 @@ fn remap_stmt_kind(kind: &mut StatementKind, offset: u32, target_arena_id: u32) 
         Match { value, arms } => {
             remap_id(value, offset, target_arena_id);
             for (pattern, body) in arms {
-                if let crate::ast::statements::MatchPattern::Literal(id) = pattern {
+                if let crate::statements::MatchPattern::Literal(id) = pattern {
                     remap_id(id, offset, target_arena_id);
                 }
                 remap_stmts(body, offset, target_arena_id);

@@ -11,10 +11,10 @@
 //! environment lookup, eliminating runtime name searches.
 //!
 //! [`Resolver`]: crate::resolver
-use crate::ast::ExprId;
-use crate::ast::statements::{Param, Statement, TypeAnnotation};
-use crate::lexer::tokentypes;
-use crate::utils::span::Span;
+use crate::ExprId;
+use crate::statements::{Param, Statement, TypeAnnotation};
+use rl_lexer::tokentypes;
+use rl_utils::span::Span;
 
 /// An expression paired with its source span.
 #[derive(Debug, Clone, PartialEq)]

@@ -17,8 +17,8 @@
 //! [`Resolver`]: crate::resolver
 use std::rc::Rc;
 
-use crate::ast::ExprId;
-use crate::utils::span::Span;
+use crate::ExprId;
+use rl_utils::span::Span;
 
 /// A statement paired with its source span.
 #[derive(Debug, Clone, PartialEq)]
