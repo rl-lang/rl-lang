@@ -78,6 +78,8 @@ pub enum OpCode {
     Loop = 22,
     /// call function
     Call = 23,
+    GetGlobal = 24,
+    SetGlobal = 25,
 }
 
 impl OpCode {
@@ -107,6 +109,8 @@ impl OpCode {
             21 => OpCode::JumpIfFalse,
             22 => OpCode::Loop,
             23 => OpCode::Call,
+            24 => OpCode::GetGlobal,
+            25 => OpCode::SetGlobal,
             other => panic!("corrupt bytecode: unknown opcode byte {other}"),
         }
     }
