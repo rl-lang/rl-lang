@@ -211,7 +211,12 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Run { file, vm, .. } => {
+        Commands::Run {
+            file,
+            vm,
+            cranelift,
+            ..
+        } => {
             let path = file
                 .to_str()
                 .unwrap_or_else(|| {
@@ -227,8 +232,7 @@ fn main() {
             let tokens = lexing_loop(source.clone());
             let (ast, statements) = parsing_loop(source.clone(), tokens);
             if vm {
-                #[cfg(feature = "vm")]
-                #[cfg(feature = "eval")]
+                #[cfg(all(feature = "eval", feature = "vm"))]
                 rl_lang::logic_loops::vm_loop(source, ast, statements);
                 #[cfg(not(feature = "vm"))]
                 {

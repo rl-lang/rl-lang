@@ -1,0 +1,7 @@
+[package]
+name = "rl-resolver"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+rl-ast.workspace = true

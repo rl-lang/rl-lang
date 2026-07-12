@@ -1,0 +1,12 @@
+[package]
+name = "rl-cranelift"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+rl-vm.workspace = true
+cranelift-jit.workspace = true
+cranelift-module.workspace = true
+cranelift-codegen.workspace = true
+cranelift-frontend.workspace = true
+target-lexicon.workspace = true

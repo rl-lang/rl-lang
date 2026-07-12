@@ -1,0 +1,7 @@
+[package]
+name = "rl-utils"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+ariadne.workspace = true

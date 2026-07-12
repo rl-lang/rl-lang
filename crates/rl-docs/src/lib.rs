@@ -15,7 +15,7 @@ pub mod entry;
 use serde::Serialize;
 use serde_json::to_string_pretty;
 
-use crate::docs::entry::{
+use crate::rl_docs::entry::{
     ConceptCategory, ConceptEntry, DescriptionEntry, DescriptionKind, FnEntry, StdEntry,
 };
 

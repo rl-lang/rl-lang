@@ -1,0 +1,7 @@
+[package]
+name = "rl-lexer"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+rl-utils.workspace = true

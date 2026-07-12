@@ -1,0 +1,14 @@
+[package]
+name = "rl-interpreter"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+rl-ast.workspace = true
+rl-lexer.workspace = true
+rl-parser.workspace = true
+rl-resolver.workspace = true
+rl-utils.workspace = true
+crossterm.workspace = true
+tiny_http.workspace = true
+ureq.workspace = true

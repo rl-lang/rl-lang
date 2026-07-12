@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use ariadne::{Color, Label, Report, ReportKind, Source};
 
-use crate::utils::source::SourceFile;
-use crate::utils::span::Span;
+use rl_utils::source::SourceFile;
+use rl_utils::span::Span;
 
 /// heavy optional fields, heap-allocated so `Error` stays small on the stack
 #[derive(Debug, Clone)]
