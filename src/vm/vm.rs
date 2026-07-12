@@ -123,54 +123,46 @@ impl Vm {
                 OpCode::GreaterEq => self.binary_cmp(|o| o.is_ge())?,
 
                 OpCode::GetLocal => {
-                    let depth = chunk!().read_u16(ip) as usize;
+                    let flat = chunk!().read_u16(ip) as usize;
                     ip += 2;
-                    let slot = chunk!().read_u16(ip) as usize;
-                    ip += 2;
-
-                    let val = match self.resolve(scope_base, depth)? {
-                        None => self.globals.get(slot),
-                        Some(scope_idx) => self.local_slot(scope_idx, slot),
-                    }
-                    .ok_or_else(|| {
-                        VmError(format!(
-                            "read of undefined local slot {slot} at depth {depth}"
-                        ))
-                    })?
-                    .clone();
+                    let frame_base = self.scope_starts[scope_base];
+                    let val = self.locals[frame_base + flat].clone();
                     self.stack.push(val);
                 }
                 OpCode::SetLocal => {
-                    let depth = chunk!().read_u16(ip) as usize;
+                    let flat = chunk!().read_u16(ip) as usize;
                     ip += 2;
-                    let slot = chunk!().read_u16(ip) as usize;
-                    ip += 2;
-
                     let val = self
                         .stack
                         .last()
                         .cloned()
                         .ok_or_else(|| VmError("stack underflow on assignment".into()))?;
-
-                    match self.resolve(scope_base, depth)? {
-                        None => {
-                            if slot >= self.globals.len() {
-                                return Err(VmError(format!(
-                                    "assignment to undefined global slot {slot}"
-                                )));
-                            }
-                            self.globals[slot] = val;
-                        }
-                        Some(scope_idx) => {
-                            let (base, end) = self.scope_range(scope_idx);
-                            if base + slot >= end {
-                                return Err(VmError(format!(
-                                    "assignment to undefined local slot {slot} at depth {depth}"
-                                )));
-                            }
-                            self.locals[base + slot] = val;
-                        }
+                    let frame_base = self.scope_starts[scope_base];
+                    self.locals[frame_base + flat] = val;
+                }
+                OpCode::GetGlobal => {
+                    let slot = chunk!().read_u16(ip) as usize;
+                    ip += 2;
+                    let val =
+                        self.globals.get(slot).cloned().ok_or_else(|| {
+                            VmError(format!("read of undefined global slot {slot}"))
+                        })?;
+                    self.stack.push(val);
+                }
+                OpCode::SetGlobal => {
+                    let slot = chunk!().read_u16(ip) as usize;
+                    ip += 2;
+                    let val = self
+                        .stack
+                        .last()
+                        .cloned()
+                        .ok_or_else(|| VmError("stack underflow on assignment".into()))?;
+                    if slot >= self.globals.len() {
+                        return Err(VmError(format!(
+                            "assignment to undefined global slot {slot}"
+                        )));
                     }
+                    self.globals[slot] = val;
                 }
                 OpCode::DefineLocal => {
                     let slot = chunk!().read_u16(ip) as usize;
@@ -287,38 +279,6 @@ impl Vm {
             self.locals.truncate(cut);
         }
         Ok(!frames.is_empty())
-    }
-
-    fn resolve(&self, frame_scope_base: usize, depth: usize) -> Result<Option<usize>, VmError> {
-        let num_active = self.scope_starts.len() - frame_scope_base;
-        if depth == num_active {
-            return Ok(None);
-        }
-        self.scope_starts
-            .len()
-            .checked_sub(1 + depth)
-            .filter(|&idx| idx >= frame_scope_base)
-            .map(Some)
-            .ok_or_else(|| VmError(format!("depth {depth} exceeds active scopes")))
-    }
-
-    fn scope_range(&self, scope_idx: usize) -> (usize, usize) {
-        let start = self.scope_starts[scope_idx];
-        let end = self
-            .scope_starts
-            .get(scope_idx + 1)
-            .copied()
-            .unwrap_or(self.locals.len());
-        (start, end)
-    }
-
-    fn local_slot(&self, scope_idx: usize, slot: usize) -> Option<&VmValue> {
-        let (base, end) = self.scope_range(scope_idx);
-        if base + slot < end {
-            self.locals.get(base + slot)
-        } else {
-            None
-        }
     }
 
     /// Helper functions that wraps the Vec::pop to return valid VmError or VmValue
