@@ -5,14 +5,12 @@
 //! it only provides the machinery for navigating the token stream.
 use std::collections::HashSet;
 
-use crate::{
-    ast::{Ast, statements::Statement},
-    lexer::tokentypes::{Token, TokenType},
-    utils::{
-        errors::{Error, Reason},
-        source::SourceFile,
-        span::Span,
-    },
+use rl_ast::{Ast, statements::Statement};
+use rl_lexer::tokentypes::{Token, TokenType};
+use rl_utils::{
+    errors::{Error, Reason},
+    source::SourceFile,
+    span::Span,
 };
 
 /// Parses a flat list of tokens and produces a [`Vec<Statement>`].

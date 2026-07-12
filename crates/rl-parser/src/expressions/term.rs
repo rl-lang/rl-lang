@@ -1,9 +1,7 @@
-use crate::{
-    ast::{ExprId, nodes::ExpressionKind},
-    lexer::tokentypes::TokenType,
-    parser::parser_logic::Parser,
-    utils::errors::Error,
-};
+use crate::parser_logic::Parser;
+use rl_ast::{ExprId, nodes::ExpressionKind};
+use rl_lexer::tokentypes::TokenType;
+use rl_utils::errors::Error;
 
 impl Parser {
     /// Parses additive expressions: `+` and `-`.

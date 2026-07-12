@@ -28,12 +28,10 @@
 //! | `get fn, fn from std::ns` | [`StatementKind::Import`] |
 //! | `get fn, fn from mod::sub` | [`StatementKind::ImportFileNamed`] |
 
-use crate::{
-    ast::statements::{Statement, StatementKind},
-    lexer::tokentypes::TokenType,
-    parser::parser_logic::Parser,
-    utils::errors::Error,
-};
+use crate::parser_logic::Parser;
+use rl_ast::statements::{Statement, StatementKind};
+use rl_lexer::{tokenizer::Tokenizer, tokentypes::TokenType};
+use rl_utils::{errors::Error, source::SourceFile, span::Span};
 
 impl Parser {
     fn get_imported_type_names(&mut self, path: &[String], only: Option<&[String]>) {
@@ -46,11 +44,11 @@ impl Parser {
         let Ok(source_text) = std::fs::read_to_string(&file_path) else {
             return;
         };
-        let source_file = crate::utils::source::SourceFile::new(
+        let source_file = SourceFile::new(
             file_path.to_string_lossy().as_ref().to_string(),
             source_text,
         );
-        let Ok(tokens) = crate::lexer::tokenizer::Tokenizer::lex(source_file.clone()) else {
+        let Ok(tokens) = Tokenizer::lex(source_file.clone()) else {
             return;
         };
         let Ok((_, stmts)) = Parser::parse(tokens, source_file) else {
@@ -93,7 +91,7 @@ impl Parser {
     /// # Errors
     /// Returns an error if an identifier is missing after `get`, `::`, `,`, or
     /// `from`, or if `from` itself is absent in the named-import form.
-    pub fn parse_import(&mut self, start: crate::utils::span::Span) -> Result<Statement, Error> {
+    pub fn parse_import(&mut self, start: Span) -> Result<Statement, Error> {
         let first = match self.peek() {
             TokenType::Identifier(name) => name,
             _ => return Err(self.err("expected identifier after 'get'", self.peek_span())),

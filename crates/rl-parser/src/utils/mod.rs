@@ -1,12 +1,10 @@
 mod parse_type;
 use std::rc::Rc;
 
-use crate::{
-    ast::statements::TypeAnnotation,
-    lexer::tokentypes::TokenType,
-    parser::parser_logic::Parser,
-    utils::{errors::Error, span::Span},
-};
+use crate::parser_logic::Parser;
+use rl_ast::statements::TypeAnnotation;
+use rl_lexer::tokentypes::TokenType;
+use rl_utils::{errors::Error, span::Span};
 
 impl Parser {
     /// Returns the [`Span`] of the token at the current read head without consuming it.

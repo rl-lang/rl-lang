@@ -19,15 +19,13 @@ mod tag_declaration;
 mod variable_declaration;
 mod while_statement;
 
-use crate::{
-    ast::{
-        nodes::ExpressionKind,
-        statements::{FunctionAttribute, Statement, StatementKind},
-    },
-    lexer::tokentypes::TokenType,
-    parser::parser_logic::Parser,
-    utils::errors::Error,
+use crate::parser_logic::Parser;
+use rl_ast::{
+    nodes::ExpressionKind,
+    statements::{FunctionAttribute, Statement, StatementKind},
 };
+use rl_lexer::tokentypes::TokenType;
+use rl_utils::{errors::Error, span::Span};
 
 impl Parser {
     /// Dispatches the current token to the appropriate statement sub-parser.
@@ -216,10 +214,7 @@ impl Parser {
     /// or in the wrong order.
     ///
     /// [`parse_function`]: Parser::parse_function
-    fn parse_entry_attribute(
-        &mut self,
-        start: crate::utils::span::Span,
-    ) -> Result<Statement, Error> {
+    fn parse_entry_attribute(&mut self, start: Span) -> Result<Statement, Error> {
         if !self.match_type(&[TokenType::LeftBracket]) {
             return Err(self.err("expected `[` after `!#`", self.peek_span()));
         }

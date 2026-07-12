@@ -1,9 +1,7 @@
-use crate::{
-    ast::{ExprId, nodes::ExpressionKind},
-    lexer::tokentypes::TokenType,
-    parser::parser_logic::Parser,
-    utils::errors::Error,
-};
+use crate::parser_logic::Parser;
+use rl_ast::{ExprId, nodes::ExpressionKind};
+use rl_lexer::tokentypes::TokenType;
+use rl_utils::errors::Error;
 
 impl Parser {
     /// Parses a primary expression - the highest-precedence, non-recursive forms.
@@ -799,7 +797,7 @@ impl Parser {
             while self.match_type(&[TokenType::Newline]) {}
             self.match_type(&[TokenType::LeftParen]);
 
-            let mut params: Vec<crate::ast::statements::Param> = Vec::new();
+            let mut params: Vec<rl_ast::statements::Param> = Vec::new();
             while self.match_type(&[TokenType::Newline]) {}
             while !self.match_type(&[TokenType::RightParen]) {
                 let param_type = self.parse_param_type()?;
@@ -811,7 +809,7 @@ impl Parser {
                     }
                     _ => return Err(self.err("expected parameter name", self.peek_span())),
                 };
-                params.push(crate::ast::statements::Param {
+                params.push(rl_ast::statements::Param {
                     param_name,
                     param_type,
                 });

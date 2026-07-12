@@ -4,12 +4,10 @@
 //! identifier is recognized as a previously-declared record name and is
 //! immediately followed by `{`.
 
-use crate::{
-    ast::{ExprId, nodes::ExpressionKind},
-    lexer::tokentypes::TokenType,
-    parser::parser_logic::Parser,
-    utils::{errors::Error, span::Span},
-};
+use crate::parser_logic::Parser;
+use rl_ast::{ExprId, nodes::ExpressionKind};
+use rl_lexer::tokentypes::TokenType;
+use rl_utils::{errors::Error, span::Span};
 
 impl Parser {
     /// Parses the body of a struct literal after `Name` has already been

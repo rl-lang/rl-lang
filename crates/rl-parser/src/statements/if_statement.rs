@@ -18,12 +18,10 @@
 //! }
 //! ```
 
-use crate::{
-    ast::statements::{Statement, StatementKind},
-    lexer::tokentypes::TokenType,
-    parser::parser_logic::Parser,
-    utils::{errors::Error, span::Span},
-};
+use crate::parser_logic::Parser;
+use rl_ast::statements::{Statement, StatementKind};
+use rl_lexer::tokentypes::TokenType;
+use rl_utils::{errors::Error, span::Span};
 
 impl Parser {
     /// Parses an `if` statement, including any `else if` / `else` tail.

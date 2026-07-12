@@ -18,15 +18,13 @@
 //! - `identifier` -> range or foreach ([`StatementKind::ForRange`] / [`StatementKind::ForEach`])
 //! - anything else -> error
 
-use crate::{
-    ast::{
-        nodes::ExpressionKind,
-        statements::{Statement, StatementKind},
-    },
-    lexer::tokentypes::TokenType,
-    parser::parser_logic::Parser,
-    utils::errors::Error,
+use crate::parser_logic::Parser;
+use rl_ast::{
+    nodes::ExpressionKind,
+    statements::{Statement, StatementKind},
 };
+use rl_lexer::tokentypes::TokenType;
+use rl_utils::{errors::Error, span::Span};
 
 impl Parser {
     /// Parses a `for` statement in one of its three forms.
@@ -45,7 +43,7 @@ impl Parser {
     /// # Errors
     /// Returns an error for invalid range elements (non-integer), missing
     /// commas in C-style headers, or unrecognised `for` syntax.
-    pub fn parse_for(&mut self, start: crate::utils::span::Span) -> Result<Statement, Error> {
+    pub fn parse_for(&mut self, start: Span) -> Result<Statement, Error> {
         if matches!(self.peek(), TokenType::LeftBracket) {
             // C-style: for [T i = init, cond, incr] { … }
             self.advance();

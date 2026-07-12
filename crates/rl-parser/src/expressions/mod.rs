@@ -28,7 +28,9 @@ mod struct_literal;
 mod term;
 mod unary;
 
-use crate::{ast::ExprId, parser::parser_logic::Parser, utils::errors::Error};
+use crate::parser_logic::Parser;
+use rl_ast::ExprId;
+use rl_utils::errors::Error;
 
 impl Parser {
     /// Entry point for expression parsing. Delegates to [`parse_equality`].

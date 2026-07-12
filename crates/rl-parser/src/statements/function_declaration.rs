@@ -12,12 +12,10 @@
 //! [`TypeAnnotation::Null`]. The `is_entry` flag is set when the function is
 //! preceded by a `!#[entry]` attribute, marking it as the program entry point.
 
-use crate::{
-    ast::statements::{FunctionAttribute, Param, Statement, StatementKind, TypeAnnotation},
-    lexer::tokentypes::TokenType,
-    parser::parser_logic::Parser,
-    utils::{errors::Error, span::Span},
-};
+use crate::parser_logic::Parser;
+use rl_ast::statements::{FunctionAttribute, Param, Statement, StatementKind, TypeAnnotation};
+use rl_lexer::tokentypes::TokenType;
+use rl_utils::{errors::Error, span::Span};
 
 impl Parser {
     /// Parses a named function declaration.

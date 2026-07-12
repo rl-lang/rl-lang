@@ -1,9 +1,9 @@
 use std::rc::Rc;
 
-use crate::{
-    ast::statements::TypeAnnotation, lexer::tokentypes::TokenType, parser::parser_logic::Parser,
-    utils::errors::Error,
-};
+use crate::parser_logic::Parser;
+use rl_ast::statements::TypeAnnotation;
+use rl_lexer::tokentypes::TokenType;
+use rl_utils::errors::Error;
 
 impl Parser {
     /// Parses a type keyword into a [`TypeAnnotation`].
