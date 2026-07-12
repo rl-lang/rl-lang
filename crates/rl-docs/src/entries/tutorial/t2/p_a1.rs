@@ -1,4 +1,4 @@
-use crate::docs::entry::{ConceptCategory, ConceptEntry, DescriptionEntry, DescriptionKind};
+use crate::entry::{ConceptCategory, ConceptEntry, DescriptionEntry, DescriptionKind};
 
 pub static ADV_INTRO: ConceptEntry = ConceptEntry {
     name: "1. what we are building",

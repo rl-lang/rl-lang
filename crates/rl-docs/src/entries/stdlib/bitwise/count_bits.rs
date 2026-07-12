@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static COUNT_BITS: FnEntry = FnEntry {
     signature: "count_bits(a)",

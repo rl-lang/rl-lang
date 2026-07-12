@@ -1,4 +1,4 @@
-use crate::docs::entry::{ConceptCategory, ConceptEntry, DescriptionEntry, DescriptionKind};
+use crate::entry::{ConceptCategory, ConceptEntry, DescriptionEntry, DescriptionKind};
 
 pub static ADV_MODULES: ConceptEntry = ConceptEntry {
     name: "2. splitting code across files",

@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static LEX: FnEntry = FnEntry {
     signature: "lex(code)",

@@ -1,4 +1,4 @@
-use crate::docs::entry::{FnEntry, StdEntry};
+use crate::entry::{FnEntry, StdEntry};
 
 pub static TIME: StdEntry = StdEntry {
     name: "time",

@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static PANIC: FnEntry = FnEntry {
     signature: "panic(msg?)",

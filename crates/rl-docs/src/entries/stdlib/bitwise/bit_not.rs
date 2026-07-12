@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static BIT_NOT: FnEntry = FnEntry {
     signature: "bit_not(a)",

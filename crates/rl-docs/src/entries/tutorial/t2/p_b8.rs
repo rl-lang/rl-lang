@@ -1,4 +1,4 @@
-use crate::docs::entry::{ConceptCategory, ConceptEntry, DescriptionEntry, DescriptionKind};
+use crate::entry::{ConceptCategory, ConceptEntry, DescriptionEntry, DescriptionKind};
 
 pub static ADV_PROGRAM_LOOP: ConceptEntry = ConceptEntry {
     name: "8. the program loop",

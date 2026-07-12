@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static HTTP_GET: FnEntry = FnEntry {
     signature: "http_get(url)",

@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static HTTP_RESPOND: FnEntry = FnEntry {
     signature: "http_respond(req, status, body, content_type?)",

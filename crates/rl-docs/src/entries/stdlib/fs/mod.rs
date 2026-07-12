@@ -1,4 +1,4 @@
-use crate::docs::entry::{FnEntry, StdEntry};
+use crate::entry::{FnEntry, StdEntry};
 
 mod copy_file;
 mod file_modified;

@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static BIT_AND: FnEntry = FnEntry {
     signature: "bit_and(a, b)",

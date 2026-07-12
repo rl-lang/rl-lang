@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static COPY_FILE: FnEntry = FnEntry {
     signature: "copy_file(src, dst)",

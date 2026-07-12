@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static HTTP_POST: FnEntry = FnEntry {
     signature: "http_post(url, body, content_type?)",

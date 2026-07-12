@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static TCP_SET_TIMEOUT: FnEntry = FnEntry {
     signature: "tcp_set_timeout(stream, millis)",

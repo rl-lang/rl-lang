@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static TERM_SET_SIZE: FnEntry = FnEntry {
     signature: "term_set_size(cols, rows)",

@@ -1,4 +1,4 @@
-use crate::docs::entry::{ConceptCategory, ConceptEntry, DescriptionEntry, DescriptionKind};
+use crate::entry::{ConceptCategory, ConceptEntry, DescriptionEntry, DescriptionKind};
 pub static STEP_VARIABLES: ConceptEntry = ConceptEntry {
     name: "2. storing values",
     summary: "storing values",

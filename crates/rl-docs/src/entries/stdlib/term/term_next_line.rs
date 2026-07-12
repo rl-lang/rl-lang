@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static TERM_NEXT_LINE: FnEntry = FnEntry {
     signature: "term_next_line(n)",

@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static UDP_RECV_FROM: FnEntry = FnEntry {
     signature: "udp_recv_from(socket, max_bytes)",

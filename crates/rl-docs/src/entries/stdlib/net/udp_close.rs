@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static UDP_CLOSE: FnEntry = FnEntry {
     signature: "udp_close(socket)",

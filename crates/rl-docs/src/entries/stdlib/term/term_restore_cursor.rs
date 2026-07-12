@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static TERM_RESTORE_CURSOR: FnEntry = FnEntry {
     signature: "term_restore_cursor()",

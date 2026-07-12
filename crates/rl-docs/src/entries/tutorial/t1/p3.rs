@@ -1,4 +1,4 @@
-use crate::docs::entry::{ConceptCategory, ConceptEntry, DescriptionEntry, DescriptionKind};
+use crate::entry::{ConceptCategory, ConceptEntry, DescriptionEntry, DescriptionKind};
 pub static STEP_TYPES: ConceptEntry = ConceptEntry {
     name: "3. types",
     summary: "types",

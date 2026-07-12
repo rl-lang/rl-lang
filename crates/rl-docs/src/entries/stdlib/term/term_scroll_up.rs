@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static TERM_SCROLL_UP: FnEntry = FnEntry {
     signature: "term_scroll_up(n)",

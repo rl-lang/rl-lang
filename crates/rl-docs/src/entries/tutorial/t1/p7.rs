@@ -1,4 +1,4 @@
-use crate::docs::entry::{ConceptCategory, ConceptEntry, DescriptionEntry, DescriptionKind};
+use crate::entry::{ConceptCategory, ConceptEntry, DescriptionEntry, DescriptionKind};
 pub static STEP_FOR_LOOPS: ConceptEntry = ConceptEntry {
     name: "7. for loops",
     summary: "for loops",

@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static TCP_SET_NONBLOCKING: FnEntry = FnEntry {
     signature: "tcp_set_nonblocking(stream, flag)",

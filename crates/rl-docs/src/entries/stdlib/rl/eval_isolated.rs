@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static EVAL_ISOLATED: FnEntry = FnEntry {
     signature: "eval_isolated(code)",

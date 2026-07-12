@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static ASSERT_NE: FnEntry = FnEntry {
     signature: "assert_ne(a, b, msg?)",

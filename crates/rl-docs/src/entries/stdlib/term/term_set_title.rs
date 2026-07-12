@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static TERM_SET_TITLE: FnEntry = FnEntry {
     signature: "term_set_title(title)",

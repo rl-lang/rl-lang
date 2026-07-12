@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static RENAME_FILE: FnEntry = FnEntry {
     signature: "rename_file(path, new_name)",

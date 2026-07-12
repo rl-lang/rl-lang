@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static TERM_RESET_ATTR: FnEntry = FnEntry {
     signature: "term_reset_attr()",

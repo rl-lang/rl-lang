@@ -1,4 +1,4 @@
-use crate::docs::entry::{FnEntry, StdEntry};
+use crate::entry::{FnEntry, StdEntry};
 
 mod http_get;
 mod http_post;

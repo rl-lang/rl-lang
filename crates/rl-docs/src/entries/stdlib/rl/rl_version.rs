@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static RL_VERSION: FnEntry = FnEntry {
     signature: "rl_version()",

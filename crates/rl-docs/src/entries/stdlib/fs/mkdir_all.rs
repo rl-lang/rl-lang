@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static MKDIR_ALL: FnEntry = FnEntry {
     signature: "mkdir_all(path)",

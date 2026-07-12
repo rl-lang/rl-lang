@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static HTTP_REQUEST_URL: FnEntry = FnEntry {
     signature: "http_request_url(req)",

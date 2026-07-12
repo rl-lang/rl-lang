@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static UNREACHABLE: FnEntry = FnEntry {
     signature: "unreachable(msg?)",

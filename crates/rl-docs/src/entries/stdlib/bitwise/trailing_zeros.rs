@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static TRAILING_ZEROS: FnEntry = FnEntry {
     signature: "trailing_zeros(a)",

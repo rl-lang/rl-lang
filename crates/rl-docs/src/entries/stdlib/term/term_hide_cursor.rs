@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static TERM_HIDE_CURSOR: FnEntry = FnEntry {
     signature: "term_hide_cursor()",

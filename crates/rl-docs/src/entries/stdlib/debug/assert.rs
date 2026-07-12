@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static ASSERT: FnEntry = FnEntry {
     signature: "assert(cond, msg?)",

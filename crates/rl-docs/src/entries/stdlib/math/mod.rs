@@ -1,4 +1,4 @@
-use crate::docs::entry::{FnEntry, StdEntry};
+use crate::entry::{FnEntry, StdEntry};
 pub static MATH: StdEntry = StdEntry {
     name: "math",
     description: "functions for math",

@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static TERM_END_SYNC: FnEntry = FnEntry {
     signature: "term_end_sync()",

@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static FILE_MODIFIED: FnEntry = FnEntry {
     signature: "file_modified(path)",

@@ -1,4 +1,4 @@
-use crate::docs::entry::{ConceptCategory, ConceptEntry, DescriptionEntry, DescriptionKind};
+use crate::entry::{ConceptCategory, ConceptEntry, DescriptionEntry, DescriptionKind};
 pub static STEP_FIRST_PROGRAM: ConceptEntry = ConceptEntry {
     name: "1. your first program",
     summary: "your first program",

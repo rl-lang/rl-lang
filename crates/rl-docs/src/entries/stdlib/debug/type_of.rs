@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static TYPE_OF: FnEntry = FnEntry {
     signature: "type_of(value)",

@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static ASSERT_EQ: FnEntry = FnEntry {
     signature: "assert_eq(a, b, msg?)",

@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static LIST_DIR: FnEntry = FnEntry {
     signature: "list_dir(path)",

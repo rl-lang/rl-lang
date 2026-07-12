@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static TCP_READ: FnEntry = FnEntry {
     signature: "tcp_read(stream, max_bytes)",

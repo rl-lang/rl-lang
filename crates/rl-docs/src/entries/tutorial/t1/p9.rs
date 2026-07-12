@@ -1,4 +1,4 @@
-use crate::docs::entry::{ConceptCategory, ConceptEntry, DescriptionEntry, DescriptionKind};
+use crate::entry::{ConceptCategory, ConceptEntry, DescriptionEntry, DescriptionKind};
 pub static STEP_ARRAYS: ConceptEntry = ConceptEntry {
     name: "9. collecting data",
     summary: "collecting data",

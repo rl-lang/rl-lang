@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static TEMP_DIR: FnEntry = FnEntry {
     signature: "temp_dir()",

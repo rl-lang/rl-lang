@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static ASSERT_GT: FnEntry = FnEntry {
     signature: "assert_gt(a, b, msg?)",

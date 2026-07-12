@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static BIT_SHIFT_LEFT: FnEntry = FnEntry {
     signature: "bit_shift_left(a, n)",

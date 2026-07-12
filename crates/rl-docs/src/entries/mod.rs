@@ -1,6 +1,6 @@
 //! Aggregates all documentation entries and exposes them as flat `Vec`s
 //! for the renderer functions in [`crate::docs`].
-use crate::docs::entry::{ConceptEntry, StdEntry};
+use crate::entry::{ConceptEntry, StdEntry};
 
 mod concepts;
 mod stdlib;

@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static LEADING_ZEROS: FnEntry = FnEntry {
     signature: "leading_zeros(a)",

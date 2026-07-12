@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static UDP_SEND_TO: FnEntry = FnEntry {
     signature: "udp_send_to(socket, data, addr)",

@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static TCP_SHUTDOWN: FnEntry = FnEntry {
     signature: "tcp_shutdown(stream, mode)",

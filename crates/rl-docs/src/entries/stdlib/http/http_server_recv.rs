@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static HTTP_SERVER_RECV: FnEntry = FnEntry {
     signature: "http_server_recv(server)",

@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static UDP_BIND: FnEntry = FnEntry {
     signature: "udp_bind(addr)",

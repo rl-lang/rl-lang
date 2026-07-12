@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static BIT_OR: FnEntry = FnEntry {
     signature: "bit_or(a, b)",

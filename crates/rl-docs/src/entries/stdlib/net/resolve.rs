@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static RESOLVE: FnEntry = FnEntry {
     signature: "resolve(host_port)",

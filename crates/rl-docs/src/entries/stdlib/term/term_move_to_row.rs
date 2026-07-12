@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static TERM_MOVE_TO_ROW: FnEntry = FnEntry {
     signature: "term_move_to_row(row)",

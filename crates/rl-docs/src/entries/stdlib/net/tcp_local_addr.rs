@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static TCP_LOCAL_ADDR: FnEntry = FnEntry {
     signature: "tcp_local_addr(stream)",

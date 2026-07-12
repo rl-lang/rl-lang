@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static TERM_SET_FG: FnEntry = FnEntry {
     signature: "term_set_fg(r, g, b)",

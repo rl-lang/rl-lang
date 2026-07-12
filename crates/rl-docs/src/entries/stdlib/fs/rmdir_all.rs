@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static RMDIR_ALL: FnEntry = FnEntry {
     signature: "rmdir_all(path)",

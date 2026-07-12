@@ -1,4 +1,4 @@
-use crate::docs::entry::{ConceptCategory, ConceptEntry, DescriptionEntry, DescriptionKind};
+use crate::entry::{ConceptCategory, ConceptEntry, DescriptionEntry, DescriptionKind};
 pub static STEP_OPERATORS_AND_DECISIONS: ConceptEntry = ConceptEntry {
     name: "5. making decisions",
     summary: "making decisions",

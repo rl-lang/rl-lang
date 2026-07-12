@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static MOVE_FILE: FnEntry = FnEntry {
     signature: "move_file(src, dst)",

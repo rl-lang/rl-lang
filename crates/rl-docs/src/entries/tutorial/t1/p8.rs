@@ -1,4 +1,4 @@
-use crate::docs::entry::{ConceptCategory, ConceptEntry, DescriptionEntry, DescriptionKind};
+use crate::entry::{ConceptCategory, ConceptEntry, DescriptionEntry, DescriptionKind};
 pub static STEP_FUNCTIONS: ConceptEntry = ConceptEntry {
     name: "8. grouping logic into functions",
     summary: "grouping logic into functions",

@@ -1,4 +1,4 @@
-use crate::docs::entry::FnEntry;
+use crate::entry::FnEntry;
 
 pub static TCP_ACCEPT: FnEntry = FnEntry {
     signature: "tcp_accept(listener)",
