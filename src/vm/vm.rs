@@ -292,8 +292,8 @@ impl Vm {
     }
     #[inline(always)]
     fn pop_two_unchecked(&mut self) -> (VmValue, VmValue) {
-        let a = self.pop_unchecked();
         let b = self.pop_unchecked();
+        let a = self.pop_unchecked();
         (a, b)
     }
 
