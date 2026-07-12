@@ -16,10 +16,8 @@
 //! The node's `ExprId` never changes - only its `kind` does. Child `ExprId`s
 //! embedded in a parent's kind stay valid across the rewrite since resolving
 //! a child mutates the arena slot it already occupies, not its address.
-use crate::{
-    ast::{ExprId, nodes::ExpressionKind},
-    resolver::Resolver,
-};
+use crate::Resolver;
+use rl_ast::{ExprId, nodes::ExpressionKind};
 
 impl Resolver {
     /// Resolves the expression at `id` in place and returns the same `id`.

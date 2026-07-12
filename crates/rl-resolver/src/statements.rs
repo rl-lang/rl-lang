@@ -15,17 +15,15 @@
 //!   `ImportFileNamed` additionally filters to only the requested names before resolving.
 //!   Both silently return the original unresolved statement on any IO/parse failure
 
-use crate::{
-    ast::{
-        Ast,
-        nodes::ExpressionKind,
-        statements::{Statement, StatementKind},
-    },
-    lexer::tokenizer::Tokenizer,
-    parser::parser_logic::Parser,
-    resolver::Resolver,
-    utils::source::SourceFile,
+use crate::Resolver;
+use rl_ast::{
+    Ast,
+    nodes::ExpressionKind,
+    statements::{Statement, StatementKind},
 };
+use rl_lexer::tokenizer::Tokenizer;
+use rl_parser::parser_logic::Parser;
+use rl_utils::source::SourceFile;
 
 impl Resolver {
     pub fn resolve_program(&mut self, ast: Ast, statements: Vec<Statement>) -> Vec<Statement> {

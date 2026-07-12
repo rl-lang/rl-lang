@@ -12,7 +12,7 @@
 //! Function and lambda bodies are resolved in their own pushed scope.
 //! Import statements are read from disk, lexed, parsed, and resolved inline.
 
-use crate::ast::Ast;
+use rl_ast::Ast;
 
 mod expressions;
 mod statements;
