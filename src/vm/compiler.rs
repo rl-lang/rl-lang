@@ -68,11 +68,13 @@ impl<'a> Compiler<'a> {
     fn compile_statement(&mut self, stmt: &Statement) -> Result<(), CompileError> {
         let line = self.line(0); // todo
         match &stmt.kind {
-            StatementKind::ResolvedVariableDeclaration { slot, value, .. }
-            | StatementKind::ResolvedConstantDeclaration { slot, value, .. } => {
+            StatementKind::ResolvedVariableDeclaration { value, .. }
+            | StatementKind::ResolvedConstantDeclaration { value, .. } => {
                 self.compile_expr(*value)?;
+                let slot = self.next_slot;
+                self.next_slot += 1;
                 self.chunk.write_op(OpCode::DefineLocal, line);
-                self.chunk.write_u16(*slot as u16, line);
+                self.chunk.write_u16(slot, line);
                 Ok(())
             }
 
@@ -106,7 +108,7 @@ impl<'a> Compiler<'a> {
                 body,
                 ..
             } => {
-                let func_chunk = Self::compile_function_chunk(self.ast, body)?;
+                let func_chunk = Self::compile_function_chunk(self.ast, body, params.len())?;
                 let func = VmValue::Function(Rc::new(VmFunction {
                     name: name.clone(),
                     arity: params.len(),
@@ -199,6 +201,7 @@ impl<'a> Compiler<'a> {
     ) -> Result<(), CompileError> {
         if needs_scope {
             self.chunk.write_op(OpCode::PushScope, line);
+            self.scope_bases.push(self.next_slot);
         }
         for stmt in body {
             if let StatementKind::Expression(id) = &stmt.kind {
@@ -209,6 +212,7 @@ impl<'a> Compiler<'a> {
         }
         if needs_scope {
             self.chunk.write_op(OpCode::PopScope, line);
+            self.scope_bases.pop();
         }
         Ok(())
     }
@@ -276,18 +280,34 @@ impl<'a> Compiler<'a> {
             }
 
             ExpressionKind::ResolvedIdentifier { depth, slot, .. } => {
-                self.chunk.write_op(OpCode::GetLocal, line);
-                self.chunk.write_u16(*depth as u16, line);
-                self.chunk.write_u16(*slot as u16, line);
+                match self.resolve(*depth, *slot) {
+                    Some(s) => {
+                        self.chunk.write_op(OpCode::GetLocal, line);
+                        self.chunk.write_u16(s, line);
+                    }
+
+                    None => {
+                        self.chunk.write_op(OpCode::GetGlobal, line);
+                        self.chunk.write_u16(*slot as u16, line);
+                    }
+                }
             }
 
             ExpressionKind::ResolvedAssign {
                 depth, slot, value, ..
             } => {
                 self.compile_expr(*value)?;
-                self.chunk.write_op(OpCode::SetLocal, line);
-                self.chunk.write_u16(*depth as u16, line);
-                self.chunk.write_u16(*slot as u16, line);
+                match self.resolve(*depth, *slot) {
+                    Some(s) => {
+                        self.chunk.write_op(OpCode::SetLocal, line);
+                        self.chunk.write_u16(s, line);
+                    }
+
+                    None => {
+                        self.chunk.write_op(OpCode::SetGlobal, line);
+                        self.chunk.write_u16(*slot as u16, line);
+                    }
+                }
             }
 
             ExpressionKind::CallExpr { callee, args } => {
@@ -340,8 +360,14 @@ impl<'a> Compiler<'a> {
         self.chunk.write_u16(offset, line);
     }
 
-    fn compile_function_chunk(ast: &Ast, body: &[Statement]) -> Result<Chunk, CompileError> {
+    fn compile_function_chunk(
+        ast: &Ast,
+        body: &[Statement],
+        param_count: usize,
+    ) -> Result<Chunk, CompileError> {
         let mut sub = Compiler::new(ast);
+        sub.scope_bases.push(0);
+        sub.next_slot = param_count as u16;
         for stmt in body {
             sub.compile_statement(stmt)?;
         }
