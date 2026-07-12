@@ -7,7 +7,10 @@
 //! spans overlap on the same line).
 use crate::utils::{offset_to_position, position_to_offset};
 use rl_checker::TypeChecker;
-use rl_lexer::{tokenizer::Tokenizer, tokentypes::TokenType};
+use rl_lexer::{
+    tokenizer::Tokenizer,
+    tokentypes::{Token, TokenType},
+};
 use rl_parser::parser_logic::Parser;
 use rl_utils::{source::SourceFile, span::Span};
 
@@ -80,10 +83,7 @@ pub fn run_hover(source: &str, position: Position, uri: &Url) -> Option<Hover> {
 
 /// Returns the [`Span`] of the identifier token that contains `offset`,
 /// or `None` if no identifier token covers that position.
-fn find_identifier_span_at(
-    tokens: &[crate::lexer::tokentypes::Token],
-    offset: usize,
-) -> Option<Span> {
+fn find_identifier_span_at(tokens: &[Token], offset: usize) -> Option<Span> {
     tokens
         .iter()
         .find(|t| {

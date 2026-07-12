@@ -16,16 +16,16 @@
 #[cfg(feature = "debug")]
 use log::info;
 
-use crate::ast::Ast;
+use rl_ast::Ast;
 
 #[cfg(feature = "eval")]
-use super::interpreter::evaluator::Evaluator;
+use rl_interpreter::evaluator::Evaluator;
 
-use super::{
-    ast::statements::Statement,
-    lexer::{tokenizer::Tokenizer, tokentypes::Token},
-    parser::parser_logic::Parser,
-    utils::source::SourceFile,
+use {
+    rl_ast::statements::Statement,
+    rl_lexer::{tokenizer::Tokenizer, tokentypes::Token},
+    rl_parser::parser_logic::Parser,
+    rl_utils::source::SourceFile,
 };
 
 /// Lexes `source` into a token stream, or prints the error and exits.
@@ -91,7 +91,7 @@ pub fn eval_loop(
 
 #[cfg(all(feature = "eval", feature = "vm"))]
 pub fn vm_loop(source: SourceFile, ast: Ast, statements: Vec<Statement>) {
-    use crate::vm::{Compiler, Vm};
+    use rl_vm::{Compiler, Vm};
 
     let mut evaluator = Evaluator::default()
         .with_stdlib()

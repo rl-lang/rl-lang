@@ -12,23 +12,27 @@
 //! | `docs [topic]` | print stdlib / concept / tutorial reference |
 //! | `repl` | start the interactive TUI REPL (`repl_tui` feature) |
 //! | `lsp` | start the LSP server over stdio (`lsp` feature) |
+mod logic_loops;
 use clap::{Parser, Subcommand};
-use rl_lang::docs;
-use rl_lang::tooling::format::format_tokens;
-use rl_lang::tooling::new::create_project;
-use rl_lang::tooling::package::{find_embedded, package};
-use rl_lang::tooling::workflows::generate;
+use rl_docs::{
+    concept_to_markdown, docs_to_json,
+    entries::{concept_entries, stdlib_entries, tutorial_entries},
+    entry::{ConceptEntry, StdEntry},
+    std_to_markdown, tutorial_to_markdown,
+};
+use rl_tooling::format::format_tokens;
+use rl_tooling::new::create_project;
+use rl_tooling::package::{find_embedded, package};
+use rl_tooling::workflows::generate;
 use std::path::PathBuf;
 
+use crate::logic_loops::{eval_loop, lexing_loop, parsing_loop};
 #[cfg(feature = "lsp")]
 use rl_lang::lsp::run_lsp;
-#[cfg(feature = "repl_tui")]
-use rl_lang::repl;
-use rl_lang::utils::source::SourceFile;
-use rl_lang::{
-    logic_loops::{eval_loop, lexing_loop, parsing_loop},
-    tooling::dev::read_rl_toml,
-};
+#[cfg(feature = "repl")]
+use rl_repl;
+use rl_tooling::dev::read_rl_toml;
+use rl_utils::source::SourceFile;
 
 #[derive(Parser)]
 #[command(name = "rl", version, about = "The rl programming language")]
@@ -233,7 +237,7 @@ fn main() {
             let (ast, statements) = parsing_loop(source.clone(), tokens);
             if vm {
                 #[cfg(all(feature = "eval", feature = "vm"))]
-                rl_lang::logic_loops::vm_loop(source, ast, statements);
+                crate::logic_loops::vm_loop(source, ast, statements);
                 #[cfg(not(feature = "vm"))]
                 {
                     eprintln!("error: --vm requires the `vm` feature");
@@ -286,7 +290,7 @@ fn main() {
 
             #[cfg(feature = "eval")]
             {
-                use rl_lang::checker::TypeChecker;
+                use rl_checker::TypeChecker;
                 let base_dir = file
                     .parent()
                     .map(std::path::Path::to_path_buf)
@@ -331,9 +335,9 @@ fn main() {
             output,
             out_file,
         } => {
-            let std_entries = docs::entries::stdlib_entries();
-            let concept_entries = docs::entries::concept_entries();
-            let tutorial_entries = docs::entries::tutorial_entries();
+            let std_entries = stdlib_entries();
+            let concept_entries = concept_entries();
+            let tutorial_entries = tutorial_entries();
 
             let any_category = stdlib || concept || tutorial;
             let want_std = !any_category || stdlib;
@@ -341,9 +345,9 @@ fn main() {
             let want_tutorial = !any_category || tutorial;
 
             let (matched_std, matched_concepts, matched_tutorial): (
-                Vec<&docs::entry::StdEntry>,
-                Vec<&docs::entry::ConceptEntry>,
-                Vec<&docs::entry::ConceptEntry>,
+                Vec<&StdEntry>,
+                Vec<&ConceptEntry>,
+                Vec<&ConceptEntry>,
             ) = match topic.as_deref() {
                 None => (
                     if want_std {
@@ -406,7 +410,7 @@ fn main() {
             };
 
             let rendered = if json {
-                match docs::docs_to_json(&matched_std, &matched_concepts, &matched_tutorial) {
+                match docs_to_json(&matched_std, &matched_concepts, &matched_tutorial) {
                     Ok(s) => s,
                     Err(e) => {
                         eprintln!("error: failed to serialize docs to json: {}", e);
@@ -416,13 +420,13 @@ fn main() {
             } else {
                 let mut out = String::new();
                 if !matched_std.is_empty() {
-                    out.push_str(&docs::std_to_markdown(&matched_std));
+                    out.push_str(&std_to_markdown(&matched_std));
                 }
                 if !matched_concepts.is_empty() {
-                    out.push_str(&docs::concept_to_markdown(&matched_concepts));
+                    out.push_str(&concept_to_markdown(&matched_concepts));
                 }
                 if !matched_tutorial.is_empty() {
-                    out.push_str(&docs::tutorial_to_markdown(&matched_tutorial));
+                    out.push_str(&tutorial_to_markdown(&matched_tutorial));
                 }
                 out
             };
@@ -444,8 +448,8 @@ fn main() {
         }
 
         Commands::Repl => {
-            #[cfg(feature = "repl_tui")]
-            repl::start_repl();
+            #[cfg(feature = "repl")]
+            rl_repl::start_repl();
         }
 
         #[cfg(feature = "lsp")]

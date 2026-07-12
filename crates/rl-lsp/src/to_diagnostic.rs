@@ -1,7 +1,7 @@
 //! Converts rl [`Error`]s into LSP [`Diagnostic`]s.
 use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, Range};
 
-use rl_utils::offset_to_position;
+use crate::utils::offset_to_position;
 
 /// Converts an rl [`Error`] into an LSP [`Diagnostic`].
 ///
