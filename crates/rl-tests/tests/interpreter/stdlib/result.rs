@@ -7,7 +7,7 @@ fn is_ok_on_ok() {
     let ev = eval_program(
         r#"
 get is_ok from std::res
-dec bool x = is_ok(ok(42))?
+dec bool x = is_ok(ok(42))
 "#,
     )
     .unwrap();
@@ -19,7 +19,7 @@ fn is_ok_on_err() {
     let ev = eval_program(
         r#"
 get is_ok from std::res
-dec bool x = is_ok(err("oops"))?
+dec bool x = is_ok(err("oops"))
 "#,
     )
     .unwrap();
@@ -31,7 +31,7 @@ fn is_err_on_err() {
     let ev = eval_program(
         r#"
 get is_err from std::res
-dec bool x = is_err(err("oops"))?
+dec bool x = is_err(err("oops"))
 "#,
     )
     .unwrap();
@@ -43,7 +43,7 @@ fn is_err_on_ok() {
     let ev = eval_program(
         r#"
 get is_err from std::res
-dec bool x = is_err(ok(42))?
+dec bool x = is_err(ok(42))
 "#,
     )
     .unwrap();
