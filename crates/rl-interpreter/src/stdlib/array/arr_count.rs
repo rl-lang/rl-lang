@@ -1,9 +1,15 @@
-use crate::{evaluator::Evaluator, values::Value};
-use rl_utils::{errors::Error, span::Span};
+use crate::{
+    evaluator::Evaluator,
+    stdlib::common::{verr, vok, vs},
+    values::Value,
+};
 
-pub fn std_arr_count(eval: &mut Evaluator, array: Value, span: Span) -> Result<i64, Error> {
+pub fn std_arr_count(_: &mut Evaluator, array: Value) -> Value {
     match array {
-        Value::Values { items, .. } => Ok(items.len() as i64),
-        _ => Err(eval.err("arr_is_empty() accepts only arrays".to_string(), span)),
+        Value::Values { items, .. } => vok!(Value::Integer(items.len() as i64)),
+        other => verr!(vs!(format!(
+            "arr_count: accepts only arrays, found {}",
+            other.type_name()
+        ))),
     }
 }
