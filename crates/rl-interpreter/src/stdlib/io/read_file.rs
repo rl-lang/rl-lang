@@ -1,12 +1,18 @@
-use crate::{evaluator::Evaluator, values::Value};
-use rl_utils::{errors::Error, span::Span};
+use crate::{
+    evaluator::Evaluator,
+    stdlib::common::{verr, vok, vs},
+    values::Value,
+};
 
-pub fn std_read_file(eval: &mut Evaluator, file: String, span: Span) -> Result<Value, Error> {
-    let data = std::fs::read_to_string(&file).map_err(|e| {
-        eval.err(
-            format!("read_file(): failed to read \"{}\": {}", file, e),
-            span,
-        )
-    })?;
-    Ok(Value::String(data))
+pub fn std_read_file(_: &mut Evaluator, file: String) -> Value {
+    let data = match std::fs::read_to_string(&file) {
+        Ok(d) => d,
+        Err(e) => {
+            return verr!(vs!(format!(
+                "read_file: failed to read \"{}\": {}",
+                file, e
+            )));
+        }
+    };
+    vok!(vs!(data))
 }

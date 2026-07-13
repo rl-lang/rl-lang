@@ -1,20 +1,22 @@
-use crate::{evaluator::Evaluator, values::Value};
+use crate::{
+    evaluator::Evaluator,
+    stdlib::common::{verr, vok, vs},
+    values::Value,
+};
 use rl_ast::statements::TypeAnnotation;
-use rl_utils::{errors::Error, span::Span};
 
-pub fn func(eval: &mut Evaluator, file: String, span: Span) -> Result<Value, Error> {
-    let data = std::fs::read(&file)
-        .map_err(|e| {
-            eval.err(
-                format!("read_bytes(): failed to read \"{}\": {}", file, e),
-                span,
-            )
-        })?
-        .into_iter()
-        .map(Value::Byte)
-        .collect::<Vec<Value>>();
+pub fn func(_: &mut Evaluator, file: String) -> Value {
+    let data = match std::fs::read(&file) {
+        Err(e) => {
+            return verr!(vs!(format!(
+                "read_bytes: failed to read \"{}\": {}",
+                file, e
+            )));
+        }
+        Ok(d) => d.into_iter().map(Value::Byte).collect::<Vec<Value>>(),
+    };
 
-    Ok(Value::Values {
+    vok!(Value::Values {
         items_type: TypeAnnotation::Byte,
         items: data,
     })

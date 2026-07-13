@@ -1,17 +1,17 @@
-use crate::{evaluator::Evaluator, values::Value};
-use rl_utils::{errors::Error, span::Span};
+use crate::{
+    evaluator::Evaluator,
+    stdlib::common::{verr, vnl, vok, vs},
+    values::Value,
+};
 
-pub fn std_write_file(
-    eval: &mut Evaluator,
-    file: String,
-    content: String,
-    span: Span,
-) -> Result<Value, Error> {
-    std::fs::write(&file, content).map_err(|e| {
-        eval.err(
-            format!("write_file(): failed to write \"{}\": {}", file, e),
-            span,
-        )
-    })?;
-    Ok(Value::Null)
+pub fn std_write_file(_: &mut Evaluator, file: String, content: String) -> Value {
+    match std::fs::write(&file, content) {
+        Ok(_) => vok!(vnl!()),
+        Err(e) => {
+            verr!(vs!(format!(
+                "write_file: failed to write \"{}\": {}",
+                file, e
+            )))
+        }
+    }
 }

@@ -1,30 +1,27 @@
-use crate::{evaluator::Evaluator, values::Value};
-use rl_utils::{errors::Error, span::Span};
+use crate::{
+    evaluator::Evaluator,
+    stdlib::common::{verr, vnl, vok, vs},
+    values::Value,
+};
 use std::{fs::OpenOptions, io::Write};
 
-pub fn std_append_file(
-    eval: &mut Evaluator,
-    file: String,
-    content: String,
-    span: Span,
-) -> Result<Value, Error> {
-    let mut file_data = OpenOptions::new()
-        .append(true)
-        .create(true)
-        .open(&file)
-        .map_err(|e| {
-            eval.err(
-                format!("append_file(): failed to open \"{}\": {}", file, e),
-                span,
-            )
-        })?;
+pub fn std_append_file(_: &mut Evaluator, file: String, content: String) -> Value {
+    let mut file_data = match OpenOptions::new().append(true).create(true).open(&file) {
+        Ok(fd) => fd,
+        Err(e) => {
+            return verr!(vs!(format!(
+                "append_file: failed to open \"{}\": {}",
+                file, e
+            )));
+        }
+    };
 
-    file_data.write_all(content.as_bytes()).map_err(|e| {
-        eval.err(
-            format!("append_file(): failed to append \"{}\": {}", file, e),
-            span,
-        )
-    })?;
+    match file_data.write_all(content.as_bytes()) {
+        Err(e) => verr!(vs!(format!(
+            "append_file: failed to append \"{}\": {}",
+            file, e
+        ))),
 
-    Ok(Value::Null)
+        Ok(_) => vok!(vnl!()),
+    }
 }
