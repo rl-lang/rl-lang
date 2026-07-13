@@ -1,13 +1,16 @@
-use crate::{evaluator::Evaluator, values::Value};
-use rl_utils::{errors::Error, span::Span};
+use crate::{
+    evaluator::Evaluator,
+    stdlib::common::{verr, vf, vok, vs},
+    values::Value,
+};
 
-pub fn std_sqrt(eval: &mut Evaluator, a: Value, span: Span) -> Result<Value, Error> {
+pub fn std_sqrt(_: &mut Evaluator, a: Value) -> Value {
     match a {
-        Value::Integer(i) => Ok(Value::Float((i as f64).sqrt())),
-        Value::Float(f) => Ok(Value::Float(f.sqrt())),
-        other => Err(eval.err(
-            format!("round() expects a number, got {}", other.type_name(),),
-            span,
-        )),
+        Value::Integer(i) => vok!(vf!((i as f64).sqrt())),
+        Value::Float(f) => vok!(vf!(f.sqrt())),
+        other => verr!(vs!(format!(
+            "sqrt expects a number, got {}",
+            other.type_name()
+        ))),
     }
 }
