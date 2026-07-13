@@ -1,8 +1,11 @@
-use crate::{evaluator::Evaluator, values::Value};
+use crate::{
+    evaluator::Evaluator,
+    stdlib::common::{verr, vok, vs},
+    values::Value,
+};
 use rl_ast::statements::TypeAnnotation;
-use rl_utils::{errors::Error, span::Span};
 
-pub fn std_arr_sort(eval: &mut Evaluator, array: Value, span: Span) -> Result<Value, Error> {
+pub fn std_arr_sort(_: &mut Evaluator, array: Value) -> Value {
     match array {
         Value::Values {
             items_type,
@@ -16,7 +19,7 @@ pub fn std_arr_sort(eval: &mut Evaluator, array: Value, span: Span) -> Result<Va
                         std::cmp::Ordering::Equal
                     }
                 });
-                Ok(Value::Values { items_type, items })
+                vok!(Value::Values { items_type, items })
             }
             TypeAnnotation::Float => {
                 items.sort_by(|a, b| {
@@ -26,13 +29,13 @@ pub fn std_arr_sort(eval: &mut Evaluator, array: Value, span: Span) -> Result<Va
                         std::cmp::Ordering::Equal
                     }
                 });
-                Ok(Value::Values { items_type, items })
+                vok!(Value::Values { items_type, items })
             }
-            _ => Err(eval.err(
-                "arr_sort() accepts only int or float arrays".to_string(),
-                span,
-            )),
+            _ => verr!(vs!("arr_sort: accepts only int or float arrays".to_string())),
         },
-        _ => Err(eval.err("arr_sort() accepts only arrays".to_string(), span)),
+        other => verr!(vs!(format!(
+            "arr_sort: accepts only arrays, found {}",
+            other.type_name()
+        ))),
     }
 }
