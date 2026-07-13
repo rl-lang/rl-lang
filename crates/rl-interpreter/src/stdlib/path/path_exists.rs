@@ -1,12 +1,15 @@
-use crate::{evaluator::Evaluator, values::Value};
-use rl_utils::{errors::Error, span::Span};
+use crate::{
+    evaluator::Evaluator,
+    stdlib::common::{vb, verr, vok, vs},
+    values::Value,
+};
 
-pub fn std_path_exists(eval: &mut Evaluator, path: Value, span: Span) -> Result<Value, Error> {
+pub fn std_path_exists(_: &mut Evaluator, path: Value) -> Value {
     match path {
-        Value::String(s) => Ok(Value::Bool(std::path::Path::new(&s).exists())),
-        other => Err(eval.err(
-            format!("path_exists() expects a string, got {}", other.type_name()),
-            span,
-        )),
+        Value::String(s) => vok!(vb!(std::path::Path::new(&s).exists())),
+        other => verr!(vs!(format!(
+            "path_exists expects a string, got {}",
+            other.type_name()
+        ))),
     }
 }

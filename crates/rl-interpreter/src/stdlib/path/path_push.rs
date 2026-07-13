@@ -1,21 +1,19 @@
-use crate::{evaluator::Evaluator, values::Value};
-use rl_utils::{errors::Error, span::Span};
+use crate::{
+    evaluator::Evaluator,
+    stdlib::common::{verr, vok, vs},
+    values::Value,
+};
 
-pub fn std_path_push(
-    eval: &mut Evaluator,
-    path: Value,
-    target: String,
-    span: Span,
-) -> Result<Value, Error> {
+pub fn std_path_push(_: &mut Evaluator, path: Value, target: String) -> Value {
     match path {
         Value::String(s) => {
             let mut buf = std::path::PathBuf::from(&s);
             buf.push(&target);
-            Ok(Value::String(buf.to_string_lossy().to_string()))
+            vok!(vs!(buf.to_string_lossy().to_string()))
         }
-        other => Err(eval.err(
-            format!("path_push() expects a string, got {}", other.type_name()),
-            span,
-        )),
+        other => verr!(vs!(format!(
+            "path_push: expects a string, got {}",
+            other.type_name()
+        ))),
     }
 }

@@ -1,21 +1,18 @@
-use crate::{evaluator::Evaluator, values::Value};
-use rl_utils::{errors::Error, span::Span};
+use crate::{
+    evaluator::Evaluator,
+    stdlib::common::{verr, vok, vs},
+    values::Value,
+};
 
-pub fn std_path_extension(eval: &mut Evaluator, path: Value, span: Span) -> Result<Value, Error> {
+pub fn std_path_extension(_: &mut Evaluator, path: Value) -> Value {
     match path {
-        Value::String(s) => Ok(Value::String(
-            std::path::Path::new(&s)
-                .extension()
-                .ok_or_else(|| eval.err("file was not found".to_string(), span))?
-                .to_string_lossy()
-                .to_string(),
-        )),
-        other => Err(eval.err(
-            format!(
-                "path_extension() expects a string, got {}",
-                other.type_name()
-            ),
-            span,
-        )),
+        Value::String(s) => match std::path::Path::new(&s).extension() {
+            Some(ext) => vok!(vs!(ext.to_string_lossy().to_string())),
+            None => verr!(vs!(format!("path_extension: \"{}\" has no extension", s))),
+        },
+        other => verr!(vs!(format!(
+            "path_extension: expects a string, got {}",
+            other.type_name()
+        ))),
     }
 }
