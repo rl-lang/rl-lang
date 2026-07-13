@@ -1,13 +1,16 @@
-use crate::{evaluator::Evaluator, values::Value};
-use rl_utils::{errors::Error, span::Span};
+use crate::{
+    evaluator::Evaluator,
+    stdlib::common::{verr, vf, vi, vok, vs},
+    values::Value,
+};
 
-pub fn std_floor(eval: &mut Evaluator, a: Value, span: Span) -> Result<Value, Error> {
+pub fn std_floor(_: &mut Evaluator, a: Value) -> Value {
     match a {
-        Value::Integer(i) => Ok(Value::Integer(i)),
-        Value::Float(f) => Ok(Value::Float(f.floor())),
-        other => Err(eval.err(
-            format!("floor() expects a number, got {}", other.type_name()),
-            span,
-        )),
+        Value::Integer(i) => vok!(vi!(i)),
+        Value::Float(f) => vok!(vf!(f.floor())),
+        other => verr!(vs!(format!(
+            "floor expects a number, got {}",
+            other.type_name()
+        ))),
     }
 }
