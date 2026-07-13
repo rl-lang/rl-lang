@@ -1,17 +1,18 @@
-use crate::{evaluator::Evaluator, values::Value};
-use rl_utils::{errors::Error, span::Span};
+use crate::{
+    evaluator::Evaluator,
+    stdlib::common::{verr, vok, vs},
+    values::Value,
+};
 
-pub fn std_arr_index_of(
-    eval: &mut Evaluator,
-    array: Value,
-    value: Value,
-    span: Span,
-) -> Result<Value, Error> {
+pub fn std_arr_index_of(_: &mut Evaluator, array: Value, value: Value) -> Value {
     match array {
         Value::Values { items, .. } => match items.iter().position(|item| *item == value) {
-            Some(pos) => Ok(Value::Integer(pos as i64)),
-            None => Ok(Value::Integer(-1)),
+            Some(pos) => vok!(Value::Integer(pos as i64)),
+            None => vok!(Value::Integer(-1)),
         },
-        _ => Err(eval.err("arr_index_of() accepts only arrays".to_string(), span)),
+        other => verr!(vs!(format!(
+            "arr_index_of: accepts only arrays, found {}",
+            other.type_name()
+        ))),
     }
 }

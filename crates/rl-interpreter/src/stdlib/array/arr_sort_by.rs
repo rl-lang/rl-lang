@@ -1,4 +1,8 @@
-use crate::{evaluator::Evaluator, values::Value};
+use crate::{
+    evaluator::Evaluator,
+    stdlib::common::{verr, vok, vs},
+    values::Value,
+};
 use rl_utils::{errors::Error, span::Span};
 
 pub fn std_arr_sort_by(
@@ -10,24 +14,18 @@ pub fn std_arr_sort_by(
     let (items_type, mut items) = match array {
         Value::Values { items_type, items } => (items_type, items),
         other => {
-            return Err(eval.err(
-                format!(
-                    "arr_sort_by() accepts only arrays, found {}",
-                    other.type_name()
-                ),
-                span,
-            ));
+            return Ok(verr!(vs!(format!(
+                "arr_sort_by: accepts only arrays, found {}",
+                other.type_name()
+            ))));
         }
     };
 
     if !matches!(function, Value::Function { .. }) {
-        return Err(eval.err(
-            format!(
-                "arr_sort_by() expected function or lambda, found {}",
-                function.type_name()
-            ),
-            span,
-        ));
+        return Ok(verr!(vs!(format!(
+            "arr_sort_by: expected function or lambda, found {}",
+            function.type_name()
+        ))));
     }
 
     for i in 1..items.len() {
@@ -46,17 +44,14 @@ pub fn std_arr_sort_by(
                 }
                 Value::Integer(_) => break,
                 other => {
-                    return Err(eval.err(
-                        format!(
-                            "arr_sort_by() comparator must return int (-1, 0, 1), found {}",
-                            other.type_name()
-                        ),
-                        span,
-                    ));
+                    return Ok(verr!(vs!(format!(
+                        "arr_sort_by: comparator must return int (-1, 0, 1), found {}",
+                        other.type_name()
+                    ))));
                 }
             }
         }
     }
 
-    Ok(Value::Values { items_type, items })
+    Ok(vok!(Value::Values { items_type, items }))
 }

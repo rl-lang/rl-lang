@@ -1,14 +1,16 @@
-use crate::{evaluator::Evaluator, values::Value};
-use rl_utils::{errors::Error, span::Span};
+use crate::{
+    evaluator::Evaluator,
+    stdlib::common::{verr, vok, vs},
+    values::Value,
+};
 
-pub fn std_arr_flatten(eval: &mut Evaluator, array: Value, span: Span) -> Result<Value, Error> {
+pub fn std_arr_flatten(_: &mut Evaluator, array: Value) -> Value {
     match array {
         Value::Values { items, items_type } => {
             if items.is_empty() {
-                return Err(eval.err("arr_flatten() called on empty array".to_string(), span));
+                return verr!(vs!("arr_flatten: called on empty array".to_string()));
             }
-
-            Ok(Value::Values {
+            vok!(Value::Values {
                 items_type,
                 items: items
                     .into_iter()
@@ -22,6 +24,9 @@ pub fn std_arr_flatten(eval: &mut Evaluator, array: Value, span: Span) -> Result
                     .collect(),
             })
         }
-        _ => Err(eval.err("arr_flatten() accepts only arrays".to_string(), span)),
+        other => verr!(vs!(format!(
+            "arr_flatten: accepts only arrays, found {}",
+            other.type_name()
+        ))),
     }
 }

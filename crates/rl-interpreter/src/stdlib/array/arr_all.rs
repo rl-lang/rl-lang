@@ -1,4 +1,8 @@
-use crate::{evaluator::Evaluator, values::Value};
+use crate::{
+    evaluator::Evaluator,
+    stdlib::common::{verr, vok, vs},
+    values::Value,
+};
 use rl_ast::statements::TypeAnnotation;
 use rl_utils::{errors::Error, span::Span};
 
@@ -8,42 +12,35 @@ pub fn std_arr_all(
     function: Value,
     span: Span,
 ) -> Result<Value, Error> {
-    let (_, items) = match array {
-        Value::Values { items_type, items } => (items_type, items),
-
+    let items = match array {
+        Value::Values { items, .. } => items,
         other => {
-            return Err(eval.err(
-                format!("arr_all() accepts only arrays found {}", other.type_name()).to_string(),
-                span,
-            ));
+            return Ok(verr!(vs!(format!(
+                "arr_all: accepts only arrays, found {}",
+                other.type_name()
+            ))));
         }
     };
     let Value::Function(data) = &function else {
-        return Err(eval.err(
-            format!(
-                "arr_all() expected function or lambda found {}",
-                function.type_name()
-            ),
-            span,
-        ));
+        return Ok(verr!(vs!(format!(
+            "arr_all: expected function or lambda, found {}",
+            function.type_name()
+        ))));
     };
 
     if !matches!(data.return_type, Some(TypeAnnotation::Bool)) {
-        return Err(eval.err(
-            format!(
-                "arr_all() expected function or lambda with Bool return type found {:?}",
-                data.return_type
-            ),
-            span,
-        ));
+        return Ok(verr!(vs!(format!(
+            "arr_all: expected function or lambda with Bool return type, found {:?}",
+            data.return_type
+        ))));
     }
 
-    for item in items.clone() {
-        let mapped_item = eval.call_value(function.clone(), vec![item.clone()], span)?;
+    for item in items {
+        let mapped_item = eval.call_value(function.clone(), vec![item], span)?;
         if let Value::Bool(false) = mapped_item {
-            return Ok(Value::Bool(false));
+            return Ok(vok!(Value::Bool(false)));
         }
     }
 
-    Ok(Value::Bool(true))
+    Ok(vok!(Value::Bool(true)))
 }

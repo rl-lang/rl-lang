@@ -1,8 +1,11 @@
-use crate::{evaluator::Evaluator, values::Value};
+use crate::{
+    evaluator::Evaluator,
+    stdlib::common::{verr, vok, vs},
+    values::Value,
+};
 use rl_ast::statements::TypeAnnotation;
-use rl_utils::{errors::Error, span::Span};
 
-pub fn std_arr_product(eval: &mut Evaluator, array: Value, span: Span) -> Result<Value, Error> {
+pub fn std_arr_product(_: &mut Evaluator, array: Value) -> Value {
     match array {
         Value::Values { items, items_type } => match items_type {
             TypeAnnotation::Int => {
@@ -16,7 +19,7 @@ pub fn std_arr_product(eval: &mut Evaluator, array: Value, span: Span) -> Result
                         }
                     })
                     .product::<i64>();
-                Ok(Value::Integer(product))
+                vok!(Value::Integer(product))
             }
             TypeAnnotation::Float => {
                 let product = items
@@ -28,14 +31,16 @@ pub fn std_arr_product(eval: &mut Evaluator, array: Value, span: Span) -> Result
                             None
                         }
                     })
-                    .sum::<f64>();
-                Ok(Value::Float(product))
+                    .product::<f64>();
+                vok!(Value::Float(product))
             }
-            _ => Err(eval.err(
-                "arr_product() accepts only int or float arrays".to_string(),
-                span,
+            _ => verr!(vs!(
+                "arr_product: accepts only int or float arrays".to_string()
             )),
         },
-        _ => Err(eval.err("arr_product() accepts only arrays".to_string(), span)),
+        other => verr!(vs!(format!(
+            "arr_product: accepts only arrays, found {}",
+            other.type_name()
+        ))),
     }
 }

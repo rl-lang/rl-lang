@@ -1,40 +1,34 @@
-use crate::{evaluator::Evaluator, values::Value};
+use crate::{
+    evaluator::Evaluator,
+    stdlib::common::{verr, vok, vs},
+    values::Value,
+};
 use rl_ast::statements::TypeAnnotation;
-use rl_utils::{errors::Error, span::Span};
 
-pub fn std_arr_insert(
-    eval: &mut Evaluator,
-    array: Value,
-    value: Value,
-    index: i64,
-    span: Span,
-) -> Result<Value, Error> {
+pub fn std_arr_insert(_: &mut Evaluator, array: Value, value: Value, index: i64) -> Value {
     match array {
         Value::Values { items_type, items } => {
             if index as usize >= items.len() {
-                return Err(eval.err(format!("index out of bounds: {}", index), span));
+                return verr!(vs!(format!("arr_insert: index out of bounds: {}", index)));
             }
 
             let val_type = Evaluator::infer_type(&value, false);
             if val_type != items_type && val_type != TypeAnnotation::Null {
-                return Err(eval.err(
-                    format!(
-                        "type mismatch: array expects {:?}, cannot push {:?}",
-                        items_type, val_type
-                    ),
-                    span,
-                ));
+                return verr!(vs!(format!(
+                    "arr_insert: type mismatch: array expects {:?}, cannot push {:?}",
+                    items_type, val_type
+                )));
             }
             let mut v = items;
             v.insert(index as usize, value);
-            Ok(Value::Values {
+            vok!(Value::Values {
                 items_type,
-                items: v,
+                items: v
             })
         }
-        _ => Err(eval.err(
-            "arr_insert() accepts only arrays and values".to_string(),
-            span,
-        )),
+        other => verr!(vs!(format!(
+            "arr_insert: accepts only arrays and values, found {}",
+            other.type_name()
+        ))),
     }
 }

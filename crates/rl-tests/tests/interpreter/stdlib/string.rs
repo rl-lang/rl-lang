@@ -273,7 +273,7 @@ fn split_by_delimiter() {
 get split from std::str
 get arr_count from std::array
 dec arr[string] parts = split("a,b,c", ",")
-dec int n = arr_count(parts)
+dec int n = arr_count(parts)?
 "#,
     )
     .unwrap();

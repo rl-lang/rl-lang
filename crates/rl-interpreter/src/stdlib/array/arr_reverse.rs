@@ -1,13 +1,21 @@
-use crate::{evaluator::Evaluator, values::Value};
-use rl_utils::{errors::Error, span::Span};
+use crate::{
+    evaluator::Evaluator,
+    stdlib::common::{verr, vok, vs},
+    values::Value,
+};
 
-pub fn std_arr_reverse(eval: &mut Evaluator, array: Value, span: Span) -> Result<Value, Error> {
+pub fn std_arr_reverse(_: &mut Evaluator, array: Value) -> Value {
     match array {
-        Value::Values { items_type, items } => {
-            let mut items = items;
+        Value::Values {
+            items_type,
+            mut items,
+        } => {
             items.reverse();
-            Ok(Value::Values { items_type, items })
+            vok!(Value::Values { items_type, items })
         }
-        _ => Err(eval.err("arr_reverse() accepts only arrays".to_string(), span)),
+        other => verr!(vs!(format!(
+            "arr_reverse: accepts only arrays, found {}",
+            other.type_name()
+        ))),
     }
 }

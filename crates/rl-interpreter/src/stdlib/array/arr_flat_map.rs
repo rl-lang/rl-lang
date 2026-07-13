@@ -1,4 +1,8 @@
-use crate::{evaluator::Evaluator, values::Value};
+use crate::{
+    evaluator::Evaluator,
+    stdlib::common::{verr, vok, vs},
+    values::Value,
+};
 use rl_ast::statements::TypeAnnotation;
 use rl_utils::{errors::Error, span::Span};
 
@@ -10,51 +14,38 @@ pub fn std_arr_flat_map(
 ) -> Result<Value, Error> {
     let (items_type, items) = match array {
         Value::Values { items_type, items } => (items_type, items),
-
         other => {
-            return Err(eval.err(
-                format!(
-                    "arr_flat_map() accepts only arrays found {}",
-                    other.type_name()
-                )
-                .to_string(),
-                span,
-            ));
+            return Ok(verr!(vs!(format!(
+                "arr_flat_map: accepts only arrays, found {}",
+                other.type_name()
+            ))));
         }
     };
     let Value::Function(data) = &function else {
-        return Err(eval.err(
-            format!(
-                "arr_flat_map() expected function or lambda found {}",
-                function.type_name()
-            ),
-            span,
-        ));
+        return Ok(verr!(vs!(format!(
+            "arr_flat_map: expected function or lambda, found {}",
+            function.type_name()
+        ))));
     };
 
     if !matches!(data.return_type, Some(TypeAnnotation::Array(_))) {
-        return Err(eval.err(
-            format!(
-                "arr_flat_map() expected function or lambda with Array return type found {:?}",
-                data.return_type
-            ),
-            span,
-        ));
+        return Ok(verr!(vs!(format!(
+            "arr_flat_map: expected function or lambda with Array return type, found {:?}",
+            data.return_type
+        ))));
     }
 
     let mut result = Vec::with_capacity(items.len());
 
     for item in items {
-        let mapped_item = eval.call_value(function.clone(), vec![item.clone()], span)?;
+        let mapped_item = eval.call_value(function.clone(), vec![item], span)?;
         if let Value::Values { items, .. } = mapped_item {
-            for item in items {
-                result.push(item)
-            }
+            result.extend(items);
         }
     }
 
-    Ok(Value::Values {
+    Ok(vok!(Value::Values {
         items_type,
-        items: result,
-    })
+        items: result
+    }))
 }

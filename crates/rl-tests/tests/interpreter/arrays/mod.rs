@@ -92,7 +92,7 @@ fn arr_push() {
         r#"
 get arr_push from std::array
 dec arr[int] x = [1, 2]
-x = arr_push(x, 3)
+x = arr_push(x, 3)?
 "#,
     )
     .unwrap();
@@ -105,7 +105,7 @@ fn arr_pop() {
         r#"
 get arr_pop from std::array
 dec arr[int] x = [1, 2, 3]
-x = arr_pop(x)
+x = arr_pop(x)?
 "#,
     )
     .unwrap();
@@ -118,7 +118,7 @@ fn arr_count() {
         r#"
 get arr_count from std::array
 dec arr[int] array = [10, 20, 30]
-dec int x = arr_count(array)
+dec int x = arr_count(array)?
 "#,
     )
     .unwrap();
@@ -131,7 +131,7 @@ fn arr_is_empty_true() {
         r#"
 get arr_is_empty from std::array
 dec arr[int] array = []
-dec bool x = arr_is_empty(array)
+dec bool x = arr_is_empty(array)?
 "#,
     )
     .unwrap();
@@ -144,7 +144,7 @@ fn arr_is_empty_false() {
         r#"
 get arr_is_empty from std::array
 dec arr[int] array = [1]
-dec bool x = arr_is_empty(array)
+dec bool x = arr_is_empty(array)?
 "#,
     )
     .unwrap();
@@ -157,7 +157,7 @@ fn arr_contains_true() {
         r#"
 get arr_contains from std::array
 dec arr[int] array = [1, 2, 3]
-dec bool x = arr_contains(array, 2)
+dec bool x = arr_contains(array, 2)?
 "#,
     )
     .unwrap();
@@ -170,7 +170,7 @@ fn arr_contains_false() {
         r#"
 get arr_contains from std::array
 dec arr[int] array = [1, 2, 3]
-dec bool x = arr_contains(array, 99)
+dec bool x = arr_contains(array, 99)?
 "#,
     )
     .unwrap();
@@ -183,7 +183,7 @@ fn arr_reverse() {
         r#"
 get arr_reverse from std::array
 dec arr[int] x = [1, 2, 3]
-x = arr_reverse(x)
+x = arr_reverse(x)?
 "#,
     )
     .unwrap();
@@ -196,7 +196,7 @@ fn arr_sum() {
         r#"
 get arr_sum from std::array
 dec arr[int] array = [1, 2, 3, 4]
-dec int x = arr_sum(array)
+dec int x = arr_sum(array)?
 "#,
     )
     .unwrap();
@@ -209,7 +209,7 @@ fn arr_max() {
         r#"
 get arr_max from std::array
 dec arr[int] array = [3, 1, 4, 1, 5, 9]
-dec int x = arr_max(array)
+dec int x = arr_max(array)?
 "#,
     )
     .unwrap();
@@ -222,7 +222,7 @@ fn arr_min() {
         r#"
 get arr_min from std::array
 dec arr[int] array = [3, 1, 4, 1, 5, 9]
-dec int x = arr_min(array)
+dec int x = arr_min(array)?
 "#,
     )
     .unwrap();
@@ -235,7 +235,7 @@ fn arr_first() {
         r#"
 get arr_first from std::array
 dec arr[int] array = [7, 8, 9]
-dec int x = arr_first(array)
+dec int x = arr_first(array)?
 "#,
     )
     .unwrap();
@@ -248,7 +248,7 @@ fn arr_last() {
         r#"
 get arr_last from std::array
 dec arr[int] array = [7, 8, 9]
-dec int x = arr_last(array)
+dec int x = arr_last(array)?
 "#,
     )
     .unwrap();
@@ -261,7 +261,7 @@ fn arr_index_of_found() {
         r#"
 get arr_index_of from std::array
 dec arr[int] array = [10, 20, 30]
-dec int x = arr_index_of(array, 20)
+dec int x = arr_index_of(array, 20)?
 "#,
     )
     .unwrap();
@@ -275,7 +275,7 @@ fn arr_concat() {
 get arr_concat from std::array
 dec arr[int] a = [1, 2]
 dec arr[int] b = [3, 4]
-dec arr[int] x = arr_concat(a, b)
+dec arr[int] x = arr_concat(a, b)?
 "#,
     )
     .unwrap();
@@ -288,7 +288,7 @@ fn arr_slice() {
         r#"
 get arr_slice from std::array
 dec arr[int] array = [0, 1, 2, 3, 4]
-dec arr[int] x = arr_slice(array, 1, 4)
+dec arr[int] x = arr_slice(array, 1, 4)?
 "#,
     )
     .unwrap();
@@ -317,7 +317,7 @@ fn for_range_builds_array() {
 get arr_push from std::array
 dec arr[int] x = []
 for i in 0..3 {
-    x = arr_push(x, i)
+    x = arr_push(x, i)?
 }
 "#,
     )
@@ -331,7 +331,7 @@ fn arr_map_doubles() {
         r#"
 get arr_map from std::array
 dec arr[int] x = [1, 2, 3]
-dec arr[int] y = arr_map(x, fn(int n) -> int { return n * 2 })
+dec arr[int] y = arr_map(x, fn(int n) -> int { return n * 2 })?
 "#,
     )
     .unwrap();
@@ -344,8 +344,8 @@ fn arr_filter_evens() {
         r#"
 get arr_filter, arr_count from std::array
 dec arr[int] x = [1, 2, 3, 4, 5, 6]
-dec arr[int] y = arr_filter(x, fn(int n) -> bool { return n > 3 })
-dec int c = arr_count(y)
+dec arr[int] y = arr_filter(x, fn(int n) -> bool { return n > 3 })?
+dec int c = arr_count(y)?
 "#,
     )
     .unwrap();
@@ -358,7 +358,7 @@ fn arr_reduce_sum() {
         r#"
 get arr_reduce from std::array
 dec arr[int] x = [1, 2, 3, 4, 5]
-dec int total = arr_reduce(x, fn(int acc, int n) -> int { return acc + n }, 0)
+dec int total = arr_reduce(x, fn(int acc, int n) -> int { return acc + n }, 0)?
 "#,
     )
     .unwrap();
@@ -371,7 +371,7 @@ fn arr_reduce_product() {
         r#"
 get arr_reduce from std::array
 dec arr[int] x = [1, 2, 3, 4]
-dec int product = arr_reduce(x, fn(int acc, int n) -> int { return acc * n }, 1)
+dec int product = arr_reduce(x, fn(int acc, int n) -> int { return acc * n }, 1)?
 "#,
     )
     .unwrap();
@@ -384,7 +384,7 @@ fn arr_sort_ascending() {
         r#"
 get arr_sort from std::array
 dec arr[int] x = [3, 1, 4, 1, 5, 9, 2, 6]
-x = arr_sort(x)
+x = arr_sort(x)?
 "#,
     )
     .unwrap();
@@ -400,8 +400,8 @@ fn arr_unique_deduplicates() {
         r#"
 get arr_unique, arr_count from std::array
 dec arr[int] x = [1, 2, 2, 3, 3, 3]
-dec arr[int] u = arr_unique(x)
-dec int c = arr_count(u)
+dec arr[int] u = arr_unique(x)?
+dec int c = arr_count(u)?
 "#,
     )
     .unwrap();
@@ -414,7 +414,7 @@ fn arr_flatten() {
         r#"
 get arr_flatten from std::array
 dec arr[arr[int]] x = [[1, 2], [3, 4], [5]]
-dec arr[int] y = arr_flatten(x)
+dec arr[int] y = arr_flatten(x)?
 "#,
     )
     .unwrap();
@@ -439,7 +439,7 @@ fn arr_insert() {
         r#"
 get arr_insert from std::array
 dec arr[int] x = [1, 2, 4]
-x = arr_insert(x, 3, 2)
+x = arr_insert(x, 3, 2)?
 "#,
     )
     .unwrap();
@@ -452,7 +452,7 @@ fn arr_remove() {
         r#"
 get arr_remove from std::array
 dec arr[int] x = [1, 2, 3, 4]
-x = arr_remove(x, 1)
+x = arr_remove(x, 1)?
 "#,
     )
     .unwrap();
@@ -465,7 +465,7 @@ fn arr_find_returns_value() {
         r#"
 get arr_find from std::array
 dec arr[int] x = [10, 20, 30]
-dec int found = arr_find(x, fn(int n) -> bool { return n > 15 })
+dec int found = arr_find(x, fn(int n) -> bool { return n > 15 })?
 "#,
     )
     .unwrap();
@@ -478,7 +478,7 @@ fn arr_any_true() {
         r#"
 get arr_any from std::array
 dec arr[int] x = [1, 2, 3]
-dec bool b = arr_any(x, fn(int n) -> bool { return n > 2 })
+dec bool b = arr_any(x, fn(int n) -> bool { return n > 2 })?
 "#,
     )
     .unwrap();
@@ -491,7 +491,7 @@ fn arr_any_false() {
         r#"
 get arr_any from std::array
 dec arr[int] x = [1, 2, 3]
-dec bool b = arr_any(x, fn(int n) -> bool { return n > 10 })
+dec bool b = arr_any(x, fn(int n) -> bool { return n > 10 })?
 "#,
     )
     .unwrap();
@@ -504,7 +504,7 @@ fn arr_all_true() {
         r#"
 get arr_all from std::array
 dec arr[int] x = [2, 4, 6]
-dec bool b = arr_all(x, fn(int n) -> bool { return n > 0 })
+dec bool b = arr_all(x, fn(int n) -> bool { return n > 0 })?
 "#,
     )
     .unwrap();
@@ -517,7 +517,7 @@ fn arr_all_false() {
         r#"
 get arr_all from std::array
 dec arr[int] x = [2, 4, 6]
-dec bool b = arr_all(x, fn(int n) -> bool { return n > 3 })
+dec bool b = arr_all(x, fn(int n) -> bool { return n > 3 })?
 "#,
     )
     .unwrap();

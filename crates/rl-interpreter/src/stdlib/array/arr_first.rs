@@ -1,12 +1,18 @@
-use crate::{evaluator::Evaluator, values::Value};
-use rl_utils::{errors::Error, span::Span};
+use crate::{
+    evaluator::Evaluator,
+    stdlib::common::{verr, vok, vs},
+    values::Value,
+};
 
-pub fn std_arr_first(eval: &mut Evaluator, array: Value, span: Span) -> Result<Value, Error> {
+pub fn std_arr_first(_: &mut Evaluator, array: Value) -> Value {
     match array {
         Value::Values { items, .. } => match items.into_iter().next() {
-            Some(v) => Ok(v),
-            None => Err(eval.err("arr_first() called on empty array".to_string(), span)),
+            Some(v) => vok!(v),
+            None => verr!(vs!("arr_first: called on empty array".to_string())),
         },
-        _ => Err(eval.err("arr_first() accepts only arrays".to_string(), span)),
+        other => verr!(vs!(format!(
+            "arr_first: accepts only arrays, found {}",
+            other.type_name()
+        ))),
     }
 }
