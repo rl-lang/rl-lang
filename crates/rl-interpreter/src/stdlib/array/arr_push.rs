@@ -1,34 +1,29 @@
-use crate::{evaluator::Evaluator, values::Value};
-use rl_utils::{errors::Error, span::Span};
+use crate::{
+    evaluator::Evaluator,
+    stdlib::common::{verr, vok, vs},
+    values::Value,
+};
 
-pub fn std_arr_push(
-    eval: &mut Evaluator,
-    array: Value,
-    value: Value,
-    span: Span,
-) -> Result<Value, Error> {
+pub fn std_arr_push(_: &mut Evaluator, array: Value, value: Value) -> Value {
     match array {
         Value::Values { items_type, items } => {
             let val_type = Evaluator::infer_type(&value, false);
             if !Evaluator::types_compatible(&val_type, &items_type) {
-                return Err(eval.err(
-                    format!(
-                        "type mismatch: array expects {:?}, cannot push {:?}",
-                        items_type, val_type
-                    ),
-                    span,
-                ));
+                return verr!(vs!(format!(
+                    "arr_push: type mismatch: array expects {:?}, cannot push {:?}",
+                    items_type, val_type
+                )));
             }
             let mut v = items;
             v.push(value);
-            Ok(Value::Values {
+            vok!(Value::Values {
                 items_type,
-                items: v,
+                items: v
             })
         }
-        other => Err(eval.err(
-            format!("arr_push() accepts only arrays found {}", other.type_name()).to_string(),
-            span,
-        )),
+        other => verr!(vs!(format!(
+            "arr_push: accepts only arrays, found {}",
+            other.type_name()
+        ))),
     }
 }
