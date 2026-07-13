@@ -1,9 +1,12 @@
-use crate::{evaluator::Evaluator, values::Value};
-use rl_utils::{errors::Error, span::Span};
+use crate::{
+    evaluator::Evaluator,
+    stdlib::common::{vnl, vs},
+    values::Value,
+};
 
-pub fn std_env(_: &mut Evaluator, key: String, _: Span) -> Result<Value, Error> {
+pub fn std_env(_: &mut Evaluator, key: String) -> Value {
     match std::env::var(&key) {
-        Ok(val) => Ok(Value::String(val)),
-        Err(_) => Ok(Value::Null),
+        Ok(val) => vs!(val),
+        Err(_) => vnl!(),
     }
 }
