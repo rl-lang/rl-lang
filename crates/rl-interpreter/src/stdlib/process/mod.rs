@@ -20,12 +20,12 @@ pub use rl_commons::keywords::process::KEYWORDS;
 
 pub fn module() -> Module {
     Module::new("process")
-        .with_raw_function("args", args::std_args)
+        .with_function("args", args::std_args)
         .with_function("exit", exit::std_exit)
         .with_function("env", env::std_env)
-        .with_raw_function("cwd", cwd::std_cwd)
+        .with_function("cwd", cwd::std_cwd)
         .with_function("set_cwd", cwd::std_set_cwd)
-        .with_raw_function("pid", pid::std_pid)
+        .with_function("pid", pid::std_pid)
         .with_function("sleep", sleep::std_sleep)
         .with_function("exec", exec::std_exec)
         .with_function("exec_code", exec::std_exec_code)
