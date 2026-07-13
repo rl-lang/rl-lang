@@ -1,38 +1,42 @@
-use crate::{evaluator::Evaluator, stdlib::common::check_arity, values::Value};
-use rl_utils::{errors::Error, span::Span};
+use crate::{
+    evaluator::Evaluator,
+    stdlib::common::{verr, vok, vs},
+    values::Value,
+};
+use rl_utils::span::Span;
 
-pub fn std_result_map(eval: &mut Evaluator, args: Vec<Value>, span: Span) -> Result<Value, Error> {
-    check_arity(&args, 2, "result_map", span)?;
-    match args[0].clone() {
+pub fn std_result_map(eval: &mut Evaluator, a: Value, b: Value, span: Span) -> Value {
+    match a {
         Value::Ok(inner) => {
-            let mapped = eval.call_value(args[1].clone(), vec![*inner], span)?;
-            Ok(Value::Ok(Box::new(mapped)))
+            let mapped = match eval.call_value(b, vec![*inner], span) {
+                Ok(mapped) => mapped,
+                Err(e) => return verr!(vs!(e.message().to_string())),
+            };
+            vok!(mapped)
         }
         // pass error as is
-        Value::Err(_) => Ok(args[0].clone()),
-        other => Err(eval.err(
-            format!("result_map: expected result, got {}", other.type_name()),
-            span,
-        )),
+        Value::Err(_) => a,
+        other => verr!(vs!(format!(
+            "result_map: expected result, got {}",
+            other.type_name()
+        ))),
     }
 }
 
-pub fn std_result_map_err(
-    eval: &mut Evaluator,
-    args: Vec<Value>,
-    span: Span,
-) -> Result<Value, Error> {
-    check_arity(&args, 2, "result_map_err", span)?;
-    match args[0].clone() {
+pub fn std_result_map_err(eval: &mut Evaluator, a: Value, b: Value, span: Span) -> Value {
+    match a {
         Value::Err(inner) => {
-            let mapped = eval.call_value(args[1].clone(), vec![*inner], span)?;
-            Ok(Value::Err(Box::new(mapped)))
+            let mapped = match eval.call_value(b, vec![*inner], span) {
+                Ok(mapped) => mapped,
+                Err(e) => return verr!(vs!(e.message().to_string())),
+            };
+            verr!(mapped)
         }
         // pass ok as is
-        Value::Ok(_) => Ok(args[0].clone()),
-        other => Err(eval.err(
-            format!("result_map_err: expected result, got {}", other.type_name()),
-            span,
-        )),
+        Value::Ok(_) => a,
+        other => verr!(vs!(format!(
+            "result_map_err: expected result, got {}",
+            other.type_name()
+        ))),
     }
 }
