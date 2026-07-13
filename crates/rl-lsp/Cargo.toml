@@ -1,0 +1,12 @@
+[package]
+name = "rl-lsp"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+rl-lexer.workspace = true
+rl-utils.workspace = true
+rl-checker.workspace = true
+rl-parser.workspace = true
+tower-lsp.workspace = true
+tokio.workspace = true

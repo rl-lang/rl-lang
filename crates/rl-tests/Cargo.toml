@@ -1,0 +1,11 @@
+[package]
+name = "rl-tests"
+version.workspace = true
+edition.workspace = true
+
+[dev-dependencies]
+rl-ast.workspace = true
+rl-lexer.workspace = true
+rl-parser.workspace = true
+rl-interpreter.workspace = true
+rl-utils.workspace = true

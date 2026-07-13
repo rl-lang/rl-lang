@@ -1,57 +1,68 @@
-[package]
-name = "rl-lang"
+[workspace]
+resolver = "2"
+members = [
+    "crates/rl-utils",
+    "crates/rl-lexer",
+    "crates/rl-ast",
+    "crates/rl-parser",
+    "crates/rl-resolver",
+    "crates/rl-vm",
+    "crates/rl-cranelift",
+    "crates/rl-interpreter",
+    "crates/rl-checker",
+    "crates/rl-docs",
+    "crates/rl-tooling",
+    "crates/rl-repl",
+    "crates/rl-lsp",
+    "crates/rl-cli",
+    "crates/rl-commons",
+    "crates/rl-tests",
+    "crates/rl-benches",
+]
+
+[workspace.package]
 version = "0.1.4"
 edition = "2024"
 license = "MIT OR Apache-2.0"
-description = "A simple interpreted programming language"
 repository = "https://github.com/rl-lang/rl-lang"
-readme = "README.md"
-keywords = ["language", "interpreter", "cli"]
-categories = ["command-line-utilities"]
 
-[dependencies]
-log = { version = "0.4", optional = true }
-env_logger = { version = "0.11" , optional = true }
+[workspace.dependencies]
+rl-commons = { path = "crates/rl-commons" }
+rl-utils = { path = "crates/rl-utils" }
+rl-lexer = { path = "crates/rl-lexer" }
+rl-ast = { path = "crates/rl-ast" }
+rl-parser = { path = "crates/rl-parser" }
+rl-resolver = { path = "crates/rl-resolver" }
+rl-vm = { path = "crates/rl-vm" }
+rl-cranelift = { path = "crates/rl-cranelift" }
+rl-interpreter = { path = "crates/rl-interpreter" }
+rl-checker = { path = "crates/rl-checker" }
+rl-docs = { path = "crates/rl-docs" }
+rl-tooling = { path = "crates/rl-tooling" }
+rl-repl = { path = "crates/rl-repl" }
+rl-lsp = { path = "crates/rl-lsp" }
+
+criterion = { version = "0.5", features = ["html_reports"] }
 ariadne = "0.5"
-ratatui = { version = "0.29", optional = true }
-crossterm = { version = "0.28", optional = true }
-tower-lsp = { version = "0.20", optional = true }
-tokio = { version = "1", features = ["full"] , optional = true }
-serde_json = { version = "1", optional = true }
-clap = { version = "4.6.1", features = ["derive"] }
-toml = "0.8"
+crossterm = "0.28"
+ratatui = "0.29"
+tower-lsp = "0.20"
+tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
-
-[dev-dependencies]
-criterion = "0.5"
-
-[features]
-default = ["repl", "repl_tui", "run", "eval"]
-run = []
-repl = []
-repl_tui = ["dep:ratatui","dep:crossterm"]
-debug = ["dep:env_logger", "dep:log"]
-eval = []
-vm = []
-cranelift = []
-lsp = ["dep:tower-lsp", "dep:tokio", "dep:serde_json"]
-
-[[bench]]
-name = "v0_1_0"
-harness = false
-
-[[bench]]
-name = "v0_1_4"
-harness = false
-
-[[bin]]
-name = "rl"
-path = "src/main.rs"
+serde_json = "1"
+toml = "0.8"
+tiny_http = "0.12"
+ureq = "2"
+clap = { version = "4.6.1", features = ["derive"] }
+log = "0.4"
+env_logger = "0.11"
+cranelift-jit = "0.116"
+cranelift-module = "0.116"
+cranelift-codegen = "0.116"
+cranelift-frontend = "0.116"
+target-lexicon = "0.13"
 
 [profile.release]
 opt-level = 3
 lto = true
 codegen-units = 1
-
-[profile.bench]
-debug = true

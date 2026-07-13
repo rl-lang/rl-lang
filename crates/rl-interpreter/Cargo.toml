@@ -1,0 +1,20 @@
+[package]
+name = "rl-interpreter"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+rl-commons.workspace = true
+rl-checker.workspace = true
+rl-ast.workspace = true
+rl-lexer.workspace = true
+rl-parser.workspace = true
+rl-resolver.workspace = true
+rl-utils.workspace = true
+crossterm.workspace = true
+tiny_http.workspace = true
+ureq.workspace = true
+log = { workspace = true, optional = true }
+
+[features]
+debug = ["dep:log"]

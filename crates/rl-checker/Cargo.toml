@@ -1,0 +1,12 @@
+[package]
+name = "rl-checker"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+rl-ast.workspace = true
+rl-docs.workspace = true
+rl-commons.workspace = true
+rl-lexer.workspace = true
+rl-parser.workspace = true
+rl-utils.workspace = true

@@ -1,0 +1,8 @@
+[package]
+name = "rl-ast"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+rl-lexer.workspace = true
+rl-utils.workspace = true

@@ -1,0 +1,25 @@
+[package]
+name = "rl-benches"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+rl-ast.workspace = true
+rl-lexer.workspace = true
+rl-parser.workspace = true
+rl-interpreter.workspace = true
+rl-utils.workspace = true
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "lexer"
+harness = false
+
+[[bench]]
+name = "parser"
+harness = false
+
+[[bench]]
+name = "pipeline"
+harness = false
