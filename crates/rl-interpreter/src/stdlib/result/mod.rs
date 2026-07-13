@@ -11,8 +11,8 @@ pub use rl_commons::keywords::result::KEYWORDS;
 
 pub fn module() -> Module {
     Module::new("res")
-        .with_raw_function("is_ok", is_ok::func)
-        .with_raw_function("is_err", is_err::func)
+        .with_function("is_ok", is_ok::func)
+        .with_function("is_err", is_err::func)
         .with_raw_function("result_unwrap", result_unwrap::std_unwrap)
         .with_raw_function("result_unwrap_err", result_unwrap::std_unwrap_err)
         .with_raw_function("result_unwrap_or", result_unwrap::std_unwrap_or)
