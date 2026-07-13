@@ -2,6 +2,7 @@
 name = "rl-tests"
 version.workspace = true
 edition.workspace = true
+publish = false
 
 [dev-dependencies]
 rl-ast.workspace = true

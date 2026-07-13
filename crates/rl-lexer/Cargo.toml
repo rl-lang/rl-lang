@@ -2,6 +2,9 @@
 name = "rl-lexer"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+description = "Lexer and tokenizer for the rl-lang programming language"
+repository.workspace = true
 
 [dependencies]
 rl-utils.workspace = true

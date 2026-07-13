@@ -2,6 +2,9 @@
 name = "rl-checker"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+description = "Static type checker for the rl-lang programming language"
+repository.workspace = true
 
 [dependencies]
 rl-ast.workspace = true

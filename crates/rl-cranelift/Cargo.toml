@@ -2,6 +2,9 @@
 name = "rl-cranelift"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+description = "Cranelift-based JIT compiler backend for the rl-lang programming language"
+repository.workspace = true
 
 [dependencies]
 rl-vm.workspace = true

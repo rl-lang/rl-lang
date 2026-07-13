@@ -2,6 +2,9 @@
 name = "rl-cli"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+description = "Command-line interface for the rl-lang toolchain"
+repository.workspace = true
 
 [[bin]]
 name = "rl"

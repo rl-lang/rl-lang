@@ -2,6 +2,9 @@
 name = "rl-interpreter"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+description = "Tree-walking interpreter for the rl-lang programming language"
+repository.workspace = true
 
 [dependencies]
 rl-commons.workspace = true
