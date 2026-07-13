@@ -1,39 +1,36 @@
-use crate::{evaluator::Evaluator, values::Value};
-use rl_utils::{errors::Error, span::Span};
+use crate::{
+    evaluator::Evaluator,
+    stdlib::common::{verr, vok, vs},
+    values::Value,
+};
 
-pub fn std_arr_slice(
-    eval: &mut Evaluator,
-    array: Value,
-    start: i64,
-    end: i64,
-    span: Span,
-) -> Result<Value, Error> {
+pub fn std_arr_slice(_: &mut Evaluator, array: Value, start: i64, end: i64) -> Value {
     match array {
         Value::Values { items_type, items } => {
             let start = start as usize;
             let end = end as usize;
             if start > items.len() || end > items.len() {
-                return Err(eval.err(
-                    format!(
-                        "slice index out of bounds: {}..{} (len {})",
-                        start,
-                        end,
-                        items.len()
-                    ),
-                    span,
-                ));
+                return verr!(vs!(format!(
+                    "arr_slice: index out of bounds: {}..{} (len {})",
+                    start,
+                    end,
+                    items.len()
+                )));
             }
             if start > end {
-                return Err(eval.err(
-                    format!("slice start {} is greater than end {}", start, end),
-                    span,
-                ));
+                return verr!(vs!(format!(
+                    "arr_slice: start {} is greater than end {}",
+                    start, end
+                )));
             }
-            Ok(Value::Values {
+            vok!(Value::Values {
                 items_type,
                 items: items[start..end].to_vec(),
             })
         }
-        _ => Err(eval.err("arr_slice() accepts only arrays".to_string(), span)),
+        other => verr!(vs!(format!(
+            "arr_slice: accepts only arrays, found {}",
+            other.type_name()
+        ))),
     }
 }
