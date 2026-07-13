@@ -4,6 +4,7 @@ use rl_utils::{
     span::Span,
 };
 
+/*
 pub fn check_arity(args: &[Value], expected: usize, name: &str, span: Span) -> Result<(), Error> {
     if args.len() != expected {
         let message = if expected == 0 {
@@ -16,6 +17,7 @@ pub fn check_arity(args: &[Value], expected: usize, name: &str, span: Span) -> R
     }
     Ok(())
 }
+*/
 
 pub fn check_arity_range(
     args: &[Value],

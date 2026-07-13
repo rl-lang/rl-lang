@@ -1,7 +1,6 @@
-use crate::{evaluator::Evaluator, stdlib::common::check_arity, values::Value};
-use rl_utils::{errors::Error, span::Span};
+use crate::evaluator::Evaluator;
+use crate::values::Value;
 
-pub fn func(_: &mut Evaluator, args: Vec<Value>, span: Span) -> Result<Value, Error> {
-    check_arity(&args, 1, "is_err", span)?;
-    Ok(Value::Bool(args[0].is_err()))
+pub fn func(_: &mut Evaluator, value: Value) -> bool {
+    value.is_err()
 }

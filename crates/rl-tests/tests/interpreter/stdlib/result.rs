@@ -142,7 +142,7 @@ fn result_map_passes_through_err() {
         r#"
 get result_map, is_err from std::res
 dec result[int] r = result_map(err("dead"), fn(int n) -> int { return n * 2 })
-dec bool x = is_err(r)
+dec bool x = is_err(r)?
 "#,
     )
     .unwrap();
@@ -191,7 +191,7 @@ fn safe_div(int a, int b) -> result[int] {
     return ok(a / b)
 }
 dec result[int] r = safe_div(10, 2)
-dec bool ok_flag = is_ok(r)
+dec bool ok_flag = is_ok(r)?
 dec int val = result_unwrap(r)
 "#,
     )
@@ -212,7 +212,7 @@ fn safe_div(int a, int b) -> result[int] {
     return ok(a / b)
 }
 dec result[int] r = safe_div(10, 0)
-dec bool err_flag = is_err(r)
+dec bool err_flag = is_err(r)?
 dec string msg = result_unwrap_err(r)
 "#,
     )
