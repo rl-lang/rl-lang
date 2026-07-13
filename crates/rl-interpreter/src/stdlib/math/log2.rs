@@ -1,13 +1,16 @@
-use crate::{evaluator::Evaluator, values::Value};
-use rl_utils::{errors::Error, span::Span};
+use crate::{
+    evaluator::Evaluator,
+    stdlib::common::{verr, vf, vok, vs},
+    values::Value,
+};
 
-pub fn std_log2(eval: &mut Evaluator, a: Value, span: Span) -> Result<Value, Error> {
+pub fn std_log2(_: &mut Evaluator, a: Value) -> Value {
     match a {
-        Value::Integer(i) => Ok(Value::Float((i as f64).log2())),
-        Value::Float(f) => Ok(Value::Float(f.log2())),
-        other => Err(eval.err(
-            format!("log2() expects a number, got {}", other.type_name()),
-            span,
-        )),
+        Value::Integer(i) => vok!(vf!((i as f64).log2())),
+        Value::Float(f) => vok!(vf!(f.log2())),
+        other => verr!(vs!(format!(
+            "log2 expects a number, got {}",
+            other.type_name()
+        ))),
     }
 }

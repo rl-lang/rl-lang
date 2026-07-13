@@ -7,7 +7,7 @@ fn abs_positive() {
     let ev = eval_program(
         r#"
 get abs from std::math
-dec int x = abs(5)
+dec int x = abs(5)?
 "#,
     )
     .unwrap();
@@ -19,7 +19,7 @@ fn abs_negative() {
     let ev = eval_program(
         r#"
 get abs from std::math
-dec int x = abs(-7)
+dec int x = abs(-7)?
 "#,
     )
     .unwrap();
@@ -31,7 +31,7 @@ fn max_returns_larger() {
     let ev = eval_program(
         r#"
 get max from std::math
-dec int x = max(3, 9)
+dec int x = max(3, 9)?
 "#,
     )
     .unwrap();
@@ -43,7 +43,7 @@ fn min_returns_smaller() {
     let ev = eval_program(
         r#"
 get min from std::math
-dec int x = min(3, 9)
+dec int x = min(3, 9)?
 "#,
     )
     .unwrap();
@@ -55,7 +55,7 @@ fn pow_integer() {
     let ev = eval_program(
         r#"
 get pow from std::math
-dec int x = pow(2, 10)
+dec int x = pow(2, 10)?
 "#,
     )
     .unwrap();
@@ -67,7 +67,7 @@ fn sqrt_float() {
     let ev = eval_program(
         r#"
 get sqrt from std::math
-dec float x = sqrt(9.0)
+dec float x = sqrt(9.0)?
 "#,
     )
     .unwrap();
@@ -79,7 +79,7 @@ fn floor_float() {
     let ev = eval_program(
         r#"
 get floor from std::math
-dec float x = floor(3.9)
+dec float x = floor(3.9)?
 "#,
     )
     .unwrap();
@@ -91,7 +91,7 @@ fn ceil_float() {
     let ev = eval_program(
         r#"
 get ceil from std::math
-dec float x = ceil(3.1)
+dec float x = ceil(3.1)?
 "#,
     )
     .unwrap();
@@ -103,7 +103,7 @@ fn round_float_up() {
     let ev = eval_program(
         r#"
 get round from std::math
-dec float x = round(2.6)
+dec float x = round(2.6)?
 "#,
     )
     .unwrap();
@@ -115,7 +115,7 @@ fn round_float_down() {
     let ev = eval_program(
         r#"
 get round from std::math
-dec float x = round(2.4)
+dec float x = round(2.4)?
 "#,
     )
     .unwrap();
@@ -127,7 +127,7 @@ fn clamp_within_range() {
     let ev = eval_program(
         r#"
 get clamp from std::math
-dec int x = clamp(5, 0, 10)
+dec int x = clamp(5, 0, 10)?
 "#,
     )
     .unwrap();
@@ -139,7 +139,7 @@ fn clamp_below_min() {
     let ev = eval_program(
         r#"
 get clamp from std::math
-dec int x = clamp(-5, 0, 10)
+dec int x = clamp(-5, 0, 10)?
 "#,
     )
     .unwrap();
@@ -151,7 +151,7 @@ fn clamp_above_max() {
     let ev = eval_program(
         r#"
 get clamp from std::math
-dec int x = clamp(99, 0, 10)
+dec int x = clamp(99, 0, 10)?
 "#,
     )
     .unwrap();
@@ -163,7 +163,7 @@ fn mod_operation() {
     let ev = eval_program(
         r#"
 get mod from std::math
-dec int x = mod(10, 3)
+dec int x = mod(10, 3)?
 "#,
     )
     .unwrap();
@@ -175,7 +175,7 @@ fn log2_eight() {
     let ev = eval_program(
         r#"
 get log2 from std::math
-dec float x = log2(8.0)
+dec float x = log2(8.0)?
 "#,
     )
     .unwrap();
@@ -187,7 +187,7 @@ fn log10_thousand() {
     let ev = eval_program(
         r#"
 get log10 from std::math
-dec float x = log10(1000.0)
+dec float x = log10(1000.0)?
 "#,
     )
     .unwrap();
