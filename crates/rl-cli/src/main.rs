@@ -182,6 +182,10 @@ enum Commands {
         /// Skip inlining any syntax-highlighter script (used with --generate --html)
         #[arg(long)]
         no_highlight: bool,
+
+        /// Custom path for --generate
+        #[arg(long, value_name = "PATH")]
+        out_dir: Option<PathBuf>,
     },
 
     /// Start the LSP server over stdio
@@ -389,6 +393,7 @@ fn main() {
             html,
             highlight_js,
             no_highlight,
+            out_dir,
         } => {
             if generate {
                 #[cfg(feature = "eval")]
@@ -468,7 +473,9 @@ fn main() {
                     }
 
                     // generate website from /// doc comments
-                    use rl_tooling::generate_docs::{extract_doc_items, write_doc_site};
+                    use rl_tooling::generate_docs::{
+                        extract_doc_items, write_doc_site, write_doc_site_html,
+                    };
                     let entries = match std::fs::read_dir(parent) {
                         Ok(p) => p,
                         Err(e) => {
@@ -504,9 +511,12 @@ fn main() {
                         all_items.extend(extract_doc_items(&tokens, &file_name));
                     }
 
-                    let p = match parent.parent() {
+                    let p = match out_dir {
                         Some(p) => p,
-                        None => parent,
+                        None => match parent.parent() {
+                            Some(p) => p.to_path_buf(),
+                            None => parent.to_path_buf(),
+                        },
                     };
                     let doc_out_dir = p.join("docs_site");
                     if let Err(e) = write_doc_site(&all_items, &doc_out_dir, &config.project.name) {
@@ -518,6 +528,23 @@ fn main() {
                         doc_out_dir.display(),
                         all_items.len()
                     );
+
+                    if html {
+                        if let Err(e) = write_doc_site_html(
+                            &all_items,
+                            &doc_out_dir,
+                            &config.project.name,
+                            highlight_js.as_deref(),
+                            no_highlight,
+                        ) {
+                            eprintln!("error: failed to write html doc site: {}", e);
+                            std::process::exit(1);
+                        }
+                        println!(
+                            "html doc site written to '{}/index.html'",
+                            doc_out_dir.display()
+                        );
+                    }
                 }
                 return;
             }
