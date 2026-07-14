@@ -171,6 +171,10 @@ pub fn write_doc_site_html(
         Some(DEFAULT_HIGHLIGHT_JS.to_string())
     };
     let script_content = script_content.as_deref();
+    match script_content {
+        Some(js) => fs::write(out_dir.join("rl-highlight.js"), js)?,
+        None => {}
+    }
 
     let by_file = group_by_file(items);
 
@@ -226,7 +230,7 @@ pub fn write_doc_site_html(
 /// shared `style.css` and, if given, inlines a syntax-highlighter script.
 fn html_page(title: &str, body: &str, script_content: Option<&str>) -> String {
     let script_tag = match script_content {
-        Some(js) => format!("<script>\n{}\n</script>\n", js),
+        Some(_) => "<script src=\"rl-highlight.js\"></script>\n".to_string(),
         None => String::new(),
     };
     format!(
