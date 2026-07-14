@@ -149,7 +149,6 @@ impl FromValue for i64 {
     fn from_value(v: Value, span: Span) -> Result<Self, Error> {
         match v {
             Value::Integer(i) => Ok(i),
-            Value::Byte(b) => Ok(b as i64),
             other => Err(Error::at(
                 Reason::Runtime,
                 format!("expected integer, got {}", other.type_name()),
