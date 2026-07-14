@@ -45,7 +45,7 @@ impl Vm {
     }
 
     /// Vm entry function
-    pub fn run(&mut self, chunk: &Chunk) -> Result<Option<VmValue>, VmError> {
+    pub fn run(&mut self, chunk: &Chunk) -> Result<(), VmError> {
         let mut frames: Vec<CallFrame> = vec![CallFrame {
             source: FrameSource::Top(chunk),
             ip: 0,
@@ -68,7 +68,7 @@ impl Vm {
                 self.stack.push(VmValue::Null);
                 frames.last_mut().unwrap().ip = ip;
                 if !self.finish_call(&mut frames)? {
-                    return Ok(self.stack.pop());
+                    return Ok(());
                 }
                 let top = frames.last().unwrap();
                 cur_chunk = top.source.chunk();
@@ -192,7 +192,7 @@ impl Vm {
                     self.stack.push(ret.unwrap_or(VmValue::Null));
                     frames.last_mut().unwrap().ip = ip;
                     if !self.finish_call(&mut frames)? {
-                        return Ok(self.stack.pop());
+                        return Ok(());
                     }
                     let top = frames.last().unwrap();
                     cur_chunk = top.source.chunk();
