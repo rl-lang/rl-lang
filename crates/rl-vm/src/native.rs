@@ -1,3 +1,11 @@
+//! The VM's native function binding system - [`Module`], [`NativeFn`], and the
+//! [`IntoNativeFn`] / [`FromValue`] / [`IntoValue`] trait machinery.
+//!
+//! This mirrors `rl-interpreter`'s `native.rs`, scoped down to what `VmValue`
+//! currently supports: no array/tuple/map/error/ok variants yet (so no
+//! `Vec<T>` impls), and `VmError` carries no `Span` (the VM doesn't track
+//! spans at runtime), unlike the interpreter's `Error`.
+
 use crate::values::{VmNativeFn, VmValue};
 use crate::vm_logic::{Vm, VmError};
 use std::collections::HashMap;
@@ -183,3 +191,139 @@ impl IntoValue for char {
     }
 }
 
+/// Wraps a typed Rust function into a [`NativeFn`] with automatic arity checking
+/// and argument extraction. Implemented by macro for 0-10 arguments.
+pub trait IntoNativeFn<Args> {
+    fn into_native(self) -> NativeFn;
+}
+
+impl<F, R> IntoNativeFn<()> for F
+where
+    F: Fn(&mut Vm) -> R + 'static,
+    R: IntoValue,
+{
+    fn into_native(self) -> NativeFn {
+        Rc::new(
+            move |vm: &mut Vm, args: Vec<VmValue>| -> Result<VmValue, VmError> {
+                if !args.is_empty() {
+                    return Err(VmError(format!(
+                        "expected 0 argument(s), got {}",
+                        args.len()
+                    )));
+                }
+                Ok(self(vm).into_value())
+            },
+        )
+    }
+}
+
+/// Marker type for fallible native functions (returning `Result<R, VmError>`).
+pub struct Fallible<T>(std::marker::PhantomData<T>);
+
+macro_rules! impl_into_native_fn {
+    ($count:literal, $(($ty:ident, $var:ident)),+) => {
+        impl<F, R, $($ty),+> IntoNativeFn<($($ty,)+)> for F
+        where
+            F: Fn(&mut Vm, $($ty),+) -> R + 'static,
+            R: IntoValue,
+            $($ty: FromValue),+
+        {
+            fn into_native(self) -> NativeFn {
+                Rc::new(move |vm: &mut Vm, args: Vec<VmValue>| -> Result<VmValue, VmError> {
+                    if args.len() != $count {
+                        return Err(VmError(format!(
+                            "expected {} argument(s), got {}",
+                            $count,
+                            args.len()
+                        )));
+                    }
+                    let mut iter = args.into_iter();
+                    $(let $var = <$ty>::from_value(iter.next().unwrap())?;)+
+                    Ok(self(vm, $($var),+).into_value())
+                })
+            }
+        }
+
+        impl<F, R, $($ty),+> IntoNativeFn<(Fallible<($($ty,)+)>,)> for F
+        where
+            F: Fn(&mut Vm, $($ty),+) -> Result<R, VmError> + 'static,
+            R: IntoValue,
+            $($ty: FromValue),+
+        {
+            fn into_native(self) -> NativeFn {
+                Rc::new(move |vm: &mut Vm, args: Vec<VmValue>| -> Result<VmValue, VmError> {
+                    if args.len() != $count {
+                        return Err(VmError(format!(
+                            "expected {} argument(s), got {}",
+                            $count,
+                            args.len()
+                        )));
+                    }
+                    let mut iter = args.into_iter();
+                    $(let $var = <$ty>::from_value(iter.next().unwrap())?;)+
+                    Ok(self(vm, $($var),+)?.into_value())
+                })
+            }
+        }
+    };
+}
+impl_into_native_fn!(1, (A1, a1));
+impl_into_native_fn!(2, (A1, a1), (A2, a2));
+impl_into_native_fn!(3, (A1, a1), (A2, a2), (A3, a3));
+impl_into_native_fn!(4, (A1, a1), (A2, a2), (A3, a3), (A4, a4));
+impl_into_native_fn!(5, (A1, a1), (A2, a2), (A3, a3), (A4, a4), (A5, a5));
+impl_into_native_fn!(
+    6,
+    (A1, a1),
+    (A2, a2),
+    (A3, a3),
+    (A4, a4),
+    (A5, a5),
+    (A6, a6)
+);
+impl_into_native_fn!(
+    7,
+    (A1, a1),
+    (A2, a2),
+    (A3, a3),
+    (A4, a4),
+    (A5, a5),
+    (A6, a6),
+    (A7, a7)
+);
+impl_into_native_fn!(
+    8,
+    (A1, a1),
+    (A2, a2),
+    (A3, a3),
+    (A4, a4),
+    (A5, a5),
+    (A6, a6),
+    (A7, a7),
+    (A8, a8)
+);
+impl_into_native_fn!(
+    9,
+    (A1, a1),
+    (A2, a2),
+    (A3, a3),
+    (A4, a4),
+    (A5, a5),
+    (A6, a6),
+    (A7, a7),
+    (A8, a8),
+    (A9, a9)
+);
+impl_into_native_fn!(
+    10,
+    (A1, a1),
+    (A2, a2),
+    (A3, a3),
+    (A4, a4),
+    (A5, a5),
+    (A6, a6),
+    (A7, a7),
+    (A8, a8),
+    (A9, a9),
+    (A10, a10)
+);
