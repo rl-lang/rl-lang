@@ -19,6 +19,22 @@ pub enum VmValue {
     Native(Rc<VmNativeFn>),
 }
 
+impl fmt::Display for VmValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            VmValue::Null => write!(f, "null"),
+            VmValue::Int(i) => write!(f, "{}", i),
+            VmValue::Float(fl) => write!(f, "{}", fl),
+            VmValue::Bool(b) => write!(f, "{}", b),
+            VmValue::Byte(b) => write!(f, "{}", b),
+            VmValue::Char(c) => write!(f, "'{}'", c),
+            VmValue::Str(s) => write!(f, "{}", s),
+            VmValue::Function(func) => write!(f, "<fn {}/{}>", func.name, func.arity),
+            VmValue::Native(func) => write!(f, "<native fn {}>", func.name),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct VmFunction {
     pub name: String,
