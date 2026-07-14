@@ -144,7 +144,6 @@ pub fn write_doc_site(items: &[DocItem], out_dir: &Path, project_name: &str) -> 
     Ok(())
 }
 
-fn page_name(file: &str) -> String {
 /// Escapes the five characters that are meaningful in HTML text content.
 fn html_escape(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
