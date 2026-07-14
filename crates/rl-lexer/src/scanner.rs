@@ -101,6 +101,7 @@ impl Tokenizer {
                             return Ok(());
                         }
                         self.pending_trivia.push(trivia);
+                        self.newlines_since_trivia = 0;
                     }
                 } else if self.peek() == '=' {
                     self.advance();
