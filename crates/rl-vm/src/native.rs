@@ -136,3 +136,50 @@ impl FromValue for char {
     }
 }
 
+/// Converts a typed Rust value into a [`VmValue`].
+pub trait IntoValue {
+    fn into_value(self) -> VmValue;
+}
+
+impl IntoValue for VmValue {
+    fn into_value(self) -> VmValue {
+        self
+    }
+}
+
+impl IntoValue for () {
+    fn into_value(self) -> VmValue {
+        VmValue::Null
+    }
+}
+
+impl IntoValue for i64 {
+    fn into_value(self) -> VmValue {
+        VmValue::Int(self)
+    }
+}
+
+impl IntoValue for f64 {
+    fn into_value(self) -> VmValue {
+        VmValue::Float(self)
+    }
+}
+
+impl IntoValue for String {
+    fn into_value(self) -> VmValue {
+        VmValue::Str(Rc::from(self.as_str()))
+    }
+}
+
+impl IntoValue for bool {
+    fn into_value(self) -> VmValue {
+        VmValue::Bool(self)
+    }
+}
+
+impl IntoValue for char {
+    fn into_value(self) -> VmValue {
+        VmValue::Char(self)
+    }
+}
+
