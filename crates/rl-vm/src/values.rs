@@ -39,6 +39,33 @@ impl fmt::Display for VmValue {
     }
 }
 
+impl VmValue {
+    /// Human-readable type name used in error labels (e.g. "int", "bool").
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            VmValue::Null => "null",
+            VmValue::Int(_) => "int",
+            VmValue::Float(_) => "float",
+            VmValue::Bool(_) => "bool",
+            VmValue::Byte(_) => "byte",
+            VmValue::Char(_) => "char",
+            VmValue::Str(_) => "string",
+            VmValue::Function(_) => "function",
+            VmValue::Native(_) => "native function",
+            VmValue::Ok(_) => "ok",
+            VmValue::Err(_) => "err",
+        }
+    }
+
+    pub fn is_ok(&self) -> bool {
+        matches!(self, VmValue::Ok(_))
+    }
+
+    pub fn is_err(&self) -> bool {
+        matches!(self, VmValue::Err(_))
+    }
+}
+
 #[derive(Debug)]
 pub struct VmFunction {
     pub name: String,
