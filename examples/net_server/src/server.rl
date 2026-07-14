@@ -2,6 +2,8 @@ get println from std::io
 get tcp_listen, tcp_accept, tcp_read, tcp_write, tcp_close from std::net
 get is_err, result_unwrap, result_unwrap_err from std::res
 
+/// Listens on 127.0.0.1:7878, accepts a single client connection, reads
+/// one message, sends a canned reply, then closes the connection.
 fn serve() {
     println("starting server on 127.0.0.1:7878...")
 

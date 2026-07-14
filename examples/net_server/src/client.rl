@@ -2,6 +2,8 @@ get println from std::io
 get tcp_connect, tcp_write, tcp_read, tcp_close from std::net
 get result_unwrap from std::res
 
+/// Connects to a server on 127.0.0.1:7878, sends a greeting, prints the
+/// server's reply, then closes the connection.
 fn connect() {
     println("connecting to 127.0.0.1:7878...")
 
