@@ -450,7 +450,8 @@ fn main() {
                         }
                     }
 
-                    // generate website (placeholder)
+                    // generate website from /// doc comments
+                    use rl_tooling::generate_docs::{extract_doc_items, write_doc_site};
                     let entries = match std::fs::read_dir(parent) {
                         Ok(p) => p,
                         Err(e) => {
@@ -458,6 +459,7 @@ fn main() {
                             std::process::exit(1);
                         }
                     };
+                    let mut all_items = Vec::new();
                     for entry in entries {
                         let entry = match entry {
                             Ok(e) => e,
@@ -470,8 +472,31 @@ fn main() {
                         if file_path.extension().and_then(|e| e.to_str()) != Some("rl") {
                             continue;
                         }
-                        todo!("parse '{}' and generate website page", file_path.display());
+                        let source_text =
+                            std::fs::read_to_string(&file_path).unwrap_or_else(|_| {
+                                eprintln!("error: could not read file '{}'", file_path.display());
+                                std::process::exit(1);
+                            });
+                        let source = SourceFile::new(&*file_path.to_string_lossy(), source_text);
+                        let tokens = lexing_loop(source);
+                        let file_name = file_path
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("unknown.rl")
+                            .to_string();
+                        all_items.extend(extract_doc_items(&tokens, &file_name));
                     }
+
+                    let doc_out_dir = parent.join("docs_site");
+                    if let Err(e) = write_doc_site(&all_items, &doc_out_dir, &config.project.name) {
+                        eprintln!("error: failed to write doc site: {}", e);
+                        std::process::exit(1);
+                    }
+                    println!(
+                        "doc site written to '{}' ({} items)",
+                        doc_out_dir.display(),
+                        all_items.len()
+                    );
                 }
                 return;
             }

@@ -86,7 +86,7 @@ pub fn format_tokens(tokens: &[Token]) -> String {
 }
 
 /// Decides whether a space belongs between two adjacent real tokens.
-fn needs_space(prev: &TokenType, curr: &TokenType) -> bool {
+pub fn needs_space(prev: &TokenType, curr: &TokenType) -> bool {
     use TokenType::*;
 
     // never a space right after these "opening"/tight tokens
