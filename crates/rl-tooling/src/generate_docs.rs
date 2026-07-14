@@ -119,7 +119,7 @@ pub fn write_doc_site(items: &[DocItem], out_dir: &Path, project_name: &str) -> 
 
     let mut index = format!("# {} docs\n\n", project_name);
     for (file, file_items) in &by_file {
-        let page = page_name(file);
+        let page = page_name(file, "md");
         index.push_str(&format!("- [{}]({})\n", file, page));
 
         let mut page_out = format!("# {}\n\n", file);
@@ -137,9 +137,10 @@ pub fn write_doc_site(items: &[DocItem], out_dir: &Path, project_name: &str) -> 
 }
 
 fn page_name(file: &str) -> String {
+fn page_name(file: &str, ext: &str) -> String {
     let stem = Path::new(file)
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("page");
-    format!("{}.md", stem)
+    format!("{}.{}", stem, ext)
 }
