@@ -336,6 +336,21 @@ impl<'a> Compiler<'a> {
                 self.chunk.write_u16(args.len() as u16, line);
             }
 
+            ExpressionKind::OkLiteral(inner) => {
+                self.compile_expr(*inner)?;
+                self.chunk.write_op(OpCode::Ok, line);
+            }
+
+            ExpressionKind::ErrLiteral(inner) => {
+                self.compile_expr(*inner)?;
+                self.chunk.write_op(OpCode::Err, line);
+            }
+
+            ExpressionKind::Propagate(inner) => {
+                self.compile_expr(*inner)?;
+                self.chunk.write_op(OpCode::Propagate, line);
+            }
+
             other => {
                 return Err(CompileError(format!(
                     "expression kind not yet supported by the vm compiler: {other:?}"
