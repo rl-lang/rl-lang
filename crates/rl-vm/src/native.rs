@@ -78,3 +78,61 @@ impl Module {
     }
 }
 
+/// Converts a [`VmValue`] into a typed Rust value, or returns a `VmError`.
+/// Implemented for `i64`, `f64`, `String`, `bool`, `char`, and `VmValue` itself.
+pub trait FromValue: Sized {
+    fn from_value(v: VmValue) -> Result<Self, VmError>;
+}
+
+impl FromValue for VmValue {
+    fn from_value(v: VmValue) -> Result<Self, VmError> {
+        Ok(v)
+    }
+}
+
+impl FromValue for i64 {
+    fn from_value(v: VmValue) -> Result<Self, VmError> {
+        match v {
+            VmValue::Int(i) => Ok(i),
+            VmValue::Byte(b) => Ok(b as i64),
+            other => Err(VmError(format!("expected int, got {other:?}"))),
+        }
+    }
+}
+
+impl FromValue for f64 {
+    fn from_value(v: VmValue) -> Result<Self, VmError> {
+        match v {
+            VmValue::Float(f) => Ok(f),
+            other => Err(VmError(format!("expected float, got {other:?}"))),
+        }
+    }
+}
+
+impl FromValue for String {
+    fn from_value(v: VmValue) -> Result<Self, VmError> {
+        match v {
+            VmValue::Str(s) => Ok(s.to_string()),
+            other => Err(VmError(format!("expected string, got {other:?}"))),
+        }
+    }
+}
+
+impl FromValue for bool {
+    fn from_value(v: VmValue) -> Result<Self, VmError> {
+        match v {
+            VmValue::Bool(b) => Ok(b),
+            other => Err(VmError(format!("expected bool, got {other:?}"))),
+        }
+    }
+}
+
+impl FromValue for char {
+    fn from_value(v: VmValue) -> Result<Self, VmError> {
+        match v {
+            VmValue::Char(c) => Ok(c),
+            other => Err(VmError(format!("expected char, got {other:?}"))),
+        }
+    }
+}
+
