@@ -144,6 +144,84 @@ pub fn write_doc_site(items: &[DocItem], out_dir: &Path, project_name: &str) -> 
     Ok(())
 }
 
+/// Writes an `index.html` plus one HTML page per source file into
+/// `out_dir`, creating it if needed. Shares a single `style.css` across
+/// all pages. Mirrors [`write_doc_site`]'s layout so the two output
+/// formats stay in sync.
+///
+/// `highlight_js`, if given, overrides the built-in `.rl` syntax
+/// highlighter with a different script.
+/// Pass `no_highlight: true` to omit highlighting entirely - otherwise
+/// the built-in [`DEFAULT_HIGHLIGHT_JS`] is inlined automatically.
+pub fn write_doc_site_html(
+    items: &[DocItem],
+    out_dir: &Path,
+    project_name: &str,
+    highlight_js: Option<&Path>,
+    no_highlight: bool,
+) -> io::Result<()> {
+    fs::create_dir_all(out_dir)?;
+    fs::write(out_dir.join("style.css"), STYLE_CSS)?;
+
+    let script_content: Option<String> = if no_highlight {
+        None
+    } else if let Some(src_path) = highlight_js {
+        Some(fs::read_to_string(src_path)?)
+    } else {
+        Some(DEFAULT_HIGHLIGHT_JS.to_string())
+    };
+    let script_content = script_content.as_deref();
+
+    let by_file = group_by_file(items);
+
+    let mut index_links = String::new();
+    for (file, file_items) in &by_file {
+        let page = page_name(file, "html");
+        index_links.push_str(&format!(
+            "<li><a href=\"{page}\">{file}</a> <span class=\"count\">({count} item{s})</span></li>\n",
+            page = page,
+            file = html_escape(file),
+            count = file_items.len(),
+            s = if file_items.len() == 1 { "" } else { "s" }
+        ));
+
+        let mut sections = String::new();
+        for item in file_items {
+            sections.push_str(&format!(
+                "<section class=\"item\">\n\
+                 <h2><code class=\"kind\">{kind}</code> {name} <span class=\"line\">line {line}</span></h2>\n\
+                 <pre class=\"sig rl-code\">{sig}</pre>\n\
+                 <p class=\"doc\">{doc}</p>\n\
+                 </section>\n",
+                kind = html_escape(item.kind),
+                name = html_escape(&item.name),
+                line = item.line,
+                sig = html_escape(&item.signature),
+                doc = html_escape(&item.doc).replace('\n', "<br>\n"),
+            ));
+        }
+
+        let page_html = html_page(
+            &format!("{} - {}", file, project_name),
+            &format!("<h1>{}</h1>\n{}", html_escape(file), sections),
+            script_content,
+        );
+        fs::write(out_dir.join(page_name(file, "html")), page_html)?;
+    }
+
+    let index_html = html_page(
+        &format!("{} docs", project_name),
+        &format!(
+            "<h1>{} docs</h1>\n<ul class=\"file-list\">\n{}</ul>\n",
+            html_escape(project_name),
+            index_links
+        ),
+        script_content,
+    );
+    fs::write(out_dir.join("index.html"), index_html)?;
+    Ok(())
+}
+
 /// Wraps a `<body>` fragment in a minimal HTML5 document that links the
 /// shared `style.css` and, if given, inlines a syntax-highlighter script.
 fn html_page(title: &str, body: &str, script_content: Option<&str>) -> String {
