@@ -144,6 +144,26 @@ pub fn write_doc_site(items: &[DocItem], out_dir: &Path, project_name: &str) -> 
     Ok(())
 }
 
+/// Wraps a `<body>` fragment in a minimal HTML5 document that links the
+/// shared `style.css` and, if given, inlines a syntax-highlighter script.
+fn html_page(title: &str, body: &str, script_content: Option<&str>) -> String {
+    let script_tag = match script_content {
+        Some(js) => format!("<script>\n{}\n</script>\n", js),
+        None => String::new(),
+    };
+    format!(
+        "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n\
+         <meta charset=\"utf-8\">\n\
+         <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n\
+         <title>{title}</title>\n\
+         <link rel=\"stylesheet\" href=\"style.css\">\n\
+         </head>\n<body>\n{body}{script_tag}</body>\n</html>\n",
+        title = html_escape(title),
+        body = body,
+        script_tag = script_tag,
+    )
+}
+
 /// Escapes the five characters that are meaningful in HTML text content.
 fn html_escape(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
