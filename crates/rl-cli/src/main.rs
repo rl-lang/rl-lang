@@ -487,7 +487,11 @@ fn main() {
                         all_items.extend(extract_doc_items(&tokens, &file_name));
                     }
 
-                    let doc_out_dir = parent.join("docs_site");
+                    let p = match parent.parent() {
+                        Some(p) => p,
+                        None => parent,
+                    };
+                    let doc_out_dir = p.join("docs_site");
                     if let Err(e) = write_doc_site(&all_items, &doc_out_dir, &config.project.name) {
                         eprintln!("error: failed to write doc site: {}", e);
                         std::process::exit(1);
