@@ -284,6 +284,35 @@ impl Vm {
                         other => return Err(VmError(format!("cannot call {other:?}"))),
                     }
                 }
+
+                OpCode::Ok => {
+                    let v = self.pop()?;
+                    self.stack.push(VmValue::Ok(Box::new(v)));
+                }
+
+                OpCode::Err => {
+                    let v = self.pop()?;
+                    self.stack.push(VmValue::Err(Box::new(v)));
+                }
+
+                OpCode::Propagate => {
+                    let v = self.pop()?;
+                    match v {
+                        VmValue::Ok(inner) => self.stack.push(*inner),
+                        VmValue::Err(_) => {
+                            self.stack.push(v);
+                            frames.last_mut().unwrap().ip = ip;
+                            if !self.finish_call(&mut frames)? {
+                                return Ok(());
+                            }
+                            let top = frames.last().unwrap();
+                            cur_chunk = top.source.chunk();
+                            ip = top.ip;
+                            scope_base = top.scope_base;
+                        }
+                        other => self.stack.push(other),
+                    }
+                }
             }
         }
     }

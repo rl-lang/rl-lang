@@ -53,16 +53,22 @@ pub enum OpCode {
     Call = 23,
     GetGlobal = 24,
     SetGlobal = 25,
+    /// Ok(...)
+    Ok = 26,
+    /// Err(...)
+    Err = 27,
+    /// ?
+    Propagate = 28,
 }
 
 impl OpCode {
     /// # Safety
-    /// `byte` must be valid discriminant (0..25)
+    /// `byte` must be valid discriminant (0..28)
     /// and that's only true for bytecode emitted by this compiler
     #[inline(always)]
     pub fn from_u8_unchecked(byte: u8) -> Self {
         debug_assert!(
-            byte <= OpCode::SetGlobal as u8,
+            byte <= OpCode::Propagate as u8,
             "corrupt bytecode: opcode {byte}"
         );
         unsafe { std::mem::transmute::<u8, OpCode>(byte) }
@@ -98,6 +104,9 @@ impl OpCode {
             23 => OpCode::Call,
             24 => OpCode::GetGlobal,
             25 => OpCode::SetGlobal,
+            26 => OpCode::Ok,
+            27 => OpCode::Err,
+            28 => OpCode::Propagate,
             other => panic!("corrupt bytecode: unknown opcode byte {other}"),
         }
     }

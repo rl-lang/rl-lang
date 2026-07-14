@@ -17,6 +17,8 @@ pub enum VmValue {
     Function(Rc<VmFunction>),
     /// std function call
     Native(Rc<VmNativeFn>),
+    Ok(Box<VmValue>),
+    Err(Box<VmValue>),
 }
 
 impl fmt::Display for VmValue {
@@ -31,7 +33,36 @@ impl fmt::Display for VmValue {
             VmValue::Str(s) => write!(f, "{}", s),
             VmValue::Function(func) => write!(f, "<fn {}/{}>", func.name, func.arity),
             VmValue::Native(func) => write!(f, "<native fn {}>", func.name),
+            VmValue::Ok(inner) => write!(f, "ok({})", inner),
+            VmValue::Err(inner) => write!(f, "err({})", inner),
         }
+    }
+}
+
+impl VmValue {
+    /// Human-readable type name used in error labels (e.g. "int", "bool").
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            VmValue::Null => "null",
+            VmValue::Int(_) => "int",
+            VmValue::Float(_) => "float",
+            VmValue::Bool(_) => "bool",
+            VmValue::Byte(_) => "byte",
+            VmValue::Char(_) => "char",
+            VmValue::Str(_) => "string",
+            VmValue::Function(_) => "function",
+            VmValue::Native(_) => "native function",
+            VmValue::Ok(_) => "ok",
+            VmValue::Err(_) => "err",
+        }
+    }
+
+    pub fn is_ok(&self) -> bool {
+        matches!(self, VmValue::Ok(_))
+    }
+
+    pub fn is_err(&self) -> bool {
+        matches!(self, VmValue::Err(_))
     }
 }
 

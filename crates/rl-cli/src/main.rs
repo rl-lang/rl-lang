@@ -247,7 +247,7 @@ fn main() {
                     std::process::exit(1)
                 }
             } else if cranelift {
-                #[cfg(all(feature = "eval", feature = "vm", feature = "eval"))]
+                #[cfg(all(feature = "cranelift", feature = "vm", feature = "eval"))]
                 crate::logic_loops::cranelift_loop(source, ast, statements);
                 #[cfg(not(all(feature = "eval", feature = "cranelift", feature = "vm")))]
                 {
