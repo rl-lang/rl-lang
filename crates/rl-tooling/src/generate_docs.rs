@@ -145,6 +145,22 @@ pub fn write_doc_site(items: &[DocItem], out_dir: &Path, project_name: &str) -> 
 }
 
 fn page_name(file: &str) -> String {
+/// Escapes the five characters that are meaningful in HTML text content.
+fn html_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&#39;"),
+            other => out.push(other),
+        }
+    }
+    out
+}
+
 fn page_name(file: &str, ext: &str) -> String {
     let stem = Path::new(file)
         .file_stem()
