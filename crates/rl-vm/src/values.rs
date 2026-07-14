@@ -1,6 +1,8 @@
+use std::fmt;
 use std::rc::Rc;
 
 use crate::Chunk;
+use crate::native::NativeFn;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum VmValue {
@@ -11,7 +13,10 @@ pub enum VmValue {
     Byte(u8),
     Char(char),
     Str(Rc<str>),
+    /// user defined function call
     Function(Rc<VmFunction>),
+    /// std function call
+    Native(Rc<VmNativeFn>),
 }
 
 #[derive(Debug)]
@@ -27,5 +32,13 @@ impl PartialEq for VmFunction {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name && self.arity == other.arity
     }
+}
+
+/// A native (Rust-implemented) function bound into `VmValue::Native`.
+/// Compiled call paths like `std::io::println` resolve to one of these
+/// at compile time and get embedded as a constant, same as `VmFunction`.
+pub struct VmNativeFn {
+    pub name: String,
+    pub func: NativeFn,
 }
 
