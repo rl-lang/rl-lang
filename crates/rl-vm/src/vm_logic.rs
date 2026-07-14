@@ -238,35 +238,51 @@ impl Vm {
                     let arg_count = chunk!().read_u16(ip) as usize;
                     ip += 2;
 
-                    let base = self.locals.len();
-                    self.locals.resize(base + arg_count, VmValue::Null);
-                    for i in (0..arg_count).rev() {
-                        self.locals[base + i] = self.pop()?;
-                    }
+                    let callee_idx = self.stack.len() - 1 - arg_count;
+                    match self.stack[callee_idx].clone() {
+                        VmValue::Function(func) => {
+                            let base = self.locals.len();
+                            self.locals.resize(base + arg_count, VmValue::Null);
+                            for i in (0..arg_count).rev() {
+                                self.locals[base + i] = self.pop()?;
+                            }
+                            self.pop()?; // discard the callee itself
 
-                    let func = match self.pop()? {
-                        VmValue::Function(f) => f,
+                            if arg_count != func.arity {
+                                return Err(VmError(format!(
+                                    "{} expects {} args, got {}",
+                                    func.name, func.arity, arg_count
+                                )));
+                            }
+
+                            self.scope_starts.push(base);
+                            let new_scope_base = self.scope_starts.len() - 1;
+
+                            frames.last_mut().unwrap().ip = ip;
+                            cur_chunk = &func.chunk as *const Chunk;
+                            frames.push(CallFrame {
+                                source: FrameSource::Func(func),
+                                ip: 0,
+                                scope_base: new_scope_base,
+                            });
+                            ip = 0;
+                            scope_base = new_scope_base;
+                        }
+
+                        VmValue::Native(native) => {
+                            let mut call_args = Vec::with_capacity(arg_count);
+                            for _ in 0..arg_count {
+                                call_args.push(self.pop()?);
+                            }
+                            call_args.reverse();
+                            self.pop()?; // discard the callee itself
+
+                            let result = (native.func)(self, call_args)?;
+                            self.stack.push(result);
+                        }
+
                         other => return Err(VmError(format!("cannot call {other:?}"))),
-                    };
-                    if arg_count != func.arity {
-                        return Err(VmError(format!(
-                            "{} expects {} args, got {}",
-                            func.name, func.arity, arg_count
-                        )));
                     }
-
-                    self.scope_starts.push(base);
-                    let new_scope_base = self.scope_starts.len() - 1;
-
-                    frames.last_mut().unwrap().ip = ip;
-                    cur_chunk = &func.chunk as *const Chunk;
-                    frames.push(CallFrame {
-                        source: FrameSource::Func(func),
-                        ip: 0,
-                        scope_base: new_scope_base,
-                    });
-                    ip = 0;
-                    scope_base = new_scope_base;
                 }
             }
         }
