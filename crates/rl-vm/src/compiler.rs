@@ -1,6 +1,8 @@
 use std::rc::Rc;
 
 use crate::chunk::{Chunk, OpCode};
+use crate::native::Module;
+use crate::stdlib;
 use crate::values::{VmFunction, VmValue};
 use rl_ast::{
     Ast, ExprId, nodes::ExpressionKind, statements::Statement, statements::StatementKind,
@@ -15,6 +17,7 @@ pub struct Compiler<'a> {
     chunk: Chunk,
     next_slot: u16,
     scope_bases: Vec<u16>,
+    stdlib: Module,
 }
 
 impl<'a> Compiler<'a> {
@@ -24,6 +27,7 @@ impl<'a> Compiler<'a> {
             chunk: Chunk::new(),
             next_slot: 0,
             scope_bases: Vec::new(),
+            stdlib: stdlib::root(),
         }
     }
 
@@ -309,6 +313,18 @@ impl<'a> Compiler<'a> {
                         self.chunk.write_u16(*slot as u16, line);
                     }
                 }
+            }
+
+            ExpressionKind::Call { path, args } => {
+                let native = self.stdlib.resolve(path).ok_or_else(|| {
+                    CompileError(format!("undefined function {}", path.join("::")))
+                })?;
+                self.emit_const(VmValue::Native(native), line);
+                for arg in args {
+                    self.compile_expr(*arg)?;
+                }
+                self.chunk.write_op(OpCode::Call, line);
+                self.chunk.write_u16(args.len() as u16, line);
             }
 
             ExpressionKind::CallExpr { callee, args } => {

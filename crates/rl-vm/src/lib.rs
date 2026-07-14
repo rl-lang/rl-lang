@@ -1,6 +1,7 @@
 pub mod chunk;
 pub mod compiler;
 pub mod native;
+pub mod stdlib;
 pub mod values;
 pub mod vm_logic;
 
