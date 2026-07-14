@@ -112,12 +112,9 @@ pub fn vm_loop(source: SourceFile, ast: Ast, statements: Vec<Statement>) {
         }
     };
 
-    println!("{:?}", chunk);
-
     let mut vm = Vm::new();
     match vm.run(&chunk) {
-        Ok(Some(val)) => println!("{:?}", val),
-        Ok(None) => {}
+        Ok(_) => {}
         Err(e) => {
             eprintln!("vm runtime error: {}", e.0);
             std::process::exit(1);
