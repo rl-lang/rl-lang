@@ -1,0 +1,91 @@
+body {
+    font-family: system-ui, sans-serif;
+    max-width: 46rem;
+    margin: 2rem auto;
+    padding: 0 1rem;
+    color: #1a1a1a;
+    line-height: 1.5;
+}
+h1 {
+    border-bottom: 2px solid #eee;
+    padding-bottom: 0.5rem;
+}
+.item {
+    margin: 2rem 0;
+    padding-top: 1rem;
+    border-top: 1px solid #eee;
+}
+.kind {
+    background: #eef;
+    color: #335;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.85em;
+}
+.line {
+    color: #888;
+    font-weight: normal;
+    font-size: 0.8em;
+}
+.sig {
+    background: #f6f6f6;
+    padding: 0.75rem;
+    border-radius: 6px;
+    overflow-x: auto;
+}
+.doc {
+    color: #333;
+}
+.file-list {
+    list-style: none;
+    padding: 0;
+}
+.file-list li {
+    padding: 0.25rem 0;
+}
+.count {
+    color: #888;
+    font-size: 0.85em;
+}
+a {
+    color: #2554c7;
+    text-decoration: none;
+}
+a:hover {
+    text-decoration: underline;
+}
+
+/* rl-highlight.js token colors - tweak these to taste */
+.rl-code {
+    color: #24292e;
+}
+.rl-kw {
+    color: #cf222e;
+    font-weight: 600;
+}
+.rl-type {
+    color: #953800;
+}
+.rl-lit {
+    color: #0550ae;
+    font-weight: 600;
+}
+.rl-string {
+    color: #0a3069;
+}
+.rl-char {
+    color: #0a3069;
+}
+.rl-number {
+    color: #0550ae;
+}
+.rl-comment {
+    color: #6e7781;
+    font-style: italic;
+}
+.rl-op {
+    color: #24292e;
+}
+.rl-ident {
+    color: #24292e;
+}

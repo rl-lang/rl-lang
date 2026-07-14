@@ -17,6 +17,7 @@ use crate::format::needs_space;
 /// inlined into generated pages unless `--no-highlight` is passed or a
 /// different script is supplied via `--highlight-js`.
 const DEFAULT_HIGHLIGHT_JS: &str = include_str!("../assets/rl-highlight.js");
+const STYLE_CSS: &str = include_str!("../assets/style.css");
 
 /// One documented item extracted from a source file.
 pub struct DocItem {
