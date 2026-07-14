@@ -168,6 +168,20 @@ enum Commands {
         /// Generate docs for current project
         #[arg(long)]
         generate: bool,
+
+        /// Also emit an HTML version of the generated site (used with --generate)
+        #[arg(long)]
+        html: bool,
+
+        /// Path to a client-side syntax-highlighter script for `.rl` code
+        /// blocks, inlined into the generated site in place of the
+        /// built-in highlighter (used with --generate --html)
+        #[arg(long, value_name = "PATH")]
+        highlight_js: Option<PathBuf>,
+
+        /// Skip inlining any syntax-highlighter script (used with --generate --html)
+        #[arg(long)]
+        no_highlight: bool,
     },
 
     /// Start the LSP server over stdio
@@ -372,6 +386,9 @@ fn main() {
             output,
             out_file,
             generate,
+            html,
+            highlight_js,
+            no_highlight,
         } => {
             if generate {
                 #[cfg(feature = "eval")]
