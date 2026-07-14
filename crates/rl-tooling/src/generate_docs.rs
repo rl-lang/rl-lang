@@ -13,6 +13,11 @@ use rl_lexer::tokentypes::{Token, TokenType, Trivia};
 
 use crate::format::needs_space;
 
+/// The default `.rl` syntax highlighter, compiled into the binary and
+/// inlined into generated pages unless `--no-highlight` is passed or a
+/// different script is supplied via `--highlight-js`.
+const DEFAULT_HIGHLIGHT_JS: &str = include_str!("../assets/rl-highlight.js");
+
 /// One documented item extracted from a source file.
 pub struct DocItem {
     pub kind: &'static str,
