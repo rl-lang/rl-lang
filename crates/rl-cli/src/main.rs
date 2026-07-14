@@ -511,23 +511,14 @@ fn main() {
                         all_items.extend(extract_doc_items(&tokens, &file_name));
                     }
 
-                    let p = match out_dir {
+                    let p = match parent.parent() {
                         Some(p) => p,
-                        None => match parent.parent() {
-                            Some(p) => p.to_path_buf(),
-                            None => parent.to_path_buf(),
-                        },
+                        None => parent,
                     };
-                    let doc_out_dir = p.join("docs_site");
-                    if let Err(e) = write_doc_site(&all_items, &doc_out_dir, &config.project.name) {
-                        eprintln!("error: failed to write doc site: {}", e);
-                        std::process::exit(1);
-                    }
-                    println!(
-                        "doc site written to '{}' ({} items)",
-                        doc_out_dir.display(),
-                        all_items.len()
-                    );
+                    let doc_out_dir = match out_dir {
+                        Some(p) => p,
+                        None => p.join("docs_site"),
+                    };
 
                     if html {
                         if let Err(e) = write_doc_site_html(
@@ -543,6 +534,18 @@ fn main() {
                         println!(
                             "html doc site written to '{}/index.html'",
                             doc_out_dir.display()
+                        );
+                    } else {
+                        if let Err(e) =
+                            write_doc_site(&all_items, &doc_out_dir, &config.project.name)
+                        {
+                            eprintln!("error: failed to write doc site: {}", e);
+                            std::process::exit(1);
+                        }
+                        println!(
+                            "doc site written to '{}' ({} items)",
+                            doc_out_dir.display(),
+                            all_items.len()
                         );
                     }
                 }
