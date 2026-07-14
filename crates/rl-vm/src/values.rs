@@ -58,3 +58,14 @@ pub struct VmNativeFn {
     pub func: NativeFn,
 }
 
+impl fmt::Debug for VmNativeFn {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "VmNativeFn({})", self.name)
+    }
+}
+
+impl PartialEq for VmNativeFn {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
