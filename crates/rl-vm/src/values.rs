@@ -17,6 +17,8 @@ pub enum VmValue {
     Function(Rc<VmFunction>),
     /// std function call
     Native(Rc<VmNativeFn>),
+    Ok(Box<VmValue>),
+    Err(Box<VmValue>),
 }
 
 impl fmt::Display for VmValue {
@@ -31,6 +33,8 @@ impl fmt::Display for VmValue {
             VmValue::Str(s) => write!(f, "{}", s),
             VmValue::Function(func) => write!(f, "<fn {}/{}>", func.name, func.arity),
             VmValue::Native(func) => write!(f, "<native fn {}>", func.name),
+            VmValue::Ok(inner) => write!(f, "ok({})", inner),
+            VmValue::Err(inner) => write!(f, "err({})", inner),
         }
     }
 }
