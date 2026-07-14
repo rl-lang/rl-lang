@@ -103,11 +103,9 @@ fn render_signature(tokens: &[Token], start: usize) -> String {
     out
 }
 
-/// Writes an `index.md` plus one markdown page per source file into
-/// `out_dir`, creating it if needed.
-pub fn write_doc_site(items: &[DocItem], out_dir: &Path, project_name: &str) -> io::Result<()> {
-    fs::create_dir_all(out_dir)?;
-
+/// Groups items by their source file, sorted by file name, ready to be
+/// rendered into per-file pages by any output-format writer.
+fn group_by_file(items: &[DocItem]) -> Vec<(&str, Vec<&DocItem>)> {
     let mut by_file: Vec<(&str, Vec<&DocItem>)> = Vec::new();
     for item in items {
         match by_file.iter_mut().find(|(f, _)| *f == item.file) {
@@ -116,6 +114,15 @@ pub fn write_doc_site(items: &[DocItem], out_dir: &Path, project_name: &str) -> 
         }
     }
     by_file.sort_by(|a, b| a.0.cmp(b.0));
+    by_file
+}
+
+/// Writes an `index.md` plus one markdown page per source file into
+/// `out_dir`, creating it if needed.
+pub fn write_doc_site(items: &[DocItem], out_dir: &Path, project_name: &str) -> io::Result<()> {
+    fs::create_dir_all(out_dir)?;
+
+    let by_file = group_by_file(items);
 
     let mut index = format!("# {} docs\n\n", project_name);
     for (file, file_items) in &by_file {
