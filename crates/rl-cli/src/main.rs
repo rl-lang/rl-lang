@@ -233,6 +233,33 @@ fn main() {
             let source = SourceFile::new(&*path, source_text);
             let tokens = lexing_loop(source.clone());
             let (ast, statements) = parsing_loop(source.clone(), tokens);
+            // temporary solution
+            // should be updated when:
+            // *_loop accept refernce instead
+            // `vm` and `cranelift` get separate compile command so it wouldn't
+            // need the recompilation on every run step
+            // thus no check every time
+            #[cfg(feature = "eval")]
+            {
+                let tokens = lexing_loop(source.clone());
+                let (checker_ast, checker_statements) = parsing_loop(source.clone(), tokens);
+                use rl_checker::TypeChecker;
+                let base_dir = file
+                    .parent()
+                    .map(std::path::Path::to_path_buf)
+                    .unwrap_or_else(|| std::path::PathBuf::from("."));
+                let mut checker = TypeChecker::new()
+                    .with_source_file(source.clone())
+                    .with_ast_arena(checker_ast)
+                    .with_base_dir(base_dir);
+                let errors = checker.check(&checker_statements);
+                if !errors.is_empty() {
+                    for e in errors {
+                        e.report_to_stderr();
+                    }
+                    std::process::exit(1);
+                }
+            }
             if vm {
                 #[cfg(all(feature = "eval", feature = "vm"))]
                 crate::logic_loops::vm_loop(source, ast, statements);
