@@ -171,10 +171,7 @@ pub fn write_doc_site_html(
         Some(DEFAULT_HIGHLIGHT_JS.to_string())
     };
     let script_content = script_content.as_deref();
-    match script_content {
-        Some(js) => fs::write(out_dir.join("rl-highlight.js"), js)?,
-        None => {}
-    }
+    if let Some(js) = script_content { fs::write(out_dir.join("rl-highlight.js"), js)? }
 
     let by_file = group_by_file(items);
 
