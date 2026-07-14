@@ -164,6 +164,10 @@ enum Commands {
         /// Custom path for --output (implies --output)
         #[arg(long, value_name = "PATH")]
         out_file: Option<PathBuf>,
+
+        /// Generate docs for current project
+        #[arg(long)]
+        generate: bool,
     },
 
     /// Start the LSP server over stdio
@@ -367,7 +371,111 @@ fn main() {
             stdlib,
             output,
             out_file,
+            generate,
         } => {
+            if generate {
+                #[cfg(feature = "eval")]
+                {
+                    let config = read_rl_toml();
+                    let path = std::path::PathBuf::from(&config.project.entry);
+                    let source_text = std::fs::read_to_string(&path).unwrap_or_else(|_| {
+                        eprintln!(
+                            "error: could not read entry file '{}'",
+                            config.project.entry
+                        );
+                        std::process::exit(1);
+                    });
+                    println!("[{}] v{}", config.project.name, config.project.version);
+                    let source = SourceFile::new(&*config.project.entry, source_text);
+                    let tokens = lexing_loop(source.clone());
+                    let (ast, statements) = parsing_loop(source.clone(), tokens);
+
+                    use rl_checker::TypeChecker;
+                    let mut checker = TypeChecker::new()
+                        .with_source_file(source)
+                        .with_ast_arena(ast)
+                        .with_base_dir(
+                            path.parent()
+                                .unwrap_or_else(|| std::path::Path::new("."))
+                                .to_path_buf(),
+                        );
+                    let errors = checker.check(&statements);
+                    if errors.is_empty() {
+                        println!("check complete");
+                    } else {
+                        for e in errors {
+                            e.report_to_stderr();
+                        }
+                        std::process::exit(1);
+                    }
+
+                    let parent = match path.parent() {
+                        Some(p) => p,
+                        None => {
+                            eprintln!("error when formatting");
+                            std::process::exit(1);
+                        }
+                    };
+
+                    // format every .rl file in the project
+                    let entries = match std::fs::read_dir(parent) {
+                        Ok(p) => p,
+                        Err(e) => {
+                            eprintln!("error when formatting: {}", e);
+                            std::process::exit(1);
+                        }
+                    };
+                    for entry in entries {
+                        let entry = match entry {
+                            Ok(e) => e,
+                            Err(e) => {
+                                eprintln!("error: {}", e);
+                                continue;
+                            }
+                        };
+                        let file_path = entry.path();
+                        if file_path.extension().and_then(|e| e.to_str()) != Some("rl") {
+                            continue;
+                        }
+                        let source_text =
+                            std::fs::read_to_string(&file_path).unwrap_or_else(|_| {
+                                eprintln!("error: could not read file '{}'", file_path.display());
+                                std::process::exit(1);
+                            });
+                        let source = SourceFile::new(&*file_path.to_string_lossy(), source_text);
+                        let tokens = lexing_loop(source);
+                        let formatted = format_tokens(&tokens);
+                        if let Err(e) = std::fs::write(&file_path, formatted) {
+                            eprintln!("error: {}", e);
+                        }
+                    }
+
+                    // generate website (placeholder)
+                    let entries = match std::fs::read_dir(parent) {
+                        Ok(p) => p,
+                        Err(e) => {
+                            eprintln!("error when generating website: {}", e);
+                            std::process::exit(1);
+                        }
+                    };
+                    for entry in entries {
+                        let entry = match entry {
+                            Ok(e) => e,
+                            Err(e) => {
+                                eprintln!("error: {}", e);
+                                continue;
+                            }
+                        };
+                        let file_path = entry.path();
+                        if file_path.extension().and_then(|e| e.to_str()) != Some("rl") {
+                            continue;
+                        }
+                        todo!("parse '{}' and generate website page", file_path.display());
+                    }
+                }
+                return;
+            }
+
             let std_entries = stdlib_entries();
             let concept_entries = concept_entries();
             let tutorial_entries = tutorial_entries();
