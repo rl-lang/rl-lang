@@ -1,17 +1,14 @@
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
-use std::io::{Read, Write};
 use std::rc::Rc;
-
-use flate2::Compression;
-use flate2::read::DeflateDecoder;
-use flate2::write::DeflateEncoder;
 
 use crate::chunk::Chunk;
 use crate::native::Module;
 use crate::values::{VmFunction, VmValue};
 
-const MAGIC: &[u8; 4] = b"RLZ1";
+const MAGIC: &[u8; 4] = b"RLZ2";
+
+const ZSTD_LEVEL: i32 = 19;
 
 #[derive(Debug)]
 pub struct BytecodeError(pub String);
@@ -21,18 +18,16 @@ impl Display for BytecodeError {
         write!(f, "{}", self.0)
     }
 }
+
 pub fn serialize_chunk(chunk: &Chunk) -> Vec<u8> {
     let payload = serialize_payload(chunk);
 
-    let mut out = Vec::new();
+    let compressed = zstd::encode_all(&payload[..], ZSTD_LEVEL)
+        .expect("compressing an in-memory buffer cannot fail");
+
+    let mut out = Vec::with_capacity(4 + compressed.len());
     out.extend_from_slice(MAGIC);
-    let mut encoder = DeflateEncoder::new(&mut out, Compression::default());
-    encoder
-        .write_all(&payload)
-        .expect("writing to an in-memory Vec<u8> cannot fail");
-    encoder
-        .finish()
-        .expect("finishing an in-memory deflate stream cannot fail");
+    out.extend_from_slice(&compressed);
     out
 }
 
@@ -43,10 +38,7 @@ pub fn deserialize_chunk(bytes: &[u8], stdlib: &Module) -> Result<Chunk, Bytecod
         ));
     }
 
-    let mut decoder = DeflateDecoder::new(&bytes[4..]);
-    let mut payload = Vec::new();
-    decoder
-        .read_to_end(&mut payload)
+    let payload = zstd::decode_all(&bytes[4..])
         .map_err(|e| BytecodeError(format!("failed to decompress .rlc file: {e}")))?;
 
     deserialize_payload(&payload, stdlib)
