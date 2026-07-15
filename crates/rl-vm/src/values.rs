@@ -28,12 +28,46 @@ pub enum VmValue {
     Map(Rc<RefCell<HashMap<VmMapKey, VmValue>>>),
     Record {
         name: Rc<str>,
-        fields: Rc<RefCell<Vec<(Rc<str>, VmValue)>>>,
+        fields: RecordFields,
     },
     Tag {
         name: Rc<str>,
         variant: Rc<str>,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct RecordFields(Rc<RefCell<Vec<(Rc<str>, VmValue)>>>);
+
+impl RecordFields {
+    pub fn new(fields: Vec<(Rc<str>, VmValue)>) -> Self {
+        Self(Rc::new(RefCell::new(fields)))
+    }
+
+    pub fn get(&self, name: &str) -> Option<VmValue> {
+        self.0
+            .borrow()
+            .iter()
+            .find(|(n, _)| &**n == name)
+            .map(|(_, v)| v.clone())
+    }
+
+    pub fn set(&self, name: &str, value: VmValue) {
+        let mut fields = self.0.borrow_mut();
+        if let Some(entry) = fields.iter_mut().find(|(n, _)| &**n == name) {
+            entry.1 = value;
+        } else {
+            fields.push((Rc::from(name), value));
+        }
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (Rc<str>, VmValue)> + '_ {
+        self.0.borrow().clone().into_iter()
+    }
+
+    pub fn has(&self, name: &str) -> bool {
+        self.0.borrow().iter().any(|(n, _)| &**n == name)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -124,7 +158,7 @@ impl fmt::Display for VmValue {
             }
             VmValue::Record { name, fields } => {
                 write!(f, "{} {{", name)?;
-                for (i, (fname, fval)) in fields.borrow().iter().enumerate() {
+                for (i, (fname, fval)) in fields.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
                     }

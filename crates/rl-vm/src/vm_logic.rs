@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::chunk::{Chunk, OpCode};
-use crate::values::{VmFunction, VmMapKey, VmValue};
+use crate::values::{RecordFields, VmFunction, VmMapKey, VmValue};
 
 #[derive(Debug)]
 pub struct VmError(pub String);
@@ -419,7 +419,7 @@ impl Vm {
                         .collect();
                     self.stack.push(VmValue::Record {
                         name,
-                        fields: Rc::new(RefCell::new(fields)),
+                        fields: RecordFields::new(fields),
                     });
                 }
 
@@ -439,14 +439,9 @@ impl Vm {
                             target.type_name()
                         )));
                     };
-                    let value = fields
-                        .borrow()
-                        .iter()
-                        .find(|(f, _)| *f == field)
-                        .map(|(_, v)| v.clone())
-                        .ok_or_else(|| {
-                            VmError(format!("record `{}` has no field `{}`", name, field))
-                        })?;
+                    let value = fields.get(&field).ok_or_else(|| {
+                        VmError(format!("record `{}` has no field `{}`", name, field))
+                    })?;
                     self.stack.push(value);
                 }
 
@@ -467,17 +462,13 @@ impl Vm {
                             target.type_name()
                         )));
                     };
-                    let mut fields_mut = fields.borrow_mut();
-                    match fields_mut.iter_mut().find(|(f, _)| *f == field) {
-                        Some((_, slot)) => *slot = value.clone(),
-                        None => {
-                            return Err(VmError(format!(
-                                "record `{}` has no field `{}`",
-                                name, field
-                            )));
-                        }
+                    if !fields.has(&field) {
+                        return Err(VmError(format!(
+                            "record `{}` has no field `{}`",
+                            name, field
+                        )));
                     }
-                    drop(fields_mut);
+                    fields.set(&field, value.clone());
                     self.stack.push(value);
                 }
             }
