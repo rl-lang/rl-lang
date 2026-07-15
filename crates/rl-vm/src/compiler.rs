@@ -74,7 +74,9 @@ impl<'a> Compiler<'a> {
         let line = self.line(0); // todo
         match &stmt.kind {
             StatementKind::ResolvedVariableDeclaration { value, .. }
-            | StatementKind::ResolvedConstantDeclaration { value, .. } => {
+            | StatementKind::ResolvedConstantDeclaration { value, .. }
+            | StatementKind::ResolvedArray { value, .. }
+            | StatementKind::ResolvedConstantArray { value, .. } => {
                 self.compile_expr(*value)?;
                 let slot = self.next_slot;
                 self.next_slot += 1;
@@ -84,7 +86,9 @@ impl<'a> Compiler<'a> {
             }
 
             StatementKind::VariableDeclaration { .. }
-            | StatementKind::ConstantDeclaration { .. } => Err(CompileError(
+            | StatementKind::ConstantDeclaration { .. }
+            | StatementKind::Array { .. }
+            | StatementKind::ConstantArray { .. } => Err(CompileError(
                 "unresolved declaration reached the compiler - run the resolver pass first".into(),
             )),
 
@@ -354,6 +358,14 @@ impl<'a> Compiler<'a> {
             ExpressionKind::ErrorLiteral(inner) => {
                 self.compile_expr(*inner)?;
                 self.chunk.write_op(OpCode::Error, line);
+            }
+
+            ExpressionKind::ArrayLiteral(items) => {
+                for item in items {
+                    self.compile_expr(*item)?;
+                }
+                self.chunk.write_op(OpCode::BuildArr, line);
+                self.chunk.write_u16(items.len() as u16, line);
             }
 
             other => {
