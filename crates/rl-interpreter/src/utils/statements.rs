@@ -158,8 +158,8 @@ impl Evaluator {
                 let val = self.evaluate(*value)?;
                 let val = match val {
                     Value::Set { items, .. } => {
-                        for item in &items {
-                            let actual = Self::infer_type(item, false);
+                        for key in items.borrow().iter() {
+                            let actual = Self::infer_type(&key.clone().into_value(), false);
                             if !Self::types_compatible(&actual, type_annotation) {
                                 return Err(self.err(
                                     format!(
@@ -195,8 +195,8 @@ impl Evaluator {
                 let val = self.evaluate(*value)?;
                 let val = match val {
                     Value::Set { items, .. } => {
-                        for item in &items {
-                            let actual = Self::infer_type(item, false);
+                        for key in items.borrow().iter() {
+                            let actual = Self::infer_type(&key.clone().into_value(), false);
                             if !Self::types_compatible(&actual, type_annotation) {
                                 return Err(self.err(
                                     format!(
