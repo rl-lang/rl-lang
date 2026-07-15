@@ -573,7 +573,7 @@ impl Vm {
 
     fn index_get(arr: &VmValue, index: &VmValue) -> Result<VmValue, VmError> {
         match arr {
-            VmValue::Arr(items) | VmValue::Tuple(items) | VmValue::Set(items) => {
+            VmValue::Arr(items) | VmValue::Tuple(items) => {
                 let i = Self::index_as_usize(index, items.len())?;
                 Ok(items[i].clone())
             }
