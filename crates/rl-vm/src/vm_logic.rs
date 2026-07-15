@@ -329,6 +329,16 @@ impl Vm {
                     self.stack.push(VmValue::Arr(Rc::new(items)));
                 }
 
+                OpCode::BuildTuple => {
+                    let count = chunk!().read_u16(ip) as usize;
+                    ip += 2;
+                    if self.stack.len() < count {
+                        return Err(VmError("stack underflow building tuple".into()));
+                    }
+                    let items = self.stack.split_off(self.stack.len() - count);
+                    self.stack.push(VmValue::Tuple(Rc::new(items)));
+                }
+
                 OpCode::Index => {
                     let index = self.pop()?;
                     let arr = self.pop()?;
@@ -376,8 +386,9 @@ impl Vm {
     }
 
     fn index_get(arr: &VmValue, index: &VmValue) -> Result<VmValue, VmError> {
-        let VmValue::Arr(items) = arr else {
-            return Err(VmError(format!("cannot index into {}", arr.type_name())));
+        let items = match arr {
+            VmValue::Arr(items) | VmValue::Tuple(items) => items,
+            other => return Err(VmError(format!("cannot index into {}", other.type_name()))),
         };
         let i = Self::index_as_usize(index, items.len())?;
         Ok(items[i].clone())
