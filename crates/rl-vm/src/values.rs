@@ -26,6 +26,14 @@ pub enum VmValue {
     Tuple(Rc<Vec<VmValue>>),
     Set(Rc<Vec<VmValue>>),
     Map(Rc<RefCell<HashMap<VmMapKey, VmValue>>>),
+    Record {
+        name: Rc<str>,
+        fields: Rc<RefCell<Vec<(Rc<str>, VmValue)>>>,
+    },
+    Tag {
+        name: Rc<str>,
+        variant: Rc<str>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -114,6 +122,17 @@ impl fmt::Display for VmValue {
                 }
                 write!(f, "}}")
             }
+            VmValue::Record { name, fields } => {
+                write!(f, "{} {{", name)?;
+                for (i, (fname, fval)) in fields.borrow().iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}: {}", fname, fval)?;
+                }
+                write!(f, "}}")
+            }
+            VmValue::Tag { name, variant } => write!(f, "{}.{}", name, variant),
         }
     }
 }
@@ -138,6 +157,8 @@ impl VmValue {
             VmValue::Tuple(_) => "tuple",
             VmValue::Set(_) => "set",
             VmValue::Map(_) => "map",
+            VmValue::Record { .. } => "record",
+            VmValue::Tag { .. } => "tag",
         }
     }
 
