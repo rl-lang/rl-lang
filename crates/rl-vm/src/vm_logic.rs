@@ -318,6 +318,16 @@ impl Vm {
                     let v = self.pop()?;
                     self.stack.push(VmValue::Error(Box::new(v)));
                 }
+
+                OpCode::BuildArr => {
+                    let count = chunk!().read_u16(ip) as usize;
+                    ip += 2;
+                    if self.stack.len() < count {
+                        return Err(VmError("stack underflow building array".into()));
+                    }
+                    let items = self.stack.split_off(self.stack.len() - count);
+                    self.stack.push(VmValue::Arr(Rc::new(items)));
+                }
             }
         }
     }
