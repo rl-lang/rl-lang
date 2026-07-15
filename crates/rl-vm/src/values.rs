@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
 
@@ -22,6 +24,39 @@ pub enum VmValue {
     Error(Box<VmValue>),
     Arr(Rc<Vec<VmValue>>),
     Tuple(Rc<Vec<VmValue>>),
+    Set(Rc<Vec<VmValue>>),
+    Map(Rc<RefCell<HashMap<VmMapKey, VmValue>>>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum VmMapKey {
+    Int(i64),
+    Str(Rc<str>),
+    Bool(bool),
+    Byte(u8),
+    Char(char),
+}
+
+impl VmMapKey {
+    pub fn from_value(v: &VmValue) -> Option<VmMapKey> {
+        match v {
+            VmValue::Int(i) => Some(VmMapKey::Int(*i)),
+            VmValue::Str(s) => Some(VmMapKey::Str(s.clone())),
+            VmValue::Bool(b) => Some(VmMapKey::Bool(*b)),
+            VmValue::Byte(b) => Some(VmMapKey::Byte(*b)),
+            VmValue::Char(c) => Some(VmMapKey::Char(*c)),
+            _ => None,
+        }
+    }
+    pub fn into_value(self) -> VmValue {
+        match self {
+            VmMapKey::Int(i) => VmValue::Int(i),
+            VmMapKey::Str(s) => VmValue::Str(s),
+            VmMapKey::Bool(b) => VmValue::Bool(b),
+            VmMapKey::Byte(b) => VmValue::Byte(b),
+            VmMapKey::Char(c) => VmValue::Char(c),
+        }
+    }
 }
 
 impl fmt::Display for VmValue {
@@ -59,6 +94,26 @@ impl fmt::Display for VmValue {
                 }
                 write!(f, ")")
             }
+            VmValue::Set(items) => {
+                write!(f, "{{")?;
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", item)?;
+                }
+                write!(f, "}}")
+            }
+            VmValue::Map(entries) => {
+                write!(f, "{{")?;
+                for (i, (k, v)) in entries.borrow().iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}: {}", k.clone().into_value(), v)?;
+                }
+                write!(f, "}}")
+            }
         }
     }
 }
@@ -81,6 +136,8 @@ impl VmValue {
             VmValue::Error(_) => "error",
             VmValue::Arr(_) => "arr",
             VmValue::Tuple(_) => "tuple",
+            VmValue::Set(_) => "set",
+            VmValue::Map(_) => "map",
         }
     }
 
