@@ -60,13 +60,14 @@
 //! effect on bytecode execution speed. It trades a small amount of
 //! compress/decompress time for smaller files on disk.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::rc::Rc;
 
 use crate::chunk::Chunk;
 use crate::native::Module;
-use crate::values::{VmFunction, VmValue};
+use crate::values::{VmFunction, VmMapKey, VmValue};
 
 const MAGIC: &[u8; 4] = b"RLZ2";
 
@@ -239,6 +240,18 @@ fn collect_strings_value(value: &VmValue, pool: &mut StringPoolBuilder) {
                 collect_strings_value(item, pool);
             }
         }
+
+        VmValue::Set(items) => {
+            for item in items.iter() {
+                collect_strings_value(item, pool);
+            }
+        }
+        VmValue::Map(entries) => {
+            for (k, v) in entries.borrow().iter() {
+                collect_strings_value(&k.clone().into_value(), pool);
+                collect_strings_value(v, pool);
+            }
+        }
     }
 }
 
@@ -365,6 +378,22 @@ fn write_value(value: &VmValue, pool: &StringPoolBuilder, out: &mut Vec<u8>) {
             write_uvarint(items.len() as u64, out);
             for item in items.iter() {
                 write_value(item, pool, out);
+            }
+        }
+        VmValue::Set(items) => {
+            out.push(14);
+            write_uvarint(items.len() as u64, out);
+            for item in items.iter() {
+                write_value(item, pool, out);
+            }
+        }
+        VmValue::Map(entries) => {
+            out.push(15);
+            let entries = entries.borrow();
+            write_uvarint(entries.len() as u64, out);
+            for (k, v) in entries.iter() {
+                write_value(&k.clone().into_value(), pool, out);
+                write_value(v, pool, out);
             }
         }
     }
@@ -532,6 +561,26 @@ fn read_value(
                 items.push(read_value(cursor, stdlib, pool)?);
             }
             VmValue::Tuple(Rc::new(items))
+        }
+        14 => {
+            let len = cursor.uvarint()? as usize;
+            let mut items = Vec::with_capacity(len);
+            for _ in 0..len {
+                items.push(read_value(cursor, stdlib, pool)?);
+            }
+            VmValue::Set(Rc::new(items))
+        }
+        15 => {
+            let len = cursor.uvarint()? as usize;
+            let mut map = HashMap::with_capacity(len);
+            for _ in 0..len {
+                let k = read_value(cursor, stdlib, pool)?;
+                let v = read_value(cursor, stdlib, pool)?;
+                let key = VmMapKey::from_value(&k)
+                    .ok_or_else(|| BytecodeError("corrupt .rlc: invalid map key".into()))?;
+                map.insert(key, v);
+            }
+            VmValue::Map(Rc::new(RefCell::new(map)))
         }
         other => {
             return Err(BytecodeError(format!(
