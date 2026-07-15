@@ -410,7 +410,6 @@ fn write_value(value: &VmValue, pool: &StringPoolBuilder, out: &mut Vec<u8>) {
         VmValue::Record { name, fields } => {
             out.push(16);
             write_uvarint(pool.get(name) as u64, out);
-            let fields = fields;
             write_uvarint(fields.len() as u64, out);
             for (fname, fval) in fields.iter() {
                 write_uvarint(pool.get(&fname) as u64, out);

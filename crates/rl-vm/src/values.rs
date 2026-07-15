@@ -36,8 +36,12 @@ pub enum VmValue {
     },
 }
 
+// for some reason this works???
+// need to look it up
+pub type RecordField = Rc<RefCell<Vec<(Rc<str>, VmValue)>>>;
+
 #[derive(Debug, Clone, PartialEq, Default)]
-pub struct RecordFields(Rc<RefCell<Vec<(Rc<str>, VmValue)>>>);
+pub struct RecordFields(RecordField);
 
 impl RecordFields {
     pub fn new(fields: Vec<(Rc<str>, VmValue)>) -> Self {
@@ -71,6 +75,10 @@ impl RecordFields {
 
     pub fn len(&self) -> usize {
         self.0.borrow().len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.borrow().is_empty()
     }
 }
 
