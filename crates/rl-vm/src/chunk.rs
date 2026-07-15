@@ -61,6 +61,12 @@ pub enum OpCode {
     Propagate = 28,
     /// Error(...)
     Error = 29,
+    /// build an array from the top N stack values
+    BuildArr = 30,
+    /// arr[index] -> element
+    Index = 31,
+    /// pops value, index, arr -> pushes a new arr with that element replaced
+    ArrSet = 32,
 }
 
 impl OpCode {
@@ -70,7 +76,7 @@ impl OpCode {
     #[inline(always)]
     pub fn from_u8_unchecked(byte: u8) -> Self {
         debug_assert!(
-            byte <= OpCode::Error as u8,
+            byte <= OpCode::ArrSet as u8,
             "corrupt bytecode: opcode {byte}"
         );
         unsafe { std::mem::transmute::<u8, OpCode>(byte) }
@@ -110,6 +116,9 @@ impl OpCode {
             27 => OpCode::Err,
             28 => OpCode::Propagate,
             29 => OpCode::Error,
+            30 => OpCode::BuildArr,
+            31 => OpCode::Index,
+            32 => OpCode::ArrSet,
             other => panic!("corrupt bytecode: unknown opcode byte {other}"),
         }
     }
