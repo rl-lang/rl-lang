@@ -215,6 +215,26 @@ enum Commands {
         #[arg(value_name = "FILE")]
         file: PathBuf,
     },
+
+    /// Compile a .rl source file to .rlc bytecode
+    #[command(
+        long_about = "Lex, parse, resolve, and compile a .rl source file to bytecode, \
+                           writing the result as a .rlc file.\n\n\
+                           The resulting .rlc file can be run directly with `rl run`, \
+                           skipping the lex/parse/compile step.",
+        after_help = "EXAMPLES:\n    \
+                           rl compile script.rl\n    \
+                           rl compile script.rl --output out.rlc"
+    )]
+    Compile {
+        /// Path to the .rl file to compile
+        #[arg(value_name = "FILE")]
+        file: PathBuf,
+
+        /// Output .rlc path (defaults to FILE with its extension changed to .rlc)
+        #[arg(short, long, value_name = "PATH")]
+        output: Option<PathBuf>,
+    },
 }
 
 fn main() {
@@ -241,6 +261,22 @@ fn main() {
             cranelift,
             ..
         } => {
+            let is_rlc = file.extension().and_then(|e| e.to_str()) == Some("rlc");
+
+            if is_rlc {
+                #[cfg(all(feature = "eval", feature = "vm"))]
+                {
+                    use crate::logic_loops::run_rlc_file;
+                    run_rlc_file(&file);
+                    return;
+                }
+                #[cfg(not(all(feature = "eval", feature = "vm")))]
+                {
+                    eprintln!("error: running .rlc files requires the `eval` and `vm` features");
+                    std::process::exit(1);
+                }
+            }
+
             let path = file
                 .to_str()
                 .unwrap_or_else(|| {
@@ -705,6 +741,63 @@ fn main() {
             if let Err(e) = std::fs::write(path, formatted) {
                 eprintln!("error: {}", e);
             };
+        }
+
+        Commands::Compile { file, output } => {
+            #[cfg(all(feature = "eval", feature = "vm"))]
+            {
+                use crate::logic_loops::compile_to_chunk;
+                let path = file
+                    .to_str()
+                    .unwrap_or_else(|| {
+                        eprintln!("error: invalid file path");
+                        std::process::exit(1);
+                    })
+                    .to_string();
+                let source_text = std::fs::read_to_string(&file).unwrap_or_else(|_| {
+                    eprintln!("error: could not read file '{}'", file.display());
+                    std::process::exit(1);
+                });
+                let source = SourceFile::new(&*path, source_text);
+                let tokens = lexing_loop(source.clone());
+                let (ast, statements) = parsing_loop(source.clone(), tokens);
+
+                let checker_tokens = lexing_loop(source.clone());
+                let (checker_ast, checker_statements) =
+                    parsing_loop(source.clone(), checker_tokens);
+                use rl_checker::TypeChecker;
+                let base_dir = file
+                    .parent()
+                    .map(std::path::Path::to_path_buf)
+                    .unwrap_or_else(|| std::path::PathBuf::from("."));
+                let mut checker = TypeChecker::new()
+                    .with_source_file(source.clone())
+                    .with_ast_arena(checker_ast)
+                    .with_base_dir(base_dir);
+                let errors = checker.check(&checker_statements);
+                if !errors.is_empty() {
+                    for e in errors {
+                        e.report_to_stderr();
+                    }
+                    std::process::exit(1);
+                }
+
+                let chunk = compile_to_chunk(source, ast, statements);
+                let bytes = rl_vm::serialize_chunk(&chunk);
+
+                let out_path = output.unwrap_or_else(|| file.with_extension("rlc"));
+                if let Err(e) = std::fs::write(&out_path, &bytes) {
+                    eprintln!("error: failed to write '{}': {}", out_path.display(), e);
+                    std::process::exit(1);
+                }
+                println!("compiled '{}' -> '{}'", file.display(), out_path.display());
+            }
+            #[cfg(not(all(feature = "eval", feature = "vm")))]
+            {
+                let _ = (file, output);
+                eprintln!("error: `compile` requires the `eval` and `vm` features");
+                std::process::exit(1);
+            }
         }
     }
 }

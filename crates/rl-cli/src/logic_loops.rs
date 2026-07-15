@@ -91,7 +91,16 @@ pub fn eval_loop(
 
 #[cfg(all(feature = "eval", feature = "vm"))]
 pub fn vm_loop(source: SourceFile, ast: Ast, statements: Vec<Statement>) {
-    use rl_vm::{Compiler, Vm};
+    let chunk = compile_to_chunk(source, ast, statements);
+    run_chunk(&chunk);
+}
+
+/// Resolves and compiles `statements` down to a bytecode [`rl_vm::Chunk`],
+/// or prints the error and exits. Shared by `vm_loop` and the `compile`
+/// subcommand.
+#[cfg(all(feature = "eval", feature = "vm"))]
+pub fn compile_to_chunk(source: SourceFile, ast: Ast, statements: Vec<Statement>) -> rl_vm::Chunk {
+    use rl_vm::Compiler;
 
     let mut evaluator = Evaluator::default()
         .with_stdlib()
@@ -104,22 +113,52 @@ pub fn vm_loop(source: SourceFile, ast: Ast, statements: Vec<Statement>) {
 
     let statements = evaluator.resolver.resolve_program(ast, statements);
 
-    let chunk = match Compiler::new(&evaluator.resolver.ast_arena).compile(&statements) {
+    match Compiler::new(&evaluator.resolver.ast_arena).compile(&statements) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("vm compile error: {}", e.0);
             std::process::exit(1);
         }
-    };
+    }
+}
+
+/// Runs an already-compiled [`rl_vm::Chunk`] on a fresh [`rl_vm::Vm`], or
+/// prints the error and exits. Used both for freshly compiled `.rl` code
+/// and bytecode loaded from a `.rlc` file.
+#[cfg(all(feature = "eval", feature = "vm"))]
+pub fn run_chunk(chunk: &rl_vm::Chunk) {
+    use rl_vm::Vm;
 
     let mut vm = Vm::new();
-    match vm.run(&chunk) {
+    match vm.run(chunk) {
         Ok(_) => {}
         Err(e) => {
             eprintln!("vm runtime error: {}", e.0);
             std::process::exit(1);
         }
     }
+}
+
+/// Loads and runs a precompiled `.rlc` bytecode file, or prints the error
+/// and exits.
+#[cfg(all(feature = "eval", feature = "vm"))]
+pub fn run_rlc_file(path: &std::path::Path) {
+    use rl_vm::{deserialize_chunk, stdlib};
+
+    let bytes = std::fs::read(path).unwrap_or_else(|_| {
+        eprintln!("error: could not read file '{}'", path.display());
+        std::process::exit(1);
+    });
+
+    let chunk = match deserialize_chunk(&bytes, &stdlib::root()) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("error: failed to load '{}': {}", path.display(), e);
+            std::process::exit(1);
+        }
+    };
+
+    run_chunk(&chunk);
 }
 
 #[cfg(all(feature = "eval", feature = "cranelift", feature = "vm"))]

@@ -61,6 +61,7 @@ cranelift-module = "0.116"
 cranelift-codegen = "0.116"
 cranelift-frontend = "0.116"
 target-lexicon = "0.13"
+zstd = "0.13"
 
 [profile.release]
 opt-level = 3
