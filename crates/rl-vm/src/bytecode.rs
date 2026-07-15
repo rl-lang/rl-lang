@@ -1,3 +1,65 @@
+//! Binary (de)serialization of a compiled [Chunk] to/from the .rlc
+//! bytecode file format.
+//!
+//! # Layout
+//!
+//!
+//! [ magic: b"RLZ2" ]
+//! [ zstd-compressed payload ]
+//!
+//!
+//! The payload, once decompressed, is the RLC2 format:
+//!
+//!
+//! [ string pool ]
+//! [ chunk ]
+//!
+//!
+//! The string pool deduplicates every string used anywhere in the file
+//! (string constants, function names, native names) so repeated
+//! identifiers - which are common across nested function chunks - are
+//! stored once. It is encoded as:
+//!
+//!
+//! uvarint string_count | string*
+//!
+//!
+//! where each string is `uvarint byte_len | utf8 bytes`.
+//!
+//! A chunk is encoded as:
+//!
+//!
+//! uvarint code_len | code bytes | line_table | uvarint const_count | constant*
+//!
+//!
+//! The line table is run-length encoded rather than storing one line
+//! number per bytecode byte, since consecutive instructions usually
+//! share a line:
+//!
+//!
+//! uvarint run_count | (ivarint line_delta, uvarint run_length)*
+//!
+//!
+//! line_delta is relative to the previous run's line (first run
+//! relative to 0), which keeps it small since consecutive lines are
+//! usually +0 or +1.
+//!
+//! Each constant starts with a 1-byte tag (see [write_value] /
+//! [read_value]) followed by its payload. Function constants embed a
+//! nested chunk, so the format is recursive. Native constants store
+//! only their name (as a pool index); they're re-resolved against the
+//! running process's stdlib [Module] tree on load, since function
+//! pointers can't be serialized across processes/builds.
+//!
+//! All integers (lengths, counts, arities, ints, line deltas) are
+//! encoded as ULEB128/zigzag-LEB128 varints rather than fixed-width
+//! fields, since most values in practice are small.
+//!
+//! The outer zstd wrapper is a load-time-only cost: decompression
+//! happens once, before the chunk is handed to the VM, so it has no
+//! effect on bytecode execution speed. It trades a small amount of
+//! compress/decompress time for smaller files on disk.
+
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::rc::Rc;
@@ -8,6 +70,9 @@ use crate::values::{VmFunction, VmValue};
 
 const MAGIC: &[u8; 4] = b"RLZ2";
 
+/// zstd compression level. 1 = fastest/worst ratio, 22 = slowest/best
+/// ratio. 19 is "high" without being the extreme, slow tail of the
+/// range - reasonable for a one-time compile-time cost.
 const ZSTD_LEVEL: i32 = 19;
 
 #[derive(Debug)]
@@ -19,6 +84,9 @@ impl Display for BytecodeError {
     }
 }
 
+/// Serializes chunk into the .rlc binary format: an RLC2 payload
+/// (string pool + chunk, both varint/RLE-encoded) wrapped in zstd
+/// compression.
 pub fn serialize_chunk(chunk: &Chunk) -> Vec<u8> {
     let payload = serialize_payload(chunk);
 
@@ -31,6 +99,10 @@ pub fn serialize_chunk(chunk: &Chunk) -> Vec<u8> {
     out
 }
 
+/// Parses a .rlc file previously produced by [serialize_chunk].
+///
+/// stdlib is used to re-resolve any Native function constants by
+/// name; pass rl_vm::stdlib::root().
 pub fn deserialize_chunk(bytes: &[u8], stdlib: &Module) -> Result<Chunk, BytecodeError> {
     if bytes.len() < 4 || &bytes[0..4] != MAGIC {
         return Err(BytecodeError(
@@ -44,16 +116,29 @@ pub fn deserialize_chunk(bytes: &[u8], stdlib: &Module) -> Result<Chunk, Bytecod
     deserialize_payload(&payload, stdlib)
 }
 
+// ---- RLC2 payload (pre-compression) ----
+
+/// Encodes chunk as an uncompressed RLC2 payload: string pool
+/// followed by the chunk itself. This is what gets zstd-compressed
+/// by [serialize_chunk].
 fn serialize_payload(chunk: &Chunk) -> Vec<u8> {
+    // Pass 1: walk the chunk (and every nested function chunk) to
+    // collect every string that will need to be written, deduplicating
+    // as we go.
     let mut pool = StringPoolBuilder::default();
     collect_strings_chunk(chunk, &mut pool);
 
+    // Pass 2: write the pool, then the chunk itself, with strings
+    // replaced by indices into the pool.
     let mut out = Vec::new();
     write_string_pool(&pool, &mut out);
     write_chunk(chunk, &pool, &mut out);
     out
 }
 
+/// Parses an uncompressed RLC2 payload previously produced by
+/// [serialize_payload]. Called by [deserialize_chunk] after
+/// decompression.
 fn deserialize_payload(bytes: &[u8], stdlib: &Module) -> Result<Chunk, BytecodeError> {
     let mut cursor = Cursor {
         data: bytes,
@@ -65,6 +150,8 @@ fn deserialize_payload(bytes: &[u8], stdlib: &Module) -> Result<Chunk, BytecodeE
 
 // ---- string pool ----
 
+/// Built while writing: deduplicates strings and remembers the order
+/// they were first seen in, which becomes their index in the file.
 #[derive(Default)]
 struct StringPoolBuilder {
     index: HashMap<String, u32>,
@@ -72,6 +159,7 @@ struct StringPoolBuilder {
 }
 
 impl StringPoolBuilder {
+    /// Interns `s`, returning its (possibly pre-existing) index.
     fn intern(&mut self, s: &str) -> u32 {
         if let Some(&i) = self.index.get(s) {
             return i;
@@ -82,6 +170,9 @@ impl StringPoolBuilder {
         i
     }
 
+    /// Looks up the index of a string that was already interned during
+    /// the collection pass. Panics if it wasn't - that indicates
+    /// collect_strings_* missed a string that write_value tried to use.
     fn get(&self, s: &str) -> u32 {
         *self
             .index
@@ -112,6 +203,9 @@ fn pool_str<'a>(pool: &'a [String], idx: u32) -> Result<&'a str, BytecodeError> 
         .ok_or_else(|| BytecodeError("corrupt .rlc file: string pool index out of range".into()))
 }
 
+/// Recursively collects every string referenced by chunk (string
+/// constants, function names, native names) into pool, including
+/// strings nested inside function constants' own chunks.
 fn collect_strings_chunk(chunk: &Chunk, pool: &mut StringPoolBuilder) {
     for c in &chunk.constants {
         collect_strings_value(c, pool);
@@ -142,6 +236,7 @@ fn collect_strings_value(value: &VmValue, pool: &mut StringPoolBuilder) {
 
 // ---- varint helpers ----
 
+/// Writes an unsigned LEB128 varint.
 fn write_uvarint(mut value: u64, out: &mut Vec<u8>) {
     loop {
         let byte = (value & 0x7f) as u8;
@@ -155,6 +250,9 @@ fn write_uvarint(mut value: u64, out: &mut Vec<u8>) {
     }
 }
 
+/// Zigzag-encodes a signed value then writes it as an unsigned varint,
+/// so small negative numbers stay small: (0, -1, 1, -2, 2, ...) ->
+/// (0, 1, 2, 3, 4, ...).
 fn write_ivarint(value: i64, out: &mut Vec<u8>) {
     let zigzag = ((value << 1) ^ (value >> 63)) as u64;
     write_uvarint(zigzag, out);
@@ -177,6 +275,9 @@ fn write_chunk(chunk: &Chunk, pool: &StringPoolBuilder, out: &mut Vec<u8>) {
     }
 }
 
+/// Encodes a per-instruction line table as runs of (line, run_length)
+/// rather than one line number per bytecode byte, since consecutive
+/// instructions overwhelmingly share the same line.
 fn write_lines_rle(lines: &[u32], out: &mut Vec<u8>) {
     let mut runs: Vec<(u32, u32)> = Vec::new();
     for &line in lines {
@@ -270,6 +371,7 @@ impl<'a> Cursor<'a> {
         Ok(f64::from_le_bytes(self.take(8)?.try_into().unwrap()))
     }
 
+    /// Reads an unsigned LEB128 varint.
     fn uvarint(&mut self) -> Result<u64, BytecodeError> {
         let mut result: u64 = 0;
         let mut shift = 0;
@@ -287,6 +389,7 @@ impl<'a> Cursor<'a> {
         Ok(result)
     }
 
+    /// Reads a zigzag-encoded signed varint.
     fn ivarint(&mut self) -> Result<i64, BytecodeError> {
         let zigzag = self.uvarint()?;
         Ok(((zigzag >> 1) as i64) ^ -((zigzag & 1) as i64))
@@ -395,6 +498,8 @@ fn read_value(
     })
 }
 
+/// Recursively searches module and its submodules for a native function
+/// with leaf name name.
 fn find_native_by_name(module: &Module, name: &str) -> Option<Rc<crate::values::VmNativeFn>> {
     if let Some(f) = module.functions.get(name) {
         return Some(f.clone());
