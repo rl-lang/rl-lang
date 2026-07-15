@@ -34,6 +34,11 @@ pub enum VmValue {
         name: Rc<str>,
         variant: Rc<str>,
     },
+    Closure {
+        func: Rc<VmFunction>,
+        captured: Rc<Vec<VmValue>>,
+        capture_start: u16,
+    },
 }
 
 // for some reason this works???
@@ -179,6 +184,7 @@ impl fmt::Display for VmValue {
                 write!(f, "}}")
             }
             VmValue::Tag { name, variant } => write!(f, "{}.{}", name, variant),
+            VmValue::Closure { func, .. } => write!(f, "<closure {}/{}>", func.name, func.arity),
         }
     }
 }
@@ -205,6 +211,7 @@ impl VmValue {
             VmValue::Map(_) => "map",
             VmValue::Record { .. } => "record",
             VmValue::Tag { .. } => "tag",
+            VmValue::Closure { .. } => "closure",
         }
     }
 
