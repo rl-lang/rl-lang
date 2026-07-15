@@ -368,6 +368,14 @@ impl<'a> Compiler<'a> {
                 self.chunk.write_u16(items.len() as u16, line);
             }
 
+            ExpressionKind::TupleLiteral(items) => {
+                for item in items {
+                    self.compile_expr(*item)?;
+                }
+                self.chunk.write_op(OpCode::BuildTuple, line);
+                self.chunk.write_u16(items.len() as u16, line);
+            }
+
             ExpressionKind::Index { target, index } => {
                 self.compile_expr(*target)?;
                 self.compile_expr(*index)?;

@@ -234,7 +234,7 @@ fn collect_strings_value(value: &VmValue, pool: &mut StringPoolBuilder) {
         | VmValue::Byte(_)
         | VmValue::Char(_) => {}
 
-        VmValue::Arr(items) => {
+        VmValue::Arr(items) | VmValue::Tuple(items) => {
             for item in items.iter() {
                 collect_strings_value(item, pool);
             }
@@ -355,6 +355,13 @@ fn write_value(value: &VmValue, pool: &StringPoolBuilder, out: &mut Vec<u8>) {
         }
         VmValue::Arr(items) => {
             out.push(12);
+            write_uvarint(items.len() as u64, out);
+            for item in items.iter() {
+                write_value(item, pool, out);
+            }
+        }
+        VmValue::Tuple(items) => {
+            out.push(13);
             write_uvarint(items.len() as u64, out);
             for item in items.iter() {
                 write_value(item, pool, out);
@@ -517,6 +524,14 @@ fn read_value(
                 items.push(read_value(cursor, stdlib, pool)?);
             }
             VmValue::Arr(Rc::new(items))
+        }
+        13 => {
+            let len = cursor.uvarint()? as usize;
+            let mut items = Vec::with_capacity(len);
+            for _ in 0..len {
+                items.push(read_value(cursor, stdlib, pool)?);
+            }
+            VmValue::Tuple(Rc::new(items))
         }
         other => {
             return Err(BytecodeError(format!(

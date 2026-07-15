@@ -67,6 +67,8 @@ pub enum OpCode {
     Index = 31,
     /// pops value, index, arr -> pushes a new arr with that element replaced
     ArrSet = 32,
+    /// build a tuple fromthe top N stack values
+    BuildTuple = 33,
 }
 
 impl OpCode {
@@ -76,7 +78,7 @@ impl OpCode {
     #[inline(always)]
     pub fn from_u8_unchecked(byte: u8) -> Self {
         debug_assert!(
-            byte <= OpCode::ArrSet as u8,
+            byte <= OpCode::BuildTuple as u8,
             "corrupt bytecode: opcode {byte}"
         );
         unsafe { std::mem::transmute::<u8, OpCode>(byte) }
@@ -119,6 +121,7 @@ impl OpCode {
             30 => OpCode::BuildArr,
             31 => OpCode::Index,
             32 => OpCode::ArrSet,
+            33 => OpCode::BuildTuple,
             other => panic!("corrupt bytecode: unknown opcode byte {other}"),
         }
     }
