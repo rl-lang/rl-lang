@@ -1,18 +1,27 @@
 //! rl package - bundle a .rl program into a self-contained binary.
 //!
-//! Copies the rl binary itself, then appends the source text and a
-//! magic footer so the copy can detect and run the embedded program at
+//! Copies the rl binary itself, then appends a payload and a magic
+//! footer so the copy can detect and run the embedded program at
 //! startup without any arguments.
+//!
+//! Two kinds of payload can be embedded, selected by a distinct magic
+//! marker:
+//!
+//! - **source** (default): the raw `.rl` source text (with local `get`
+//!   imports inlined), interpreted at startup.
+//! - **vm** (`--vm`): pre-compiled `.rlc` bytecode (already zstd-compressed
+//!   by [`rl_vm::serialize_chunk`]), loaded straight into the VM at
+//!   startup, skipping lex/parse/compile entirely.
 //!
 //! # Binary layout after packaging
 //!
 //! [ original rl binary bytes ]
-//! [ rl source text (UTF-8)   ]
-//! [ magic marker: \x00RL_PACKAGE_V1\x00 ]
-//! [ source length: u64 little-endian    ]
+//! [ payload: source text (UTF-8) or compiled .rlc bytecode ]
+//! [ magic marker: \x00RL_PACKAGE_V1\x00 (source) or \x00RL_PACKAGE_V2\x00 (vm) ]
+//! [ payload length: u64 little-endian    ]
 //!
 //!
-//! The magic + length are appended *after* the source so detection only
+//! The magic + length are appended *after* the payload so detection only
 //! needs to read the last few bytes — no full scan required.
 
 use std::collections::HashSet;
@@ -24,14 +33,18 @@ const MAGIC_VM: &[u8] = b"\x00RL_PACKAGE_V2\x00";
 const MAGIC_LEN: usize = 15;
 const FOOTER_LEN: usize = MAGIC_LEN + 8;
 
+/// An embedded program recovered from the running binary's own bytes.
 pub enum EmbeddedProgram {
+    /// Raw `.rl` source text, to be lexed/parsed/evaluated at startup.
     Source(String),
+    /// Pre-compiled `.rlc` bytecode (still zstd-compressed), to be
+    /// deserialized and handed straight to the VM at startup.
     Bytecode(Vec<u8>),
 }
 
 /// Searches the running binary's own bytes for an embedded rl program.
 ///
-/// Returns Some(source) if this binary was produced by rl package,
+/// Returns Some(program) if this binary was produced by rl package,
 /// or None if it is a plain rl binary.
 pub fn find_embedded() -> Option<EmbeddedProgram> {
     let path = std::env::current_exe().ok()?;
@@ -67,8 +80,9 @@ pub fn find_embedded() -> Option<EmbeddedProgram> {
 
 /// Packages source_path into a self-contained binary at output_path.
 ///
-/// Copies the running rl binary verbatim, then appends the rl source
-/// and the magic footer. The output is made executable on Unix.
+/// Copies the running rl binary verbatim, then appends the bundled rl
+/// source (with local imports inlined) and the source magic footer.
+/// The output is made executable on Unix.
 ///
 /// Prints an error and exits with code 1 on any failure.
 pub fn package(source_path: &str, output_path: &str) {
@@ -79,6 +93,14 @@ pub fn package(source_path: &str, output_path: &str) {
     println!("packaged '{}' -> '{}'", source_path, output_path);
 }
 
+/// Packages already-compiled `.rlc` bytecode into a self-contained binary
+/// at output_path.
+///
+/// Copies the running rl binary verbatim, then appends `bytecode` (as
+/// produced by [`rl_vm::serialize_chunk`]) and the vm magic footer. The
+/// output is made executable on Unix.
+///
+/// Prints an error and exits with code 1 on any failure.
 pub fn package_vm(bytecode: &[u8], output_path: &str) {
     if let Err(e) = try_package_payload(bytecode, MAGIC_VM, output_path) {
         eprintln!("error: packaging failed: {}", e);
