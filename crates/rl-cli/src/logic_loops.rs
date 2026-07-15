@@ -143,17 +143,22 @@ pub fn run_chunk(chunk: &rl_vm::Chunk) {
 /// and exits.
 #[cfg(all(feature = "eval", feature = "vm"))]
 pub fn run_rlc_file(path: &std::path::Path) {
-    use rl_vm::{deserialize_chunk, stdlib};
-
     let bytes = std::fs::read(path).unwrap_or_else(|_| {
         eprintln!("error: could not read file '{}'", path.display());
         std::process::exit(1);
     });
 
-    let chunk = match deserialize_chunk(&bytes, &stdlib::root()) {
+    run_rlc_bytes(&bytes, &path.display().to_string());
+}
+
+#[cfg(all(feature = "eval", feature = "vm"))]
+pub fn run_rlc_bytes(bytes: &[u8], label: &str) {
+    use rl_vm::{deserialize_chunk, stdlib};
+
+    let chunk = match deserialize_chunk(bytes, &stdlib::root()) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("error: failed to load '{}': {}", path.display(), e);
+            eprintln!("error: failed to load '{}': {}", label, e);
             std::process::exit(1);
         }
     };
