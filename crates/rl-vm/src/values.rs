@@ -68,6 +68,10 @@ impl RecordFields {
     pub fn has(&self, name: &str) -> bool {
         self.0.borrow().iter().any(|(n, _)| &**n == name)
     }
+
+    pub fn len(&self) -> usize {
+        self.0.borrow().len()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

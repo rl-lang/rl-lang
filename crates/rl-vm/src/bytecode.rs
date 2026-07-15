@@ -67,7 +67,7 @@ use std::rc::Rc;
 
 use crate::chunk::Chunk;
 use crate::native::Module;
-use crate::values::{VmFunction, VmMapKey, VmValue};
+use crate::values::{RecordFields, VmFunction, VmMapKey, VmValue};
 
 const MAGIC: &[u8; 4] = b"RLZ2";
 
@@ -254,9 +254,9 @@ fn collect_strings_value(value: &VmValue, pool: &mut StringPoolBuilder) {
         }
 
         VmValue::Record { fields, .. } => {
-            for (fname, fval) in fields.borrow().iter() {
-                pool.intern(fname);
-                collect_strings_value(fval, pool);
+            for (fname, fval) in fields.iter() {
+                pool.intern(&fname);
+                collect_strings_value(&fval, pool);
             }
         }
         VmValue::Tag { name, variant } => {
@@ -410,11 +410,11 @@ fn write_value(value: &VmValue, pool: &StringPoolBuilder, out: &mut Vec<u8>) {
         VmValue::Record { name, fields } => {
             out.push(16);
             write_uvarint(pool.get(name) as u64, out);
-            let fields = fields.borrow();
+            let fields = fields;
             write_uvarint(fields.len() as u64, out);
             for (fname, fval) in fields.iter() {
-                write_uvarint(pool.get(fname) as u64, out);
-                write_value(fval, pool, out);
+                write_uvarint(pool.get(&fname) as u64, out);
+                write_value(&fval, pool, out);
             }
         }
         VmValue::Tag { name, variant } => {
@@ -621,7 +621,7 @@ fn read_value(
             }
             VmValue::Record {
                 name: Rc::from(name),
-                fields: Rc::new(RefCell::new(fields)),
+                fields: RecordFields::new(fields),
             }
         }
         17 => {
