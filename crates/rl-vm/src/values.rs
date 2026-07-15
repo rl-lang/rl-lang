@@ -19,6 +19,7 @@ pub enum VmValue {
     Native(Rc<VmNativeFn>),
     Ok(Box<VmValue>),
     Err(Box<VmValue>),
+    Error(Box<VmValue>),
 }
 
 impl fmt::Display for VmValue {
@@ -35,6 +36,7 @@ impl fmt::Display for VmValue {
             VmValue::Native(func) => write!(f, "<native fn {}>", func.name),
             VmValue::Ok(inner) => write!(f, "ok({})", inner),
             VmValue::Err(inner) => write!(f, "err({})", inner),
+            VmValue::Error(inner) => write!(f, "error({})", inner),
         }
     }
 }
@@ -54,6 +56,7 @@ impl VmValue {
             VmValue::Native(_) => "native function",
             VmValue::Ok(_) => "ok",
             VmValue::Err(_) => "err",
+            VmValue::Error(_) => "error",
         }
     }
 
