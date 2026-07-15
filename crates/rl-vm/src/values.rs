@@ -20,6 +20,7 @@ pub enum VmValue {
     Ok(Box<VmValue>),
     Err(Box<VmValue>),
     Error(Box<VmValue>),
+    Arr(Rc<Vec<VmValue>>),
 }
 
 impl fmt::Display for VmValue {
@@ -37,6 +38,16 @@ impl fmt::Display for VmValue {
             VmValue::Ok(inner) => write!(f, "ok({})", inner),
             VmValue::Err(inner) => write!(f, "err({})", inner),
             VmValue::Error(inner) => write!(f, "error({})", inner),
+            VmValue::Arr(items) => {
+                write!(f, "[")?;
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", item)?;
+                }
+                write!(f, "]")
+            }
         }
     }
 }
@@ -57,6 +68,7 @@ impl VmValue {
             VmValue::Ok(_) => "ok",
             VmValue::Err(_) => "err",
             VmValue::Error(_) => "error",
+            VmValue::Arr(_) => "arr",
         }
     }
 

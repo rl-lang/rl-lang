@@ -233,6 +233,12 @@ fn collect_strings_value(value: &VmValue, pool: &mut StringPoolBuilder) {
         | VmValue::Bool(_)
         | VmValue::Byte(_)
         | VmValue::Char(_) => {}
+
+        VmValue::Arr(items) => {
+            for item in items.iter() {
+                collect_strings_value(item, pool);
+            }
+        }
     }
 }
 
@@ -346,6 +352,13 @@ fn write_value(value: &VmValue, pool: &StringPoolBuilder, out: &mut Vec<u8>) {
         VmValue::Error(inner) => {
             out.push(11);
             write_value(inner, pool, out);
+        }
+        VmValue::Arr(items) => {
+            out.push(12);
+            write_uvarint(items.len() as u64, out);
+            for item in items.iter() {
+                write_value(item, pool, out);
+            }
         }
     }
 }
@@ -497,6 +510,14 @@ fn read_value(
         9 => VmValue::Ok(Box::new(read_value(cursor, stdlib, pool)?)),
         10 => VmValue::Err(Box::new(read_value(cursor, stdlib, pool)?)),
         11 => VmValue::Error(Box::new(read_value(cursor, stdlib, pool)?)),
+        12 => {
+            let len = cursor.uvarint()? as usize;
+            let mut items = Vec::with_capacity(len);
+            for _ in 0..len {
+                items.push(read_value(cursor, stdlib, pool)?);
+            }
+            VmValue::Arr(Rc::new(items))
+        }
         other => {
             return Err(BytecodeError(format!(
                 "corrupt .rlc file: unknown constant tag {other}"

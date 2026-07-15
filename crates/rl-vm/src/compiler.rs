@@ -74,7 +74,9 @@ impl<'a> Compiler<'a> {
         let line = self.line(0); // todo
         match &stmt.kind {
             StatementKind::ResolvedVariableDeclaration { value, .. }
-            | StatementKind::ResolvedConstantDeclaration { value, .. } => {
+            | StatementKind::ResolvedConstantDeclaration { value, .. }
+            | StatementKind::ResolvedArray { value, .. }
+            | StatementKind::ResolvedConstantArray { value, .. } => {
                 self.compile_expr(*value)?;
                 let slot = self.next_slot;
                 self.next_slot += 1;
@@ -84,7 +86,9 @@ impl<'a> Compiler<'a> {
             }
 
             StatementKind::VariableDeclaration { .. }
-            | StatementKind::ConstantDeclaration { .. } => Err(CompileError(
+            | StatementKind::ConstantDeclaration { .. }
+            | StatementKind::Array { .. }
+            | StatementKind::ConstantArray { .. } => Err(CompileError(
                 "unresolved declaration reached the compiler - run the resolver pass first".into(),
             )),
 
@@ -354,6 +358,64 @@ impl<'a> Compiler<'a> {
             ExpressionKind::ErrorLiteral(inner) => {
                 self.compile_expr(*inner)?;
                 self.chunk.write_op(OpCode::Error, line);
+            }
+
+            ExpressionKind::ArrayLiteral(items) => {
+                for item in items {
+                    self.compile_expr(*item)?;
+                }
+                self.chunk.write_op(OpCode::BuildArr, line);
+                self.chunk.write_u16(items.len() as u16, line);
+            }
+
+            ExpressionKind::Index { target, index } => {
+                self.compile_expr(*target)?;
+                self.compile_expr(*index)?;
+                self.chunk.write_op(OpCode::Index, line);
+            }
+
+            ExpressionKind::IndexAssign {
+                target,
+                index,
+                value,
+            } => {
+                let ExpressionKind::ResolvedIdentifier { depth, slot, .. } =
+                    &self.ast.exprs.get(*target).kind
+                else {
+                    return Err(CompileError(
+                        "vm compiler only supports index-assignment on a plain variable \
+                         (e.g. `arr[i] = x`), not a chained or computed target"
+                            .into(),
+                    ));
+                };
+                let (depth, slot) = (*depth, *slot);
+                let resolved = self.resolve(depth, slot);
+
+                // push current array
+                match resolved {
+                    Some(s) => {
+                        self.chunk.write_op(OpCode::GetLocal, line);
+                        self.chunk.write_u16(s, line);
+                    }
+                    None => {
+                        self.chunk.write_op(OpCode::GetGlobal, line);
+                        self.chunk.write_u16(slot as u16, line);
+                    }
+                }
+                self.compile_expr(*index)?;
+                self.compile_expr(*value)?;
+                self.chunk.write_op(OpCode::ArrSet, line);
+                // write the updated array back; result stays on the stack as the expr's value
+                match resolved {
+                    Some(s) => {
+                        self.chunk.write_op(OpCode::SetLocal, line);
+                        self.chunk.write_u16(s, line);
+                    }
+                    None => {
+                        self.chunk.write_op(OpCode::SetGlobal, line);
+                        self.chunk.write_u16(slot as u16, line);
+                    }
+                }
             }
 
             other => {
