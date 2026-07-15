@@ -517,13 +517,21 @@ impl Vm {
                             "corrupt bytecode: closure template is not a function".into(),
                         ));
                     };
-                    let frame_base = self.scope_starts[scope_base];
-                    let start = frame_base + capture_start as usize;
-                    let captured = if start <= self.locals.len() {
-                        self.locals[start..].to_vec()
-                    } else {
+
+                    let captured = if self.scope_starts.len() == scope_base {
                         Vec::new()
+                    } else {
+                        let frame_base = self.scope_starts[scope_base];
+                        let start = frame_base + capture_start as usize;
+                        if start > self.locals.len() {
+                            return Err(VmError(format!(
+                                "corrupt bytecode: closure capture_start {capture_start} exceeds live locals ({} available)",
+                                self.locals.len() - frame_base
+                            )));
+                        }
+                        self.locals[start..].to_vec()
                     };
+
                     self.stack.push(VmValue::Closure {
                         func,
                         captured: Rc::new(captured),
