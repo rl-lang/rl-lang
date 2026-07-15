@@ -1,7 +1,9 @@
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::chunk::{Chunk, OpCode};
-use crate::values::{VmFunction, VmValue};
+use crate::values::{VmFunction, VmMapKey, VmValue};
 
 #[derive(Debug)]
 pub struct VmError(pub String);
@@ -352,6 +354,36 @@ impl Vm {
                     let arr = self.pop()?;
                     self.stack.push(Self::index_set(arr, &index, value)?);
                 }
+
+                OpCode::BuildSet => {
+                    let count = chunk!().read_u16(ip) as usize;
+                    ip += 2;
+                    if self.stack.len() < count {
+                        return Err(VmError("stack underflow building set".into()));
+                    }
+                    let items = self.stack.split_off(self.stack.len() - count);
+                    self.stack.push(VmValue::Set(Rc::new(items)));
+                }
+
+                OpCode::BuildMap => {
+                    let count = chunk!().read_u16(ip) as usize; // number of entries
+                    ip += 2;
+                    if self.stack.len() < count * 2 {
+                        return Err(VmError("stack underflow building map".into()));
+                    }
+                    let flat = self.stack.split_off(self.stack.len() - count * 2);
+                    let mut map = HashMap::with_capacity(count);
+                    for pair in flat.chunks_exact(2) {
+                        let key = VmMapKey::from_value(&pair[0]).ok_or_else(|| {
+                            VmError(format!(
+                                "type {} cannot be used as a map key",
+                                pair[0].type_name()
+                            ))
+                        })?;
+                        map.insert(key, pair[1].clone());
+                    }
+                    self.stack.push(VmValue::Map(Rc::new(RefCell::new(map))));
+                }
             }
         }
     }
@@ -386,22 +418,48 @@ impl Vm {
     }
 
     fn index_get(arr: &VmValue, index: &VmValue) -> Result<VmValue, VmError> {
-        let items = match arr {
-            VmValue::Arr(items) | VmValue::Tuple(items) => items,
-            other => return Err(VmError(format!("cannot index into {}", other.type_name()))),
-        };
-        let i = Self::index_as_usize(index, items.len())?;
-        Ok(items[i].clone())
+        match arr {
+            VmValue::Arr(items) | VmValue::Tuple(items) | VmValue::Set(items) => {
+                let i = Self::index_as_usize(index, items.len())?;
+                Ok(items[i].clone())
+            }
+            VmValue::Map(entries) => {
+                let key = VmMapKey::from_value(index).ok_or_else(|| {
+                    VmError(format!(
+                        "type {} cannot be used as a map key",
+                        index.type_name()
+                    ))
+                })?;
+                entries
+                    .borrow()
+                    .get(&key)
+                    .cloned()
+                    .ok_or_else(|| VmError(format!("key {} not found in map", index)))
+            }
+            other => Err(VmError(format!("cannot index into {}", other.type_name()))),
+        }
     }
 
     fn index_set(arr: VmValue, index: &VmValue, value: VmValue) -> Result<VmValue, VmError> {
-        let VmValue::Arr(items) = arr else {
-            return Err(VmError(format!("cannot index into {}", arr.type_name())));
-        };
-        let i = Self::index_as_usize(index, items.len())?;
-        let mut items = Rc::try_unwrap(items).unwrap_or_else(|rc| (*rc).clone());
-        items[i] = value;
-        Ok(VmValue::Arr(Rc::new(items)))
+        match arr {
+            VmValue::Arr(items) => {
+                let i = Self::index_as_usize(index, items.len())?;
+                let mut items = Rc::try_unwrap(items).unwrap_or_else(|rc| (*rc).clone());
+                items[i] = value;
+                Ok(VmValue::Arr(Rc::new(items)))
+            }
+            VmValue::Map(entries) => {
+                let key = VmMapKey::from_value(index).ok_or_else(|| {
+                    VmError(format!(
+                        "type {} cannot be used as a map key",
+                        index.type_name()
+                    ))
+                })?;
+                entries.borrow_mut().insert(key, value);
+                Ok(VmValue::Map(entries))
+            }
+            other => Err(VmError(format!("cannot index into {}", other.type_name()))),
+        }
     }
 
     #[inline(always)]
