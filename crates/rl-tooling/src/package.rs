@@ -19,15 +19,21 @@ use std::collections::HashSet;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-const MAGIC: &[u8] = b"\x00RL_PACKAGE_V1\x00";
+const MAGIC_SOURCE: &[u8] = b"\x00RL_PACKAGE_V1\x00";
+const MAGIC_VM: &[u8] = b"\x00RL_PACKAGE_V2\x00";
 const MAGIC_LEN: usize = 15;
 const FOOTER_LEN: usize = MAGIC_LEN + 8;
+
+pub enum EmbeddedProgram {
+    Source(String),
+    Bytecode(Vec<u8>),
+}
 
 /// Searches the running binary's own bytes for an embedded rl program.
 ///
 /// Returns Some(source) if this binary was produced by rl package,
 /// or None if it is a plain rl binary.
-pub fn find_embedded() -> Option<String> {
+pub fn find_embedded() -> Option<EmbeddedProgram> {
     let path = std::env::current_exe().ok()?;
     let bytes = std::fs::read(path).ok()?;
 
@@ -41,15 +47,22 @@ pub fn find_embedded() -> Option<String> {
 
     // verify magic sits just before the length
     let magic_start = len_start.checked_sub(MAGIC_LEN)?;
-    if &bytes[magic_start..len_start] != MAGIC {
-        return None;
+    let magic = &bytes[magic_start..len_start];
+
+    // payload sits just before the magic
+    let payload_start = magic_start.checked_sub(len)?;
+    let payload_end = magic_start;
+    let payload = &bytes[payload_start..payload_end];
+
+    if magic == MAGIC_SOURCE {
+        String::from_utf8(payload.to_vec())
+            .ok()
+            .map(EmbeddedProgram::Source)
+    } else if magic == MAGIC_VM {
+        Some(EmbeddedProgram::Bytecode(payload.to_vec()))
+    } else {
+        None
     }
-
-    // source sits just before the magic
-    let source_start = magic_start.checked_sub(len)?;
-    let source_end = magic_start;
-
-    String::from_utf8(bytes[source_start..source_end].to_vec()).ok()
 }
 
 /// Packages source_path into a self-contained binary at output_path.
@@ -66,15 +79,27 @@ pub fn package(source_path: &str, output_path: &str) {
     println!("packaged '{}' -> '{}'", source_path, output_path);
 }
 
+pub fn package_vm(bytecode: &[u8], output_path: &str) {
+    if let Err(e) = try_package_payload(bytecode, MAGIC_VM, output_path) {
+        eprintln!("error: packaging failed: {}", e);
+        std::process::exit(1);
+    }
+    println!("packaged (vm) -> '{}'", output_path);
+}
+
 fn try_package(source_path: &str, output_path: &str) -> std::io::Result<()> {
     let source = bundle(source_path)?;
+    try_package_payload(source.as_bytes(), MAGIC_SOURCE, output_path)
+}
+
+fn try_package_payload(payload: &[u8], magic: &[u8], output_path: &str) -> std::io::Result<()> {
     let self_bytes = std::fs::read(std::env::current_exe()?)?;
 
     let mut out = std::fs::File::create(output_path)?;
     out.write_all(&self_bytes)?;
-    out.write_all(source.as_bytes())?;
-    out.write_all(MAGIC)?;
-    out.write_all(&(source.len() as u64).to_le_bytes())?;
+    out.write_all(payload)?;
+    out.write_all(magic)?;
+    out.write_all(&(payload.len() as u64).to_le_bytes())?;
 
     #[cfg(unix)]
     {
