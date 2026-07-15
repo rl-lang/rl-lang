@@ -44,21 +44,7 @@ impl<'a> Compiler<'a> {
     /// stops on first error
     /// will consume and discard the Compiler
     pub fn compile(mut self, statements: &[Statement]) -> Result<Chunk, CompileError> {
-        let last_expr_idx = statements
-            .iter()
-            .rposition(|s| matches!(s.kind, StatementKind::Expression(_)));
-
-        for (i, stmt) in statements.iter().enumerate() {
-            if let StatementKind::Expression(id) = &stmt.kind {
-                if Some(i) == last_expr_idx {
-                    self.compile_expr(*id)?;
-                } else {
-                    self.compile_expr_statement(*id)?;
-                }
-            } else {
-                self.compile_statement(stmt)?;
-            }
-        }
+        self.compile_body(statements)?;
         self.chunk.write_op(OpCode::Return, 0);
         Ok(self.chunk)
     }
@@ -211,6 +197,25 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
+    fn compile_body(&mut self, statements: &[Statement]) -> Result<(), CompileError> {
+        let trailing_expr = matches!(
+            statements.last().map(|s| &s.kind),
+            Some(StatementKind::Expression(_))
+        );
+        for (i, stmt) in statements.iter().enumerate() {
+            if let StatementKind::Expression(id) = &stmt.kind {
+                if trailing_expr && i == statements.len() - 1 {
+                    self.compile_expr(*id)?;
+                } else {
+                    self.compile_expr_statement(*id)?;
+                }
+            } else {
+                self.compile_statement(stmt)?;
+            }
+        }
+        Ok(())
+    }
+
     /// Compiles a `{ }` body. Every expression statement inside a block is
     /// always discarded (Pop) - only the top-level program's trailing
     /// expression statement keeps its value.
@@ -233,7 +238,7 @@ impl<'a> Compiler<'a> {
         }
         if needs_scope {
             self.chunk.write_op(OpCode::PopScope, line);
-            self.scope_bases.pop();
+            self.next_slot = self.scope_bases.pop().unwrap();
         }
         Ok(())
     }
@@ -506,6 +511,46 @@ impl<'a> Compiler<'a> {
                 );
             }
 
+            ExpressionKind::ResolvedLambda {
+                params,
+                body,
+                capture_depth,
+                ..
+            } => {
+                let param_count = params.len();
+                let (capture_start, captured_scope_bases, outer_next_slot): (u16, &[u16], u16) =
+                    if self.scope_bases.is_empty() {
+                        (0, &[], 0)
+                    } else {
+                        let cap_depth = (*capture_depth).min(self.scope_bases.len());
+                        let capture_start = if cap_depth == 0 {
+                            self.next_slot
+                        } else {
+                            self.scope_bases[self.scope_bases.len() - cap_depth]
+                        };
+                        let captured_scope_bases =
+                            &self.scope_bases[self.scope_bases.len() - cap_depth..];
+                        (capture_start, captured_scope_bases, self.next_slot)
+                    };
+                let chunk = Self::compile_closure_chunk(
+                    self.ast,
+                    body,
+                    param_count,
+                    captured_scope_bases,
+                    outer_next_slot,
+                )?;
+
+                let func = VmValue::Function(Rc::new(VmFunction {
+                    name: "<lambda>".to_string(),
+                    arity: param_count,
+                    chunk,
+                }));
+                let const_idx = self.chunk.add_constant(func);
+                self.chunk.write_op(OpCode::BuildClosure, line);
+                self.chunk.write_u16(const_idx, line);
+                self.chunk.write_u16(capture_start, line);
+            }
+
             other => {
                 return Err(CompileError(format!(
                     "expression kind not yet supported by the vm compiler: {other:?}"
@@ -555,10 +600,24 @@ impl<'a> Compiler<'a> {
         let mut sub = Compiler::new(ast);
         sub.scope_bases.push(0);
         sub.next_slot = param_count as u16;
-        for stmt in body {
-            sub.compile_statement(stmt)?;
-        }
+        sub.compile_body(body)?;
         sub.chunk.write_op(OpCode::Return, 0); // implicit `return null` on fallthrough
+        Ok(sub.chunk)
+    }
+
+    fn compile_closure_chunk(
+        ast: &Ast,
+        body: &[Statement],
+        param_count: usize,
+        captured_scope_bases: &[u16],
+        outer_next_slot: u16,
+    ) -> Result<Chunk, CompileError> {
+        let mut sub = Compiler::new(ast);
+        sub.scope_bases = captured_scope_bases.to_vec();
+        sub.scope_bases.push(outer_next_slot);
+        sub.next_slot = outer_next_slot + param_count as u16;
+        sub.compile_body(body)?;
+        sub.chunk.write_op(OpCode::Return, 0);
         Ok(sub.chunk)
     }
 }

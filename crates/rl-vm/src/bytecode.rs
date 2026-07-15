@@ -263,6 +263,12 @@ fn collect_strings_value(value: &VmValue, pool: &mut StringPoolBuilder) {
             pool.intern(name);
             pool.intern(variant);
         }
+        VmValue::Closure { func, captured, .. } => {
+            collect_strings_value(&VmValue::Function(func.clone()), pool);
+            for v in captured.iter() {
+                collect_strings_value(v, pool);
+            }
+        }
     }
 }
 
@@ -420,6 +426,19 @@ fn write_value(value: &VmValue, pool: &StringPoolBuilder, out: &mut Vec<u8>) {
             out.push(17);
             write_uvarint(pool.get(name) as u64, out);
             write_uvarint(pool.get(variant) as u64, out);
+        }
+        VmValue::Closure {
+            func,
+            captured,
+            capture_start,
+        } => {
+            out.push(18);
+            write_value(&VmValue::Function(func.clone()), pool, out);
+            write_uvarint(*capture_start as u64, out);
+            write_uvarint(captured.len() as u64, out);
+            for v in captured.iter() {
+                write_value(v, pool, out);
+            }
         }
     }
 }
@@ -631,6 +650,24 @@ fn read_value(
             VmValue::Tag {
                 name: Rc::from(name),
                 variant: Rc::from(variant),
+            }
+        }
+        18 => {
+            let VmValue::Function(func) = read_value(cursor, stdlib, pool)? else {
+                return Err(BytecodeError(
+                    "corrupt .rlc: closure template is not a function".into(),
+                ));
+            };
+            let capture_start = cursor.uvarint()? as u16;
+            let len = cursor.uvarint()? as usize;
+            let mut captured = Vec::with_capacity(len);
+            for _ in 0..len {
+                captured.push(read_value(cursor, stdlib, pool)?);
+            }
+            VmValue::Closure {
+                func,
+                captured: Rc::new(captured),
+                capture_start,
             }
         }
         other => {
