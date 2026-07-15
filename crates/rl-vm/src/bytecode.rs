@@ -197,7 +197,7 @@ fn read_string_pool(cursor: &mut Cursor) -> Result<Vec<String>, BytecodeError> {
     Ok(strings)
 }
 
-fn pool_str<'a>(pool: &'a [String], idx: u32) -> Result<&'a str, BytecodeError> {
+fn pool_str(pool: &[String], idx: u32) -> Result<&str, BytecodeError> {
     pool.get(idx as usize)
         .map(String::as_str)
         .ok_or_else(|| BytecodeError("corrupt .rlc file: string pool index out of range".into()))
