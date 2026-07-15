@@ -20,10 +20,10 @@ use rl_docs::{
     entry::{ConceptEntry, StdEntry},
     std_to_markdown, tutorial_to_markdown,
 };
-use rl_tooling::format::format_tokens;
 use rl_tooling::new::create_project;
 use rl_tooling::package::{find_embedded, package};
 use rl_tooling::workflows::generate;
+use rl_tooling::{format::format_tokens, package::EmbeddedProgram};
 use std::path::PathBuf;
 
 use crate::logic_loops::{eval_loop, lexing_loop, parsing_loop};
@@ -249,14 +249,34 @@ fn main() {
     env_logger::init();
 
     // expriemental
-    if let Some(source) = find_embedded() {
-        let sf = SourceFile::new("program", source);
-        let tokens = lexing_loop(sf.clone());
-        let (ast, statements) = parsing_loop(sf.clone(), tokens);
-        if cfg!(feature = "eval") {
-            eval_loop(sf, ast, statements, 1);
+    match find_embedded() {
+        Some(EmbeddedProgram::Source(source)) => {
+            let sf = SourceFile::new("program", source);
+            let tokens = lexing_loop(sf.clone());
+            let (ast, statements) = parsing_loop(sf.clone(), tokens);
+            if cfg!(feature = "eval") {
+                eval_loop(sf, ast, statements, 1);
+            }
+            return;
         }
-        return;
+        Some(EmbeddedProgram::Bytecode(bytes)) => {
+            #[cfg(all(feature = "eval", feature = "vm"))]
+            {
+                use crate::logic_loops::run_rlc_bytes;
+                run_rlc_bytes(&bytes, "program");
+            }
+            #[cfg(not(all(feature = "eval", feature = "vm")))]
+            {
+                let _ = bytes;
+                eprintln!(
+                    "error: running vm-packaged binaries requires the `eval` and `vm` features"
+                );
+                std::process::exit(1);
+            }
+            #[allow(unreachable_code)]
+            return;
+        }
+        None => {}
     }
 
     let cli = Cli::parse();
@@ -726,7 +746,53 @@ fn main() {
                 eprintln!("error: invalid file path");
                 std::process::exit(1);
             });
-            package(path, &output);
+
+            if vm {
+                #[cfg(all(feature = "eval", feature = "vm"))]
+                {
+                    use crate::logic_loops::compile_to_chunk;
+
+                    let source_text = std::fs::read_to_string(&file).unwrap_or_else(|_| {
+                        eprintln!("error: could not read file '{}'", file.display());
+                        std::process::exit(1);
+                    });
+                    let source = SourceFile::new(path, source_text);
+                    let tokens = lexing_loop(source.clone());
+                    let (ast, statements) = parsing_loop(source.clone(), tokens);
+
+                    let checker_tokens = lexing_loop(source.clone());
+                    let (checker_ast, checker_statements) =
+                        parsing_loop(source.clone(), checker_tokens);
+                    use rl_checker::TypeChecker;
+                    use rl_tooling::package::package_vm;
+                    let base_dir = file
+                        .parent()
+                        .map(std::path::Path::to_path_buf)
+                        .unwrap_or_else(|| std::path::PathBuf::from("."));
+                    let mut checker = TypeChecker::new()
+                        .with_source_file(source.clone())
+                        .with_ast_arena(checker_ast)
+                        .with_base_dir(base_dir);
+                    let errors = checker.check(&checker_statements);
+                    if !errors.is_empty() {
+                        for e in errors {
+                            e.report_to_stderr();
+                        }
+                        std::process::exit(1);
+                    }
+
+                    let chunk = compile_to_chunk(source, ast, statements);
+                    let bytecode = rl_vm::serialize_chunk(&chunk);
+                    package_vm(&bytecode, &output);
+                }
+                #[cfg(not(all(feature = "eval", feature = "vm")))]
+                {
+                    eprintln!("error: `package --vm` requires the `eval` and `vm` features");
+                    std::process::exit(1);
+                }
+            } else {
+                package(path, &output);
+            }
         }
 
         Commands::Format { file } => {
