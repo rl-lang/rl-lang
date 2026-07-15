@@ -313,6 +313,11 @@ impl Vm {
                         other => self.stack.push(other),
                     }
                 }
+
+                OpCode::Error => {
+                    let v = self.pop()?;
+                    self.stack.push(VmValue::Error(Box::new(v)));
+                }
             }
         }
     }

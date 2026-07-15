@@ -351,6 +351,11 @@ impl<'a> Compiler<'a> {
                 self.chunk.write_op(OpCode::Propagate, line);
             }
 
+            ExpressionKind::ErrorLiteral(inner) => {
+                self.compile_expr(*inner)?;
+                self.chunk.write_op(OpCode::Error, line);
+            }
+
             other => {
                 return Err(CompileError(format!(
                     "expression kind not yet supported by the vm compiler: {other:?}"

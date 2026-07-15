@@ -224,7 +224,9 @@ fn collect_strings_value(value: &VmValue, pool: &mut StringPoolBuilder) {
         VmValue::Native(native) => {
             pool.intern(&native.name);
         }
-        VmValue::Ok(inner) | VmValue::Err(inner) => collect_strings_value(inner, pool),
+        VmValue::Ok(inner) | VmValue::Err(inner) | VmValue::Error(inner) => {
+            collect_strings_value(inner, pool)
+        }
         VmValue::Null
         | VmValue::Int(_)
         | VmValue::Float(_)
@@ -339,6 +341,10 @@ fn write_value(value: &VmValue, pool: &StringPoolBuilder, out: &mut Vec<u8>) {
         }
         VmValue::Err(inner) => {
             out.push(10);
+            write_value(inner, pool, out);
+        }
+        VmValue::Error(inner) => {
+            out.push(11);
             write_value(inner, pool, out);
         }
     }
@@ -490,6 +496,7 @@ fn read_value(
         }
         9 => VmValue::Ok(Box::new(read_value(cursor, stdlib, pool)?)),
         10 => VmValue::Err(Box::new(read_value(cursor, stdlib, pool)?)),
+        11 => VmValue::Error(Box::new(read_value(cursor, stdlib, pool)?)),
         other => {
             return Err(BytecodeError(format!(
                 "corrupt .rlc file: unknown constant tag {other}"

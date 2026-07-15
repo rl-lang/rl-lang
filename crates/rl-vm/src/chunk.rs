@@ -59,6 +59,8 @@ pub enum OpCode {
     Err = 27,
     /// ?
     Propagate = 28,
+    /// Error(...)
+    Error = 29,
 }
 
 impl OpCode {
@@ -68,7 +70,7 @@ impl OpCode {
     #[inline(always)]
     pub fn from_u8_unchecked(byte: u8) -> Self {
         debug_assert!(
-            byte <= OpCode::Propagate as u8,
+            byte <= OpCode::Error as u8,
             "corrupt bytecode: opcode {byte}"
         );
         unsafe { std::mem::transmute::<u8, OpCode>(byte) }
@@ -107,6 +109,7 @@ impl OpCode {
             26 => OpCode::Ok,
             27 => OpCode::Err,
             28 => OpCode::Propagate,
+            29 => OpCode::Error,
             other => panic!("corrupt bytecode: unknown opcode byte {other}"),
         }
     }
