@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::rc::Rc;
 
@@ -24,7 +24,7 @@ pub enum VmValue {
     Error(Box<VmValue>),
     Arr(Rc<Vec<VmValue>>),
     Tuple(Rc<Vec<VmValue>>),
-    Set(Rc<Vec<VmValue>>),
+    Set(Rc<RefCell<HashSet<VmMapKey>>>),
     Map(Rc<RefCell<HashMap<VmMapKey, VmValue>>>),
     Record {
         name: Rc<str>,
@@ -155,11 +155,11 @@ impl fmt::Display for VmValue {
             }
             VmValue::Set(items) => {
                 write!(f, "{{")?;
-                for (i, item) in items.iter().enumerate() {
+                for (i, item) in items.borrow().iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
-                    write!(f, "{}", item)?;
+                    write!(f, "{}", item.clone().into_value())?;
                 }
                 write!(f, "}}")
             }

@@ -61,7 +61,7 @@
 //! compress/decompress time for smaller files on disk.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
 use std::rc::Rc;
 
@@ -242,8 +242,8 @@ fn collect_strings_value(value: &VmValue, pool: &mut StringPoolBuilder) {
         }
 
         VmValue::Set(items) => {
-            for item in items.iter() {
-                collect_strings_value(item, pool);
+            for item in items.borrow().iter() {
+                collect_strings_value(&item.clone().into_value(), pool);
             }
         }
         VmValue::Map(entries) => {
@@ -399,9 +399,10 @@ fn write_value(value: &VmValue, pool: &StringPoolBuilder, out: &mut Vec<u8>) {
         }
         VmValue::Set(items) => {
             out.push(14);
+            let items = items.borrow();
             write_uvarint(items.len() as u64, out);
             for item in items.iter() {
-                write_value(item, pool, out);
+                write_value(&item.clone().into_value(), pool, out);
             }
         }
         VmValue::Map(entries) => {
@@ -608,11 +609,14 @@ fn read_value(
         }
         14 => {
             let len = cursor.uvarint()? as usize;
-            let mut items = Vec::with_capacity(len);
+            let mut set = HashSet::with_capacity(len);
             for _ in 0..len {
-                items.push(read_value(cursor, stdlib, pool)?);
+                let v = read_value(cursor, stdlib, pool)?;
+                let key = VmMapKey::from_value(&v)
+                    .ok_or_else(|| BytecodeError("corrupt .rlc: invalid set element".into()))?;
+                set.insert(key);
             }
-            VmValue::Set(Rc::new(items))
+            VmValue::Set(Rc::new(RefCell::new(set)))
         }
         15 => {
             let len = cursor.uvarint()? as usize;

@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use crate::chunk::{Chunk, OpCode};
@@ -398,7 +398,14 @@ impl Vm {
                         return Err(VmError("stack underflow building set".into()));
                     }
                     let items = self.stack.split_off(self.stack.len() - count);
-                    self.stack.push(VmValue::Set(Rc::new(items)));
+                    let mut set = HashSet::with_capacity(count);
+                    for v in items {
+                        let key = VmMapKey::from_value(&v).ok_or_else(|| {
+                            VmError(format!("type {} cannot be a set element", v.type_name()))
+                        })?;
+                        set.insert(key);
+                    }
+                    self.stack.push(VmValue::Set(Rc::new(RefCell::new(set))));
                 }
 
                 OpCode::BuildMap => {
@@ -573,7 +580,7 @@ impl Vm {
 
     fn index_get(arr: &VmValue, index: &VmValue) -> Result<VmValue, VmError> {
         match arr {
-            VmValue::Arr(items) | VmValue::Tuple(items) | VmValue::Set(items) => {
+            VmValue::Arr(items) | VmValue::Tuple(items) => {
                 let i = Self::index_as_usize(index, items.len())?;
                 Ok(items[i].clone())
             }

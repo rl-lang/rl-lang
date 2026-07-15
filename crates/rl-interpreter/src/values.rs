@@ -2,7 +2,12 @@
 
 use crate::evaluator::EnvironmentItem;
 use rl_ast::statements::{Param, Statement, TypeAnnotation};
-use std::{cell::RefCell, collections::HashMap, fmt, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    fmt,
+    rc::Rc,
+};
 
 /// A runtime value produced by evaluating an rl expression.
 #[derive(Debug, Clone, PartialEq)]
@@ -55,7 +60,7 @@ pub enum Value {
     Set {
         /// The declared element type of this set.
         items_type: TypeAnnotation,
-        items: Vec<Value>,
+        items: Rc<RefCell<HashSet<MapKey>>>,
     },
 }
 
@@ -180,8 +185,14 @@ impl fmt::Display for Value {
                 write!(f, "{{{}}}", formatted.join(", "))
             }
             Value::Set { items, .. } => {
-                let formatted: Vec<String> = items.iter().map(|v| v.to_string()).collect();
-                write!(f, "{{{}}}", formatted.join(", "))
+                write!(f, "{{")?;
+                for (i, item) in items.borrow().iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", item.clone().into_value())?;
+                }
+                write!(f, "}}")
             }
         }
     }
