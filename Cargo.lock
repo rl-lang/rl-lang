@@ -1599,6 +1599,7 @@ dependencies = [
 name = "rl-vm"
 version = "0.1.5"
 dependencies = [
+ "flate2",
  "rl-ast",
  "rl-lexer",
 ]
