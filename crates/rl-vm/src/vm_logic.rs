@@ -328,6 +328,20 @@ impl Vm {
                     let items = self.stack.split_off(self.stack.len() - count);
                     self.stack.push(VmValue::Arr(Rc::new(items)));
                 }
+
+                OpCode::Index => {
+                    let index = self.pop()?;
+                    let arr = self.pop()?;
+                    let elem = Self::index_get(&arr, &index)?;
+                    self.stack.push(elem);
+                }
+
+                OpCode::ArrSet => {
+                    let value = self.pop()?;
+                    let index = self.pop()?;
+                    let arr = self.pop()?;
+                    self.stack.push(Self::index_set(arr, &index, value)?);
+                }
             }
         }
     }
@@ -340,6 +354,43 @@ impl Vm {
             self.locals.truncate(cut);
         }
         Ok(!frames.is_empty())
+    }
+
+    fn index_as_usize(index: &VmValue, len: usize) -> Result<usize, VmError> {
+        let i = match index {
+            VmValue::Int(n) => *n,
+            VmValue::Byte(b) => *b as i64,
+            other => {
+                return Err(VmError(format!(
+                    "array index must be int or byte, got {}",
+                    other.type_name()
+                )));
+            }
+        };
+        if i < 0 || i as usize >= len {
+            return Err(VmError(format!(
+                "array index out of bounds: {i} (len {len})"
+            )));
+        }
+        Ok(i as usize)
+    }
+
+    fn index_get(arr: &VmValue, index: &VmValue) -> Result<VmValue, VmError> {
+        let VmValue::Arr(items) = arr else {
+            return Err(VmError(format!("cannot index into {}", arr.type_name())));
+        };
+        let i = Self::index_as_usize(index, items.len())?;
+        Ok(items[i].clone())
+    }
+
+    fn index_set(arr: VmValue, index: &VmValue, value: VmValue) -> Result<VmValue, VmError> {
+        let VmValue::Arr(items) = arr else {
+            return Err(VmError(format!("cannot index into {}", arr.type_name())));
+        };
+        let i = Self::index_as_usize(index, items.len())?;
+        let mut items = Rc::try_unwrap(items).unwrap_or_else(|rc| (*rc).clone());
+        items[i] = value;
+        Ok(VmValue::Arr(Rc::new(items)))
     }
 
     #[inline(always)]
