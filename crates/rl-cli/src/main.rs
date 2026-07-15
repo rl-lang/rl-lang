@@ -199,8 +199,9 @@ enum Commands {
 
     /// Package a .rl file into a self-contained binary
     #[command(after_help = "EXAMPLES:\n    \
-                             rl package script.rl\n    \
-                             rl package script.rl --output myprogram")]
+                                 rl package script.rl\n    \
+                                 rl package script.rl --output myprogram\n    \
+                                 rl package script.rl --vm")]
     Package {
         /// Path to the .rl source file to package
         #[arg(value_name = "FILE")]
@@ -209,6 +210,12 @@ enum Commands {
         /// Output binary path
         #[arg(short, long, value_name = "PATH", default_value = "program")]
         output: String,
+
+        /// Compile to .rlc bytecode first and embed that (compressed)
+        /// instead of the raw source text. The resulting binary loads
+        /// straight into the VM at startup, skipping lex/parse/compile.
+        #[arg(long)]
+        vm: bool,
     },
 
     Format {
@@ -714,7 +721,7 @@ fn main() {
             }
         },
 
-        Commands::Package { file, output } => {
+        Commands::Package { file, output, vm } => {
             let path = file.to_str().unwrap_or_else(|| {
                 eprintln!("error: invalid file path");
                 std::process::exit(1);
