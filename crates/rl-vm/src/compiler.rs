@@ -76,7 +76,11 @@ impl<'a> Compiler<'a> {
             StatementKind::ResolvedVariableDeclaration { value, .. }
             | StatementKind::ResolvedConstantDeclaration { value, .. }
             | StatementKind::ResolvedArray { value, .. }
-            | StatementKind::ResolvedConstantArray { value, .. } => {
+            | StatementKind::ResolvedConstantArray { value, .. }
+            | StatementKind::ResolvedMap { value, .. }
+            | StatementKind::ResolvedConstantMap { value, .. }
+            | StatementKind::ResolvedSet { value, .. }
+            | StatementKind::ResolvedConstantSet { value, .. } => {
                 self.compile_expr(*value)?;
                 let slot = self.next_slot;
                 self.next_slot += 1;
@@ -88,7 +92,11 @@ impl<'a> Compiler<'a> {
             StatementKind::VariableDeclaration { .. }
             | StatementKind::ConstantDeclaration { .. }
             | StatementKind::Array { .. }
-            | StatementKind::ConstantArray { .. } => Err(CompileError(
+            | StatementKind::ConstantArray { .. }
+            | StatementKind::Map { .. }
+            | StatementKind::ConstantMap { .. }
+            | StatementKind::Set { .. }
+            | StatementKind::ConstantSet { .. } => Err(CompileError(
                 "unresolved declaration reached the compiler - run the resolver pass first".into(),
             )),
 
@@ -373,6 +381,23 @@ impl<'a> Compiler<'a> {
                     self.compile_expr(*item)?;
                 }
                 self.chunk.write_op(OpCode::BuildTuple, line);
+                self.chunk.write_u16(items.len() as u16, line);
+            }
+
+            ExpressionKind::SetLiteral(items) => {
+                for item in items {
+                    self.compile_expr(*item)?;
+                }
+                self.chunk.write_op(OpCode::BuildSet, line);
+                self.chunk.write_u16(items.len() as u16, line);
+            }
+
+            ExpressionKind::MapLiteral(items) => {
+                for (key, value) in items {
+                    self.compile_expr(*key)?;
+                    self.compile_expr(*value)?;
+                }
+                self.chunk.write_op(OpCode::BuildMap, line);
                 self.chunk.write_u16(items.len() as u16, line);
             }
 
