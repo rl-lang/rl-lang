@@ -73,11 +73,11 @@ pub enum OpCode {
     BuildSet = 34,
     /// builds a map from the top N*2 stack values
     BuildMap = 35,
-    ///
+    /// builds a record
     BuildRecord = 36,
-    ///
+    /// variable.field
     FieldGet = 37,
-    ///
+    /// variable.field = value
     FieldSet = 38,
 }
 
