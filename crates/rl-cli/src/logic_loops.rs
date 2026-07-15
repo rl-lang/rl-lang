@@ -151,6 +151,8 @@ pub fn run_rlc_file(path: &std::path::Path) {
     run_rlc_bytes(&bytes, &path.display().to_string());
 }
 
+/// Deserializes compiled `.rlc` bytecode and runs it on the VM, or prints
+/// the error and exits. `label` is used only for error messages.
 #[cfg(all(feature = "eval", feature = "vm"))]
 pub fn run_rlc_bytes(bytes: &[u8], label: &str) {
     use rl_vm::{deserialize_chunk, stdlib};
