@@ -22,6 +22,19 @@ pub fn serialize_chunk(chunk: &Chunk) -> Vec<u8> {
     out
 }
 
+pub fn deserialize_chunk(bytes: &[u8], stdlib: &Module) -> Result<Chunk, BytecodeError> {
+    if bytes.len() < 4 || &bytes[0..4] != MAGIC {
+        return Err(BytecodeError(
+            "not a valid .rlc file (bad magic header)".to_string(),
+        ));
+    }
+    let mut cursor = Cursor {
+        data: bytes,
+        pos: 4,
+    };
+    read_chunk(&mut cursor, stdlib)
+}
+
 fn write_chunk(chunk: &Chunk, out: &mut Vec<u8>) {
     out.extend_from_slice(&(chunk.code.len() as u32).to_le_bytes());
     out.extend_from_slice(&chunk.code);
