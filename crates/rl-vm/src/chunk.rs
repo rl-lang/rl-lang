@@ -179,8 +179,10 @@ impl Chunk {
     /// search for same value in constants vector and return its index
     /// if no similar values found it will append new value and return its index
     pub fn add_constant(&mut self, value: VmValue) -> u16 {
-        if let Some(pos) = self.constants.iter().position(|c| *c == value) {
-            return pos as u16;
+        if !matches!(value, VmValue::Function(_)) {
+            if let Some(pos) = self.constants.iter().position(|c| *c == value) {
+                return pos as u16;
+            }
         }
         self.constants.push(value);
         (self.constants.len() - 1) as u16
