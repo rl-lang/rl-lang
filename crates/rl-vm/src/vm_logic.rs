@@ -384,6 +384,102 @@ impl Vm {
                     }
                     self.stack.push(VmValue::Map(Rc::new(RefCell::new(map))));
                 }
+
+                OpCode::BuildRecord => {
+                    let name_idx = chunk!().read_u16(ip) as usize;
+                    ip += 2;
+                    let fields_idx = chunk!().read_u16(ip) as usize;
+                    ip += 2;
+                    let count = chunk!().read_u16(ip) as usize;
+                    ip += 2;
+
+                    let VmValue::Str(name) = chunk!().constants[name_idx].clone() else {
+                        return Err(VmError(
+                            "corrupt bytecode: struct name is not a string".into(),
+                        ));
+                    };
+                    let VmValue::Arr(field_names) = chunk!().constants[fields_idx].clone() else {
+                        return Err(VmError(
+                            "corrupt bytecode: struct field list is not an array".into(),
+                        ));
+                    };
+                    if self.stack.len() < count {
+                        return Err(VmError("stack underflow building struct".into()));
+                    }
+                    let values = self.stack.split_off(self.stack.len() - count);
+                    let fields = field_names
+                        .iter()
+                        .zip(values)
+                        .map(|(fname, val)| {
+                            let VmValue::Str(fname) = fname else {
+                                unreachable!("field name constant must be a string");
+                            };
+                            (fname.clone(), val)
+                        })
+                        .collect();
+                    self.stack.push(VmValue::Record {
+                        name,
+                        fields: Rc::new(RefCell::new(fields)),
+                    });
+                }
+
+                OpCode::FieldGet => {
+                    let field_idx = chunk!().read_u16(ip) as usize;
+                    ip += 2;
+                    let VmValue::Str(field) = chunk!().constants[field_idx].clone() else {
+                        return Err(VmError(
+                            "corrupt bytecode: field name is not a string".into(),
+                        ));
+                    };
+                    let target = self.pop()?;
+                    let VmValue::Record { name, fields } = &target else {
+                        return Err(VmError(format!(
+                            "cannot access field `{}` on {}",
+                            field,
+                            target.type_name()
+                        )));
+                    };
+                    let value = fields
+                        .borrow()
+                        .iter()
+                        .find(|(f, _)| *f == field)
+                        .map(|(_, v)| v.clone())
+                        .ok_or_else(|| {
+                            VmError(format!("record `{}` has no field `{}`", name, field))
+                        })?;
+                    self.stack.push(value);
+                }
+
+                OpCode::FieldSet => {
+                    let field_idx = chunk!().read_u16(ip) as usize;
+                    ip += 2;
+                    let VmValue::Str(field) = chunk!().constants[field_idx].clone() else {
+                        return Err(VmError(
+                            "corrupt bytecode: field name is not a string".into(),
+                        ));
+                    };
+                    let value = self.pop()?;
+                    let target = self.pop()?;
+                    let VmValue::Record { name, fields } = &target else {
+                        return Err(VmError(format!(
+                            "cannot assign field `{}` on {}",
+                            field,
+                            target.type_name()
+                        )));
+                    };
+                    let mut fields_mut = fields.borrow_mut();
+                    match fields_mut.iter_mut().find(|(f, _)| *f == field) {
+                        Some((_, slot)) => *slot = value.clone(),
+                        None => {
+                            return Err(VmError(format!(
+                                "record `{}` has no field `{}`",
+                                name, field
+                            )));
+                        }
+                    }
+                    drop(fields_mut);
+                    self.stack.push(value);
+                }
             }
         }
     }
