@@ -9,4 +9,4 @@ repository.workspace = true
 [dependencies]
 rl-ast.workspace = true
 rl-lexer.workspace = true
-flate2.workspace = true
+zstd.workspace = true
