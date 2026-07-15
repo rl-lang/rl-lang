@@ -1,12 +1,17 @@
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
+use std::io::{Read, Write};
 use std::rc::Rc;
+
+use flate2::Compression;
+use flate2::read::DeflateDecoder;
+use flate2::write::DeflateEncoder;
 
 use crate::chunk::Chunk;
 use crate::native::Module;
 use crate::values::{VmFunction, VmValue};
 
-const MAGIC: &[u8; 4] = b"RLC2";
+const MAGIC: &[u8; 4] = b"RLZ1";
 
 #[derive(Debug)]
 pub struct BytecodeError(pub String);
@@ -17,13 +22,17 @@ impl Display for BytecodeError {
     }
 }
 pub fn serialize_chunk(chunk: &Chunk) -> Vec<u8> {
-    let mut pool = StringPoolBuilder::default();
-    collect_strings_chunk(chunk, &mut pool);
+    let payload = serialize_payload(chunk);
 
     let mut out = Vec::new();
     out.extend_from_slice(MAGIC);
-    write_string_pool(&pool, &mut out);
-    write_chunk(chunk, &pool, &mut out);
+    let mut encoder = DeflateEncoder::new(&mut out, Compression::default());
+    encoder
+        .write_all(&payload)
+        .expect("writing to an in-memory Vec<u8> cannot fail");
+    encoder
+        .finish()
+        .expect("finishing an in-memory deflate stream cannot fail");
     out
 }
 
@@ -33,9 +42,30 @@ pub fn deserialize_chunk(bytes: &[u8], stdlib: &Module) -> Result<Chunk, Bytecod
             "not a valid .rlc file (bad magic header)".to_string(),
         ));
     }
+
+    let mut decoder = DeflateDecoder::new(&bytes[4..]);
+    let mut payload = Vec::new();
+    decoder
+        .read_to_end(&mut payload)
+        .map_err(|e| BytecodeError(format!("failed to decompress .rlc file: {e}")))?;
+
+    deserialize_payload(&payload, stdlib)
+}
+
+fn serialize_payload(chunk: &Chunk) -> Vec<u8> {
+    let mut pool = StringPoolBuilder::default();
+    collect_strings_chunk(chunk, &mut pool);
+
+    let mut out = Vec::new();
+    write_string_pool(&pool, &mut out);
+    write_chunk(chunk, &pool, &mut out);
+    out
+}
+
+fn deserialize_payload(bytes: &[u8], stdlib: &Module) -> Result<Chunk, BytecodeError> {
     let mut cursor = Cursor {
         data: bytes,
-        pos: 4,
+        pos: 0,
     };
     let pool = read_string_pool(&mut cursor)?;
     read_chunk(&mut cursor, stdlib, &pool)
