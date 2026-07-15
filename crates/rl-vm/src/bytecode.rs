@@ -67,7 +67,7 @@ use std::rc::Rc;
 
 use crate::chunk::Chunk;
 use crate::native::Module;
-use crate::values::{VmFunction, VmMapKey, VmValue};
+use crate::values::{RecordFields, VmFunction, VmMapKey, VmValue};
 
 const MAGIC: &[u8; 4] = b"RLZ2";
 
@@ -252,6 +252,17 @@ fn collect_strings_value(value: &VmValue, pool: &mut StringPoolBuilder) {
                 collect_strings_value(v, pool);
             }
         }
+
+        VmValue::Record { fields, .. } => {
+            for (fname, fval) in fields.iter() {
+                pool.intern(&fname);
+                collect_strings_value(&fval, pool);
+            }
+        }
+        VmValue::Tag { name, variant } => {
+            pool.intern(name);
+            pool.intern(variant);
+        }
     }
 }
 
@@ -395,6 +406,20 @@ fn write_value(value: &VmValue, pool: &StringPoolBuilder, out: &mut Vec<u8>) {
                 write_value(&k.clone().into_value(), pool, out);
                 write_value(v, pool, out);
             }
+        }
+        VmValue::Record { name, fields } => {
+            out.push(16);
+            write_uvarint(pool.get(name) as u64, out);
+            write_uvarint(fields.len() as u64, out);
+            for (fname, fval) in fields.iter() {
+                write_uvarint(pool.get(&fname) as u64, out);
+                write_value(&fval, pool, out);
+            }
+        }
+        VmValue::Tag { name, variant } => {
+            out.push(17);
+            write_uvarint(pool.get(name) as u64, out);
+            write_uvarint(pool.get(variant) as u64, out);
         }
     }
 }
@@ -581,6 +606,32 @@ fn read_value(
                 map.insert(key, v);
             }
             VmValue::Map(Rc::new(RefCell::new(map)))
+        }
+        16 => {
+            let name_idx = cursor.uvarint()? as u32;
+            let name = pool_str(pool, name_idx)?;
+            let len = cursor.uvarint()? as usize;
+            let mut fields = Vec::with_capacity(len);
+            for _ in 0..len {
+                let fname_idx = cursor.uvarint()? as u32;
+                let fname = pool_str(pool, fname_idx)?;
+                let fval = read_value(cursor, stdlib, pool)?;
+                fields.push((Rc::from(fname), fval));
+            }
+            VmValue::Record {
+                name: Rc::from(name),
+                fields: RecordFields::new(fields),
+            }
+        }
+        17 => {
+            let name_idx = cursor.uvarint()? as u32;
+            let name = pool_str(pool, name_idx)?;
+            let variant_idx = cursor.uvarint()? as u32;
+            let variant = pool_str(pool, variant_idx)?;
+            VmValue::Tag {
+                name: Rc::from(name),
+                variant: Rc::from(variant),
+            }
         }
         other => {
             return Err(BytecodeError(format!(

@@ -100,6 +100,10 @@ impl<'a> Compiler<'a> {
                 "unresolved declaration reached the compiler - run the resolver pass first".into(),
             )),
 
+            StatementKind::RecordDeclaration { .. } | StatementKind::TagDeclaration { .. } => {
+                Ok(())
+            }
+
             StatementKind::While { condition, body } => {
                 let loop_start = self.chunk.code.len();
                 self.compile_expr(*condition)?;
@@ -449,6 +453,57 @@ impl<'a> Compiler<'a> {
                         self.chunk.write_u16(slot as u16, line);
                     }
                 }
+            }
+
+            ExpressionKind::StructLiteral { name, fields } => {
+                let field_names: Vec<VmValue> = fields
+                    .iter()
+                    .map(|(fname, _)| VmValue::Str(Rc::from(fname.as_str())))
+                    .collect();
+                for (_, value_id) in fields {
+                    self.compile_expr(*value_id)?;
+                }
+                let name_idx = self
+                    .chunk
+                    .add_constant(VmValue::Str(Rc::from(name.as_str())));
+                let fields_idx = self.chunk.add_constant(VmValue::Arr(Rc::new(field_names)));
+                self.chunk.write_op(OpCode::BuildRecord, line);
+                self.chunk.write_u16(name_idx, line);
+                self.chunk.write_u16(fields_idx, line);
+                self.chunk.write_u16(fields.len() as u16, line);
+            }
+
+            ExpressionKind::FieldAccess { target, field } => {
+                self.compile_expr(*target)?;
+                let field_idx = self
+                    .chunk
+                    .add_constant(VmValue::Str(Rc::from(field.as_str())));
+                self.chunk.write_op(OpCode::FieldGet, line);
+                self.chunk.write_u16(field_idx, line);
+            }
+
+            ExpressionKind::FieldAssign {
+                target,
+                field,
+                value,
+            } => {
+                self.compile_expr(*target)?;
+                self.compile_expr(*value)?;
+                let field_idx = self
+                    .chunk
+                    .add_constant(VmValue::Str(Rc::from(field.as_str())));
+                self.chunk.write_op(OpCode::FieldSet, line);
+                self.chunk.write_u16(field_idx, line);
+            }
+
+            ExpressionKind::EnumVariant { enum_name, variant } => {
+                self.emit_const(
+                    VmValue::Tag {
+                        name: Rc::from(enum_name.as_str()),
+                        variant: Rc::from(variant.as_str()),
+                    },
+                    line,
+                );
             }
 
             other => {

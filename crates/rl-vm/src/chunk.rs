@@ -73,6 +73,12 @@ pub enum OpCode {
     BuildSet = 34,
     /// builds a map from the top N*2 stack values
     BuildMap = 35,
+    /// builds a record
+    BuildRecord = 36,
+    /// variable.field
+    FieldGet = 37,
+    /// variable.field = value
+    FieldSet = 38,
 }
 
 impl OpCode {
@@ -82,7 +88,7 @@ impl OpCode {
     #[inline(always)]
     pub fn from_u8_unchecked(byte: u8) -> Self {
         debug_assert!(
-            byte <= OpCode::BuildMap as u8,
+            byte <= OpCode::FieldSet as u8,
             "corrupt bytecode: opcode {byte}"
         );
         unsafe { std::mem::transmute::<u8, OpCode>(byte) }
@@ -128,6 +134,9 @@ impl OpCode {
             33 => OpCode::BuildTuple,
             34 => OpCode::BuildSet,
             35 => OpCode::BuildMap,
+            36 => OpCode::BuildRecord,
+            37 => OpCode::FieldGet,
+            38 => OpCode::FieldSet,
             other => panic!("corrupt bytecode: unknown opcode byte {other}"),
         }
     }

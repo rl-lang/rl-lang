@@ -26,6 +26,60 @@ pub enum VmValue {
     Tuple(Rc<Vec<VmValue>>),
     Set(Rc<Vec<VmValue>>),
     Map(Rc<RefCell<HashMap<VmMapKey, VmValue>>>),
+    Record {
+        name: Rc<str>,
+        fields: RecordFields,
+    },
+    Tag {
+        name: Rc<str>,
+        variant: Rc<str>,
+    },
+}
+
+// for some reason this works???
+// need to look it up
+pub type RecordField = Rc<RefCell<Vec<(Rc<str>, VmValue)>>>;
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct RecordFields(RecordField);
+
+impl RecordFields {
+    pub fn new(fields: Vec<(Rc<str>, VmValue)>) -> Self {
+        Self(Rc::new(RefCell::new(fields)))
+    }
+
+    pub fn get(&self, name: &str) -> Option<VmValue> {
+        self.0
+            .borrow()
+            .iter()
+            .find(|(n, _)| &**n == name)
+            .map(|(_, v)| v.clone())
+    }
+
+    pub fn set(&self, name: &str, value: VmValue) {
+        let mut fields = self.0.borrow_mut();
+        if let Some(entry) = fields.iter_mut().find(|(n, _)| &**n == name) {
+            entry.1 = value;
+        } else {
+            fields.push((Rc::from(name), value));
+        }
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (Rc<str>, VmValue)> + '_ {
+        self.0.borrow().clone().into_iter()
+    }
+
+    pub fn has(&self, name: &str) -> bool {
+        self.0.borrow().iter().any(|(n, _)| &**n == name)
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.borrow().len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.borrow().is_empty()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -114,6 +168,17 @@ impl fmt::Display for VmValue {
                 }
                 write!(f, "}}")
             }
+            VmValue::Record { name, fields } => {
+                write!(f, "{} {{", name)?;
+                for (i, (fname, fval)) in fields.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}: {}", fname, fval)?;
+                }
+                write!(f, "}}")
+            }
+            VmValue::Tag { name, variant } => write!(f, "{}.{}", name, variant),
         }
     }
 }
@@ -138,6 +203,8 @@ impl VmValue {
             VmValue::Tuple(_) => "tuple",
             VmValue::Set(_) => "set",
             VmValue::Map(_) => "map",
+            VmValue::Record { .. } => "record",
+            VmValue::Tag { .. } => "tag",
         }
     }
 
