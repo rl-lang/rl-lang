@@ -506,6 +506,38 @@ impl<'a> Compiler<'a> {
                 );
             }
 
+            ExpressionKind::ResolvedLambda {
+                params,
+                body,
+                capture_depth,
+                ..
+            } => {
+                let param_count = params.len();
+                let cap_depth = (*capture_depth).min(self.scope_bases.len());
+                let capture_start = if cap_depth == 0 {
+                    self.next_slot
+                } else {
+                    self.scope_bases[self.scope_bases.len() - cap_depth]
+                };
+                let captured_scope_bases = &self.scope_bases[self.scope_bases.len() - cap_depth..];
+                let chunk = Self::compile_closure_chunk(
+                    self.ast,
+                    body,
+                    param_count,
+                    captured_scope_bases,
+                    self.next_slot,
+                )?;
+                let func = VmValue::Function(Rc::new(VmFunction {
+                    name: "<lambda>".to_string(),
+                    arity: param_count,
+                    chunk,
+                }));
+                let const_idx = self.chunk.add_constant(func);
+                self.chunk.write_op(OpCode::BuildClosure, line);
+                self.chunk.write_u16(const_idx, line);
+                self.chunk.write_u16(capture_start, line);
+            }
+
             other => {
                 return Err(CompileError(format!(
                     "expression kind not yet supported by the vm compiler: {other:?}"
@@ -559,6 +591,24 @@ impl<'a> Compiler<'a> {
             sub.compile_statement(stmt)?;
         }
         sub.chunk.write_op(OpCode::Return, 0); // implicit `return null` on fallthrough
+        Ok(sub.chunk)
+    }
+
+    fn compile_closure_chunk(
+        ast: &Ast,
+        body: &[Statement],
+        param_count: usize,
+        captured_scope_bases: &[u16],
+        outer_next_slot: u16,
+    ) -> Result<Chunk, CompileError> {
+        let mut sub = Compiler::new(ast);
+        sub.scope_bases = captured_scope_bases.to_vec();
+        sub.scope_bases.push(outer_next_slot);
+        sub.next_slot = outer_next_slot + param_count as u16;
+        for stmt in body {
+            sub.compile_statement(stmt)?;
+        }
+        sub.chunk.write_op(OpCode::Return, 0);
         Ok(sub.chunk)
     }
 }
