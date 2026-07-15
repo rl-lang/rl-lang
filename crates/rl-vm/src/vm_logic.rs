@@ -283,6 +283,42 @@ impl Vm {
                             self.stack.push(result);
                         }
 
+                        VmValue::Closure {
+                            func,
+                            captured,
+                            capture_start,
+                        } => {
+                            if arg_count != func.arity {
+                                return Err(VmError(format!(
+                                    "closure expects {} args, got {}",
+                                    func.arity, arg_count
+                                )));
+                            }
+                            let base = self.locals.len();
+                            self.locals
+                                .resize(base + capture_start as usize, VmValue::Null);
+                            self.locals.extend_from_slice(&captured);
+                            let params_start = base + capture_start as usize + captured.len();
+                            self.locals.resize(params_start + arg_count, VmValue::Null);
+                            for i in (0..arg_count).rev() {
+                                self.locals[params_start + i] = self.pop()?;
+                            }
+                            self.pop()?; // discard the closure itself
+
+                            self.scope_starts.push(base);
+                            let new_scope_base = self.scope_starts.len() - 1;
+
+                            frames.last_mut().unwrap().ip = ip;
+                            cur_chunk = &func.chunk as *const Chunk;
+                            frames.push(CallFrame {
+                                source: FrameSource::Func(func),
+                                ip: 0,
+                                scope_base: new_scope_base,
+                            });
+                            ip = 0;
+                            scope_base = new_scope_base;
+                        }
+
                         other => return Err(VmError(format!("cannot call {other:?}"))),
                     }
                 }
@@ -470,6 +506,29 @@ impl Vm {
                     }
                     fields.set(&field, value.clone());
                     self.stack.push(value);
+                }
+                OpCode::BuildClosure => {
+                    let const_idx = chunk!().read_u16(ip) as usize;
+                    ip += 2;
+                    let capture_start = chunk!().read_u16(ip);
+                    ip += 2;
+                    let VmValue::Function(func) = chunk!().constants[const_idx].clone() else {
+                        return Err(VmError(
+                            "corrupt bytecode: closure template is not a function".into(),
+                        ));
+                    };
+                    let frame_base = self.scope_starts[scope_base];
+                    let start = frame_base + capture_start as usize;
+                    let captured = if start <= self.locals.len() {
+                        self.locals[start..].to_vec()
+                    } else {
+                        Vec::new()
+                    };
+                    self.stack.push(VmValue::Closure {
+                        func,
+                        captured: Rc::new(captured),
+                        capture_start,
+                    });
                 }
             }
         }
