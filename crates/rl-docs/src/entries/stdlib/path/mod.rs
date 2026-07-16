@@ -4,7 +4,7 @@ pub static PATH: StdEntry = StdEntry {
     name: "path",
     description: "functions for working with filesystem paths",
     functions: FUNCTIONS,
-    since: None,
+    since: Some("v0.1.5"),
     unstable: false,
 };
 
@@ -29,7 +29,7 @@ pub static PATH_EXISTS: FnEntry = FnEntry {
 get std::path::path_exists
 
 path_exists("./Cargo.toml")"#,
-    expected_output: None,
+    expected_output: Some("true"),
     returns: "bool",
     errors: None,
     see_also: &[],
@@ -43,22 +43,25 @@ pub static PATH_EXTENSION: FnEntry = FnEntry {
 get std::path::path_extension
 
 path_extension("main.rl")"#,
-    expected_output: None,
+    expected_output: Some("rl"),
     returns: "string",
     errors: None,
     see_also: &[],
     since: Some("v0.1.5"),
 };
 
-static PATH_FILENAME: FnEntry = FnEntry {
+pub static PATH_FILENAME: FnEntry = FnEntry {
     signature: "path_filename(path)",
     description: "returns the final component of the path",
-    example: "get std::path::path_filename\n\npath_filename(\"/usr/bin/rl\") // \"rl\"",
-    expected_output: None,
-    returns: "",
+    example: r#"
+get std::path::path_filename
+
+path_filename("/usr/bin/rl")"#,
+    expected_output: Some("rl"),
+    returns: "string",
     errors: None,
     see_also: &[],
-    since: None,
+    since: Some("v0.1.5"),
 };
 
 static PATH_IS_DIR: FnEntry = FnEntry {
