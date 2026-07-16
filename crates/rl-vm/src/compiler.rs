@@ -12,31 +12,15 @@ use rl_lexer::tokentypes::TokenType;
 #[derive(Debug)]
 pub struct CompileError(pub String);
 
-/// Where a `continue` inside the current loop should go.
 enum ContinueTarget {
-    /// Jump straight back to this bytecode offset (while loops: re-check the condition).
     Backward(usize),
-    /// Emit a forward jump now, patched later once we know where the
-    /// "advance" step lives (for/for-range/for-each: increment before re-checking).
+    #[allow(unused)]
     Forward,
-}
-
-/// How to produce the loop's element count each time the condition is checked.
-enum LenSource {
-    Const(i64),
-    /// re-read the length of the array in this local slot at runtime
-    Runtime(u16),
-}
-
-fn len_const(n: i64) -> LenSource {
-    LenSource::Const(n)
 }
 
 struct LoopCtx {
     continue_target: ContinueTarget,
-    /// operand offsets of forward `continue` jumps awaiting a patch target
     continue_jumps: Vec<usize>,
-    /// operand offsets of `break` jumps, patched to the loop's exit point
     break_jumps: Vec<usize>,
 }
 
@@ -165,96 +149,6 @@ impl<'a> Compiler<'a> {
                 Ok(())
             }
 
-            // C-style `for [init, cond, incr] {}`
-            StatementKind::ResolvedFor {
-                initializer,
-                condition,
-                increment,
-                body,
-            } => {
-                self.compile_statement(initializer)?;
-
-                let loop_start = self.chunk.code.len();
-                self.compile_expr(*condition)?;
-                let exit_jump = self.emit_jump(OpCode::JumpIfFalse, line);
-
-                self.loop_stack.push(LoopCtx {
-                    continue_target: ContinueTarget::Forward,
-                    continue_jumps: Vec::new(),
-                    break_jumps: Vec::new(),
-                });
-                self.compile_block(body, false, line)?;
-                let ctx = self.loop_stack.pop().unwrap();
-
-                for pos in ctx.continue_jumps {
-                    self.patch_jump(pos);
-                }
-                self.compile_expr_statement(*increment)?;
-                self.emit_loop(loop_start, line);
-                self.patch_jump(exit_jump);
-                for pos in ctx.break_jumps {
-                    self.patch_jump(pos);
-                }
-                Ok(())
-            }
-
-            // `for x in N..M {}`
-            StatementKind::ResolvedForRange { range, body, .. } => {
-                let items = match &range.kind {
-                    StatementKind::Range(items) => items.clone(),
-                    _ => return Err(CompileError("for-range: expected a range statement".into())),
-                };
-                let len = items.len() as i64;
-                self.chunk.write_op(OpCode::PushScope, line);
-                let arr_val = VmValue::Arr(Rc::new(items.into_iter().map(VmValue::Int).collect()));
-                self.emit_const(arr_val, line);
-                let arr_slot = self.next_slot;
-                self.next_slot += 1;
-                self.chunk.write_op(OpCode::DefineLocal, line);
-                self.chunk.write_u16(arr_slot, line);
-
-                self.emit_const(VmValue::Int(0), line);
-                let idx_slot = self.next_slot;
-                self.next_slot += 1;
-                self.chunk.write_op(OpCode::DefineLocal, line);
-                self.chunk.write_u16(idx_slot, line);
-
-                self.compile_indexed_loop(arr_slot, idx_slot, len_const(len), body, line)?;
-
-                self.chunk.write_op(OpCode::PopScope, line);
-                self.next_slot -= 2;
-                Ok(())
-            }
-
-            // `for x in some_array {}`
-            StatementKind::ResolvedForEach { iterable, body, .. } => {
-                self.chunk.write_op(OpCode::PushScope, line);
-
-                self.compile_expr(*iterable)?;
-                let arr_slot = self.next_slot;
-                self.next_slot += 1;
-                self.chunk.write_op(OpCode::DefineLocal, line);
-                self.chunk.write_u16(arr_slot, line);
-
-                self.emit_const(VmValue::Int(0), line);
-                let idx_slot = self.next_slot;
-                self.next_slot += 1;
-                self.chunk.write_op(OpCode::DefineLocal, line);
-                self.chunk.write_u16(idx_slot, line);
-
-                self.compile_indexed_loop(
-                    arr_slot,
-                    idx_slot,
-                    LenSource::Runtime(arr_slot),
-                    body,
-                    line,
-                )?;
-
-                self.chunk.write_op(OpCode::PopScope, line);
-                self.next_slot -= 2;
-                Ok(())
-            }
-
             StatementKind::Conditional {
                 if_branch,
                 else_branch,
@@ -294,80 +188,6 @@ impl<'a> Compiler<'a> {
                 "statement kind not yet supported by the vm compiler: {other:?}"
             ))),
         }
-    }
-
-    /// Shared codegen for `for-range` / `for-each`
-    fn compile_indexed_loop(
-        &mut self,
-        arr_slot: u16,
-        idx_slot: u16,
-        len: LenSource,
-        body: &[Statement],
-        line: u32,
-    ) -> Result<(), CompileError> {
-        let loop_start = self.chunk.code.len();
-        self.chunk.write_op(OpCode::GetLocal, line);
-        self.chunk.write_u16(idx_slot, line);
-        match len {
-            LenSource::Const(n) => self.emit_const(VmValue::Int(n), line),
-            LenSource::Runtime(slot) => {
-                self.chunk.write_op(OpCode::GetLocal, line);
-                self.chunk.write_u16(slot, line);
-                self.chunk.write_op(OpCode::Len, line);
-            }
-        }
-        self.chunk.write_op(OpCode::Less, line);
-        let exit_jump = self.emit_jump(OpCode::JumpIfFalse, line);
-
-        self.loop_stack.push(LoopCtx {
-            continue_target: ContinueTarget::Forward,
-            continue_jumps: Vec::new(),
-            break_jumps: Vec::new(),
-        });
-
-        self.chunk.write_op(OpCode::PushScope, line);
-        self.scope_bases.push(self.next_slot);
-
-        self.chunk.write_op(OpCode::GetLocal, line);
-        self.chunk.write_u16(arr_slot, line);
-        self.chunk.write_op(OpCode::GetLocal, line);
-        self.chunk.write_u16(idx_slot, line);
-        self.chunk.write_op(OpCode::Index, line);
-        let loop_var_slot = self.next_slot;
-        self.next_slot += 1;
-        self.chunk.write_op(OpCode::DefineLocal, line);
-        self.chunk.write_u16(loop_var_slot, line);
-
-        for stmt in body {
-            if let StatementKind::Expression(id) = &stmt.kind {
-                self.compile_expr_statement(*id)?;
-            } else {
-                self.compile_statement(stmt)?;
-            }
-        }
-
-        self.chunk.write_op(OpCode::PopScope, line);
-        self.next_slot = self.scope_bases.pop().unwrap();
-
-        let ctx = self.loop_stack.pop().unwrap();
-        for pos in ctx.continue_jumps {
-            self.patch_jump(pos);
-        }
-
-        self.chunk.write_op(OpCode::GetLocal, line);
-        self.chunk.write_u16(idx_slot, line);
-        self.emit_const(VmValue::Int(1), line);
-        self.chunk.write_op(OpCode::Add, line);
-        self.chunk.write_op(OpCode::SetLocal, line);
-        self.chunk.write_u16(idx_slot, line);
-        self.chunk.write_op(OpCode::Pop, line);
-
-        self.emit_loop(loop_start, line);
-        self.patch_jump(exit_jump);
-        for pos in ctx.break_jumps {
-            self.patch_jump(pos);
-        }
-        Ok(())
     }
 
     fn compile_conditional(
