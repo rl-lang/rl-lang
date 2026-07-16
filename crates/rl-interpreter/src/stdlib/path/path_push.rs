@@ -1,19 +1,7 @@
-use crate::{
-    evaluator::Evaluator,
-    stdlib::common::{verr, vok, vs},
-    values::Value,
-};
+use crate::evaluator::Evaluator;
 
-pub fn std_path_push(_: &mut Evaluator, path: Value, target: String) -> Value {
-    match path {
-        Value::String(s) => {
-            let mut buf = std::path::PathBuf::from(&s);
-            buf.push(&target);
-            vok!(vs!(buf.to_string_lossy().to_string()))
-        }
-        other => verr!(vs!(format!(
-            "path_push: expects a string, got {}",
-            other.type_name()
-        ))),
-    }
+pub fn std_path_push(_: &mut Evaluator, path: String, target: String) -> String {
+    let mut buf = std::path::PathBuf::from(&path);
+    buf.push(&target);
+    buf.to_string_lossy().to_string()
 }
