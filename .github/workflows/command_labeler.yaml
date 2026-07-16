@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       issues: write
+      pull-requests: write
 
     steps:
       - name: Parse and Validate Label
@@ -22,6 +23,21 @@ jobs:
 
           # Convert input to lowercase for case-insensitive comparison
           INPUT_LOWER=$(echo "$INPUT_LABEL" | tr '[:upper:]' '[:lower:]')
+
+          # Alias "help" to "help wanted"
+          if [ "$INPUT_LOWER" = "help" ]; then
+            INPUT_LOWER="help wanted"
+          fi
+
+          # Alias "wip" to "in progress"
+          if [ "$INPUT_LOWER" = "wip" ]; then
+            INPUT_LOWER="in progress"
+          fi
+
+          # Alias "q" to "question"
+          if [ "$INPUT_LOWER" = "q" ]; then
+            INPUT_LOWER="question"
+          fi
 
           # Check if the requested label is allowed
           MATCHED_LABEL=""
