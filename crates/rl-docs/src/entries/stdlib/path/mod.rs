@@ -22,15 +22,18 @@ static FUNCTIONS: &[&FnEntry] = &[
     &PATH_STEM,
 ];
 
-static PATH_EXISTS: FnEntry = FnEntry {
+pub static PATH_EXISTS: FnEntry = FnEntry {
     signature: "path_exists(path)",
     description: "returns true if the path exists on the filesystem",
-    example: "get std::path::path_exists\n\npath_exists(\"./Cargo.toml\") // true",
+    example: r#"
+get std::path::path_exists
+
+path_exists("./Cargo.toml")"#,
     expected_output: None,
-    returns: "",
+    returns: "bool",
     errors: None,
     see_also: &[],
-    since: None,
+    since: Some("v0.1.5"),
 };
 
 static PATH_EXTENSION: FnEntry = FnEntry {
