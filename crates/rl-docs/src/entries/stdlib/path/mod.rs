@@ -134,15 +134,18 @@ path_pop("/usr/bin/rl")"#,
     since: Some("v0.1.5"),
 };
 
-static PATH_PUSH: FnEntry = FnEntry {
+pub static PATH_PUSH: FnEntry = FnEntry {
     signature: "path_push(path, target)",
     description: "appends a component to the path and returns the result",
-    example: "get std::path::path_push\n\npath_push(\"/usr/bin\", \"rl\") // \"/usr/bin/rl\"",
-    expected_output: None,
-    returns: "",
+    example: r#"
+get std::path::path_push
+
+path_push("/usr/bin", "rl")"#,
+    expected_output: Some("/usr/bin/rl"),
+    returns: "string",
     errors: None,
     see_also: &[],
-    since: None,
+    since: Some("v0.1.5"),
 };
 
 static PATH_SET_EXTENSION: FnEntry = FnEntry {
