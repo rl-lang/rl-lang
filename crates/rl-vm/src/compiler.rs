@@ -126,6 +126,49 @@ impl<'a> Compiler<'a> {
                 Ok(())
             }
 
+            StatementKind::ResolvedFor {
+                initializer,
+                condition,
+                increment,
+                body,
+            } => {
+                // The resolver never pushes a scope around a C-style for loop
+                // (see rl-resolver/src/statements.rs), so the initializer's
+                // variable - and anything the body declares - lives directly
+                // in the enclosing frame, with no PushScope/PopScope pair.
+                self.compile_statement(initializer)?;
+
+                let loop_start = self.chunk.code.len();
+                self.compile_expr(*condition)?;
+                let exit_jump = self.emit_jump(OpCode::JumpIfFalse, line);
+
+                // `continue` must still run the increment before re-checking
+                // the condition, so it can't jump straight back to
+                // `loop_start` like `while` does - it jumps forward to just
+                // before the increment instead.
+                self.loop_stack.push(LoopCtx {
+                    continue_target: ContinueTarget::Forward,
+                    continue_jumps: Vec::new(),
+                    break_jumps: Vec::new(),
+                });
+                // no extra scope for the body either, matching the interpreter
+                self.compile_block(body, false, line)?;
+                let ctx = self.loop_stack.pop().unwrap();
+
+                // `continue` jumps land here, right before the increment.
+                for pos in ctx.continue_jumps {
+                    self.patch_jump(pos);
+                }
+                self.compile_expr_statement(*increment)?;
+                self.emit_loop(loop_start, line);
+
+                self.patch_jump(exit_jump);
+                for pos in ctx.break_jumps {
+                    self.patch_jump(pos);
+                }
+                Ok(())
+            }
+
             StatementKind::Break => {
                 if self.loop_stack.is_empty() {
                     return Err(CompileError("`break` outside of a loop".into()));
