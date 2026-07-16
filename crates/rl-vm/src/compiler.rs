@@ -12,12 +12,25 @@ use rl_lexer::tokentypes::TokenType;
 #[derive(Debug)]
 pub struct CompileError(pub String);
 
+enum ContinueTarget {
+    Backward(usize),
+    #[allow(unused)]
+    Forward,
+}
+
+struct LoopCtx {
+    continue_target: ContinueTarget,
+    continue_jumps: Vec<usize>,
+    break_jumps: Vec<usize>,
+}
+
 pub struct Compiler<'a> {
     ast: &'a Ast,
     chunk: Chunk,
     next_slot: u16,
     scope_bases: Vec<u16>,
     stdlib: Module,
+    loop_stack: Vec<LoopCtx>,
 }
 
 impl<'a> Compiler<'a> {
@@ -28,6 +41,7 @@ impl<'a> Compiler<'a> {
             next_slot: 0,
             scope_bases: Vec::new(),
             stdlib: stdlib::root(),
+            loop_stack: Vec::new(),
         }
     }
 
@@ -94,10 +108,44 @@ impl<'a> Compiler<'a> {
                 let loop_start = self.chunk.code.len();
                 self.compile_expr(*condition)?;
                 let exit_jump = self.emit_jump(OpCode::JumpIfFalse, line);
+
+                self.loop_stack.push(LoopCtx {
+                    continue_target: ContinueTarget::Backward(loop_start),
+                    continue_jumps: Vec::new(),
+                    break_jumps: Vec::new(),
+                });
                 // resolver unconditionally pushes a scope for `while` bodies
                 self.compile_block(body, true, line)?;
+                let ctx = self.loop_stack.pop().unwrap();
+
                 self.emit_loop(loop_start, line);
                 self.patch_jump(exit_jump);
+                for pos in ctx.break_jumps {
+                    self.patch_jump(pos);
+                }
+                Ok(())
+            }
+
+            StatementKind::Break => {
+                if self.loop_stack.is_empty() {
+                    return Err(CompileError("`break` outside of a loop".into()));
+                }
+                let pos = self.emit_jump(OpCode::Jump, line);
+                self.loop_stack.last_mut().unwrap().break_jumps.push(pos);
+                Ok(())
+            }
+
+            StatementKind::Continue => {
+                if self.loop_stack.is_empty() {
+                    return Err(CompileError("`continue` outside of a loop".into()));
+                }
+                match self.loop_stack.last().unwrap().continue_target {
+                    ContinueTarget::Backward(target) => self.emit_loop(target, line),
+                    ContinueTarget::Forward => {
+                        let pos = self.emit_jump(OpCode::Jump, line);
+                        self.loop_stack.last_mut().unwrap().continue_jumps.push(pos);
+                    }
+                }
                 Ok(())
             }
 
