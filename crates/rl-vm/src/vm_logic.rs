@@ -178,7 +178,7 @@ impl Vm {
                         }
                         self.globals[slot] = val;
                     } else {
-                        let base = *self.scope_starts.last().unwrap();
+                        let base = self.scope_starts[scope_base];
                         if base + slot >= self.locals.len() {
                             self.locals.resize(base + slot + 1, VmValue::Null);
                         }
@@ -514,6 +514,7 @@ impl Vm {
                     fields.set(&field, value.clone());
                     self.stack.push(value);
                 }
+
                 OpCode::BuildClosure => {
                     let const_idx = chunk!().read_u16(ip) as usize;
                     ip += 2;
@@ -544,6 +545,20 @@ impl Vm {
                         captured: Rc::new(captured),
                         capture_start,
                     });
+                }
+
+                OpCode::Len => {
+                    let val = self.pop()?;
+                    let len = match &val {
+                        VmValue::Arr(items) | VmValue::Tuple(items) => items.len(),
+                        other => {
+                            return Err(VmError(format!(
+                                "cannot take length of {}",
+                                other.type_name()
+                            )));
+                        }
+                    };
+                    self.stack.push(VmValue::Int(len as i64));
                 }
             }
         }
