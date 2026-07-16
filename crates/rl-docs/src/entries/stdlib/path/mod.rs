@@ -92,15 +92,18 @@ path_is_file("./Cargo.toml")"#,
     since: Some("v0.1.5"),
 };
 
-static PATH_JOIN: FnEntry = FnEntry {
+pub static PATH_JOIN: FnEntry = FnEntry {
     signature: "path_join(path, other)",
     description: "joins two paths together",
-    example: "get std::path::path_join\n\npath_join(\"src\", \"main.rl\") // \"src/main.rl\"",
-    expected_output: None,
-    returns: "",
+    example: r#"
+get std::path::path_join
+
+path_join("src", "main.rl")"#,
+    expected_output: Some("src/main.rl"),
+    returns: "string",
     errors: None,
     see_also: &[],
-    since: None,
+    since: Some("v0.1.5"),
 };
 
 static PATH_PARENT: FnEntry = FnEntry {
