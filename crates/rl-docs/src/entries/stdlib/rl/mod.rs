@@ -18,7 +18,7 @@ pub static RL: StdEntry = StdEntry {
     name: "rl",
     description: "functions for introspecting and running rl source code from within rl itself",
     functions: FUNCTIONS,
-    since: None,
+    since: Some("v0.1.5"),
     unstable: false,
 };
 
