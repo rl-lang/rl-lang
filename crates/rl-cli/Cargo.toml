@@ -32,7 +32,7 @@ log = { workspace = true, optional = true }
 env_logger = { workspace = true, optional = true }
 
 [features]
-default = ["repl", "run", "eval"]
+default = ["repl", "run", "eval", "vm"]
 run = []
 repl = ["dep:rl-repl"]
 debug = ["dep:env_logger", "dep:log"]

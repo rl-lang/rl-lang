@@ -183,7 +183,7 @@ impl Vm {
                         }
                         self.globals[slot] = val;
                     } else {
-                        let base = *self.scope_starts.last().unwrap();
+                        let base = self.scope_starts[scope_base];
                         if base + slot >= self.locals.len() {
                             self.locals.resize(base + slot + 1, VmValue::Null);
                         }
