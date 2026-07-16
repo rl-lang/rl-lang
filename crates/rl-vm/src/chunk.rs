@@ -80,6 +80,7 @@ pub enum OpCode {
     /// variable.field = value
     FieldSet = 38,
     BuildClosure = 39,
+    Len = 40,
 }
 
 impl OpCode {
@@ -88,10 +89,7 @@ impl OpCode {
     /// and that's only true for bytecode emitted by this compiler
     #[inline(always)]
     pub fn from_u8_unchecked(byte: u8) -> Self {
-        debug_assert!(
-            byte <= OpCode::BuildClosure as u8,
-            "corrupt bytecode: opcode {byte}"
-        );
+        debug_assert!(byte <= OpCode::Len as u8, "corrupt bytecode: opcode {byte}");
         unsafe { std::mem::transmute::<u8, OpCode>(byte) }
     }
 
@@ -139,6 +137,7 @@ impl OpCode {
             37 => OpCode::FieldGet,
             38 => OpCode::FieldSet,
             39 => OpCode::BuildClosure,
+            40 => OpCode::Len,
             other => panic!("corrupt bytecode: unknown opcode byte {other}"),
         }
     }
@@ -180,9 +179,10 @@ impl Chunk {
     /// if no similar values found it will append new value and return its index
     pub fn add_constant(&mut self, value: VmValue) -> u16 {
         if !matches!(value, VmValue::Function(_))
-            && let Some(pos) = self.constants.iter().position(|c| *c == value) {
-                return pos as u16;
-            }
+            && let Some(pos) = self.constants.iter().position(|c| *c == value)
+        {
+            return pos as u16;
+        }
         self.constants.push(value);
         (self.constants.len() - 1) as u16
     }
