@@ -106,15 +106,18 @@ path_join("src", "main.rl")"#,
     since: Some("v0.1.5"),
 };
 
-static PATH_PARENT: FnEntry = FnEntry {
+pub static PATH_PARENT: FnEntry = FnEntry {
     signature: "path_parent(path)",
     description: "returns the parent directory of the path",
-    example: "get std::path::path_parent\n\npath_parent(\"/usr/bin/rl\") // \"/usr/bin\"",
-    expected_output: None,
-    returns: "",
+    example: r#"
+get std::path::path_parent
+
+path_parent("/usr/bin/rl")"#,
+    expected_output: Some("/usr/bin"),
+    returns: "string",
     errors: None,
     see_also: &[],
-    since: None,
+    since: Some("v0.1.5"),
 };
 
 static PATH_POP: FnEntry = FnEntry {
