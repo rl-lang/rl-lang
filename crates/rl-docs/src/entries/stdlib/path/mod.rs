@@ -36,15 +36,18 @@ path_exists("./Cargo.toml")"#,
     since: Some("v0.1.5"),
 };
 
-static PATH_EXTENSION: FnEntry = FnEntry {
+pub static PATH_EXTENSION: FnEntry = FnEntry {
     signature: "path_extension(path)",
     description: "returns the file extension of the path",
-    example: "get std::path::path_extension\n\npath_extension(\"main.rl\") // \"rl\"",
+    example: r#"
+get std::path::path_extension
+
+path_extension("main.rl")"#,
     expected_output: None,
-    returns: "",
+    returns: "string",
     errors: None,
     see_also: &[],
-    since: None,
+    since: Some("v0.1.5"),
 };
 
 static PATH_FILENAME: FnEntry = FnEntry {
