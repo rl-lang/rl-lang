@@ -148,15 +148,18 @@ path_push("/usr/bin", "rl")"#,
     since: Some("v0.1.5"),
 };
 
-static PATH_SET_EXTENSION: FnEntry = FnEntry {
+pub static PATH_SET_EXTENSION: FnEntry = FnEntry {
     signature: "path_set_extension(path, extension)",
     description: "sets or replaces the extension of the path and returns the result",
-    example: "get std::path::path_set_extension\n\npath_set_extension(\"main.rl\", \"txt\") // \"main.txt\"",
-    expected_output: None,
-    returns: "",
+    example: r#"
+get std::path::path_set_extension
+
+path_set_extension("main.rl", "txt")"#,
+    expected_output: Some("main.txt"),
+    returns: "string",
     errors: None,
     see_also: &[],
-    since: None,
+    since: Some("v0.1.5"),
 };
 
 static PATH_STEM: FnEntry = FnEntry {
