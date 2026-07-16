@@ -46,6 +46,11 @@ impl Vm {
         }
     }
 
+    pub fn run_and_return(&mut self, chunk: &Chunk) -> Result<VmValue, VmError> {
+        self.run(chunk)?;
+        Ok(self.stack.pop().unwrap_or(VmValue::Null))
+    }
+
     /// Vm entry function
     pub fn run(&mut self, chunk: &Chunk) -> Result<(), VmError> {
         let mut frames: Vec<CallFrame> = vec![CallFrame {

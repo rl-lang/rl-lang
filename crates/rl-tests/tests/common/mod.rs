@@ -28,6 +28,19 @@ pub fn eval_program(source: &str) -> Result<Evaluator, Error> {
     Ok(evaluator)
 }
 
+pub fn compile_and_run(source: &str) -> Result<rl_vm::VmValue, rl_vm::VmError> {
+    let file = SourceFile::new("test", source.to_string());
+    let tokens = rl_lexer::tokenizer::Tokenizer::lex(file.clone()).expect("lex failed");
+    let (ast, stmts) =
+        rl_parser::parser_logic::Parser::parse(tokens, file.clone()).expect("parse failed");
+    let mut evaluator = Evaluator::default().with_stdlib().with_source_file(file);
+    let stmts = evaluator.resolver.resolve_program(ast, stmts);
+    let chunk = rl_vm::Compiler::new(&evaluator.resolver.ast_arena)
+        .compile(&stmts)
+        .expect("compile failed");
+    rl_vm::Vm::new().run_and_return(&chunk)
+}
+
 // ---- helpers start ----
 pub fn assert_expr(ast: &Ast, id: ExprId, kind: ExpressionKind, span: Span) {
     let expr = ast.exprs.get(id);
