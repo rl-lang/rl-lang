@@ -172,6 +172,51 @@ impl<'a> Compiler<'a> {
                 Ok(())
             }
 
+            StatementKind::ResolvedForRange {
+                slot, range, body, ..
+            } => {
+                let items = match &range.kind {
+                    StatementKind::Range(items) => items.clone(),
+                    _ => {
+                        return Err(CompileError("for-range: expected a range statement".into()));
+                    }
+                };
+
+                let mut break_jumps = Vec::new();
+                for item in items {
+                    let pre_depth = self.scope_bases.len() as u16;
+
+                    self.chunk.write_op(OpCode::PushScope, line);
+                    self.scope_bases.push(self.next_slot);
+
+                    self.emit_const(VmValue::Int(item), line);
+                    let loop_var_slot = self.next_slot + *slot as u16;
+                    self.next_slot = loop_var_slot + 1;
+                    self.emit_define_slot(loop_var_slot, line);
+
+                    self.loop_stack.push(LoopCtx {
+                        continue_target: ContinueTarget::Forward,
+                        continue_jumps: Vec::new(),
+                        break_jumps: Vec::new(),
+                        scope_depth: pre_depth,
+                    });
+                    self.compile_block(body, false, line)?;
+                    let ctx = self.loop_stack.pop().unwrap();
+
+                    self.next_slot = self.scope_bases.pop().unwrap();
+                    self.chunk.write_op(OpCode::PopScope, line);
+
+                    for pos in ctx.continue_jumps {
+                        self.patch_jump(pos);
+                    }
+                    break_jumps.extend(ctx.break_jumps);
+                }
+                for pos in break_jumps {
+                    self.patch_jump(pos);
+                }
+                Ok(())
+            }
+
             StatementKind::Break => {
                 if self.loop_stack.is_empty() {
                     return Err(CompileError("`break` outside of a loop".into()));
@@ -723,5 +768,11 @@ impl<'a> Compiler<'a> {
         sub.compile_body(body)?;
         sub.chunk.write_op(OpCode::Return, 0);
         Ok(sub.chunk)
+    }
+
+    /// Defines a raw, compiler-managed slot.
+    fn emit_define_slot(&mut self, slot: u16, line: u32) {
+        self.chunk.write_op(OpCode::DefineLocal, line);
+        self.chunk.write_u16(slot, line);
     }
 }
