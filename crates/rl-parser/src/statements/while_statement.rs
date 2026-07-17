@@ -30,4 +30,17 @@ impl Parser {
             span,
         ))
     }
+
+    /// Parses a `loop` loop.
+    ///
+    /// Called after `loop` has been consumed. Reads the loop body via [`parse_block`],
+    /// and produces [`StatementKind::Loop`].
+    ///
+    /// [`parse_block`]: Parser::parse_block
+    pub fn parse_loop(&mut self, start: Span) -> Result<Statement, Error> {
+        while self.match_type(&[TokenType::Newline]) {}
+        let body = self.parse_block()?;
+        let span = start.join(self.previous_span());
+        Ok(Statement::new(StatementKind::Loop(body), span))
+    }
 }
