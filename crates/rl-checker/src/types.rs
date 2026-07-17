@@ -214,5 +214,7 @@ fn const_matches(a: &TypeAnnotation, b: &TypeAnnotation) -> bool {
             | (TypeAnnotation::Map(_, _), TypeAnnotation::CMap(_, _))
             | (TypeAnnotation::Set(_), TypeAnnotation::CSet(_))
             | (TypeAnnotation::CSet(_), TypeAnnotation::Set(_))
+            | (TypeAnnotation::Array(_), TypeAnnotation::CArray(_))
+            | (TypeAnnotation::CArray(_), TypeAnnotation::Array(_))
     )
 }
