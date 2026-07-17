@@ -98,7 +98,8 @@ impl<'a> Compiler<'a> {
             | StatementKind::Map { .. }
             | StatementKind::ConstantMap { .. }
             | StatementKind::Set { .. }
-            | StatementKind::ConstantSet { .. } => Err(CompileError(
+            | StatementKind::ConstantSet { .. }
+            | StatementKind::DestructureDeclaration { .. } => Err(CompileError(
                 "unresolved declaration reached the compiler - run the resolver pass first".into(),
             )),
 
@@ -344,6 +345,10 @@ impl<'a> Compiler<'a> {
             StatementKind::Expression(id) => self.compile_expr_statement(*id),
 
             StatementKind::Match { value, arms } => self.compile_match(*value, arms, line),
+
+            StatementKind::ResolvedDestructureDeclaration { slots, value, .. } => {
+                self.compile_destructure(*value, slots, line)
+            }
 
             StatementKind::ResolvedFunctionDeclaration {
                 name,
@@ -901,6 +906,41 @@ impl<'a> Compiler<'a> {
         sub.compile_body(body)?;
         sub.chunk.write_op(OpCode::Return, 0);
         Ok(sub.chunk)
+    }
+
+    fn compile_destructure(
+        &mut self,
+        value: ExprId,
+        slots: &[usize],
+        line: u32,
+    ) -> Result<(), CompileError> {
+        if slots.is_empty() {
+            self.compile_expr(value)?;
+            self.chunk.write_op(OpCode::Pop, line);
+            return Ok(());
+        }
+
+        let is_global = self.scope_bases.is_empty();
+
+        let base = self.next_slot;
+        self.next_slot += slots.len() as u16;
+
+        self.compile_expr(value)?;
+        self.emit_define_slot(base, line);
+
+        for i in 1..slots.len() {
+            self.emit_get_slot(base, is_global, line);
+            self.emit_const(VmValue::Int(i as i64), line);
+            self.chunk.write_op(OpCode::Index, line);
+            self.emit_define_slot(base + i as u16, line);
+        }
+
+        self.emit_get_slot(base, is_global, line);
+        self.emit_const(VmValue::Int(0), line);
+        self.chunk.write_op(OpCode::Index, line);
+        self.emit_define_slot(base, line);
+
+        Ok(())
     }
 
     /// Defines a raw, compiler-managed slot.
