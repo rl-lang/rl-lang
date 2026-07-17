@@ -141,6 +141,10 @@ enum Commands {
         #[arg(value_name = "TOPIC")]
         topic: Option<String>,
 
+        /// Browse docs in an interactive terminal UI instead of printing them
+        #[arg(long)]
+        tui: bool,
+
         /// Print output as JSON instead of Markdown
         #[arg(long)]
         json: bool,
@@ -457,6 +461,7 @@ fn main() {
             highlight_js,
             no_highlight,
             out_dir,
+            tui,
         } => {
             if generate {
                 #[cfg(feature = "eval")]
