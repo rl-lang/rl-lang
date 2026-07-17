@@ -2,6 +2,8 @@ use ratatui::{
     style::{Color, Modifier, Style},
     text::{Line, Span},
 };
+use rl_lexer::{tokenizer::Tokenizer, tokentypes::TokenType};
+use rl_utils::source::SourceFile;
 
 /// Splits `text` on `**bold**` delimiters into styled spans, alternating
 /// `base` and bold-cyan on every `**` boundary.
@@ -25,6 +27,28 @@ pub fn parse_inline(text: &str, base: Color) -> Vec<Span<'static>> {
         spans.push(Span::raw(String::new()));
     }
     spans
+}
+
+/// Maps a lexer [`TokenType`] to the color it should render as in the TUI.
+fn token_color(token: &TokenType) -> Color {
+    use TokenType::*;
+    match token {
+        // keywords
+        Null | Fn | In | For | While | Return | Break | Continue | Get | From | If | Else
+        | Const | Dec | As | Ok | Err | Match | Record | Tag | Loop => Color::Magenta,
+        // type keywords
+        Int | Float | Bool | String | Byte | Char | Array | Error | Result | Map | Set => {
+            Color::LightBlue
+        }
+        // literals
+        StringLiteral(_) | CharacterLiteral(_) => Color::Green,
+        NumberLiteral(_) | FloatLiteral(_) | ByteLiteral(_) => Color::Yellow,
+        BoolLiteral(_) => Color::Magenta,
+        // identifiers
+        Identifier(_) => Color::White,
+        // everything else: delimiters, punctuation, operators, newline/eof
+        _ => Color::DarkGray,
+    }
 }
 
 /// Converts a single entry's rendered Markdown into styled ratatui lines:
