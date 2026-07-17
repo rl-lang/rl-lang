@@ -141,6 +141,10 @@ enum Commands {
         #[arg(value_name = "TOPIC")]
         topic: Option<String>,
 
+        /// Browse docs in an interactive terminal UI instead of printing them
+        #[arg(long)]
+        tui: bool,
+
         /// Print output as JSON instead of Markdown
         #[arg(long)]
         json: bool,
@@ -457,6 +461,7 @@ fn main() {
             highlight_js,
             no_highlight,
             out_dir,
+            tui,
         } => {
             if generate {
                 #[cfg(feature = "eval")]
@@ -688,6 +693,29 @@ fn main() {
                     (matched_std, matched_concepts, matched_tutorial)
                 }
             };
+
+            if tui {
+                #[cfg(feature = "docs-tui")]
+                {
+                    if let Err(e) = rl_docs::tui::run_docs_tui(
+                        &matched_std,
+                        &matched_concepts,
+                        &matched_tutorial,
+                        topic.as_deref(),
+                    ) {
+                        eprintln!("error: docs tui failed: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+                #[cfg(not(feature = "docs-tui"))]
+                {
+                    eprintln!(
+                        "error: this build of rl was compiled without --tui support (missing 'docs-tui' feature)"
+                    );
+                    std::process::exit(1);
+                }
+                return;
+            }
 
             let rendered = if json {
                 match docs_to_json(&matched_std, &matched_concepts, &matched_tutorial) {

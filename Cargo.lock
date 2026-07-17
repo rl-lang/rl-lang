@@ -1525,6 +1525,10 @@ dependencies = [
 name = "rl-docs"
 version = "0.1.5"
 dependencies = [
+ "crossterm",
+ "ratatui",
+ "rl-lexer",
+ "rl-utils",
  "serde",
  "serde_json",
 ]

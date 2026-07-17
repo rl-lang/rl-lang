@@ -32,7 +32,7 @@ log = { workspace = true, optional = true }
 env_logger = { workspace = true, optional = true }
 
 [features]
-default = ["repl", "run", "eval", "vm"]
+default = ["repl", "run", "eval", "vm", "docs-tui"]
 run = []
 repl = ["dep:rl-repl"]
 debug = ["dep:env_logger", "dep:log"]
@@ -40,3 +40,4 @@ eval = []
 vm = []
 cranelift = ["rl-cranelift"]
 lsp = ["dep:rl-lsp", "dep:tokio"]
+docs-tui = ["rl-docs/tui"]
