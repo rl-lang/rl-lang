@@ -28,7 +28,7 @@ pub fn eval_input(input: &str, evaluator: &mut Evaluator, output: &mut Vec<Outpu
         }
     };
 
-    let (_file_ast, statements) = match Parser::parse(tokens, source.clone()) {
+    let (file_ast, statements) = match Parser::parse(tokens, source.clone()) {
         Ok(s) => s,
         Err(e) => {
             output.push(OutputLine::Error(format!("error: {}", e.message())));
@@ -38,6 +38,8 @@ pub fn eval_input(input: &str, evaluator: &mut Evaluator, output: &mut Vec<Outpu
 
     evaluator.set_source_file(source);
     evaluator.output_buffer = Some(String::new());
+
+    let statements = evaluator.resolver.resolve_program(file_ast, statements);
 
     let mut success = true;
 
