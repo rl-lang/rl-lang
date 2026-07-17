@@ -51,6 +51,76 @@ fn token_color(token: &TokenType) -> Color {
     }
 }
 
+/// Tokenizes `code` with `rl-lexer` and renders it as syntax-highlighted
+/// ratatui [`Line`]s.
+fn highlight_rl_code(code: &str) -> Vec<Line<'static>> {
+    let source_file = SourceFile::new("<docs>", code.to_string());
+    let tokens = match Tokenizer::lex(source_file) {
+        Ok(tokens) => tokens,
+        Err(_) => {
+            return code
+                .lines()
+                .map(|raw| {
+                    Line::from(Span::styled(
+                        format!("   {raw}"),
+                        Style::default().fg(Color::Green),
+                    ))
+                })
+                .collect();
+        }
+    };
+
+    // Walk the token spans, filling any gaps (whitespace, comments - trivia
+    // carries no span of its own) with the original source text in a dim
+    // comment-ish color, so nothing from the snippet is silently dropped.
+    let mut pieces: Vec<(String, Color)> = Vec::new();
+    let mut cursor = 0usize;
+    let bytes_len = code.len();
+
+    for tok in &tokens {
+        if matches!(tok.token, TokenType::Eof) {
+            break;
+        }
+        let start = tok.span.start.min(bytes_len);
+        let end = tok.span.end.min(bytes_len);
+        if start > cursor {
+            pieces.push((code[cursor..start].to_string(), Color::DarkGray));
+        }
+        if end > start {
+            pieces.push((code[start..end].to_string(), token_color(&tok.token)));
+        }
+        cursor = end.max(cursor);
+    }
+    if cursor < bytes_len {
+        pieces.push((code[cursor..].to_string(), Color::DarkGray));
+    }
+
+    // Split the colored pieces into lines at '\n', starting each rendered
+    // line with the same 3-space indent as the old plain rendering.
+    let mut lines: Vec<Line<'static>> = Vec::new();
+    let mut current: Vec<Span<'static>> = vec![Span::raw("   ")];
+    let mut current_has_content = false;
+
+    for (text, color) in pieces {
+        for (i, part) in text.split('\n').enumerate() {
+            if i > 0 {
+                lines.push(Line::from(std::mem::take(&mut current)));
+                current.push(Span::raw("   "));
+                current_has_content = false;
+            }
+            if !part.is_empty() {
+                current.push(Span::styled(part.to_string(), Style::default().fg(color)));
+                current_has_content = true;
+            }
+        }
+    }
+    if current_has_content || lines.is_empty() {
+        lines.push(Line::from(current));
+    }
+
+    lines
+}
+
 /// Converts a single entry's rendered Markdown into styled ratatui lines:
 /// headers get bold/cyan treatment, fenced code blocks are colored green
 /// with the fence itself replaced by a divider, bullets get a dim marker,
