@@ -408,6 +408,13 @@ impl<'a> Compiler<'a> {
                 Ok(())
             }
 
+            StatementKind::ResolvedImportFile { body, .. } => {
+                for stmt in body {
+                    self.compile_statement(stmt)?;
+                }
+                Ok(())
+            }
+
             other => Err(CompileError(format!(
                 "statement kind not yet supported by the vm compiler: {other:?}"
             ))),
