@@ -99,7 +99,9 @@ impl<'a> Compiler<'a> {
             | StatementKind::ConstantMap { .. }
             | StatementKind::Set { .. }
             | StatementKind::ConstantSet { .. }
-            | StatementKind::DestructureDeclaration { .. } => Err(CompileError(
+            | StatementKind::DestructureDeclaration { .. }
+            | StatementKind::ImportFile { .. }
+            | StatementKind::ImportFileNamed { .. } => Err(CompileError(
                 "unresolved declaration reached the compiler - run the resolver pass first".into(),
             )),
 
@@ -375,6 +377,41 @@ impl<'a> Compiler<'a> {
                     None => self.emit_const(VmValue::Null, line),
                 }
                 self.chunk.write_op(OpCode::Return, line);
+                Ok(())
+            }
+
+            StatementKind::Import { names, path } => {
+                let mut module = &self.stdlib;
+                for seg in path {
+                    module = module.submodules.get(seg).ok_or_else(|| {
+                        CompileError(format!("unknown module '{}'", path.join("::")))
+                    })?;
+                }
+
+                let fns: Vec<_> = names
+                    .iter()
+                    .map(|name| {
+                        module.functions.get(name).cloned().ok_or_else(|| {
+                            CompileError(format!(
+                                "'{}' is not defined in '{}'",
+                                name,
+                                path.join("::")
+                            ))
+                        })
+                    })
+                    .collect::<Result<_, CompileError>>()?;
+
+                for (name, f) in names.iter().zip(fns) {
+                    self.stdlib.functions.insert(name.clone(), f);
+                }
+
+                Ok(())
+            }
+
+            StatementKind::ResolvedImportFile { body, .. } => {
+                for stmt in body {
+                    self.compile_statement(stmt)?;
+                }
                 Ok(())
             }
 
