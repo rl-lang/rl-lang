@@ -3,8 +3,7 @@ use crate::entry::FnEntry;
 pub static LEX: FnEntry = FnEntry {
     signature: "lex(code)",
     description: "tokenizes a string of rl source code and returns each token as a (kind, lexeme, line) tuple, without parsing or running it",
-    example: r#"
-get std::rl::lex
+    example: r#"get std::rl::lex
 
 lex("dec int x = 1")"#,
     expected_output: Some(
