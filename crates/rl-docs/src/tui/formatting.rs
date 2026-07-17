@@ -9,26 +9,65 @@ use rl_utils::source::SourceFile;
 /// `base` and bold-cyan on every `**` boundary.
 pub fn parse_inline(text: &str, base: Color) -> Vec<Span<'static>> {
     let mut spans = Vec::new();
-    let mut bold = false;
-    for part in text.split("**") {
-        if !part.is_empty() {
-            let style = if bold {
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(base)
-            };
-            spans.push(Span::styled(part.to_string(), style));
+    let mut current_idx = 0;
+
+    let mut is_bold = false;
+    let mut is_code = false;
+
+    let bytes = text.as_bytes();
+
+    while current_idx < bytes.len() {
+        // Check for Bold delimiter "**"
+        if current_idx + 1 < bytes.len() && &bytes[current_idx..current_idx + 2] == b"**" {
+            is_bold = !is_bold;
+            current_idx += 2;
+            continue;
         }
-        bold = !bold;
+
+        // Check for Code delimiter "`"
+        if bytes[current_idx] == b'`' {
+            is_code = !is_code;
+            current_idx += 1;
+            continue;
+        }
+
+        // Find the next delimiter boundary
+        let mut next_boundary = current_idx;
+        while next_boundary < bytes.len() {
+            if bytes[next_boundary] == b'`' {
+                break;
+            }
+            if next_boundary + 1 < bytes.len() && &bytes[next_boundary..next_boundary + 2] == b"**"
+            {
+                break;
+            }
+            next_boundary += 1;
+        }
+
+        let slice = &text[current_idx..next_boundary];
+        if !slice.is_empty() {
+            let mut style = Style::default();
+
+            if is_code {
+                style = style.fg(Color::Cyan).add_modifier(Modifier::DIM);
+            } else if is_bold {
+                style = style.fg(Color::Cyan).add_modifier(Modifier::BOLD);
+            } else {
+                style = style.fg(base);
+            }
+
+            spans.push(Span::styled(slice.to_string(), style));
+        }
+
+        current_idx = next_boundary;
     }
+
     if spans.is_empty() {
         spans.push(Span::raw(String::new()));
     }
+
     spans
 }
-
 /// Maps a lexer [`TokenType`] to the color it should render as in the TUI.
 fn token_color(token: &TokenType) -> Color {
     use TokenType::*;
@@ -155,21 +194,25 @@ pub fn markdown_to_lines(content: &str) -> Vec<Line<'static>> {
         // ---headings---
         // heading 4
         if let Some(rest) = raw.strip_prefix("#### ") {
-            lines.push(Line::from(Span::styled(
-                format!(" {rest}"),
+            let mut spans = vec![Span::styled(
+                " ",
                 Style::default()
                     .fg(Color::LightBlue)
                     .add_modifier(Modifier::BOLD | Modifier::ITALIC),
-            )));
+            )];
+            spans.extend(parse_inline(rest, Color::LightBlue));
+            lines.push(Line::from(spans));
         }
         // heading 3
         else if let Some(rest) = raw.strip_prefix("### ") {
-            lines.push(Line::from(Span::styled(
-                format!(" {rest}"),
+            let mut spans = vec![Span::styled(
+                " ",
                 Style::default()
                     .fg(Color::LightBlue)
                     .add_modifier(Modifier::BOLD),
-            )));
+            )];
+            spans.extend(parse_inline(rest, Color::LightBlue));
+            lines.push(Line::from(spans));
         }
         // heading 2
         else if let Some(rest) = raw.strip_prefix("## ") {
