@@ -95,6 +95,12 @@ impl Parser {
                 log::info!("found `while` while parsing");
                 self.parse_while(start)
             }
+            TokenType::Loop => {
+                self.advance();
+                #[cfg(feature = "debug")]
+                log::info!("found `loop` while parsing");
+                self.parse_loop(start)
+            }
             TokenType::For => {
                 self.advance();
                 #[cfg(feature = "debug")]

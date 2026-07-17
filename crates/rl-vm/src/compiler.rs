@@ -129,6 +129,25 @@ impl<'a> Compiler<'a> {
                 Ok(())
             }
 
+            StatementKind::Loop(body) => {
+                let loop_start = self.chunk.code.len();
+
+                self.loop_stack.push(LoopCtx {
+                    continue_target: ContinueTarget::Backward(loop_start),
+                    continue_jumps: Vec::new(),
+                    break_jumps: Vec::new(),
+                    scope_depth: self.scope_bases.len() as u16,
+                });
+                self.compile_block(body, true, line)?;
+                let ctx = self.loop_stack.pop().unwrap();
+
+                self.emit_loop(loop_start, line);
+                for pos in ctx.break_jumps {
+                    self.patch_jump(pos);
+                }
+                Ok(())
+            }
+
             StatementKind::ResolvedFor {
                 initializer,
                 condition,

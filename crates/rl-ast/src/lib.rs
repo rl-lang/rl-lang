@@ -217,6 +217,9 @@ fn remap_stmt_kind(kind: &mut StatementKind, offset: u32, target_arena_id: u32) 
             remap_id(condition, offset, target_arena_id);
             remap_stmts(body, offset, target_arena_id);
         }
+        Loop(body) => {
+            remap_stmts(body, offset, target_arena_id);
+        }
         For {
             initializer,
             condition,
