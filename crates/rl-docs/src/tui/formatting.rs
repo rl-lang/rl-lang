@@ -122,16 +122,23 @@ fn highlight_rl_code(code: &str) -> Vec<Line<'static>> {
 }
 
 /// Converts a single entry's rendered Markdown into styled ratatui lines:
-/// headers get bold/cyan treatment, fenced code blocks are colored green
-/// with the fence itself replaced by a divider, bullets get a dim marker,
-/// and everything else runs through [`parse_inline`] for `**bold**` spans.
+/// headers get bold/cyan treatment, fenced code blocks are syntax
+/// highlighted via `rl-lexer` with the fence itself replaced by a divider,
+/// bullets get a dim marker, and everything else runs through
+/// [`parse_inline`] for `**bold**` spans.
 pub fn markdown_to_lines(content: &str) -> Vec<Line<'static>> {
     let mut lines = Vec::new();
     let mut in_code = false;
+    let mut code_buf: Vec<&str> = Vec::new();
 
     for raw in content.lines() {
         // code blocks
         if raw.starts_with("```") {
+            if in_code {
+                // closing fence: flush buffered code through the highlighter
+                lines.extend(highlight_rl_code(&code_buf.join("\n")));
+                code_buf.clear();
+            }
             in_code = !in_code;
             lines.push(Line::from(Span::styled(
                 "─".repeat(40),
@@ -139,12 +146,10 @@ pub fn markdown_to_lines(content: &str) -> Vec<Line<'static>> {
             )));
             continue;
         }
-        // code in code blocks
+        // code in code blocks: buffer until the closing fence so the whole
+        // block can be lexed together (tokens can span line boundaries).
         if in_code {
-            lines.push(Line::from(Span::styled(
-                format!("   {raw}"),
-                Style::default().fg(Color::Green),
-            )));
+            code_buf.push(raw);
             continue;
         }
         // ---headings---
@@ -203,6 +208,12 @@ pub fn markdown_to_lines(content: &str) -> Vec<Line<'static>> {
         } else {
             lines.push(Line::from(parse_inline(&format!(" {raw}"), Color::White)));
         }
+    }
+
+    // Unterminated code block (shouldn't normally happen): flush whatever
+    // was buffered rather than silently dropping it.
+    if in_code && !code_buf.is_empty() {
+        lines.extend(highlight_rl_code(&code_buf.join("\n")));
     }
 
     lines
