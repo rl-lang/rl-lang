@@ -38,3 +38,17 @@ pub fn build_items(
     items
 }
 
+pub fn filter_items(items: &[DocItem], query: &str) -> Vec<usize> {
+    if query.is_empty() {
+        return (0..items.len()).collect();
+    }
+    let needle = query.to_lowercase();
+    items
+        .iter()
+        .enumerate()
+        .filter(|(_, item)| {
+            item.label.to_lowercase().contains(&needle) || item.tag.contains(&needle)
+        })
+        .map(|(i, _)| i)
+        .collect()
+}
