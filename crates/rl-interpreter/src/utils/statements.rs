@@ -350,6 +350,29 @@ impl Evaluator {
                 }
             },
 
+            StatementKind::Loop(body) => loop {
+                self.push_scope();
+                for statement in body {
+                    self.evaluate_statement(statement)?;
+                    if self.return_value.is_some() || self.is_breaking || self.is_continuing {
+                        break;
+                    }
+                }
+                self.pop_scope();
+                if self.is_breaking {
+                    self.is_breaking = false;
+                    break;
+                }
+
+                if self.is_continuing {
+                    self.is_continuing = false;
+                }
+
+                if self.return_value.is_some() {
+                    break;
+                }
+            },
+
             StatementKind::Range(..) => {}
 
             StatementKind::For {
