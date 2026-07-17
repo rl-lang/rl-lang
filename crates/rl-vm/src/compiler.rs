@@ -4,6 +4,7 @@ use crate::chunk::{Chunk, OpCode};
 use crate::native::Module;
 use crate::stdlib;
 use crate::values::{VmFunction, VmValue};
+use rl_ast::statements::MatchPattern;
 use rl_ast::{
     Ast, ExprId, nodes::ExpressionKind, statements::Statement, statements::StatementKind,
 };
@@ -322,6 +323,8 @@ impl<'a> Compiler<'a> {
             } => self.compile_conditional(if_branch, else_branch.as_deref(), line),
 
             StatementKind::Expression(id) => self.compile_expr_statement(*id),
+
+            StatementKind::Match { value, arms } => self.compile_match(*value, arms, line),
 
             StatementKind::ResolvedFunctionDeclaration {
                 name,
@@ -805,6 +808,51 @@ impl<'a> Compiler<'a> {
         let pos_after_operand = self.chunk.code.len() + 2;
         let offset = (pos_after_operand - loop_start) as u16;
         self.chunk.write_u16(offset, line);
+    }
+
+    fn compile_match(
+        &mut self,
+        value: ExprId,
+        arms: &[(MatchPattern, Vec<Statement>)],
+        line: u32,
+    ) -> Result<(), CompileError> {
+        self.chunk.write_op(OpCode::PushScope, line);
+        self.scope_bases.push(self.next_slot);
+
+        self.compile_expr(value)?;
+        let _slot = self.next_slot;
+        self.next_slot += 1;
+        self.chunk.write_op(OpCode::DefineLocal, line);
+        self.chunk.write_u16(_slot, line);
+
+        let mut end_jumps = Vec::new();
+        for (pattern, body) in arms {
+            let next_arm_jump = match pattern {
+                MatchPattern::Wildcard => None,
+                MatchPattern::Literal(expr) => {
+                    self.compile_expr(*expr)?;
+                    self.chunk.write_op(OpCode::GetLocal, line);
+                    self.chunk.write_u16(_slot, line);
+                    self.chunk.write_op(OpCode::Eq, line);
+                    Some(self.emit_jump(OpCode::JumpIfFalse, line))
+                }
+            };
+
+            self.compile_block(body, true, line)?;
+            end_jumps.push(self.emit_jump(OpCode::Jump, line));
+
+            if let Some(j) = next_arm_jump {
+                self.patch_jump(j);
+            }
+        }
+
+        for j in end_jumps {
+            self.patch_jump(j);
+        }
+
+        self.chunk.write_op(OpCode::PopScope, line);
+        self.next_slot = self.scope_bases.pop().unwrap();
+        Ok(())
     }
 
     fn compile_function_chunk(
