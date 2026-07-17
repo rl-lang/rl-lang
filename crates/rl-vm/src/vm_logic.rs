@@ -210,7 +210,8 @@ impl Vm {
                 OpCode::PushScope => self.scope_starts.push(self.locals.len()),
                 OpCode::PopScope => {
                     let num_active = self.scope_starts.len() - scope_base;
-                    if num_active <= 1 {
+                    let min_active = if frames.len() > 1 { 1 } else { 0 };
+                    if num_active <= min_active {
                         return Err(VmError("cannot pop the base call frame".into()));
                     }
                     let start = self.scope_starts.pop().unwrap();
@@ -387,6 +388,19 @@ impl Vm {
                     let arr = self.pop()?;
                     let elem = Self::index_get(&arr, &index)?;
                     self.stack.push(elem);
+                }
+
+                OpCode::ArrLen => {
+                    let arr = self.pop()?;
+                    match arr {
+                        VmValue::Arr(items) => self.stack.push(VmValue::Int(items.len() as i64)),
+                        other => {
+                            return Err(VmError(format!(
+                                "cannot get length of {}",
+                                other.type_name()
+                            )));
+                        }
+                    }
                 }
 
                 OpCode::ArrSet => {

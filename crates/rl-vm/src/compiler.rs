@@ -22,6 +22,7 @@ struct LoopCtx {
     continue_target: ContinueTarget,
     continue_jumps: Vec<usize>,
     break_jumps: Vec<usize>,
+    scope_depth: u16,
 }
 
 pub struct Compiler<'a> {
@@ -113,6 +114,7 @@ impl<'a> Compiler<'a> {
                     continue_target: ContinueTarget::Backward(loop_start),
                     continue_jumps: Vec::new(),
                     break_jumps: Vec::new(),
+                    scope_depth: self.scope_bases.len() as u16,
                 });
                 // resolver unconditionally pushes a scope for `while` bodies
                 self.compile_block(body, true, line)?;
@@ -126,9 +128,169 @@ impl<'a> Compiler<'a> {
                 Ok(())
             }
 
+            StatementKind::ResolvedFor {
+                initializer,
+                condition,
+                increment,
+                body,
+            } => {
+                // The resolver never pushes a scope around a C-style for loop
+                // (see rl-resolver/src/statements.rs), so the initializer's
+                // variable - and anything the body declares - lives directly
+                // in the enclosing frame, with no PushScope/PopScope pair.
+                self.compile_statement(initializer)?;
+
+                let loop_start = self.chunk.code.len();
+                self.compile_expr(*condition)?;
+                let exit_jump = self.emit_jump(OpCode::JumpIfFalse, line);
+
+                // `continue` must still run the increment before re-checking
+                // the condition, so it can't jump straight back to
+                // `loop_start` like `while` does - it jumps forward to just
+                // before the increment instead.
+                self.loop_stack.push(LoopCtx {
+                    continue_target: ContinueTarget::Forward,
+                    continue_jumps: Vec::new(),
+                    break_jumps: Vec::new(),
+                    scope_depth: self.scope_bases.len() as u16,
+                });
+                // no extra scope for the body either, matching the interpreter
+                self.compile_block(body, false, line)?;
+                let ctx = self.loop_stack.pop().unwrap();
+
+                // `continue` jumps land here, right before the increment.
+                for pos in ctx.continue_jumps {
+                    self.patch_jump(pos);
+                }
+                self.compile_expr_statement(*increment)?;
+                self.emit_loop(loop_start, line);
+
+                self.patch_jump(exit_jump);
+                for pos in ctx.break_jumps {
+                    self.patch_jump(pos);
+                }
+                Ok(())
+            }
+
+            StatementKind::ResolvedForRange {
+                slot, range, body, ..
+            } => {
+                let items = match &range.kind {
+                    StatementKind::Range(items) => items.clone(),
+                    _ => {
+                        return Err(CompileError("for-range: expected a range statement".into()));
+                    }
+                };
+
+                let mut break_jumps = Vec::new();
+                for item in items {
+                    let pre_depth = self.scope_bases.len() as u16;
+
+                    self.chunk.write_op(OpCode::PushScope, line);
+                    self.scope_bases.push(self.next_slot);
+
+                    self.emit_const(VmValue::Int(item), line);
+                    let loop_var_slot = self.next_slot + *slot as u16;
+                    self.next_slot = loop_var_slot + 1;
+                    self.emit_define_slot(loop_var_slot, line);
+
+                    self.loop_stack.push(LoopCtx {
+                        continue_target: ContinueTarget::Forward,
+                        continue_jumps: Vec::new(),
+                        break_jumps: Vec::new(),
+                        scope_depth: pre_depth,
+                    });
+                    self.compile_block(body, false, line)?;
+                    let ctx = self.loop_stack.pop().unwrap();
+
+                    self.next_slot = self.scope_bases.pop().unwrap();
+                    self.chunk.write_op(OpCode::PopScope, line);
+
+                    for pos in ctx.continue_jumps {
+                        self.patch_jump(pos);
+                    }
+                    break_jumps.extend(ctx.break_jumps);
+                }
+                for pos in break_jumps {
+                    self.patch_jump(pos);
+                }
+                Ok(())
+            }
+
+            StatementKind::ResolvedForEach {
+                slot,
+                iterable,
+                body,
+                ..
+            } => {
+                let hidden_base = self.next_slot;
+                self.next_slot += 2;
+                let arr_slot = hidden_base;
+                let idx_slot = hidden_base + 1;
+                let hidden_global = self.scope_bases.is_empty();
+
+                self.compile_expr(*iterable)?;
+                self.emit_define_slot(arr_slot, line);
+
+                self.emit_const(VmValue::Int(0), line);
+                self.emit_define_slot(idx_slot, line);
+
+                let loop_start = self.chunk.code.len();
+                self.emit_get_slot(idx_slot, hidden_global, line);
+                self.emit_get_slot(arr_slot, hidden_global, line);
+                self.chunk.write_op(OpCode::ArrLen, line);
+                self.chunk.write_op(OpCode::Less, line);
+                let exit_jump = self.emit_jump(OpCode::JumpIfFalse, line);
+
+                let pre_depth = self.scope_bases.len() as u16;
+                self.chunk.write_op(OpCode::PushScope, line);
+                self.scope_bases.push(self.next_slot);
+
+                self.emit_get_slot(arr_slot, hidden_global, line);
+                self.emit_get_slot(idx_slot, hidden_global, line);
+                self.chunk.write_op(OpCode::Index, line);
+                let loop_var_slot = self.next_slot + *slot as u16;
+                self.next_slot = loop_var_slot + 1;
+                self.emit_define_slot(loop_var_slot, line);
+
+                self.loop_stack.push(LoopCtx {
+                    continue_target: ContinueTarget::Forward,
+                    continue_jumps: Vec::new(),
+                    break_jumps: Vec::new(),
+                    scope_depth: pre_depth,
+                });
+                self.compile_block(body, false, line)?;
+                let ctx = self.loop_stack.pop().unwrap();
+
+                self.next_slot = self.scope_bases.pop().unwrap();
+                self.chunk.write_op(OpCode::PopScope, line);
+
+                for pos in ctx.continue_jumps {
+                    self.patch_jump(pos);
+                }
+                self.emit_get_slot(idx_slot, hidden_global, line);
+                self.emit_const(VmValue::Int(1), line);
+                self.chunk.write_op(OpCode::Add, line);
+                self.emit_set_slot(idx_slot, hidden_global, line);
+
+                self.emit_loop(loop_start, line);
+                self.patch_jump(exit_jump);
+                for pos in ctx.break_jumps {
+                    self.patch_jump(pos);
+                }
+
+                self.next_slot = hidden_base;
+                Ok(())
+            }
+
             StatementKind::Break => {
                 if self.loop_stack.is_empty() {
                     return Err(CompileError("`break` outside of a loop".into()));
+                }
+                let target_depth = self.loop_stack.last().unwrap().scope_depth;
+                let current_depth = self.scope_bases.len() as u16;
+                for _ in target_depth..current_depth {
+                    self.chunk.write_op(OpCode::PopScope, line);
                 }
                 let pos = self.emit_jump(OpCode::Jump, line);
                 self.loop_stack.last_mut().unwrap().break_jumps.push(pos);
@@ -138,6 +300,11 @@ impl<'a> Compiler<'a> {
             StatementKind::Continue => {
                 if self.loop_stack.is_empty() {
                     return Err(CompileError("`continue` outside of a loop".into()));
+                }
+                let target_depth = self.loop_stack.last().unwrap().scope_depth;
+                let current_depth = self.scope_bases.len() as u16;
+                for _ in target_depth..current_depth {
+                    self.chunk.write_op(OpCode::PopScope, line);
                 }
                 match self.loop_stack.last().unwrap().continue_target {
                     ContinueTarget::Backward(target) => self.emit_loop(target, line),
@@ -667,5 +834,33 @@ impl<'a> Compiler<'a> {
         sub.compile_body(body)?;
         sub.chunk.write_op(OpCode::Return, 0);
         Ok(sub.chunk)
+    }
+
+    /// Defines a raw, compiler-managed slot.
+    fn emit_define_slot(&mut self, slot: u16, line: u32) {
+        self.chunk.write_op(OpCode::DefineLocal, line);
+        self.chunk.write_u16(slot, line);
+    }
+
+    /// Reads a raw, compiler-managed slot.
+    fn emit_get_slot(&mut self, slot: u16, is_global: bool, line: u32) {
+        if is_global {
+            self.chunk.write_op(OpCode::GetGlobal, line);
+        } else {
+            self.chunk.write_op(OpCode::GetLocal, line);
+        }
+        self.chunk.write_u16(slot, line);
+    }
+
+    /// Writes a raw, compiler-managed slot and discards the leftover
+    /// value that SetLocal/SetGlobal leave on the stack.
+    fn emit_set_slot(&mut self, slot: u16, is_global: bool, line: u32) {
+        if is_global {
+            self.chunk.write_op(OpCode::SetGlobal, line);
+        } else {
+            self.chunk.write_op(OpCode::SetLocal, line);
+        }
+        self.chunk.write_u16(slot, line);
+        self.chunk.write_op(OpCode::Pop, line);
     }
 }
