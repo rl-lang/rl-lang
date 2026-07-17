@@ -210,7 +210,8 @@ impl Vm {
                 OpCode::PushScope => self.scope_starts.push(self.locals.len()),
                 OpCode::PopScope => {
                     let num_active = self.scope_starts.len() - scope_base;
-                    if num_active <= 1 {
+                    let min_active = if frames.len() > 1 { 1 } else { 0 };
+                    if num_active <= min_active {
                         return Err(VmError("cannot pop the base call frame".into()));
                     }
                     let start = self.scope_starts.pop().unwrap();

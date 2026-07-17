@@ -22,6 +22,7 @@ struct LoopCtx {
     continue_target: ContinueTarget,
     continue_jumps: Vec<usize>,
     break_jumps: Vec<usize>,
+    scope_depth: u16,
 }
 
 pub struct Compiler<'a> {
@@ -113,6 +114,7 @@ impl<'a> Compiler<'a> {
                     continue_target: ContinueTarget::Backward(loop_start),
                     continue_jumps: Vec::new(),
                     break_jumps: Vec::new(),
+                    scope_depth: self.scope_bases.len() as u16,
                 });
                 // resolver unconditionally pushes a scope for `while` bodies
                 self.compile_block(body, true, line)?;
@@ -150,6 +152,7 @@ impl<'a> Compiler<'a> {
                     continue_target: ContinueTarget::Forward,
                     continue_jumps: Vec::new(),
                     break_jumps: Vec::new(),
+                    scope_depth: self.scope_bases.len() as u16,
                 });
                 // no extra scope for the body either, matching the interpreter
                 self.compile_block(body, false, line)?;
@@ -173,6 +176,11 @@ impl<'a> Compiler<'a> {
                 if self.loop_stack.is_empty() {
                     return Err(CompileError("`break` outside of a loop".into()));
                 }
+                let target_depth = self.loop_stack.last().unwrap().scope_depth;
+                let current_depth = self.scope_bases.len() as u16;
+                for _ in target_depth..current_depth {
+                    self.chunk.write_op(OpCode::PopScope, line);
+                }
                 let pos = self.emit_jump(OpCode::Jump, line);
                 self.loop_stack.last_mut().unwrap().break_jumps.push(pos);
                 Ok(())
@@ -181,6 +189,11 @@ impl<'a> Compiler<'a> {
             StatementKind::Continue => {
                 if self.loop_stack.is_empty() {
                     return Err(CompileError("`continue` outside of a loop".into()));
+                }
+                let target_depth = self.loop_stack.last().unwrap().scope_depth;
+                let current_depth = self.scope_bases.len() as u16;
+                for _ in target_depth..current_depth {
+                    self.chunk.write_op(OpCode::PopScope, line);
                 }
                 match self.loop_stack.last().unwrap().continue_target {
                     ContinueTarget::Backward(target) => self.emit_loop(target, line),
