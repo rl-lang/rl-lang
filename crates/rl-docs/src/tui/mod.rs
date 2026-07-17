@@ -1,2 +1,3 @@
+mod formatting;
 mod types;
 
