@@ -3,6 +3,8 @@ use crate::tui::types::DocItem;
 use crate::{concept_to_markdown, std_to_markdown, tutorial_to_markdown};
 use ratatui::style::Color;
 
+/// Flattens stdlib/concept/tutorial entries into a single browsable list,
+/// pre-rendering each entry's Markdown once up front.
 pub fn build_items(
     std_entries: &[&StdEntry],
     concept_entries: &[&ConceptEntry],
@@ -38,6 +40,8 @@ pub fn build_items(
     items
 }
 
+/// Returns the indices of `items` whose label or tag contains `query`
+/// (case-insensitive). Empty query matches everything.
 pub fn filter_items(items: &[DocItem], query: &str) -> Vec<usize> {
     if query.is_empty() {
         return (0..items.len()).collect();

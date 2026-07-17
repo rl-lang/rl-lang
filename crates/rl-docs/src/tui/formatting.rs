@@ -3,6 +3,8 @@ use ratatui::{
     text::{Line, Span},
 };
 
+/// Splits `text` on `**bold**` delimiters into styled spans, alternating
+/// `base` and bold-cyan on every `**` boundary.
 pub fn parse_inline(text: &str, base: Color) -> Vec<Span<'static>> {
     let mut spans = Vec::new();
     let mut bold = false;
@@ -25,6 +27,10 @@ pub fn parse_inline(text: &str, base: Color) -> Vec<Span<'static>> {
     spans
 }
 
+/// Converts a single entry's rendered Markdown into styled ratatui lines:
+/// headers get bold/cyan treatment, fenced code blocks are colored green
+/// with the fence itself replaced by a divider, bullets get a dim marker,
+/// and everything else runs through [`parse_inline`] for `**bold**` spans.
 pub fn markdown_to_lines(content: &str) -> Vec<Line<'static>> {
     let mut lines = Vec::new();
     let mut in_code = false;

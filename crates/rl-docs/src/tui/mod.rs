@@ -38,6 +38,12 @@ mod utils;
 
 use crate::entry::{ConceptEntry, StdEntry};
 
+/// Initializes the ratatui terminal, runs the docs viewer loop, and restores
+/// the terminal on exit (mirrors [`rl_repl::start_repl`]'s init/restore pattern).
+///
+/// `initial_query` seeds the filter box - typically the `TOPIC` the user
+/// already passed to `rl docs`, so `--tui` behaves as a drop-in, browsable
+/// upgrade over the flat Markdown output.
 pub fn run_docs_tui(
     std_entries: &[&StdEntry],
     concept_entries: &[&ConceptEntry],
