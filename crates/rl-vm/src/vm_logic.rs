@@ -390,6 +390,19 @@ impl Vm {
                     self.stack.push(elem);
                 }
 
+                OpCode::ArrLen => {
+                    let arr = self.pop()?;
+                    match arr {
+                        VmValue::Arr(items) => self.stack.push(VmValue::Int(items.len() as i64)),
+                        other => {
+                            return Err(VmError(format!(
+                                "cannot get length of {}",
+                                other.type_name()
+                            )));
+                        }
+                    }
+                }
+
                 OpCode::ArrSet => {
                     let value = self.pop()?;
                     let index = self.pop()?;
