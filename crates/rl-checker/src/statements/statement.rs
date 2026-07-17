@@ -311,6 +311,15 @@ impl TypeChecker {
                 self.exit_loop();
             }
 
+            StatementKind::Loop(body) => {
+                // add loop depth
+                self.enter_loop();
+                // checks the blocks
+                self.check_block(body);
+                // remove loop depth
+                self.exit_loop();
+            }
+
             StatementKind::For {
                 initializer,
                 condition,
