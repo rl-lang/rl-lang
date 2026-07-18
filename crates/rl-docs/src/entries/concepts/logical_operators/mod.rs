@@ -77,5 +77,5 @@ pub static LOGICAL_OPERATORS: ConceptEntry = ConceptEntry {
     ],
     related: &["operators", "flow_control", "types"],
     related_stdlib: &["bitwise"],
-    since: None,
+    since: Some("v0.1.5"),
 };
