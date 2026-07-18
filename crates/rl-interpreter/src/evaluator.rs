@@ -1099,6 +1099,7 @@ impl Evaluator {
                 .chain(stdlib::debug::KEYWORDS)
                 .chain(stdlib::net::KEYWORDS)
                 .chain(stdlib::http::KEYWORDS)
+                .chain(stdlib::set::KEYWORDS)
                 .copied();
             if let Some(suggestion) = closest_match(last, candidates) {
                 err = err.with_help(format!("did you mean `{}`?", suggestion));
