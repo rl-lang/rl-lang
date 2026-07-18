@@ -169,7 +169,8 @@ impl Evaluator {
                 .with_module(stdlib::rl::module())
                 .with_module(stdlib::debug::module())
                 .with_module(stdlib::net::module())
-                .with_module(stdlib::http::module()),
+                .with_module(stdlib::http::module())
+                .with_module(stdlib::set::module()),
         )
     }
 

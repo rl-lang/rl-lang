@@ -403,3 +403,14 @@ pub mod math {
         ];
     }
 }
+
+pub mod set {
+    pub const KEYWORDS: &[&str] = &[
+        "set_add",
+        "set_contains",
+        "set_is_empty",
+        "set_len",
+        "set_remove",
+        "set_to_array"
+    ];
+}

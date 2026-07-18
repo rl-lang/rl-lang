@@ -19,3 +19,4 @@ pub mod string;
 pub mod terminal;
 pub mod time;
 pub mod types;
+pub mod set;
