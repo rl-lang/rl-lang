@@ -541,7 +541,7 @@ fn arr_range() {
     let ev = eval_program(
         r#"
 get arr_range from std::array
-dec arr[int] x = arr_range(0, 5, 1)
+dec arr[int] x = arr_range(0, 5, 1)?
 "#,
     )
     .unwrap();
