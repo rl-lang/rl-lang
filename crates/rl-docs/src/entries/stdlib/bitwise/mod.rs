@@ -24,7 +24,7 @@ pub static BITWISE: StdEntry = StdEntry {
     name: "bitwise",
     description: "functions for bitwise operations on byte and int values",
     functions: FUNCTIONS,
-    since: None,
+    since: Some("v0.1.5"),
     unstable: false,
 };
 
