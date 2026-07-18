@@ -1,19 +1,23 @@
 use crate::entry::{FnEntry, StdEntry};
 
 mod is_bool;
+mod is_byte;
 mod is_char;
+mod is_error;
 mod is_float;
 mod is_int;
 mod is_null;
 mod is_string;
 mod to_bin;
 mod to_bool;
+mod to_byte;
 mod to_char;
 mod to_float;
 mod to_hex;
 mod to_int;
 mod to_oct;
 mod to_string;
+mod unwrap_error;
 
 pub static TYPES: StdEntry = StdEntry {
     name: "types",
@@ -38,4 +42,8 @@ static FUNCTIONS: &[&FnEntry] = &[
     &to_int::TO_INT,
     &to_oct::TO_OCT,
     &to_string::TO_STRING,
+    &is_error::IS_ERROR,
+    &is_byte::IS_BYTE,
+    &to_byte::TO_BYTE,
+    &unwrap_error::UNWRAP_ERROR,
 ];
