@@ -28,15 +28,16 @@ impl TypeChecker {
         let found = self.scopes.iter().rev().find_map(|scope| {
             scope
                 .get(name)
-                .map(|item| (item.type_annotation.clone(), item.is_const))
+                .map(|item| (item.type_annotation.clone(), item.is_const, item.decl_span))
         });
 
-        if let Some((item_type, is_const)) = found {
+        if let Some((item_type, is_const, decl_span)) = found {
             let kind = if is_const { "const" } else { "variable" };
             self.push_hover(
                 span,
                 format!("```rl\n{} {}: {}\n```", kind, name, item_type.info()),
             );
+            self.definiations.push((span, decl_span));
             return item_type;
         }
 

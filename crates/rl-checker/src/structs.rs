@@ -27,6 +27,8 @@ pub struct TypeChecker {
     /// `(span, markdown)` pairs collected at every declaration and usage site,
     /// consumed by the LSP hover provider.
     pub hovers: Vec<(Span, String)>,
+    /// `(usage_span, declaration_span)` pairs consumed by the LSP goto-defination provider
+    pub definiations: Vec<(Span, Span)>,
     pub base_dir: Option<PathBuf>,
     pub importing: Vec<PathBuf>,
     pub imported: HashMap<PathBuf, Option<HashSet<String>>>,
@@ -43,6 +45,7 @@ pub struct ScopeItem {
     pub type_annotation: CheckType,
     /// Whether this binding is immutable (`CONST`).
     pub is_const: bool,
+    pub decl_span: Span,
 }
 
 /// The type of a value as seen by the static checker.
