@@ -27,7 +27,7 @@ pub fn check_arity_range(
     span: Span,
 ) -> Result<(), Error> {
     let len = args.len();
-    if !(expected_from..expected_to).contains(&len) {
+    if !(expected_from..=expected_to).contains(&len) {
         let message = format!(
             "{}: expected from {} to {} arg(s), got {}",
             name,
