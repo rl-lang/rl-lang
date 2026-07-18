@@ -1,31 +1,4 @@
-use std::rc::Rc;
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum VmValue {
-    Null,
-    Int(i64),
-    Float(f64),
-    Bool(bool),
-    Byte(u8),
-    Char(char),
-    Str(Rc<str>),
-    Function(Rc<VmFunction>),
-}
-
-#[derive(Debug)]
-pub struct VmFunction {
-    pub name: String,
-    pub arity: usize,
-    pub chunk: Chunk,
-}
-
-// VmValue derives PartialEq, so VmFunction needs it too - compare by
-// identity (name+arity) rather than deep-comparing bytecode
-impl PartialEq for VmFunction {
-    fn eq(&self, other: &Self) -> bool {
-        self.name == other.name && self.arity == other.arity
-    }
-}
+use crate::VmValue;
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -80,16 +53,44 @@ pub enum OpCode {
     Call = 23,
     GetGlobal = 24,
     SetGlobal = 25,
+    /// Ok(...)
+    Ok = 26,
+    /// Err(...)
+    Err = 27,
+    /// ?
+    Propagate = 28,
+    /// Error(...)
+    Error = 29,
+    /// build an array from the top N stack values
+    BuildArr = 30,
+    /// arr[index] -> element
+    Index = 31,
+    /// pops value, index, arr -> pushes a new arr with that element replaced
+    ArrSet = 32,
+    /// build a tuple fromthe top N stack values
+    BuildTuple = 33,
+    /// builds a set from the top N stack values
+    BuildSet = 34,
+    /// builds a map from the top N*2 stack values
+    BuildMap = 35,
+    /// builds a record
+    BuildRecord = 36,
+    /// variable.field
+    FieldGet = 37,
+    /// variable.field = value
+    FieldSet = 38,
+    BuildClosure = 39,
+    ArrLen = 40,
 }
 
 impl OpCode {
     /// # Safety
-    /// `byte` must be valid discriminant (0..25)
+    /// `byte` must be valid discriminant (0..28)
     /// and that's only true for bytecode emitted by this compiler
     #[inline(always)]
     pub fn from_u8_unchecked(byte: u8) -> Self {
         debug_assert!(
-            byte <= OpCode::SetGlobal as u8,
+            byte <= OpCode::ArrLen as u8,
             "corrupt bytecode: opcode {byte}"
         );
         unsafe { std::mem::transmute::<u8, OpCode>(byte) }
@@ -125,6 +126,21 @@ impl OpCode {
             23 => OpCode::Call,
             24 => OpCode::GetGlobal,
             25 => OpCode::SetGlobal,
+            26 => OpCode::Ok,
+            27 => OpCode::Err,
+            28 => OpCode::Propagate,
+            29 => OpCode::Error,
+            30 => OpCode::BuildArr,
+            31 => OpCode::Index,
+            32 => OpCode::ArrSet,
+            33 => OpCode::BuildTuple,
+            34 => OpCode::BuildSet,
+            35 => OpCode::BuildMap,
+            36 => OpCode::BuildRecord,
+            37 => OpCode::FieldGet,
+            38 => OpCode::FieldSet,
+            39 => OpCode::BuildClosure,
+            40 => OpCode::ArrLen,
             other => panic!("corrupt bytecode: unknown opcode byte {other}"),
         }
     }
@@ -165,7 +181,9 @@ impl Chunk {
     /// search for same value in constants vector and return its index
     /// if no similar values found it will append new value and return its index
     pub fn add_constant(&mut self, value: VmValue) -> u16 {
-        if let Some(pos) = self.constants.iter().position(|c| *c == value) {
+        if !matches!(value, VmValue::Function(_))
+            && let Some(pos) = self.constants.iter().position(|c| *c == value)
+        {
             return pos as u16;
         }
         self.constants.push(value);

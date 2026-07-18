@@ -248,8 +248,10 @@ impl Evaluator {
             }
             Value::Set { items, .. } => {
                 let inner = items
-                    .first()
-                    .map(|v| Self::infer_type(v, false))
+                    .borrow()
+                    .iter()
+                    .next()
+                    .map(|k| Self::infer_type(&k.clone().into_value(), false))
                     .unwrap_or(TypeAnnotation::Null);
                 if is_const {
                     TypeAnnotation::CSet(Box::new(inner))
@@ -498,8 +500,9 @@ impl Evaluator {
                     .map(|v| Self::infer_type(v, false))
                     .unwrap_or(TypeAnnotation::Null);
 
-                if items_type != TypeAnnotation::Null {
-                    for (i, v) in values.iter().enumerate() {
+                let mut set = std::collections::HashSet::with_capacity(len);
+                for (i, v) in values.iter().enumerate() {
+                    if items_type != TypeAnnotation::Null {
                         let actual = Self::infer_type(v, false);
                         if !Self::types_compatible(&actual, &items_type) {
                             return Err(self.err(
@@ -511,13 +514,19 @@ impl Evaluator {
                             ));
                         }
                     }
+                    let key = MapKey::from_value(v).ok_or_else(|| {
+                        self.err(
+                            format!("type {} cannot be a set element", v.type_name()),
+                            span,
+                        )
+                    })?;
+                    set.insert(key);
                 }
                 Ok(Value::Set {
                     items_type,
-                    items: values,
+                    items: Rc::new(RefCell::new(set)),
                 })
             }
-
             ExpressionKind::MapLiteral(entries) => {
                 let len = entries.len();
                 let mut map = HashMap::with_capacity(len);

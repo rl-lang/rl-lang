@@ -20,10 +20,10 @@ use rl_docs::{
     entry::{ConceptEntry, StdEntry},
     std_to_markdown, tutorial_to_markdown,
 };
-use rl_tooling::format::format_tokens;
 use rl_tooling::new::create_project;
 use rl_tooling::package::{find_embedded, package};
 use rl_tooling::workflows::generate;
+use rl_tooling::{format::format_tokens, package::EmbeddedProgram};
 use std::path::PathBuf;
 
 use crate::logic_loops::{eval_loop, lexing_loop, parsing_loop};
@@ -141,6 +141,10 @@ enum Commands {
         #[arg(value_name = "TOPIC")]
         topic: Option<String>,
 
+        /// Browse docs in an interactive terminal UI instead of printing them
+        #[arg(long)]
+        tui: bool,
+
         /// Print output as JSON instead of Markdown
         #[arg(long)]
         json: bool,
@@ -164,6 +168,28 @@ enum Commands {
         /// Custom path for --output (implies --output)
         #[arg(long, value_name = "PATH")]
         out_file: Option<PathBuf>,
+
+        /// Generate docs for current project
+        #[arg(long)]
+        generate: bool,
+
+        /// Also emit an HTML version of the generated site (used with --generate)
+        #[arg(long)]
+        html: bool,
+
+        /// Path to a client-side syntax-highlighter script for `.rl` code
+        /// blocks, inlined into the generated site in place of the
+        /// built-in highlighter (used with --generate --html)
+        #[arg(long, value_name = "PATH")]
+        highlight_js: Option<PathBuf>,
+
+        /// Skip inlining any syntax-highlighter script (used with --generate --html)
+        #[arg(long)]
+        no_highlight: bool,
+
+        /// Custom path for --generate
+        #[arg(long, value_name = "PATH")]
+        out_dir: Option<PathBuf>,
     },
 
     /// Start the LSP server over stdio
@@ -177,8 +203,9 @@ enum Commands {
 
     /// Package a .rl file into a self-contained binary
     #[command(after_help = "EXAMPLES:\n    \
-                             rl package script.rl\n    \
-                             rl package script.rl --output myprogram")]
+                                 rl package script.rl\n    \
+                                 rl package script.rl --output myprogram\n    \
+                                 rl package script.rl --vm")]
     Package {
         /// Path to the .rl source file to package
         #[arg(value_name = "FILE")]
@@ -187,11 +214,37 @@ enum Commands {
         /// Output binary path
         #[arg(short, long, value_name = "PATH", default_value = "program")]
         output: String,
+
+        /// Compile to .rlc bytecode first and embed that (compressed)
+        /// instead of the raw source text. The resulting binary loads
+        /// straight into the VM at startup, skipping lex/parse/compile.
+        #[arg(long)]
+        vm: bool,
     },
 
     Format {
         #[arg(value_name = "FILE")]
         file: PathBuf,
+    },
+
+    /// Compile a .rl source file to .rlc bytecode
+    #[command(
+        long_about = "Lex, parse, resolve, and compile a .rl source file to bytecode, \
+                           writing the result as a .rlc file.\n\n\
+                           The resulting .rlc file can be run directly with `rl run`, \
+                           skipping the lex/parse/compile step.",
+        after_help = "EXAMPLES:\n    \
+                           rl compile script.rl\n    \
+                           rl compile script.rl --output out.rlc"
+    )]
+    Compile {
+        /// Path to the .rl file to compile
+        #[arg(value_name = "FILE")]
+        file: PathBuf,
+
+        /// Output .rlc path (defaults to FILE with its extension changed to .rlc)
+        #[arg(short, long, value_name = "PATH")]
+        output: Option<PathBuf>,
     },
 }
 
@@ -200,14 +253,34 @@ fn main() {
     env_logger::init();
 
     // expriemental
-    if let Some(source) = find_embedded() {
-        let sf = SourceFile::new("program", source);
-        let tokens = lexing_loop(sf.clone());
-        let (ast, statements) = parsing_loop(sf.clone(), tokens);
-        if cfg!(feature = "eval") {
-            eval_loop(sf, ast, statements, 1);
+    match find_embedded() {
+        Some(EmbeddedProgram::Source(source)) => {
+            let sf = SourceFile::new("program", source);
+            let tokens = lexing_loop(sf.clone());
+            let (ast, statements) = parsing_loop(sf.clone(), tokens);
+            if cfg!(feature = "eval") {
+                eval_loop(sf, ast, statements, 1);
+            }
+            return;
         }
-        return;
+        Some(EmbeddedProgram::Bytecode(bytes)) => {
+            #[cfg(all(feature = "eval", feature = "vm"))]
+            {
+                use crate::logic_loops::run_rlc_bytes;
+                run_rlc_bytes(&bytes, "program");
+            }
+            #[cfg(not(all(feature = "eval", feature = "vm")))]
+            {
+                let _ = bytes;
+                eprintln!(
+                    "error: running vm-packaged binaries requires the `eval` and `vm` features"
+                );
+                std::process::exit(1);
+            }
+            #[allow(unreachable_code)]
+            return;
+        }
+        None => {}
     }
 
     let cli = Cli::parse();
@@ -219,6 +292,22 @@ fn main() {
             cranelift,
             ..
         } => {
+            let is_rlc = file.extension().and_then(|e| e.to_str()) == Some("rlc");
+
+            if is_rlc {
+                #[cfg(all(feature = "eval", feature = "vm"))]
+                {
+                    use crate::logic_loops::run_rlc_file;
+                    run_rlc_file(&file);
+                    return;
+                }
+                #[cfg(not(all(feature = "eval", feature = "vm")))]
+                {
+                    eprintln!("error: running .rlc files requires the `eval` and `vm` features");
+                    std::process::exit(1);
+                }
+            }
+
             let path = file
                 .to_str()
                 .unwrap_or_else(|| {
@@ -233,6 +322,33 @@ fn main() {
             let source = SourceFile::new(&*path, source_text);
             let tokens = lexing_loop(source.clone());
             let (ast, statements) = parsing_loop(source.clone(), tokens);
+            // temporary solution
+            // should be updated when:
+            // *_loop accept refernce instead
+            // `vm` and `cranelift` get separate compile command so it wouldn't
+            // need the recompilation on every run step
+            // thus no check every time
+            #[cfg(feature = "eval")]
+            {
+                let tokens = lexing_loop(source.clone());
+                let (checker_ast, checker_statements) = parsing_loop(source.clone(), tokens);
+                use rl_checker::TypeChecker;
+                let base_dir = file
+                    .parent()
+                    .map(std::path::Path::to_path_buf)
+                    .unwrap_or_else(|| std::path::PathBuf::from("."));
+                let mut checker = TypeChecker::new()
+                    .with_source_file(source.clone())
+                    .with_ast_arena(checker_ast)
+                    .with_base_dir(base_dir);
+                let errors = checker.check(&checker_statements);
+                if !errors.is_empty() {
+                    for e in errors {
+                        e.report_to_stderr();
+                    }
+                    std::process::exit(1);
+                }
+            }
             if vm {
                 #[cfg(all(feature = "eval", feature = "vm"))]
                 crate::logic_loops::vm_loop(source, ast, statements);
@@ -247,7 +363,7 @@ fn main() {
                     std::process::exit(1)
                 }
             } else if cranelift {
-                #[cfg(all(feature = "eval", feature = "vm", feature = "eval"))]
+                #[cfg(all(feature = "cranelift", feature = "vm", feature = "eval"))]
                 crate::logic_loops::cranelift_loop(source, ast, statements);
                 #[cfg(not(all(feature = "eval", feature = "cranelift", feature = "vm")))]
                 {
@@ -340,7 +456,170 @@ fn main() {
             stdlib,
             output,
             out_file,
+            generate,
+            html,
+            highlight_js,
+            no_highlight,
+            out_dir,
+            tui,
         } => {
+            if generate {
+                #[cfg(feature = "eval")]
+                {
+                    let config = read_rl_toml();
+                    let path = std::path::PathBuf::from(&config.project.entry);
+                    let source_text = std::fs::read_to_string(&path).unwrap_or_else(|_| {
+                        eprintln!(
+                            "error: could not read entry file '{}'",
+                            config.project.entry
+                        );
+                        std::process::exit(1);
+                    });
+                    println!("[{}] v{}", config.project.name, config.project.version);
+                    let source = SourceFile::new(&*config.project.entry, source_text);
+                    let tokens = lexing_loop(source.clone());
+                    let (ast, statements) = parsing_loop(source.clone(), tokens);
+
+                    use rl_checker::TypeChecker;
+                    let mut checker = TypeChecker::new()
+                        .with_source_file(source)
+                        .with_ast_arena(ast)
+                        .with_base_dir(
+                            path.parent()
+                                .unwrap_or_else(|| std::path::Path::new("."))
+                                .to_path_buf(),
+                        );
+                    let errors = checker.check(&statements);
+                    if errors.is_empty() {
+                        println!("check complete");
+                    } else {
+                        for e in errors {
+                            e.report_to_stderr();
+                        }
+                        std::process::exit(1);
+                    }
+
+                    let parent = match path.parent() {
+                        Some(p) => p,
+                        None => {
+                            eprintln!("error when formatting");
+                            std::process::exit(1);
+                        }
+                    };
+
+                    // format every .rl file in the project
+                    let entries = match std::fs::read_dir(parent) {
+                        Ok(p) => p,
+                        Err(e) => {
+                            eprintln!("error when formatting: {}", e);
+                            std::process::exit(1);
+                        }
+                    };
+                    for entry in entries {
+                        let entry = match entry {
+                            Ok(e) => e,
+                            Err(e) => {
+                                eprintln!("error: {}", e);
+                                continue;
+                            }
+                        };
+                        let file_path = entry.path();
+                        if file_path.extension().and_then(|e| e.to_str()) != Some("rl") {
+                            continue;
+                        }
+                        let source_text =
+                            std::fs::read_to_string(&file_path).unwrap_or_else(|_| {
+                                eprintln!("error: could not read file '{}'", file_path.display());
+                                std::process::exit(1);
+                            });
+                        let source = SourceFile::new(&*file_path.to_string_lossy(), source_text);
+                        let tokens = lexing_loop(source);
+                        let formatted = format_tokens(&tokens);
+                        if let Err(e) = std::fs::write(&file_path, formatted) {
+                            eprintln!("error: {}", e);
+                        }
+                    }
+
+                    // generate website from /// doc comments
+                    use rl_tooling::generate_docs::{
+                        extract_doc_items, write_doc_site, write_doc_site_html,
+                    };
+                    let entries = match std::fs::read_dir(parent) {
+                        Ok(p) => p,
+                        Err(e) => {
+                            eprintln!("error when generating website: {}", e);
+                            std::process::exit(1);
+                        }
+                    };
+                    let mut all_items = Vec::new();
+                    for entry in entries {
+                        let entry = match entry {
+                            Ok(e) => e,
+                            Err(e) => {
+                                eprintln!("error: {}", e);
+                                continue;
+                            }
+                        };
+                        let file_path = entry.path();
+                        if file_path.extension().and_then(|e| e.to_str()) != Some("rl") {
+                            continue;
+                        }
+                        let source_text =
+                            std::fs::read_to_string(&file_path).unwrap_or_else(|_| {
+                                eprintln!("error: could not read file '{}'", file_path.display());
+                                std::process::exit(1);
+                            });
+                        let source = SourceFile::new(&*file_path.to_string_lossy(), source_text);
+                        let tokens = lexing_loop(source);
+                        let file_name = file_path
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("unknown.rl")
+                            .to_string();
+                        all_items.extend(extract_doc_items(&tokens, &file_name));
+                    }
+
+                    let p = match parent.parent() {
+                        Some(p) => p,
+                        None => parent,
+                    };
+                    let doc_out_dir = match out_dir {
+                        Some(p) => p,
+                        None => p.join("docs_site"),
+                    };
+
+                    if html {
+                        if let Err(e) = write_doc_site_html(
+                            &all_items,
+                            &doc_out_dir,
+                            &config.project.name,
+                            highlight_js.as_deref(),
+                            no_highlight,
+                        ) {
+                            eprintln!("error: failed to write html doc site: {}", e);
+                            std::process::exit(1);
+                        }
+                        println!(
+                            "html doc site written to '{}/index.html'",
+                            doc_out_dir.display()
+                        );
+                    } else {
+                        if let Err(e) =
+                            write_doc_site(&all_items, &doc_out_dir, &config.project.name)
+                        {
+                            eprintln!("error: failed to write doc site: {}", e);
+                            std::process::exit(1);
+                        }
+                        println!(
+                            "doc site written to '{}' ({} items)",
+                            doc_out_dir.display(),
+                            all_items.len()
+                        );
+                    }
+                }
+                return;
+            }
+
             let std_entries = stdlib_entries();
             let concept_entries = concept_entries();
             let tutorial_entries = tutorial_entries();
@@ -415,6 +694,29 @@ fn main() {
                 }
             };
 
+            if tui {
+                #[cfg(feature = "docs-tui")]
+                {
+                    if let Err(e) = rl_docs::tui::run_docs_tui(
+                        &matched_std,
+                        &matched_concepts,
+                        &matched_tutorial,
+                        topic.as_deref(),
+                    ) {
+                        eprintln!("error: docs tui failed: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+                #[cfg(not(feature = "docs-tui"))]
+                {
+                    eprintln!(
+                        "error: this build of rl was compiled without --tui support (missing 'docs-tui' feature)"
+                    );
+                    std::process::exit(1);
+                }
+                return;
+            }
+
             let rendered = if json {
                 match docs_to_json(&matched_std, &matched_concepts, &matched_tutorial) {
                     Ok(s) => s,
@@ -467,12 +769,58 @@ fn main() {
             }
         },
 
-        Commands::Package { file, output } => {
+        Commands::Package { file, output, vm } => {
             let path = file.to_str().unwrap_or_else(|| {
                 eprintln!("error: invalid file path");
                 std::process::exit(1);
             });
-            package(path, &output);
+
+            if vm {
+                #[cfg(all(feature = "eval", feature = "vm"))]
+                {
+                    use crate::logic_loops::compile_to_chunk;
+
+                    let source_text = std::fs::read_to_string(&file).unwrap_or_else(|_| {
+                        eprintln!("error: could not read file '{}'", file.display());
+                        std::process::exit(1);
+                    });
+                    let source = SourceFile::new(path, source_text);
+                    let tokens = lexing_loop(source.clone());
+                    let (ast, statements) = parsing_loop(source.clone(), tokens);
+
+                    let checker_tokens = lexing_loop(source.clone());
+                    let (checker_ast, checker_statements) =
+                        parsing_loop(source.clone(), checker_tokens);
+                    use rl_checker::TypeChecker;
+                    use rl_tooling::package::package_vm;
+                    let base_dir = file
+                        .parent()
+                        .map(std::path::Path::to_path_buf)
+                        .unwrap_or_else(|| std::path::PathBuf::from("."));
+                    let mut checker = TypeChecker::new()
+                        .with_source_file(source.clone())
+                        .with_ast_arena(checker_ast)
+                        .with_base_dir(base_dir);
+                    let errors = checker.check(&checker_statements);
+                    if !errors.is_empty() {
+                        for e in errors {
+                            e.report_to_stderr();
+                        }
+                        std::process::exit(1);
+                    }
+
+                    let chunk = compile_to_chunk(source, ast, statements);
+                    let bytecode = rl_vm::serialize_chunk(&chunk);
+                    package_vm(&bytecode, &output);
+                }
+                #[cfg(not(all(feature = "eval", feature = "vm")))]
+                {
+                    eprintln!("error: `package --vm` requires the `eval` and `vm` features");
+                    std::process::exit(1);
+                }
+            } else {
+                package(path, &output);
+            }
         }
 
         Commands::Format { file } => {
@@ -494,6 +842,63 @@ fn main() {
             if let Err(e) = std::fs::write(path, formatted) {
                 eprintln!("error: {}", e);
             };
+        }
+
+        Commands::Compile { file, output } => {
+            #[cfg(all(feature = "eval", feature = "vm"))]
+            {
+                use crate::logic_loops::compile_to_chunk;
+                let path = file
+                    .to_str()
+                    .unwrap_or_else(|| {
+                        eprintln!("error: invalid file path");
+                        std::process::exit(1);
+                    })
+                    .to_string();
+                let source_text = std::fs::read_to_string(&file).unwrap_or_else(|_| {
+                    eprintln!("error: could not read file '{}'", file.display());
+                    std::process::exit(1);
+                });
+                let source = SourceFile::new(&*path, source_text);
+                let tokens = lexing_loop(source.clone());
+                let (ast, statements) = parsing_loop(source.clone(), tokens);
+
+                let checker_tokens = lexing_loop(source.clone());
+                let (checker_ast, checker_statements) =
+                    parsing_loop(source.clone(), checker_tokens);
+                use rl_checker::TypeChecker;
+                let base_dir = file
+                    .parent()
+                    .map(std::path::Path::to_path_buf)
+                    .unwrap_or_else(|| std::path::PathBuf::from("."));
+                let mut checker = TypeChecker::new()
+                    .with_source_file(source.clone())
+                    .with_ast_arena(checker_ast)
+                    .with_base_dir(base_dir);
+                let errors = checker.check(&checker_statements);
+                if !errors.is_empty() {
+                    for e in errors {
+                        e.report_to_stderr();
+                    }
+                    std::process::exit(1);
+                }
+
+                let chunk = compile_to_chunk(source, ast, statements);
+                let bytes = rl_vm::serialize_chunk(&chunk);
+
+                let out_path = output.unwrap_or_else(|| file.with_extension("rlc"));
+                if let Err(e) = std::fs::write(&out_path, &bytes) {
+                    eprintln!("error: failed to write '{}': {}", out_path.display(), e);
+                    std::process::exit(1);
+                }
+                println!("compiled '{}' -> '{}'", file.display(), out_path.display());
+            }
+            #[cfg(not(all(feature = "eval", feature = "vm")))]
+            {
+                let _ = (file, output);
+                eprintln!("error: `compile` requires the `eval` and `vm` features");
+                std::process::exit(1);
+            }
         }
     }
 }

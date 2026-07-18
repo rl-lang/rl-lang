@@ -158,8 +158,8 @@ impl Evaluator {
                 let val = self.evaluate(*value)?;
                 let val = match val {
                     Value::Set { items, .. } => {
-                        for item in &items {
-                            let actual = Self::infer_type(item, false);
+                        for key in items.borrow().iter() {
+                            let actual = Self::infer_type(&key.clone().into_value(), false);
                             if !Self::types_compatible(&actual, type_annotation) {
                                 return Err(self.err(
                                     format!(
@@ -195,8 +195,8 @@ impl Evaluator {
                 let val = self.evaluate(*value)?;
                 let val = match val {
                     Value::Set { items, .. } => {
-                        for item in &items {
-                            let actual = Self::infer_type(item, false);
+                        for key in items.borrow().iter() {
+                            let actual = Self::infer_type(&key.clone().into_value(), false);
                             if !Self::types_compatible(&actual, type_annotation) {
                                 return Err(self.err(
                                     format!(
@@ -328,6 +328,29 @@ impl Evaluator {
                             ));
                     }
                 }
+                self.push_scope();
+                for statement in body {
+                    self.evaluate_statement(statement)?;
+                    if self.return_value.is_some() || self.is_breaking || self.is_continuing {
+                        break;
+                    }
+                }
+                self.pop_scope();
+                if self.is_breaking {
+                    self.is_breaking = false;
+                    break;
+                }
+
+                if self.is_continuing {
+                    self.is_continuing = false;
+                }
+
+                if self.return_value.is_some() {
+                    break;
+                }
+            },
+
+            StatementKind::Loop(body) => loop {
                 self.push_scope();
                 for statement in body {
                     self.evaluate_statement(statement)?;

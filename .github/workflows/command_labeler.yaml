@@ -1,0 +1,70 @@
+name: Slash Command Labeler
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  label:
+    if: startsWith(github.event.comment.body, '/label ')
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Parse and Validate Label
+        id: parse
+        run: |
+          ALLOWED_LABELS=("bug" "in progress" "help wanted" "question")
+
+          # Extract the label argument from the comment (everything after "/label ")
+          INPUT_LABEL=$(echo "${{ github.event.comment.body }}" | sed 's/\/label //g' | xargs)
+
+          # Convert input to lowercase for case-insensitive comparison
+          INPUT_LOWER=$(echo "$INPUT_LABEL" | tr '[:upper:]' '[:lower:]')
+
+          # Alias "help" to "help wanted"
+          if [ "$INPUT_LOWER" = "help" ]; then
+            INPUT_LOWER="help wanted"
+          fi
+
+          # Alias "wip" to "in progress"
+          if [ "$INPUT_LOWER" = "wip" ]; then
+            INPUT_LOWER="in progress"
+          fi
+
+          # Alias "q" to "question"
+          if [ "$INPUT_LOWER" = "q" ]; then
+            INPUT_LOWER="question"
+          fi
+
+          # Check if the requested label is allowed
+          MATCHED_LABEL=""
+          for ALLOWED in "${ALLOWED_LABELS[@]}"; do
+            if [ "$INPUT_LOWER" = "$ALLOWED" ]; then
+              # Keep the original casing from the allowed list to match GitHub exactly
+              MATCHED_LABEL="$ALLOWED"
+              break
+            fi
+          done
+
+          # Output the result
+          if [ -n "$MATCHED_LABEL" ]; then
+            echo "valid=true" >> $GITHUB_OUTPUT
+            echo "label=$MATCHED_LABEL" >> $GITHUB_OUTPUT
+            echo "Valid label found: '$MATCHED_LABEL'"
+          else
+            echo "valid=false" >> $GITHUB_OUTPUT
+            echo "Label '$INPUT_LABEL' is not in the whitelist. Ignoring."
+          fi
+
+      - name: Apply Label
+        if: steps.parse.outputs.valid == 'true'
+        run: |
+          gh issue edit "$NUMBER" --add-label "$LABEL"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.issue.number }}
+          LABEL: ${{ steps.parse.outputs.label }}

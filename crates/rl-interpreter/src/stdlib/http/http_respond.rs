@@ -31,7 +31,7 @@ pub fn func(eval: &mut Evaluator, args: Vec<Value>, span: Span) -> Result<Value,
         }
     };
 
-    let body = match extract_string(args[1].clone(), "http_respond") {
+    let body = match extract_string(args[2].clone(), "http_respond") {
         Ok(s) => s,
         Err(e) => return Ok(verr!(vs!(format!("{e}")))),
     };

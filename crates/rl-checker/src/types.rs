@@ -2,12 +2,14 @@
 
 use crate::structs::{CheckType, ScopeItem};
 use rl_ast::statements::TypeAnnotation;
+use rl_utils::span::Span;
 
 impl ScopeItem {
-    pub fn new(type_annotation: CheckType, is_const: bool) -> Self {
+    pub fn new(type_annotation: CheckType, is_const: bool, decl_span: Span) -> Self {
         Self {
             type_annotation,
             is_const,
+            decl_span,
         }
     }
 }
@@ -214,5 +216,7 @@ fn const_matches(a: &TypeAnnotation, b: &TypeAnnotation) -> bool {
             | (TypeAnnotation::Map(_, _), TypeAnnotation::CMap(_, _))
             | (TypeAnnotation::Set(_), TypeAnnotation::CSet(_))
             | (TypeAnnotation::CSet(_), TypeAnnotation::Set(_))
+            | (TypeAnnotation::Array(_), TypeAnnotation::CArray(_))
+            | (TypeAnnotation::CArray(_), TypeAnnotation::Array(_))
     )
 }

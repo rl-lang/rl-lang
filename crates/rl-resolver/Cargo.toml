@@ -2,6 +2,9 @@
 name = "rl-resolver"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+description = "Name and import resolution for the rl-lang programming language"
+repository.workspace = true
 
 [dependencies]
 rl-ast.workspace = true

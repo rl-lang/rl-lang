@@ -107,6 +107,7 @@ pub enum TokenType {
     Match,
     Record,
     Tag,
+    Loop,
 
     // -- type keywords --
     Int,

@@ -2,6 +2,9 @@
 name = "rl-lsp"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+description = "Language Server Protocol implementation for the rl-lang programming language"
+repository.workspace = true
 
 [dependencies]
 rl-lexer.workspace = true

@@ -2,7 +2,11 @@
 name = "rl-vm"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+description = "Bytecode virtual machine for the rl-lang programming language"
+repository.workspace = true
 
 [dependencies]
 rl-ast.workspace = true
 rl-lexer.workspace = true
+zstd.workspace = true

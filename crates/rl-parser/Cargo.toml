@@ -2,6 +2,9 @@
 name = "rl-parser"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+description = "Parser for the rl-lang programming language"
+repository.workspace = true
 
 [dependencies]
 rl-ast.workspace = true

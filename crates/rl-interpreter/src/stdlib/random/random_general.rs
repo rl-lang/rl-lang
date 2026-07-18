@@ -1,6 +1,6 @@
 use crate::{
     evaluator::Evaluator,
-    stdlib::common::{verr, vi, vok, vs},
+    stdlib::common::{vby, verr, vi, vok, vs},
     values::Value,
 };
 use rl_ast::statements::TypeAnnotation;
@@ -85,6 +85,9 @@ pub fn choices(eval: &mut Evaluator, array: Value, count: i64) -> Value {
 
     match array.clone() {
         Value::Values { items_type, items } => {
+            if items.is_empty() {
+                return verr!(vs!("array is empty".to_string()));
+            }
             let result = (0..count)
                 .map(|_| {
                     items[eval
@@ -142,13 +145,13 @@ pub fn char(eval: &mut Evaluator) -> char {
     eval.rng.generate_random_int_range(32, 126) as u8 as char
 }
 
-pub fn byte(eval: &mut Evaluator) -> i64 {
-    eval.rng.generate_random_int_range(0, 255)
+pub fn byte(eval: &mut Evaluator) -> u8 {
+    eval.rng.generate_random_int_range(0, 255) as u8
 }
 
 pub fn string(eval: &mut Evaluator, count: i64) -> Value {
-    if count as usize <= 0 {
-        return verr!(vs!("count cannot be less than zero".to_string()));
+    if count <= 0 {
+        return verr!(vs!("count cannot be less than or equal to zero".to_string()));
     }
 
     let result: String = (0..count).map(|_| char(eval)).collect();
@@ -157,14 +160,14 @@ pub fn string(eval: &mut Evaluator, count: i64) -> Value {
 }
 
 pub fn bytes(eval: &mut Evaluator, count: i64) -> Value {
-    if count as usize <= 0 {
+    if count <= 0 {
         return verr!(vs!("count cannot be less than zero".to_string()));
     }
 
-    let result: Vec<Value> = (0..count).map(|_| vi!(byte(eval))).collect();
+    let result: Vec<Value> = (0..count).map(|_| vby!(byte(eval))).collect();
 
     vok!(Value::Values {
-        items_type: TypeAnnotation::Int,
+        items_type: TypeAnnotation::Byte,
         items: result,
     })
 }

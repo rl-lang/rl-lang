@@ -20,8 +20,8 @@ dec arr[(int, string)] z = arr_zip(a, b)
         ev.get_value_raw("z"),
         Some(Value::Values {
             items_type: TypeAnnotation::Tuple(Rc::new(vec![
-                TypeAnnotation::Null,
-                TypeAnnotation::Null,
+                TypeAnnotation::Int,
+                TypeAnnotation::String,
             ])),
             items: vec![
                 Value::Tuple(vec![Value::Integer(1), Value::String("one".to_string())]),
@@ -47,8 +47,8 @@ dec arr[(int, int)] z = arr_zip(a, b)
         ev.get_value_raw("z"),
         Some(Value::Values {
             items_type: TypeAnnotation::Tuple(Rc::new(vec![
-                TypeAnnotation::Null,
-                TypeAnnotation::Null,
+                TypeAnnotation::Int,
+                TypeAnnotation::Int,
             ])),
             items: vec![
                 Value::Tuple(vec![Value::Integer(10), Value::Integer(1)]),
@@ -149,8 +149,8 @@ dec arr[(int, string)] z = arr_zip(a, b)
         ev.get_value_raw("z"),
         Some(Value::Values {
             items_type: TypeAnnotation::Tuple(Rc::new(vec![
-                TypeAnnotation::Null,
-                TypeAnnotation::Null,
+                TypeAnnotation::Int,
+                TypeAnnotation::String,
             ])),
             items: vec![Value::Tuple(vec![
                 Value::Integer(42),

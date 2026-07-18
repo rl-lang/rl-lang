@@ -27,6 +27,12 @@ pub struct TypeChecker {
     /// `(span, markdown)` pairs collected at every declaration and usage site,
     /// consumed by the LSP hover provider.
     pub hovers: Vec<(Span, String)>,
+    /// `(usage_span, declaration_span)` pairs consumed by the LSP goto-defination provider
+    pub definitions: Vec<(Span, Span)>,
+    /// Declaration span of each `record` type name keyed by name
+    pub record_spans: HashMap<String, Span>,
+    /// Declaration span of each `tag` type name keyed by name
+    pub tag_spans: HashMap<String, Span>,
     pub base_dir: Option<PathBuf>,
     pub importing: Vec<PathBuf>,
     pub imported: HashMap<PathBuf, Option<HashSet<String>>>,
@@ -43,6 +49,7 @@ pub struct ScopeItem {
     pub type_annotation: CheckType,
     /// Whether this binding is immutable (`CONST`).
     pub is_const: bool,
+    pub decl_span: Span,
 }
 
 /// The type of a value as seen by the static checker.

@@ -5,6 +5,7 @@ pub fn format_tokens(tokens: &[Token]) -> String {
     let mut indent: usize = 0;
     let mut at_line_start = true;
     let mut prev: Option<&TokenType> = None;
+    let mut prev_minus_is_unary = false;
 
     for tok in tokens {
         for t in &tok.leading_trivia {
@@ -64,29 +65,71 @@ pub fn format_tokens(tokens: &[Token]) -> String {
             _ => {
                 if at_line_start {
                     out.push_str(&"    ".repeat(indent));
-                } else if let Some(p) = prev
-                    && needs_space(p, &tok.token)
-                {
-                    out.push(' ');
+                } else if let Some(p) = prev {
+                    let space = if matches!(p, TokenType::Minus) && prev_minus_is_unary {
+                        false
+                    } else {
+                        needs_space(p, &tok.token)
+                    };
+                    if space {
+                        out.push(' ');
+                    }
                 }
                 out.push_str(&tok.lexeme);
                 at_line_start = false;
+                if matches!(tok.token, TokenType::Minus) {
+                    prev_minus_is_unary = !is_value_token(prev);
+                }
                 prev = Some(&tok.token);
             }
         }
 
         for t in &tok.trailing_trivia {
-            if let Trivia::LineComment(c) = t {
-                out.push_str(" // ");
-                out.push_str(c);
+            match t {
+                Trivia::LineComment(c) => {
+                    out.push_str("// ");
+                    out.push_str(c);
+                }
+                Trivia::DocComment(c) => {
+                    out.push_str("/// ");
+                    out.push_str(c);
+                }
+                Trivia::BlockComment(c) => {
+                    out.push_str("/*");
+                    out.push_str(c);
+                    out.push_str("*/");
+                }
+                Trivia::BlankLine => {}
             }
         }
     }
     out
 }
 
+/// Whether a token can end an expression / stand in as a value, meaning a
+/// `-` immediately following it is a binary (subtraction) operator rather
+/// than a unary negation.
+fn is_value_token(prev: Option<&TokenType>) -> bool {
+    use TokenType::*;
+    matches!(
+        prev,
+        Some(
+            Identifier(_)
+                | NumberLiteral(_)
+                | ByteLiteral(_)
+                | StringLiteral(_)
+                | CharacterLiteral(_)
+                | FloatLiteral(_)
+                | BoolLiteral(_)
+                | RightParen
+                | RightBracket
+                | Null
+        )
+    )
+}
+
 /// Decides whether a space belongs between two adjacent real tokens.
-fn needs_space(prev: &TokenType, curr: &TokenType) -> bool {
+pub fn needs_space(prev: &TokenType, curr: &TokenType) -> bool {
     use TokenType::*;
 
     // never a space right after these "opening"/tight tokens
@@ -112,9 +155,19 @@ fn needs_space(prev: &TokenType, curr: &TokenType) -> bool {
         return false;
     }
 
-    // function/index calls: identifier immediately followed by ( or [
-    if matches!(curr, LeftParen | LeftBracket)
-        && matches!(prev, Identifier(_) | RightParen | RightBracket)
+    // function calls: identifier (or a value-producing expression)
+    // immediately followed by (
+    if matches!(curr, LeftParen) && matches!(prev, Identifier(_) | RightParen | RightBracket) {
+        return false;
+    }
+
+    // index expressions and generic type brackets: `arr[i]`, `arr[string]`,
+    // `map[string, int]`, `result[int]`, `set[int]`, etc.
+    if matches!(curr, LeftBracket)
+        && matches!(
+            prev,
+            Identifier(_) | RightParen | RightBracket | Array | Map | Set | Result
+        )
     {
         return false;
     }

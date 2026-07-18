@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>main.rl - http_server</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<h1>main.rl</h1>
+<section class="item">
+<h2><code class="kind">fn</code> path_only <span class="line">line 10</span></h2>
+<pre class="sig rl-code">fn path_only(string url) -&gt; string</pre>
+<p class="doc">Strips the query string from a URL, returning just the path portion.<br>
+Return the URL unchanged if it has no `?`.</p>
+</section>
+<section class="item">
+<h2><code class="kind">fn</code> query_param <span class="line">line 20</span></h2>
+<pre class="sig rl-code">fn query_param(string url, string key) -&gt; string</pre>
+<p class="doc">Looks up a single query parameter&#39;s value for URL by key.<br>
+Return `&quot;&quot;` if the URL has no query string or the key isn&#39;t present.</p>
+</section>
+<section class="item">
+<h2><code class="kind">fn</code> main <span class="line">line 45</span></h2>
+<pre class="sig rl-code">fn main()</pre>
+<p class="doc">Starts the HTTp server on 127.0.0.1:8000 and serves requests forver,<br>
+routing on the request path: `/`, `/time`, `/hits`, `/echo`, and a<br>
+catch-all 404 for everything else.</p>
+</section>
+<script src="rl-highlight.js"></script>
+</body>
+</html>

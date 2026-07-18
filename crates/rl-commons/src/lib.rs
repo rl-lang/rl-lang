@@ -32,6 +32,14 @@ impl ModuleNames {
         if path.is_empty() {
             return false;
         }
+        let path = if path.first().map(String::as_str) == Some(self.name.as_str()) {
+            &path[1..]
+        } else {
+            path
+        };
+        if path.is_empty() {
+            return false;
+        }
         let mut module = self;
         for seg in &path[..path.len() - 1] {
             match module.submodules.get(seg) {

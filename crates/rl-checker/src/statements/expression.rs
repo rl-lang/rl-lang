@@ -391,6 +391,9 @@ impl TypeChecker {
 
             ExpressionKind::StructLiteral { name, fields } => {
                 if let Some(declared_fields) = self.records.get(&name).cloned() {
+                    if let Some(decl_span) = self.record_spans.get(&name) {
+                        self.definitions.push((expr_span, *decl_span));
+                    }
                     for (field_name, value) in &fields {
                         let value_span = self.ast_arena.exprs.get(*value).span;
                         let value_type = self.check_expression(*value);
@@ -517,6 +520,9 @@ impl TypeChecker {
             }
 
             ExpressionKind::EnumVariant { enum_name, variant } => {
+                if let Some(decl_span) = self.tag_spans.get(&enum_name) {
+                    self.definitions.push((expr_span, *decl_span));
+                }
                 match self.tags.get(&enum_name) {
                     Some(variants) => {
                         if !variants.contains(&variant) {

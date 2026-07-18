@@ -2,5 +2,8 @@
 name = "rl-commons"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+description = "Common types shared across rl-lang crates to break dependency cycles"
+repository.workspace = true
 
 [dependencies]

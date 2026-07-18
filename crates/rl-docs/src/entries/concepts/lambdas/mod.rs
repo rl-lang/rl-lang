@@ -37,5 +37,5 @@ pub static LAMBDAS: ConceptEntry = ConceptEntry {
     pitfalls: &["captured variables are snapshotted at creation, not live-referenced"],
     related: &["functions", "closures"],
     related_stdlib: &[],
-    since: None,
+    since: Some("v0.1.5"),
 };

@@ -67,6 +67,7 @@ impl Tokenizer {
             "tag" => self.add_token(TokenType::Tag),
             "map" => self.add_token(TokenType::Map),
             "set" => self.add_token(TokenType::Set),
+            "loop" => self.add_token(TokenType::Loop),
             "_" => self.add_token(TokenType::Wildcard),
 
             &_ => self.add_token(TokenType::Identifier(value)),

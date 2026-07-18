@@ -5,22 +5,26 @@ get time_now, format_time_str, format_date_str from std::time
 get split, index_of, slice, format from std::str
 get len, arr_range from std::array
 
+/// Strips the query string from a URL, returning just the path portion.
+/// Return the URL unchanged if it has no `?`.
 fn path_only(string url) -> string {
-    dec int q = index_of(url, "?")
+    dec int q = index_of(url, "?")?
     if (q == -1) {
         return url
     }
-    return slice(url, 0, q)
+    return slice(url, 0, q)?
 }
 
+/// Looks up a single query parameter's value for URL by key.
+/// Return `""` if the URL has no query string or the key isn't present.
 fn query_param(string url, string key) -> string {
     dec int q = index_of(url, "?")
     if (q == -1) {
         return ""
     }
-    dec string query = slice(url, q + 1, len(url))
+    dec string query = slice(url, q + 1, len(url))?
     dec arr[string] pairs = split(query, "&")
-    dec arr[int] range = arr_range(0, pairs.len(), 1)
+    dec arr[int] range = arr_range(0, pairs.len(), 1)?
 
     for i in range {
         dec string pair = pairs[i]
@@ -28,13 +32,16 @@ fn query_param(string url, string key) -> string {
         if (eq == -1) {
             continue
         }
-        if (slice(pair, 0, eq) == key) {
-            return slice(pair, eq + 1, len(pair))
+        if (slice(pair, 0, eq)? == key) {
+            return slice(pair, eq + 1, len(pair))?
         }
     }
     return ""
 }
 
+/// Starts the HTTp server on 127.0.0.1:8000 and serves requests forver,
+/// routing on the request path: `/`, `/time`, `/hits`, `/echo`, and a
+/// catch-all 404 for everything else.
 fn main() {
     dec result[int] start_result = http_server_start("127.0.0.1:8080")
     if (is_err(start_result)) {
@@ -58,10 +65,10 @@ fn main() {
 
         if (path == "/") {
             dec string body = format(
-                "welcome to my rl-lang server\ndate: {}\ntime: {}\nhits so far: {}\n",
-                result_unwrap(format_date_str(time_now())),
-                result_unwrap(format_time_str(time_now())),
-                hits
+            "welcome to my rl-lang server\ndate: {}\ntime: {}\nhits so far: {}\n",
+            result_unwrap(format_date_str(time_now())),
+            result_unwrap(format_time_str(time_now())),
+            hits
             )
             result_unwrap(http_respond(req, 200, body, "text/plain"))
         } else if (path == "/time") {

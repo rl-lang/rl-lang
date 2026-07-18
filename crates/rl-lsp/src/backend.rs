@@ -4,8 +4,11 @@
 //! latest source text. Every file event updates this cache so [`hover`] always
 //! has the most recent content to work with.
 
+use crate::goto_definition::run_goto_definition;
 use crate::hover::run_hover;
 use crate::pipeline::run_pipeline;
+use crate::references::run_references;
+use crate::rename::run_rename;
 use std::collections::HashMap;
 use tokio::sync::RwLock;
 use tower_lsp::jsonrpc::Result;
@@ -35,6 +38,9 @@ impl LanguageServer for Backend {
                     TextDocumentSyncKind::FULL,
                 )),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
+                definition_provider: Some(OneOf::Left(true)),
+                references_provider: Some(OneOf::Left(true)),
+                rename_provider: Some(OneOf::Left(true)),
                 ..Default::default()
             },
             ..Default::default()
@@ -86,6 +92,47 @@ impl LanguageServer for Backend {
         };
 
         Ok(run_hover(source, position, uri))
+    }
+
+    async fn goto_definition(
+        &self,
+        params: GotoDefinitionParams,
+    ) -> Result<Option<GotoDefinitionResponse>> {
+        let uri = &params.text_document_position_params.text_document.uri;
+        let position = params.text_document_position_params.position;
+
+        let docs = self.docs.read().await;
+        let Some(source) = docs.get(uri) else {
+            return Ok(None);
+        };
+
+        Ok(run_goto_definition(source, position, uri))
+    }
+
+    async fn references(&self, params: ReferenceParams) -> Result<Option<Vec<Location>>> {
+        let uri = &params.text_document_position.text_document.uri;
+        let position = params.text_document_position.position;
+        let include_declaration = params.context.include_declaration;
+
+        let docs = self.docs.read().await;
+        let Some(source) = docs.get(uri) else {
+            return Ok(None);
+        };
+
+        Ok(run_references(source, position, uri, include_declaration))
+    }
+
+    async fn rename(&self, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
+        let uri = &params.text_document_position.text_document.uri;
+        let position = params.text_document_position.position;
+        let new_name = &params.new_name;
+
+        let docs = self.docs.read().await;
+        let Some(source) = docs.get(uri) else {
+            return Ok(None);
+        };
+
+        Ok(run_rename(source, position, uri, new_name))
     }
 
     // do nothing when the editor shuts down
