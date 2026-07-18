@@ -25,6 +25,7 @@ mod backend;
 mod goto_definition;
 mod hover;
 mod pipeline;
+mod refernces;
 mod to_diagnostic;
 mod utils;
 

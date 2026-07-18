@@ -7,6 +7,7 @@
 use crate::goto_definition::run_goto_definition;
 use crate::hover::run_hover;
 use crate::pipeline::run_pipeline;
+use crate::refernces::run_references;
 use std::collections::HashMap;
 use tokio::sync::RwLock;
 use tower_lsp::jsonrpc::Result;
@@ -37,6 +38,7 @@ impl LanguageServer for Backend {
                 )),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 definition_provider: Some(OneOf::Left(true)),
+                references_provider: Some(OneOf::Left(true)),
                 ..Default::default()
             },
             ..Default::default()
@@ -103,6 +105,19 @@ impl LanguageServer for Backend {
         };
 
         Ok(run_goto_definition(source, position, uri))
+    }
+
+    async fn references(&self, params: ReferenceParams) -> Result<Option<Vec<Location>>> {
+        let uri = &params.text_document_position.text_document.uri;
+        let position = params.text_document_position.position;
+        let include_declaration = params.context.include_declaration;
+
+        let docs = self.docs.read().await;
+        let Some(source) = docs.get(uri) else {
+            return Ok(None);
+        };
+
+        Ok(run_references(source, position, uri, include_declaration))
     }
 
     // do nothing when the editor shuts down
