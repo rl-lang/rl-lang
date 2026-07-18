@@ -60,7 +60,7 @@ impl TypeChecker {
             loop_depth: 0,
             stdlib_fn_names,
             hovers: Vec::new(),
-            definiations: Vec::new(),
+            definitions: Vec::new(),
             base_dir: None,
             importing: Vec::new(),
             imported: HashMap::new(),

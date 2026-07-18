@@ -37,7 +37,7 @@ impl TypeChecker {
                 span,
                 format!("```rl\n{} {}: {}\n```", kind, name, item_type.info()),
             );
-            self.definiations.push((span, decl_span));
+            self.definitions.push((span, decl_span));
             return item_type;
         }
 
