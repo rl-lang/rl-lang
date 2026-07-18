@@ -6,12 +6,12 @@ use rl_utils::{source::SourceFile, span::Span};
 
 use tower_lsp::lsp_types::{Location, Position, Range, Url};
 
-pub fn run_references(
+pub fn run_references_spans(
     source: &str,
     position: Position,
     uri: &Url,
     include_declaration: bool,
-) -> Option<Vec<Location>> {
+) -> Option<Vec<Span>> {
     let offset = position_to_offset(source, position);
     let file_name = uri
         .to_file_path()
@@ -34,7 +34,6 @@ pub fn run_references(
         .with_base_dir(base_dir);
     checker.check(&statements);
 
-    // cursor can be on a usage OR right on the declaration itself - check both
     let target_decl: Span = checker
         .definitions
         .iter()
@@ -61,6 +60,17 @@ pub fn run_references(
 
     spans.sort_by_key(|s| s.start);
     spans.dedup();
+
+    Some(spans)
+}
+
+pub fn run_references(
+    source: &str,
+    position: Position,
+    uri: &Url,
+    include_declaration: bool,
+) -> Option<Vec<Location>> {
+    let spans = run_references_spans(source, position, uri, include_declaration)?;
 
     Some(
         spans
