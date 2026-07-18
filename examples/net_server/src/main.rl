@@ -8,7 +8,7 @@ fn main() {
     println("choose mode:")
     println("\t1| server")
     println("\t2| client")
-    match read_int("your choice: ") {
+    match read_int("your choice: ")? {
         1 => {
             serve()
         }

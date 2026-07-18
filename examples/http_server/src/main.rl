@@ -8,11 +8,11 @@ get len, arr_range from std::array
 /// Strips the query string from a URL, returning just the path portion.
 /// Return the URL unchanged if it has no `?`.
 fn path_only(string url) -> string {
-    dec int q = index_of(url, "?")
+    dec int q = index_of(url, "?")?
     if (q == -1) {
         return url
     }
-    return slice(url, 0, q)
+    return slice(url, 0, q)?
 }
 
 /// Looks up a single query parameter's value for URL by key.
@@ -22,9 +22,9 @@ fn query_param(string url, string key) -> string {
     if (q == -1) {
         return ""
     }
-    dec string query = slice(url, q + 1, len(url))
+    dec string query = slice(url, q + 1, len(url))?
     dec arr[string] pairs = split(query, "&")
-    dec arr[int] range = arr_range(0, pairs.len(), 1)
+    dec arr[int] range = arr_range(0, pairs.len(), 1)?
 
     for i in range {
         dec string pair = pairs[i]
@@ -32,8 +32,8 @@ fn query_param(string url, string key) -> string {
         if (eq == -1) {
             continue
         }
-        if (slice(pair, 0, eq) == key) {
-            return slice(pair, eq + 1, len(pair))
+        if (slice(pair, 0, eq)? == key) {
+            return slice(pair, eq + 1, len(pair))?
         }
     }
     return ""
