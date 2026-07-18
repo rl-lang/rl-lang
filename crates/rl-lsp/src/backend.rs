@@ -4,6 +4,7 @@
 //! latest source text. Every file event updates this cache so [`hover`] always
 //! has the most recent content to work with.
 
+use crate::goto_definition::run_goto_definition;
 use crate::hover::run_hover;
 use crate::pipeline::run_pipeline;
 use std::collections::HashMap;
@@ -35,6 +36,7 @@ impl LanguageServer for Backend {
                     TextDocumentSyncKind::FULL,
                 )),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
+                definition_provider: Some(OneOf::Left(true)),
                 ..Default::default()
             },
             ..Default::default()
@@ -86,6 +88,21 @@ impl LanguageServer for Backend {
         };
 
         Ok(run_hover(source, position, uri))
+    }
+
+    async fn goto_definition(
+        &self,
+        params: GotoDefinitionParams,
+    ) -> Result<Option<GotoDefinitionResponse>> {
+        let uri = &params.text_document_position_params.text_document.uri;
+        let position = params.text_document_position_params.position;
+
+        let docs = self.docs.read().await;
+        let Some(source) = docs.get(uri) else {
+            return Ok(None);
+        };
+
+        Ok(run_goto_definition(source, position, uri))
     }
 
     // do nothing when the editor shuts down
