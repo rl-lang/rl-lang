@@ -16,6 +16,7 @@ static FUNCTIONS: &[&FnEntry] = &[
     &CONTAINS,
     &COUNT,
     &ENDS_WITH,
+    &FORMAT,
     &INDEX_OF,
     &IS_EMPTY,
     &JOIN,
@@ -32,7 +33,6 @@ static FUNCTIONS: &[&FnEntry] = &[
     &TRIM,
     &TRIM_END,
     &TRIM_START,
-    &FORMAT,
 ];
 
 static BYTES: FnEntry = FnEntry {
