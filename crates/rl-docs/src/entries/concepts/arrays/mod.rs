@@ -106,5 +106,5 @@ pub static ARRAYS: ConceptEntry = ConceptEntry {
     ],
     related: &["types", "tuples", "sets", "maps"],
     related_stdlib: &["array"],
-    since: None,
+    since: Some("v0.1.5"),
 };
