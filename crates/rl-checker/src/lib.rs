@@ -61,6 +61,8 @@ impl TypeChecker {
             stdlib_fn_names,
             hovers: Vec::new(),
             definitions: Vec::new(),
+            record_spans: HashMap::new(),
+            tag_spans: HashMap::new(),
             base_dir: None,
             importing: Vec::new(),
             imported: HashMap::new(),
@@ -106,9 +108,11 @@ impl TypeChecker {
             }
             if let StatementKind::RecordDeclaration { name, fields } = &statement.kind {
                 self.records.insert(name.clone(), fields.clone());
+                self.record_spans.insert(name.clone(), statement.span);
             }
             if let StatementKind::TagDeclaration { name, variants } = &statement.kind {
                 self.tags.insert(name.clone(), variants.clone());
+                self.tag_spans.insert(name.clone(), statement.span);
             }
         }
         for statement in statements {

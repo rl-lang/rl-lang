@@ -29,6 +29,10 @@ pub struct TypeChecker {
     pub hovers: Vec<(Span, String)>,
     /// `(usage_span, declaration_span)` pairs consumed by the LSP goto-defination provider
     pub definitions: Vec<(Span, Span)>,
+    /// Declaration span of each `record` type name keyed by name
+    pub record_spans: HashMap<String, Span>,
+    /// Declaration span of each `tag` type name keyed by name
+    pub tag_spans: HashMap<String, Span>,
     pub base_dir: Option<PathBuf>,
     pub importing: Vec<PathBuf>,
     pub imported: HashMap<PathBuf, Option<HashSet<String>>>,
