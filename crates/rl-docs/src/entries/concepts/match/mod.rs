@@ -35,5 +35,5 @@ pub static MATCH: ConceptEntry = ConceptEntry {
     pitfalls: &["arms only support literals and `_`, no OR-patterns or bindings"],
     related: &["control flow"],
     related_stdlib: &[],
-    since: None,
+    since: Some("v0.1.5"),
 };
