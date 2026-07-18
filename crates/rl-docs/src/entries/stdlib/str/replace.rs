@@ -1,6 +1,6 @@
 use crate::entry::FnEntry;
 
-static REPLACE: FnEntry = FnEntry {
+pub static REPLACE: FnEntry = FnEntry {
     signature: "replace(str, from, to)",
     description: "replaces all occurrences of from with to in str",
     example: "get std::str::replace\n\nreplace(\"foo bar foo\", \"foo\", \"baz\")",

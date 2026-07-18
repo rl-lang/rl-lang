@@ -1,6 +1,6 @@
 use crate::entry::FnEntry;
 
-static TRIM_END: FnEntry = FnEntry {
+pub static TRIM_END: FnEntry = FnEntry {
     signature: "trim_end(str)",
     description: "removes trailing whitespace from str",
     example: "get std::str::trim_end\n\ntrim_end(\"hi  \")",

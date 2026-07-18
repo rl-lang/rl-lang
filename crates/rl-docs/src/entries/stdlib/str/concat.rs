@@ -1,6 +1,6 @@
 use crate::entry::FnEntry;
 
-static CONCAT: FnEntry = FnEntry {
+pub static CONCAT: FnEntry = FnEntry {
     signature: "concat(a, b, ...)",
     description: "concatenates any number of values into a single string",
     example: "get std::str::concat\n\nconcat(\"hello\", \" \", \"world\")",

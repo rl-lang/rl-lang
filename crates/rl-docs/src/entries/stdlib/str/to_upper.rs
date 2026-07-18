@@ -1,6 +1,6 @@
 use crate::entry::FnEntry;
 
-static TO_UPPER: FnEntry = FnEntry {
+pub static TO_UPPER: FnEntry = FnEntry {
     signature: "to_upper(str)",
     description: "returns str with all characters converted to uppercase",
     example: "get std::str::to_upper\n\nto_upper(\"hello\")",

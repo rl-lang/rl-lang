@@ -1,6 +1,6 @@
 use crate::entry::FnEntry;
 
-static CHAR_AT: FnEntry = FnEntry {
+pub static CHAR_AT: FnEntry = FnEntry {
     signature: "char_at(str, index)",
     description: "returns the character at the given index",
     example: "get std::str::char_at\n\nchar_at(\"hello\", 1)?",

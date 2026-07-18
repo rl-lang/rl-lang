@@ -1,6 +1,6 @@
 use crate::entry::FnEntry;
 
-static TRIM: FnEntry = FnEntry {
+pub static TRIM: FnEntry = FnEntry {
     signature: "trim(str)",
     description: "removes leading and trailing whitespace from str",
     example: "get std::str::trim\n\ntrim(\"  hi  \")",

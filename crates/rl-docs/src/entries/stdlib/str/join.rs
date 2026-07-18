@@ -1,6 +1,6 @@
 use crate::entry::FnEntry;
 
-static JOIN: FnEntry = FnEntry {
+pub static JOIN: FnEntry = FnEntry {
     signature: "join(arr, delim)",
     description: "joins an array into a string with delim between each element",
     example: "get std::str::join\n\njoin([\"a\", \"b\", \"c\"], \"-\")?",

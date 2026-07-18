@@ -1,6 +1,6 @@
 use crate::entry::FnEntry;
 
-static SLICE: FnEntry = FnEntry {
+pub static SLICE: FnEntry = FnEntry {
     signature: "slice(str, start, end)",
     description: "returns a substring from start to end (exclusive)",
     example: "get std::str::slice\n\nslice(\"hello\", 1, 4)?",

@@ -1,6 +1,6 @@
 use crate::entry::FnEntry;
 
-static TO_LOWER: FnEntry = FnEntry {
+pub static TO_LOWER: FnEntry = FnEntry {
     signature: "to_lower(str)",
     description: "returns str with all characters converted to lowercase",
     example: "get std::str::to_lower\n\nto_lower(\"HELLO\")",

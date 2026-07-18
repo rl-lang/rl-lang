@@ -1,6 +1,6 @@
 use crate::entry::FnEntry;
 
-static FORMAT: FnEntry = FnEntry {
+pub static FORMAT: FnEntry = FnEntry {
     signature: "format(template, ...)",
     description: "replaces each \"{}\" in template with the corresponding argument, in order",
     example: "get std::str::format\n\nformat(\"{} is {}\", \"age\", 30)",

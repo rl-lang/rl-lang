@@ -1,6 +1,6 @@
 use crate::entry::FnEntry;
 
-static IS_EMPTY: FnEntry = FnEntry {
+pub static IS_EMPTY: FnEntry = FnEntry {
     signature: "is_empty(str)",
     description: "true if the string has no characters",
     example: "get std::str::is_empty\n\nis_empty(\"\")",

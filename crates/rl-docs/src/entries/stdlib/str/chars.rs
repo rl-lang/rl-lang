@@ -1,6 +1,6 @@
 use crate::entry::FnEntry;
 
-static CHARS: FnEntry = FnEntry {
+pub static CHARS: FnEntry = FnEntry {
     signature: "chars(str)",
     description: "returns a char array of each character in the string",
     example: "get std::str::chars\n\nchars(\"hi\")",

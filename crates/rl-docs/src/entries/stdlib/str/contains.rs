@@ -1,6 +1,6 @@
 use crate::entry::FnEntry;
 
-static CONTAINS: FnEntry = FnEntry {
+pub static CONTAINS: FnEntry = FnEntry {
     signature: "contains(str, sub)",
     description: "true if str contains the substring sub",
     example: "get std::str::contains\n\ncontains(\"hello\", \"ell\")",

@@ -1,6 +1,6 @@
 use crate::entry::FnEntry;
 
-static SPLIT: FnEntry = FnEntry {
+pub static SPLIT: FnEntry = FnEntry {
     signature: "split(str, delim)",
     description: "splits str by delim and returns a string array",
     example: "get std::str::split\n\nsplit(\"a,b,c\", \",\")",

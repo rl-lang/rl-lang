@@ -1,6 +1,6 @@
 use crate::entry::FnEntry;
 
-static INDEX_OF: FnEntry = FnEntry {
+pub static INDEX_OF: FnEntry = FnEntry {
     signature: "index_of(str, sub)",
     description: "returns the character index of the first occurrence of sub, or -1 if not found",
     example: "get std::str::index_of\n\nindex_of(\"hello\", \"ll\")",
