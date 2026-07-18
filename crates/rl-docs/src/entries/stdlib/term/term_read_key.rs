@@ -7,7 +7,7 @@ pub static TERM_READ_KEY: FnEntry = FnEntry {
 
 term_read_key()?"#,
     expected_output: Some("\"Char:a\""),
-    returns: "result[string] or result[array[string]]",
+    returns: "result[string] or result[arr[string]]",
     errors: Some(
         r#"Will return error if reading the input event fails.
 
