@@ -4,11 +4,11 @@
 //! # Layout
 //!
 //!
-//! [ magic: b"RLZ2" ]
+//! [ magic: b"RLZ3" ]
 //! [ zstd-compressed payload ]
 //!
 //!
-//! The payload, once decompressed, is the RLC2 format:
+//! The payload, once decompressed, is the RLC3 format:
 //!
 //!
 //! [ string pool ]
@@ -29,20 +29,20 @@
 //! A chunk is encoded as:
 //!
 //!
-//! uvarint code_len | code bytes | line_table | uvarint const_count | constant*
+//! uvarint code_len | code bytes | span_table | uvarint const_count | constant*
 //!
 //!
-//! The line table is run-length encoded rather than storing one line
-//! number per bytecode byte, since consecutive instructions usually
-//! share a line:
+//! The span table is run-length encoded rather than storing one
+//! (start, end) byte-offset pair per bytecode byte, since consecutive
+//! instructions usually share a span:
 //!
 //!
-//! uvarint run_count | (ivarint line_delta, uvarint run_length)*
+//! uvarint run_count | (ivarint start_delta, ivarint end_delta, uvarint run_length)*
 //!
 //!
-//! line_delta is relative to the previous run's line (first run
-//! relative to 0), which keeps it small since consecutive lines are
-//! usually +0 or +1.
+//! start_delta/end_delta are relative to the previous run's start/end
+//! (first run relative to 0), which keeps them small since nearby
+//! instructions usually point at nearby source ranges.
 //!
 //! Each constant starts with a 1-byte tag (see [write_value] /
 //! [read_value]) followed by its payload. Function constants embed a
@@ -51,7 +51,7 @@
 //! running process's stdlib [Module] tree on load, since function
 //! pointers can't be serialized across processes/builds.
 //!
-//! All integers (lengths, counts, arities, ints, line deltas) are
+//! All integers (lengths, counts, arities, ints, span deltas) are
 //! encoded as ULEB128/zigzag-LEB128 varints rather than fixed-width
 //! fields, since most values in practice are small.
 //!
@@ -68,8 +68,9 @@ use std::rc::Rc;
 use crate::chunk::Chunk;
 use crate::native::Module;
 use crate::values::{RecordFields, VmFunction, VmMapKey, VmValue};
+use rl_utils::span::Span;
 
-const MAGIC: &[u8; 4] = b"RLZ2";
+const MAGIC: &[u8; 4] = b"RLZ3";
 
 /// zstd compression level. 1 = fastest/worst ratio, 22 = slowest/best
 /// ratio. 19 is "high" without being the extreme, slow tail of the
@@ -306,31 +307,34 @@ fn write_str(s: &str, out: &mut Vec<u8>) {
 fn write_chunk(chunk: &Chunk, pool: &StringPoolBuilder, out: &mut Vec<u8>) {
     write_uvarint(chunk.code.len() as u64, out);
     out.extend_from_slice(&chunk.code);
-    write_lines_rle(&chunk.lines, out);
+    write_spans_rle(&chunk.spans, out);
     write_uvarint(chunk.constants.len() as u64, out);
     for c in &chunk.constants {
         write_value(c, pool, out);
     }
 }
 
-/// Encodes a per-instruction line table as runs of (line, run_length)
-/// rather than one line number per bytecode byte, since consecutive
-/// instructions overwhelmingly share the same line.
-fn write_lines_rle(lines: &[u32], out: &mut Vec<u8>) {
-    let mut runs: Vec<(u32, u32)> = Vec::new();
-    for &line in lines {
+/// Encodes a per-instruction span table as runs of (span, run_length)
+/// rather than one (start, end) pair per bytecode byte, since
+/// consecutive instructions overwhelmingly share the same span.
+fn write_spans_rle(spans: &[Span], out: &mut Vec<u8>) {
+    let mut runs: Vec<(Span, u32)> = Vec::new();
+    for &span in spans {
         match runs.last_mut() {
-            Some((last_line, count)) if *last_line == line => *count += 1,
-            _ => runs.push((line, 1)),
+            Some((last_span, count)) if *last_span == span => *count += 1,
+            _ => runs.push((span, 1)),
         }
     }
 
     write_uvarint(runs.len() as u64, out);
-    let mut prev_line: i64 = 0;
-    for (line, count) in runs {
-        write_ivarint(line as i64 - prev_line, out);
+    let mut prev_start: i64 = 0;
+    let mut prev_end: i64 = 0;
+    for (span, count) in runs {
+        write_ivarint(span.start as i64 - prev_start, out);
+        write_ivarint(span.end as i64 - prev_end, out);
         write_uvarint(count as u64, out);
-        prev_line = line as i64;
+        prev_start = span.start as i64;
+        prev_end = span.end as i64;
     }
 }
 
@@ -511,7 +515,7 @@ fn read_chunk(
     let code_len = cursor.uvarint()? as usize;
     let code = cursor.take(code_len)?.to_vec();
 
-    let lines = read_lines_rle(cursor, code_len)?;
+    let spans = read_spans_rle(cursor, code_len)?;
 
     let const_count = cursor.uvarint()? as usize;
     let mut constants = Vec::with_capacity(const_count);
@@ -522,29 +526,32 @@ fn read_chunk(
     Ok(Chunk {
         code,
         constants,
-        lines,
+        spans,
     })
 }
 
-fn read_lines_rle(cursor: &mut Cursor, code_len: usize) -> Result<Vec<u32>, BytecodeError> {
+fn read_spans_rle(cursor: &mut Cursor, code_len: usize) -> Result<Vec<Span>, BytecodeError> {
     let run_count = cursor.uvarint()? as usize;
-    let mut lines = Vec::with_capacity(code_len);
-    let mut prev_line: i64 = 0;
+    let mut spans = Vec::with_capacity(code_len);
+    let mut prev_start: i64 = 0;
+    let mut prev_end: i64 = 0;
     for _ in 0..run_count {
-        let delta = cursor.ivarint()?;
-        let line = prev_line + delta;
-        prev_line = line;
+        let start = prev_start + cursor.ivarint()?;
+        let end = prev_end + cursor.ivarint()?;
+        prev_start = start;
+        prev_end = end;
+        let span = Span::new(start as usize, end as usize);
         let count = cursor.uvarint()?;
         for _ in 0..count {
-            lines.push(line as u32);
+            spans.push(span);
         }
     }
-    if lines.len() != code_len {
+    if spans.len() != code_len {
         return Err(BytecodeError(
-            "corrupt .rlc file: line table length mismatch".to_string(),
+            "corrupt .rlc file: span table length mismatch".to_string(),
         ));
     }
-    Ok(lines)
+    Ok(spans)
 }
 
 fn read_value(
