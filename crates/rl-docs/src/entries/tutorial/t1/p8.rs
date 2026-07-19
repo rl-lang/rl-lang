@@ -1,43 +1,41 @@
 use crate::entry::{ConceptCategory, ConceptEntry, DescriptionEntry, DescriptionKind};
-pub static STEP_FUNCTIONS: ConceptEntry = ConceptEntry {
-    name: "8. grouping logic into functions",
-    summary: "grouping logic into functions",
-    category: ConceptCategory::Functions,
+pub static STEP_FOR_LOOPS: ConceptEntry = ConceptEntry {
+    name: "8. for loops",
+    summary: "for loops",
+    category: ConceptCategory::ControlFlow,
     prerequisites: &[],
     descriptions: &[
         DescriptionEntry {
             kind: DescriptionKind::Explanation,
             title: None,
-            description: "a function is a named block of code you can call by name. instead of copying the same lines everywhere you write them once as a function and call it wherever you need it",
+            description: "while loops are great when you do not know how many times you will loop. when you do know, a for loop is cleaner. the range form goes from a start number up to but not including the end",
+            examples: &["for i in 0..5 {\n    println(i)\n}\n// 0\n// 1\n// 2\n// 3\n// 4"],
+            expected_output: &[],
+        },
+        DescriptionEntry {
+            kind: DescriptionKind::Explanation,
+            title: None,
+            description: "the C-style for loop gives you full control: an initializer, a condition, and an increment, all in one line",
             examples: &[
-                "fn greet(string name) {\n    println(\"hello \")\n    println(name)\n}\n\ngreet(\"Ali\")\ngreet(\"Sara\")",
+                "for [int i = 1, i <= 5, i += 1] {\n    println(i)\n}\n// 1\n// 2\n// 3\n// 4\n// 5",
             ],
             expected_output: &[],
         },
         DescriptionEntry {
             kind: DescriptionKind::Explanation,
             title: None,
-            description: "functions can give back a value with return. you declare what type they return with -> after the parameter list",
+            description: "you can also loop over the elements of an array directly without needing an index at all",
             examples: &[
-                "fn add(int a, int b) -> int {\n    return a + b\n}\n\ndec int res = add(3, 4)\nprintln(result) // 7",
+                "dec arr[string] days = [\"sat\", \"sun\", \"mon\"]\n\nfor day in days {\n    println(day)\n}",
             ],
             expected_output: &[],
         },
         DescriptionEntry {
             kind: DescriptionKind::Explanation,
             title: None,
-            description: "functions can call themselves, this is called recursion. each call works on a smaller version of the problem until it hits a base case that stops the recursion",
+            description: "exercise: before the game starts, print a row of dashes as a divider using a for loop. then after the game ends print a summary showing each attempt number\n\nexpected output:\n  ----------\n  welcome to the guessing game!\n  ----------",
             examples: &[
-                "fn countdown(int n) {\n    if (n == 0) {\n        println(\"go!\")\n        return\n    }\n    println(n)\n    countdown(n - 1)\n}\n\ncountdown(3)\n// 3\n// 2\n// 1\n// go!",
-            ],
-            expected_output: &[],
-        },
-        DescriptionEntry {
-            kind: DescriptionKind::Explanation,
-            title: None,
-            description: "exercise: pull the hint logic and the divider printer out of your game loop into their own functions. your main game loop should just call them\n\nwrite:\n  fn print_divider() - prints a row of dashes\n  fn check_guess(int guess, int secret) -> string - returns \"low\", \"high\", or \"correct\"",
-            examples: &[
-                "get print   from std::io\nget concat  from std::str\n\nfn print_divider() {\n    for i in 0..20 {\n        print(\"-\")\n    }\n    println(\"\")\n}\n\nfn check_guess(int guess, int secret) -> string {\n    if (guess < secret) { return \"low\" }\n    if (guess > secret) { return \"high\" }\n    return \"correct\"\n}\n\n// in your game loop:\n// dec string result = check_guess(guess, secret)\n// if (result == \"correct\") { ... }",
+                "get print from std::io\n\n// print 10 dashes without a newline each\nfor i in 0..10 {\n    print(\"-\")\n}\nprintln(\"\") // move to next line\n\nprintln(\"welcome to the guessing game!\")\n\nfor i in 0..10 {\n    print(\"-\")\n}\nprintln(\"\")",
             ],
             expected_output: &[],
         },

@@ -1,43 +1,52 @@
 use crate::entry::{ConceptCategory, ConceptEntry, DescriptionEntry, DescriptionKind};
-pub static STEP_LOOPS: ConceptEntry = ConceptEntry {
-    name: "6. repeating things",
-    summary: "repeating things",
+pub static STEP_OPERATORS_AND_DECISIONS: ConceptEntry = ConceptEntry {
+    name: "6. making decisions",
+    summary: "making decisions",
     category: ConceptCategory::ControlFlow,
     prerequisites: &[],
     descriptions: &[
         DescriptionEntry {
             kind: DescriptionKind::Explanation,
             title: None,
-            description: "a while loop runs its block over and over as long as its condition stays true. as soon as the condition becomes false the loop stops",
+            description: "comparison operators compare two values and produce a bool. you use these to ask questions about your data",
             examples: &[
-                "dec int count = 3\n\nwhile (count > 0) {\n    println(count)\n    count -= 1\n}\n// 3\n// 2\n// 1",
+                "println(5 == 5)   // true  (equal)\nprintln(5 != 3)   // true  (not equal)\nprintln(3 < 10)   // true  (less than)\nprintln(10 > 3)   // true  (greater than)\nprintln(3 <= 3)   // true  (less than or equal)\nprintln(10 >= 10) // true  (greater than or equal)",
             ],
             expected_output: &[],
         },
         DescriptionEntry {
             kind: DescriptionKind::Explanation,
             title: None,
-            description: "break exits the loop immediately no matter what the condition says. use it when something happens inside the loop that means you are done",
+            description: "if runs a block of code only when a condition is true. else runs when it is false. you can chain as many else if branches as you need",
             examples: &[
-                "dec int i = 0\n\nwhile (true) {\n    println(i)\n    i += 1\n    if (i == 3) { break } // stops after printing 0, 1, 2\n}",
+                "dec int score = 75\n\nif (score >= 90) {\n    println(\"excellent\")\n} else if (score >= 60) {\n    println(\"good\")\n} else {\n    println(\"keep trying\")\n}",
             ],
             expected_output: &[],
         },
         DescriptionEntry {
             kind: DescriptionKind::Explanation,
             title: None,
-            description: "continue skips the rest of the current iteration and jumps back to the condition check",
+            description: "! flips a bool. true becomes false, false becomes true",
             examples: &[
-                "dec int i = 0\n\nwhile (i < 5) {\n    i += 1\n    if (i == 3) { continue } // skip 3\n    println(i)\n}\n// 1\n// 2\n// 4\n// 5",
+                "dec bool ready = false\n\nif (!ready) {\n    println(\"not ready yet\")\n}",
             ],
             expected_output: &[],
         },
         DescriptionEntry {
             kind: DescriptionKind::Explanation,
             title: None,
-            description: "exercise: wrap your guess check in a loop so the player keeps guessing until they get it right or run out of attempts. decrease attempts_left each round and break when they win or lose\n\nexpected output:\n  attempts left: 10\n  enter your guess: 30\n  too low!\n  attempts left: 9\n  enter your guess: 42\n  correct! you got it!",
+            description: "arithmetic works as you expect. parentheses control the order of evaluation",
             examples: &[
-                "get read_int from std::io\nget concat   from std::str\n\nCONST int MAX_ATTEMPTS = 10\ndec int secret         = 42\ndec int attempts_left  = MAX_ATTEMPTS\n\nwhile (attempts_left > 0) {\n    println(concat(\"attempts left: \", attempts_left))\n    dec int guess = read_int(\"enter your guess: \")\n    attempts_left -= 1\n\n    if (guess < secret) {\n        println(\"too low!\")\n    } else if (guess > secret) {\n        println(\"too high!\")\n    } else {\n        println(\"correct! you got it!\")\n        break\n    }\n}\n\nif (attempts_left == 0) {\n    println(concat(\"out of attempts! the number was \", secret))\n}",
+                "dec int a = (2 + 3) * 4  // 20\ndec int b = 2 + 3 * 4    // 14 (multiplication first)\ndec int c = 10 / 2       // 5",
+            ],
+            expected_output: &[],
+        },
+        DescriptionEntry {
+            kind: DescriptionKind::Explanation,
+            title: None,
+            description: "exercise: add a guess check to your game. compare the guess to the secret number (still hardcoded as 42) and tell the player if they guessed too low, too high, or correctly\n\nexpected output (if guess is 30):\n  enter your guess: 30\n  too low!\n\nexpected output (if guess is 42):\n  enter your guess: 42\n  correct!",
+            examples: &[
+                "get read_int from std::io\nget concat   from std::str\n\ndec int secret = 42\ndec int guess  = read_int(\"enter your guess: \")?\n\nif (guess < secret) {\n    println(\"too low!\")\n} else if (guess > secret) {\n    println(\"too high!\")\n} else {\n    println(\"correct!\")\n}",
             ],
             expected_output: &[],
         },
