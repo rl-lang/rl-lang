@@ -81,3 +81,104 @@ jobs:
         with:
           files: artifacts/**/*
           generate_release_notes: true
+          # Auto-flags the GitHub release as a pre-release when the tag
+          # has a SemVer pre-release part (e.g. v0.3.0-rc.1, v0.2.0-beta.2)
+          prerelease: auto
+
+  announce:
+    name: Announce on Discord
+    needs: publish
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # need full tag history to find the previous tag
+
+      - name: Classify release
+        id: classify
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          CORE="${VERSION%%-*}"
+
+          # split off a pre-release identifier if one exists (alpha/beta/rc/dev/...)
+          if [[ "$VERSION" == *-* ]]; then
+            PRE="${VERSION#*-}"
+            PRE_KIND=$(echo "$PRE" | cut -d. -f1 | tr '[:upper:]' '[:lower:]')
+          else
+            PRE=""
+            PRE_KIND=""
+          fi
+
+          case "$PRE_KIND" in
+            alpha)       LABEL="🧪 Alpha pre-release"; COLOR=15105570 ;;
+            beta)        LABEL="🧬 Beta pre-release";  COLOR=15844367 ;;
+            rc)          LABEL="🚦 Release candidate"; COLOR=3447003 ;;
+            dev|nightly) LABEL="🌙 Dev build";          COLOR=9807270 ;;
+            "")          LABEL=""; COLOR=3066993 ;; # stable — label set below once bump type is known
+            *)           LABEL="🔖 Pre-release ($PRE_KIND)"; COLOR=10181046 ;;
+          esac
+
+          # find the previous tag (excluding this one) to compute the bump type
+          PREV_TAG=$(git for-each-ref refs/tags --sort=-v:refname --format='%(refname:short)' \
+            | grep -v "^${TAG}$" | head -n 1 || true)
+
+          BUMP=""
+          if [[ -n "$PREV_TAG" && "$PREV_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            PREV_CORE="${PREV_TAG#v}"; PREV_CORE="${PREV_CORE%%-*}"
+            IFS='.' read -r CMAJ CMIN CPAT <<< "$CORE"
+            IFS='.' read -r PMAJ PMIN PPAT <<< "$PREV_CORE"
+            if   [[ "$CMAJ" != "$PMAJ" ]]; then BUMP="major"
+            elif [[ "$CMIN" != "$PMIN" ]]; then BUMP="minor"
+            elif [[ "$CPAT" != "$PPAT" ]]; then BUMP="patch"
+            else BUMP="same"
+            fi
+          fi
+
+          if [[ -z "$PRE_KIND" ]]; then
+            case "$BUMP" in
+              major) LABEL="🎉 Major release" ;;
+              minor) LABEL="✨ Minor release" ;;
+              patch) LABEL="🐛 Patch release" ;;
+              *)     LABEL="✅ Stable release" ;;
+            esac
+            COLOR=3066993
+          fi
+
+          {
+            echo "tag=$TAG"
+            echo "version=$VERSION"
+            echo "label=$LABEL"
+            echo "color=$COLOR"
+            echo "bump=$BUMP"
+            echo "prev_tag=$PREV_TAG"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Post to Discord
+        env:
+          WEBHOOK_URL: ${{ secrets.DISCORD_ANNOUNCEMENT_WEBHOOK }}
+        run: |
+          TAG="${{ steps.classify.outputs.tag }}"
+          LABEL="${{ steps.classify.outputs.label }}"
+          COLOR="${{ steps.classify.outputs.color }}"
+          RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${TAG}"
+
+          PAYLOAD=$(cat <<EOF
+          {
+            "embeds": [{
+              "title": "$LABEL — $TAG",
+              "url": "$RELEASE_URL",
+              "color": $COLOR,
+              "description": "rl-lang $TAG is out. Check the release page for the changelog and prebuilt binaries.",
+              "fields": [
+                { "name": "Release", "value": "[$TAG]($RELEASE_URL)", "inline": true }
+              ]
+            }]
+          }
+          EOF
+          )
+
+          curl -sf -H "Content-Type: application/json" -d "$PAYLOAD" "$WEBHOOK_URL"
