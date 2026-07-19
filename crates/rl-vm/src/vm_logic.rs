@@ -5,6 +5,7 @@ use std::rc::Rc;
 use crate::chunk::{Chunk, OpCode};
 use crate::values::{RecordFields, VmFunction, VmMapKey, VmValue};
 use rl_utils::errors::{Error, Reason};
+use rl_utils::line_index::LineIndex;
 use rl_utils::source::SourceFile;
 use rl_utils::span::Span;
 
@@ -48,6 +49,11 @@ pub struct Vm {
     current_span: Span,
     /// Original source text, so runtime errors can render ariadne snippets.
     source: Option<SourceFile>,
+    /// Byte-offset -> line/col table, used when `source` is `None` (e.g.
+    /// running compiled `.rlc` bytecode, which embeds this instead of the
+    /// full source) so runtime errors can still report a precise
+    /// `file:line:col` location instead of a bare message.
+    line_index: Option<LineIndex>,
 }
 
 impl Vm {
@@ -59,6 +65,7 @@ impl Vm {
             scope_starts: Vec::new(),
             current_span: Span::dummy(),
             source: None,
+            line_index: None,
         }
     }
 
@@ -69,14 +76,21 @@ impl Vm {
         self
     }
 
+    /// Attaches a [`LineIndex`] so runtime errors can still report a
+    /// precise `file:line:col` location when no source text is available
+    /// (see the `line_index` field docs). No-op when `source` is also set -
+    /// [`Error::report_to_stderr`] always prefers the full ariadne snippet.
+    pub fn with_line_index(mut self, index: LineIndex) -> Self {
+        self.line_index = Some(index);
+        self
+    }
+
     /// Builds a [`Reason::Runtime`] error anchored at the currently
-    /// executing instruction, with source attached when known.
+    /// executing instruction, with source (or a line-index location)
+    /// attached when known.
     pub fn err(&self, message: impl Into<String>) -> VmError {
         let err = Error::at(Reason::Runtime, message, self.current_span);
-        match &self.source {
-            Some(file) => err.with_source_file(file),
-            None => err,
-        }
+        self.attach_location(err)
     }
 
     /// Re-anchors an error built without span/source context - e.g. deep
@@ -87,10 +101,21 @@ impl Vm {
     /// snippet without threading a `Span` through `FromValue`/`IntoNativeFn`.
     pub fn annotate(&self, e: VmError) -> VmError {
         let e = e.with_span(self.current_span);
-        match &self.source {
-            Some(file) => e.with_source_file(file),
-            None => e,
+        self.attach_location(e)
+    }
+
+    /// Shared by [`Vm::err`] and [`Vm::annotate`]: attaches full source
+    /// when available, otherwise falls back to a `LineIndex`-derived
+    /// `file:line:col` location, otherwise leaves the error as-is (plain
+    /// message only).
+    fn attach_location(&self, e: VmError) -> VmError {
+        if let Some(file) = &self.source {
+            return e.with_source_file(file);
         }
+        if let Some(index) = &self.line_index {
+            return e.with_location_from(index);
+        }
+        e
     }
 
     pub fn run_and_return(&mut self, chunk: &Chunk) -> Result<VmValue, VmError> {

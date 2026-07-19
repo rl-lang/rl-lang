@@ -13,6 +13,7 @@
 //!
 //! [ string pool ]
 //! [ chunk ]
+//! [ line index ]
 //!
 //!
 //! The string pool deduplicates every string used anywhere in the file
@@ -44,6 +45,21 @@
 //! (first run relative to 0), which keeps them small since nearby
 //! instructions usually point at nearby source ranges.
 //!
+//!
+//! The line index is a source-free `rl_utils::line_index::LineIndex`:
+//! just the byte offset where each source line starts, so runtime errors
+//! raised from this file can report a `file:line:col` location without
+//! the file embedding (or leaking) the original source text. It's
+//! optional - `rl compile`/`rl package --vm` always include one when a
+//! source file was available, but the format tolerates its absence:
+//!
+//!
+//! u8 present_flag | (uvarint source_name_pool_idx | uvarint line_count | ivarint line_start_delta*) if present
+//!
+//!
+//! line_start_delta is relative to the previous entry (first relative
+//! to 0), same rationale as the span table above.
+//!
 //! Each constant starts with a 1-byte tag (see [write_value] /
 //! [read_value]) followed by its payload. Function constants embed a
 //! nested chunk, so the format is recursive. Native constants store
@@ -68,6 +84,7 @@ use std::rc::Rc;
 use crate::chunk::Chunk;
 use crate::native::Module;
 use crate::values::{RecordFields, VmFunction, VmMapKey, VmValue};
+use rl_utils::line_index::LineIndex;
 use rl_utils::span::Span;
 
 const MAGIC: &[u8; 4] = b"RLZ3";
@@ -87,10 +104,16 @@ impl Display for BytecodeError {
 }
 
 /// Serializes chunk into the .rlc binary format: an RLC2 payload
-/// (string pool + chunk, both varint/RLE-encoded) wrapped in zstd
-/// compression.
-pub fn serialize_chunk(chunk: &Chunk) -> Vec<u8> {
-    let payload = serialize_payload(chunk);
+/// (string pool + chunk + line index, all varint/RLE-encoded) wrapped
+/// in zstd compression.
+///
+/// `line_index` should be `Some` whenever the chunk was compiled from a
+/// real source file, so runtime errors from this bytecode can still
+/// report a `file:line:col` location even though the source text itself
+/// isn't embedded. Pass `None` only when no source was ever available
+/// (e.g. re-serializing bytecode that was itself loaded without one).
+pub fn serialize_chunk(chunk: &Chunk, line_index: Option<&LineIndex>) -> Vec<u8> {
+    let payload = serialize_payload(chunk, line_index);
 
     let compressed = zstd::encode_all(&payload[..], ZSTD_LEVEL)
         .expect("compressing an in-memory buffer cannot fail");
@@ -101,11 +124,16 @@ pub fn serialize_chunk(chunk: &Chunk) -> Vec<u8> {
     out
 }
 
-/// Parses a .rlc file previously produced by [serialize_chunk].
+/// Parses a .rlc file previously produced by [serialize_chunk], returning
+/// the chunk and its embedded [`LineIndex`] (if the file was compiled
+/// with one).
 ///
 /// stdlib is used to re-resolve any Native function constants by
 /// name; pass rl_vm::stdlib::root().
-pub fn deserialize_chunk(bytes: &[u8], stdlib: &Module) -> Result<Chunk, BytecodeError> {
+pub fn deserialize_chunk(
+    bytes: &[u8],
+    stdlib: &Module,
+) -> Result<(Chunk, Option<LineIndex>), BytecodeError> {
     if bytes.len() < 4 || &bytes[0..4] != MAGIC {
         return Err(BytecodeError(
             "not a valid .rlc file (bad magic header)".to_string(),
@@ -123,31 +151,81 @@ pub fn deserialize_chunk(bytes: &[u8], stdlib: &Module) -> Result<Chunk, Bytecod
 /// Encodes chunk as an uncompressed RLC2 payload: string pool
 /// followed by the chunk itself. This is what gets zstd-compressed
 /// by [serialize_chunk].
-fn serialize_payload(chunk: &Chunk) -> Vec<u8> {
+fn serialize_payload(chunk: &Chunk, line_index: Option<&LineIndex>) -> Vec<u8> {
     // Pass 1: walk the chunk (and every nested function chunk) to
     // collect every string that will need to be written, deduplicating
-    // as we go.
+    // as we go. The line index's source name is just another string.
     let mut pool = StringPoolBuilder::default();
     collect_strings_chunk(chunk, &mut pool);
+    if let Some(index) = line_index {
+        pool.intern(index.source_name());
+    }
 
-    // Pass 2: write the pool, then the chunk itself, with strings
-    // replaced by indices into the pool.
+    // Pass 2: write the pool, then the chunk, then the line index, with
+    // strings replaced by indices into the pool.
     let mut out = Vec::new();
     write_string_pool(&pool, &mut out);
     write_chunk(chunk, &pool, &mut out);
+    write_line_index(line_index, &pool, &mut out);
     out
 }
 
 /// Parses an uncompressed RLC2 payload previously produced by
 /// [serialize_payload]. Called by [deserialize_chunk] after
 /// decompression.
-fn deserialize_payload(bytes: &[u8], stdlib: &Module) -> Result<Chunk, BytecodeError> {
+fn deserialize_payload(
+    bytes: &[u8],
+    stdlib: &Module,
+) -> Result<(Chunk, Option<LineIndex>), BytecodeError> {
     let mut cursor = Cursor {
         data: bytes,
         pos: 0,
     };
     let pool = read_string_pool(&mut cursor)?;
-    read_chunk(&mut cursor, stdlib, &pool)
+    let chunk = read_chunk(&mut cursor, stdlib, &pool)?;
+    let line_index = read_line_index(&mut cursor, &pool)?;
+    Ok((chunk, line_index))
+}
+
+/// Writes the optional line index: a single flag byte, then (when
+/// present) the pooled source name followed by the RLE-delta-encoded
+/// line-start table. See the module-level format docs.
+fn write_line_index(index: Option<&LineIndex>, pool: &StringPoolBuilder, out: &mut Vec<u8>) {
+    match index {
+        None => out.push(0),
+        Some(index) => {
+            out.push(1);
+            write_uvarint(pool.get(index.source_name()) as u64, out);
+            let starts = index.line_starts();
+            write_uvarint(starts.len() as u64, out);
+            let mut prev: i64 = 0;
+            for &start in starts {
+                write_ivarint(start as i64 - prev, out);
+                prev = start as i64;
+            }
+        }
+    }
+}
+
+fn read_line_index(cursor: &mut Cursor, pool: &[String]) -> Result<Option<LineIndex>, BytecodeError> {
+    match cursor.u8()? {
+        0 => Ok(None),
+        1 => {
+            let name_idx = cursor.uvarint()? as u32;
+            let name = pool_str(pool, name_idx)?.to_string();
+            let count = cursor.uvarint()? as usize;
+            let mut starts = Vec::with_capacity(count);
+            let mut prev: i64 = 0;
+            for _ in 0..count {
+                prev += cursor.ivarint()?;
+                starts.push(prev as u32);
+            }
+            Ok(Some(LineIndex::from_raw(name, starts)))
+        }
+        other => Err(BytecodeError(format!(
+            "corrupt .rlc file: unknown line-index tag {other}"
+        ))),
+    }
 }
 
 // ---- string pool ----
