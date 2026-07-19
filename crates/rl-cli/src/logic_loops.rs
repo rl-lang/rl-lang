@@ -91,8 +91,8 @@ pub fn eval_loop(
 
 #[cfg(all(feature = "eval", feature = "vm"))]
 pub fn vm_loop(source: SourceFile, ast: Ast, statements: Vec<Statement>) {
-    let chunk = compile_to_chunk(source, ast, statements);
-    run_chunk(&chunk);
+    let chunk = compile_to_chunk(source.clone(), ast, statements);
+    run_chunk(&chunk, Some(source));
 }
 
 /// Resolves and compiles `statements` down to a bytecode [`rl_vm::Chunk`],
@@ -113,10 +113,13 @@ pub fn compile_to_chunk(source: SourceFile, ast: Ast, statements: Vec<Statement>
 
     let statements = evaluator.resolver.resolve_program(ast, statements);
 
-    match Compiler::new(&evaluator.resolver.ast_arena).compile(&statements) {
+    match Compiler::new(&evaluator.resolver.ast_arena)
+        .with_source_file(source.clone())
+        .compile(&statements)
+    {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("vm compile error: {}", e.0);
+            e.report_to_stderr();
             std::process::exit(1);
         }
     }
@@ -124,16 +127,21 @@ pub fn compile_to_chunk(source: SourceFile, ast: Ast, statements: Vec<Statement>
 
 /// Runs an already-compiled [`rl_vm::Chunk`] on a fresh [`rl_vm::Vm`], or
 /// prints the error and exits. Used both for freshly compiled `.rl` code
-/// and bytecode loaded from a `.rlc` file.
+/// (pass `source` so runtime errors render a snippet) and bytecode loaded
+/// from a `.rlc` file (pass `None` - `.rlc` files don't embed the original
+/// source text, so those errors fall back to a bare message).
 #[cfg(all(feature = "eval", feature = "vm"))]
-pub fn run_chunk(chunk: &rl_vm::Chunk) {
+pub fn run_chunk(chunk: &rl_vm::Chunk, source: Option<SourceFile>) {
     use rl_vm::Vm;
 
     let mut vm = Vm::new();
+    if let Some(source) = source {
+        vm = vm.with_source_file(source);
+    }
     match vm.run(chunk) {
         Ok(_) => {}
         Err(e) => {
-            eprintln!("vm runtime error: {}", e.0);
+            e.report_to_stderr();
             std::process::exit(1);
         }
     }
@@ -165,7 +173,7 @@ pub fn run_rlc_bytes(bytes: &[u8], label: &str) {
         }
     };
 
-    run_chunk(&chunk);
+    run_chunk(&chunk, None);
 }
 
 #[cfg(all(feature = "eval", feature = "cranelift", feature = "vm"))]
@@ -183,10 +191,13 @@ pub fn cranelift_loop(source: SourceFile, ast: Ast, statements: Vec<Statement>) 
 
     let statements = evaluator.resolver.resolve_program(ast, statements);
 
-    let chunk = match Compiler::new(&evaluator.resolver.ast_arena).compile(&statements) {
+    let chunk = match Compiler::new(&evaluator.resolver.ast_arena)
+        .with_source_file(source.clone())
+        .compile(&statements)
+    {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("vm compile error: {}", e.0);
+            e.report_to_stderr();
             std::process::exit(1);
         }
     };
