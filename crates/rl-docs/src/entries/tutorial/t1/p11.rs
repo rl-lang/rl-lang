@@ -1,52 +1,70 @@
 use crate::entry::{ConceptCategory, ConceptEntry, DescriptionEntry, DescriptionKind};
-pub static STEP_LAMBDAS: ConceptEntry = ConceptEntry {
-    name: "11. functions as values",
-    summary: "functions as values",
-    category: ConceptCategory::Functions,
+pub static STEP_STDLIB: ConceptEntry = ConceptEntry {
+    name: "11. the standard library",
+    summary: "the standard library",
+    category: ConceptCategory::Modules,
     prerequisites: &[],
     descriptions: &[
         DescriptionEntry {
             kind: DescriptionKind::Explanation,
             title: None,
-            description: "in rl functions are values just like numbers and strings. you can store a function in a variable with dec fn and call it through that variable",
+            description: "rl comes with a standard library of useful functions organized into modules. you import what you need with get. you have already used std::io and std::str. here are the ones most useful for your game",
             examples: &[
-                "fn double(int x) -> int {\n    return x * 2\n}\n\ndec fn f = double\nprintln(f(5)) // 10",
+                "get rand_int_range from std::random\nget concat, format from std::str\nget arr_push, len  from std::array",
             ],
             expected_output: &[],
         },
         DescriptionEntry {
             kind: DescriptionKind::Explanation,
             title: None,
-            description: "a lambda is an anonymous function defined inline without a name. useful when you need a short function just once and do not want to name it",
+            description: "std::random gives you unpredictable numbers. rand_int_range returns a random int between two values inclusive - this is how your game will pick the secret number. it can fail (min must be less than max), so unwrap it with `?`",
             examples: &[
-                "dec fn square = fn(int x) -> int {\n    return x * x\n}\n\nprintln(square(4)) // 16",
+                "get rand_int_range from std::random\n\ndec int secret = rand_int_range(1, 100)?\nprintln(secret) // different every run",
             ],
             expected_output: &[],
         },
         DescriptionEntry {
             kind: DescriptionKind::Explanation,
             title: None,
-            description: "lambdas capture variables from the surrounding scope automatically",
+            description: "std::str has format which works like concat but uses {} as placeholders. cleaner for building messages with multiple values, and it cannot fail",
             examples: &[
-                "dec int base = 10\n\ndec fn add_base = fn(int x) -> int {\n    return x + base\n}\n\nprintln(add_base(5))  // 15\nprintln(add_base(20)) // 30",
+                "get format from std::str\n\ndec string name = \"Mohamed\"\ndec int    score = 95\nprintln(format(\"hello {}, your score is {}\", name, score))\n// hello Mohamed, your score is 95",
             ],
             expected_output: &[],
         },
         DescriptionEntry {
             kind: DescriptionKind::Explanation,
             title: None,
-            description: "the real power of lambdas is passing them to functions like arr_map and arr_filter which apply your function to every element of an array",
+            description: "std::array has arr_sum, arr_min, arr_max for number arrays - useful for showing stats about the player's guesses at the end. all three fail on an empty array (there is no min/max/sum of nothing), so all three return a result",
             examples: &[
-                "get arr_map, arr_filter from std::array\n\ndec arr[int] nums   = [1, 2, 3, 4, 5, 6]\ndec arr[int] evens  = arr_filter(nums, fn(int x) -> bool { return x > 3 })\ndec arr[int] doubled = arr_map(evens, fn(int x) -> int { return x * 2 })\nprintln(doubled) // [8, 10, 12]",
+                "get arr_sum, arr_min, arr_max from std::array\n\ndec arr[int] guesses = [30, 60, 42]\nprintln(arr_min(guesses)?) // 30\nprintln(arr_max(guesses)?) // 60\nprintln(arr_sum(guesses)?) // 132",
+            ],
+            expected_output: &[],
+        },
+        DescriptionEntry {
+            kind: DescriptionKind::Explanation,
+            title: Some("method-style calls"),
+            description: "you have been writing fn(value, ...args). rl also lets you write value.fn(...args) - it calls the function with the value as the first argument, exactly the same call underneath. this reads nicely when you are chaining several calls in a row, like building a string then immediately printing it",
+            examples: &[
+                "get repeat from std::str\n\n// these two lines do exactly the same thing\nprintln(repeat(\"-\", 5))\nprintln(\"-\".repeat(5))",
+            ],
+            expected_output: &[],
+        },
+        DescriptionEntry {
+            kind: DescriptionKind::Explanation,
+            title: Some("cleaning up print_divider"),
+            description: "repeat from std::str returns a string repeated a given number of times, and cannot fail. now that you know repeat and method-style calls, print_divider from the functions chapter can shrink from a whole for loop down to one line",
+            examples: &[
+                "get repeat  from std::str\nget println from std::io\n\nfn print_divider() {\n    \"-\".repeat(30).println()\n}",
             ],
             expected_output: &[],
         },
         DescriptionEntry {
             kind: DescriptionKind::Explanation,
             title: None,
-            description: "exercise: use arr_filter and a lambda to count how many of the player's guesses were below the secret number, and how many were above\n\nexpected output:\n  guesses below: 2\n  guesses above: 1",
+            description: "exercise: replace the hardcoded secret number with rand_int_range, and rewrite print_divider using repeat and method-style calls. then at the end of the game show the player their lowest guess, highest guess, and total number of guesses using arr_min, arr_max, and len\n\nexpected output:\n  game over!\n  total guesses: 3\n  lowest guess:  30\n  highest guess: 60",
             examples: &[
-                "get arr_filter, len from std::array\nget format          from std::str\n\n// assume secret and guesses exist from the game\ndec arr[int] below = arr_filter(guesses, fn(int g) -> bool { return g < secret })\ndec arr[int] above = arr_filter(guesses, fn(int g) -> bool { return g > secret })\n\nprintln(format(\"guesses below: {}\", len(below)))\nprintln(format(\"guesses above: {}\", len(above)))",
+                "get rand_int_range        from std::random\nget arr_min, arr_max, len from std::array\nget format, repeat        from std::str\n\nfn print_divider() {\n    \"-\".repeat(30).println()\n}\n\ndec int secret = rand_int_range(1, 100)?\n\n// ... game loop ...\n\nprintln(\"game over!\")\nprintln(format(\"total guesses: {}\", len(guesses)))\nprintln(format(\"lowest guess:  {}\", arr_min(guesses)?))\nprintln(format(\"highest guess: {}\", arr_max(guesses)?))",
             ],
             expected_output: &[],
         },
