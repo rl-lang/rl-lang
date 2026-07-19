@@ -1,52 +1,43 @@
 use crate::entry::{ConceptCategory, ConceptEntry, DescriptionEntry, DescriptionKind};
-pub static STEP_ARRAYS: ConceptEntry = ConceptEntry {
-    name: "9. collecting data",
-    summary: "collecting data",
-    category: ConceptCategory::Types,
+pub static STEP_FUNCTIONS: ConceptEntry = ConceptEntry {
+    name: "9. grouping logic into functions",
+    summary: "grouping logic into functions",
+    category: ConceptCategory::Functions,
     prerequisites: &[],
     descriptions: &[
         DescriptionEntry {
             kind: DescriptionKind::Explanation,
             title: None,
-            description: "an array holds multiple values of the same type in a sequence. you declare one with dec arr[type] and access elements by index starting from zero",
+            description: "a function is a named block of code you can call by name. instead of copying the same lines everywhere you write them once as a function and call it wherever you need it",
             examples: &[
-                "dec arr[int] scores = [10, 20, 30]\n\nprintln(scores[0]) // 10\nprintln(scores[2]) // 30\n\nscores[1] = 99\nprintln(scores) // [10, 99, 30]",
+                "fn greet(string name) {\n    println(\"hello \")\n    println(name)\n}\n\ngreet(\"Ali\")\ngreet(\"Sara\")",
             ],
             expected_output: &[],
         },
         DescriptionEntry {
             kind: DescriptionKind::Explanation,
             title: None,
-            description: "arr_push adds an element to the end and gives you back the updated array. arr_pop removes the last element. these are in std::array",
+            description: "functions can give back a value with return. you declare what type they return with -> after the parameter list",
             examples: &[
-                "get arr_push, arr_pop from std::array\n\ndec arr[int] nums = [1, 2, 3]\nnums = arr_push(nums, 4)\nprintln(nums) // [1, 2, 3, 4]\n\nnums = arr_pop(nums)\nprintln(nums) // [1, 2, 3]",
+                "fn add(int a, int b) -> int {\n    return a + b\n}\n\ndec int res = add(3, 4)\nprintln(res) // 7",
             ],
             expected_output: &[],
         },
         DescriptionEntry {
             kind: DescriptionKind::Explanation,
             title: None,
-            description: "len returns the number of elements in an array. arr_contains tells you if a value is in the array",
+            description: "functions can call themselves, this is called recursion. each call works on a smaller version of the problem until it hits a base case that stops the recursion",
             examples: &[
-                "get len, arr_contains from std::array\n\ndec arr[string] names = [\"ali\", \"sara\", \"omar\"]\nprintln(len(names))               // 3\nprintln(arr_contains(names, \"sara\")) // true",
+                "fn countdown(int n) {\n    if (n == 0) {\n        println(\"go!\")\n        return\n    }\n    println(n)\n    countdown(n - 1)\n}\n\ncountdown(3)\n// 3\n// 2\n// 1\n// go!",
             ],
             expected_output: &[],
         },
         DescriptionEntry {
             kind: DescriptionKind::Explanation,
             title: None,
-            description: "you can loop over an array with for ... in to visit every element",
+            description: "exercise: pull the hint logic and the divider printer out of your game loop into their own functions. your main game loop should just call them\n\nwrite:\n  fn print_divider() - prints a row of dashes\n  fn check_guess(int guess, int secret) -> string - returns \"low\", \"high\", or \"correct\"",
             examples: &[
-                "dec arr[int] guesses = [30, 60, 42]\n\nfor g in guesses {\n    println(g)\n}\n// 30\n// 60\n// 42",
-            ],
-            expected_output: &[],
-        },
-        DescriptionEntry {
-            kind: DescriptionKind::Explanation,
-            title: None,
-            description: "exercise: track every guess the player makes in an array. at the end of the game print the full guess history\n\nexpected output:\n  your guesses: [30, 60, 42]",
-            examples: &[
-                "get arr_push      from std::array\nget read_int      from std::io\nget concat        from std::str\n\ndec arr[int] guesses = []\n\n// inside your game loop, after reading a guess:\n// guesses = arr_push(guesses, guess)\n\n// after the game:\nprintln(concat(\"your guesses: \", guesses))",
+                "get print   from std::io\nget concat  from std::str\n\nfn print_divider() {\n    for i in 0..20 {\n        print(\"-\")\n    }\n    println(\"\")\n}\n\nfn check_guess(int guess, int secret) -> string {\n    if (guess < secret) { return \"low\" }\n    if (guess > secret) { return \"high\" }\n    return \"correct\"\n}\n\n// in your game loop:\n// dec string res = check_guess(guess, secret)\n// if (res == \"correct\") { ... }",
             ],
             expected_output: &[],
         },

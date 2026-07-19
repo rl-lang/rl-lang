@@ -1,52 +1,52 @@
 use crate::entry::{ConceptCategory, ConceptEntry, DescriptionEntry, DescriptionKind};
-pub static STEP_STDLIB: ConceptEntry = ConceptEntry {
-    name: "10. the standard library",
-    summary: "the standard library",
-    category: ConceptCategory::Modules,
+pub static STEP_ARRAYS: ConceptEntry = ConceptEntry {
+    name: "10. collecting data",
+    summary: "collecting data",
+    category: ConceptCategory::Types,
     prerequisites: &[],
     descriptions: &[
         DescriptionEntry {
             kind: DescriptionKind::Explanation,
             title: None,
-            description: "rl comes with a standard library of useful functions organized into modules. you import what you need with get. you have already used std::io and std::str. here are the ones most useful for your game",
+            description: "an array holds multiple values of the same type in a sequence. you declare one with dec arr[type] and access elements by index starting from zero",
             examples: &[
-                "get rand_int_range from std::random\nget concat, format from std::str\nget arr_push, len  from std::array",
+                "dec arr[int] scores = [10, 20, 30]\n\nprintln(scores[0]) // 10\nprintln(scores[2]) // 30\n\nscores[1] = 99\nprintln(scores) // [10, 99, 30]",
             ],
             expected_output: &[],
         },
         DescriptionEntry {
             kind: DescriptionKind::Explanation,
             title: None,
-            description: "std::random gives you unpredictable numbers. rand_int_range returns a random int between two values inclusive. this is how your game will pick the secret number",
+            description: "arr_push adds an element to the end and gives you back the updated array. arr_pop removes the last element. these are in std::array. both can fail (for example if you pass something that is not an array), so both return a result - unwrap with `?`",
             examples: &[
-                "get rand_int_range from std::random\n\ndec int secret = rand_int_range(1, 100)\nprintln(secret) // different every run",
+                "get arr_push, arr_pop from std::array\n\ndec arr[int] nums = [1, 2, 3]\nnums = arr_push(nums, 4)?\nprintln(nums) // [1, 2, 3, 4]\n\nnums = arr_pop(nums)?\nprintln(nums) // [1, 2, 3]",
             ],
             expected_output: &[],
         },
         DescriptionEntry {
             kind: DescriptionKind::Explanation,
             title: None,
-            description: "std::str has format which works like concat but uses {} as placeholders. cleaner for building messages with multiple values",
+            description: "len returns the number of elements in an array and cannot fail. arr_contains tells you if a value is in the array, but it can fail (again, if the first argument turns out not to be an array), so it returns a result you unwrap with `?`",
             examples: &[
-                "get format from std::str\n\ndec string name = \"Mohamed\"\ndec int    score = 95\nprintln(format(\"hello {}, your score is {}\", name, score))\n// hello Mohamed, your score is 95",
+                "get len, arr_contains from std::array\n\ndec arr[string] names = [\"ali\", \"sara\", \"omar\"]\nprintln(len(names))                // 3\nprintln(arr_contains(names, \"sara\")?) // true",
             ],
             expected_output: &[],
         },
         DescriptionEntry {
             kind: DescriptionKind::Explanation,
             title: None,
-            description: "std::array has arr_sum, arr_min, arr_max for number arrays. useful for showing stats about the player's guesses at the end",
+            description: "you can loop over an array with for ... in to visit every element",
             examples: &[
-                "get arr_sum, arr_min, arr_max from std::array\n\ndec arr[int] guesses = [30, 60, 42]\nprintln(arr_min(guesses)) // 30\nprintln(arr_max(guesses)) // 60\nprintln(arr_sum(guesses)) // 132",
+                "dec arr[int] guesses = [30, 60, 42]\n\nfor g in guesses {\n    println(g)\n}\n// 30\n// 60\n// 42",
             ],
             expected_output: &[],
         },
         DescriptionEntry {
             kind: DescriptionKind::Explanation,
             title: None,
-            description: "exercise: replace the hardcoded secret number with rand_int_range. then at the end of the game show the player their lowest guess, highest guess, and total number of guesses using arr_min, arr_max, and len\n\nexpected output:\n  game over!\n  total guesses: 3\n  lowest guess:  30\n  highest guess: 60",
+            description: "exercise: track every guess the player makes in an array. at the end of the game print the full guess history\n\nexpected output:\n  your guesses: [30, 60, 42]",
             examples: &[
-                "get rand_int_range        from std::random\nget arr_min, arr_max, len from std::array\nget format                from std::str\n\ndec int secret = rand_int_range(1, 100)\n\n// ... game loop ...\n\nprintln(\"game over!\")\nprintln(format(\"total guesses: {}\", len(guesses)))\nprintln(format(\"lowest guess:  {}\", arr_min(guesses)))\nprintln(format(\"highest guess: {}\", arr_max(guesses)))",
+                "get arr_push      from std::array\nget read_int      from std::io\nget concat        from std::str\n\ndec arr[int] guesses = []\n\n// inside your game loop, after reading a guess:\n// guesses = arr_push(guesses, guess)?\n\n// after the game:\nprintln(concat(\"your guesses: \", guesses))",
             ],
             expected_output: &[],
         },

@@ -1,34 +1,52 @@
 use crate::entry::{ConceptCategory, ConceptEntry, DescriptionEntry, DescriptionKind};
-pub static STEP_NULL: ConceptEntry = ConceptEntry {
-    name: "12. null",
-    summary: "null",
-    category: ConceptCategory::Types,
+pub static STEP_LAMBDAS: ConceptEntry = ConceptEntry {
+    name: "12. functions as values",
+    summary: "functions as values",
+    category: ConceptCategory::Functions,
     prerequisites: &[],
     descriptions: &[
         DescriptionEntry {
             kind: DescriptionKind::Explanation,
             title: None,
-            description: "null means the absence of a value. a variable can hold null regardless of its declared type. functions that do not explicitly return anything return null implicitly",
+            description: "in rl functions are values just like numbers and strings. you can store a function in a variable with dec fn and call it through that variable",
             examples: &[
-                "dec int x = null\nprintln(x) // null\n\nfn do_nothing() {\n    // returns null implicitly\n}",
+                "fn double(int x) -> int {\n    return x * 2\n}\n\ndec fn f = double\nprintln(f(5)) // 10",
             ],
             expected_output: &[],
         },
         DescriptionEntry {
             kind: DescriptionKind::Explanation,
             title: None,
-            description: "use is_null from std::types to check if a value is null before using it. this avoids surprises when a function might return nothing",
+            description: "a lambda is an anonymous function defined inline without a name. useful when you need a short function just once and do not want to name it",
             examples: &[
-                "get is_null from std::types\n\nfn find_even(arr[int] nums) -> int {\n    for n in nums {\n        if (n > 10) { return n }\n    }\n    return null // nothing matched\n}\n\ndec int res = find_even([1, 2, 3])\n\nif (is_null(res)) {\n    println(\"nothing found\")\n} else {\n    println(res)\n}",
+                "dec fn square = fn(int x) -> int {\n    return x * x\n}\n\nprintln(square(4)) // 16",
             ],
             expected_output: &[],
         },
         DescriptionEntry {
             kind: DescriptionKind::Explanation,
             title: None,
-            description: "exercise: write a function find_first_correct that takes the guesses array and the secret number and returns the index of the first correct guess, or null if the player never guessed correctly\n\nhint: use a for loop with a counter variable alongside it",
+            description: "lambdas capture variables from the surrounding scope automatically",
             examples: &[
-                "get is_null from std::types\n\nfn find_first_correct(arr[int] guesses, int secret) -> int {\n    dec int i = 0\n    for g in guesses {\n        if (g == secret) { return i }\n        i += 1\n    }\n    return null\n}\n\ndec int idx = find_first_correct(guesses, secret)\n\nif (is_null(idx)) {\n    println(\"you never guessed correctly\")\n} else {\n    println(format(\"you got it on guess number {}\", idx + 1))\n}",
+                "dec int base = 10\n\ndec fn add_base = fn(int x) -> int {\n    return x + base\n}\n\nprintln(add_base(5))  // 15\nprintln(add_base(20)) // 30",
+            ],
+            expected_output: &[],
+        },
+        DescriptionEntry {
+            kind: DescriptionKind::Explanation,
+            title: None,
+            description: "the real power of lambdas is passing them to functions like arr_map and arr_filter which apply your function to every element of an array. both can fail (again, if you pass something that isn't actually an array), so both return a result you unwrap with `?`",
+            examples: &[
+                "get arr_map, arr_filter from std::array\n\ndec arr[int] nums    = [1, 2, 3, 4, 5, 6]\ndec arr[int] evens   = arr_filter(nums, fn(int x) -> bool { return x > 3 })?\ndec arr[int] doubled = arr_map(evens, fn(int x) -> int { return x * 2 })?\nprintln(doubled) // [8, 10, 12]",
+            ],
+            expected_output: &[],
+        },
+        DescriptionEntry {
+            kind: DescriptionKind::Explanation,
+            title: None,
+            description: "exercise: use arr_filter and a lambda to count how many of the player's guesses were below the secret number, and how many were above\n\nexpected output:\n  guesses below: 2\n  guesses above: 1",
+            examples: &[
+                "get arr_filter, len from std::array\nget format          from std::str\n\n// assume secret and guesses exist from the game\ndec arr[int] below = arr_filter(guesses, fn(int g) -> bool { return g < secret })?\ndec arr[int] above = arr_filter(guesses, fn(int g) -> bool { return g > secret })?\n\nprintln(format(\"guesses below: {}\", len(below)))\nprintln(format(\"guesses above: {}\", len(above)))",
             ],
             expected_output: &[],
         },

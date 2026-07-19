@@ -1,41 +1,43 @@
 use crate::entry::{ConceptCategory, ConceptEntry, DescriptionEntry, DescriptionKind};
-pub static STEP_FOR_LOOPS: ConceptEntry = ConceptEntry {
-    name: "7. for loops",
-    summary: "for loops",
+pub static STEP_LOOPS: ConceptEntry = ConceptEntry {
+    name: "7. repeating things",
+    summary: "repeating things",
     category: ConceptCategory::ControlFlow,
     prerequisites: &[],
     descriptions: &[
         DescriptionEntry {
             kind: DescriptionKind::Explanation,
             title: None,
-            description: "while loops are great when you do not know how many times you will loop. when you do know, a for loop is cleaner. the range form goes from a start number up to but not including the end",
-            examples: &["for i in 0..5 {\n    println(i)\n}\n// 0\n// 1\n// 2\n// 3\n// 4"],
-            expected_output: &[],
-        },
-        DescriptionEntry {
-            kind: DescriptionKind::Explanation,
-            title: None,
-            description: "the C-style for loop gives you full control: an initializer, a condition, and an increment, all in one line",
+            description: "a while loop runs its block over and over as long as its condition stays true. as soon as the condition becomes false the loop stops",
             examples: &[
-                "for [int i = 1, i <= 5, i += 1] {\n    println(i)\n}\n// 1\n// 2\n// 3\n// 4\n// 5",
+                "dec int count = 3\n\nwhile (count > 0) {\n    println(count)\n    count -= 1\n}\n// 3\n// 2\n// 1",
             ],
             expected_output: &[],
         },
         DescriptionEntry {
             kind: DescriptionKind::Explanation,
             title: None,
-            description: "you can also loop over the elements of an array directly without needing an index at all",
+            description: "break exits the loop immediately no matter what the condition says. use it when something happens inside the loop that means you are done",
             examples: &[
-                "dec arr[string] days = [\"sat\", \"sun\", \"mon\"]\n\nfor day in days {\n    println(day)\n}",
+                "dec int i = 0\n\nwhile (true) {\n    println(i)\n    i += 1\n    if (i == 3) { break } // stops after printing 0, 1, 2\n}",
             ],
             expected_output: &[],
         },
         DescriptionEntry {
             kind: DescriptionKind::Explanation,
             title: None,
-            description: "exercise: before the game starts, print a row of dashes as a divider using a for loop. then after the game ends print a summary showing each attempt number\n\nexpected output:\n  ----------\n  welcome to the guessing game!\n  ----------",
+            description: "continue skips the rest of the current iteration and jumps back to the condition check",
             examples: &[
-                "get print from std::io\n\n// print 10 dashes without a newline each\nfor i in 0..10 {\n    print(\"-\")\n}\nprintln(\"\") // move to next line\n\nprintln(\"welcome to the guessing game!\")\n\nfor i in 0..10 {\n    print(\"-\")\n}\nprintln(\"\")",
+                "dec int i = 0\n\nwhile (i < 5) {\n    i += 1\n    if (i == 3) { continue } // skip 3\n    println(i)\n}\n// 1\n// 2\n// 4\n// 5",
+            ],
+            expected_output: &[],
+        },
+        DescriptionEntry {
+            kind: DescriptionKind::Explanation,
+            title: None,
+            description: "exercise: wrap your guess check in a loop so the player keeps guessing until they get it right or run out of attempts. decrease attempts_left each round and break when they win or lose\n\nexpected output:\n  attempts left: 10\n  enter your guess: 30\n  too low!\n  attempts left: 9\n  enter your guess: 42\n  correct! you got it!",
+            examples: &[
+                "get read_int from std::io\nget concat   from std::str\n\nCONST int MAX_ATTEMPTS = 10\ndec int secret         = 42\ndec int attempts_left  = MAX_ATTEMPTS\n\nwhile (attempts_left > 0) {\n    println(concat(\"attempts left: \", attempts_left))\n    dec int guess = read_int(\"enter your guess: \")?\n    attempts_left -= 1\n\n    if (guess < secret) {\n        println(\"too low!\")\n    } else if (guess > secret) {\n        println(\"too high!\")\n    } else {\n        println(\"correct! you got it!\")\n        break\n    }\n}\n\nif (attempts_left == 0) {\n    println(concat(\"out of attempts! the number was \", secret))\n}",
             ],
             expected_output: &[],
         },
