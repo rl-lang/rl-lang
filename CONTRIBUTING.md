@@ -48,6 +48,10 @@ If you're adding a brand-new module (not just a new function in an existing one)
 
 The bytecode VM (`rl-vm`) has its own, much smaller stdlib (`crates/rl-vm/src/stdlib/`) that only covers `io` so far -- you generally don't need to touch it unless you're specifically porting a function to the VM backend.
 
+## AI usage
+
+Using AI tools to help write a contribution is fine, but you're expected to understand, test, and take responsibility for anything you submit. See [AI_POLICY.md](AI_POLICY.md) for what's and isn't okay - it covers unreviewed AI output, hallucinated APIs, and mass-generated issues/PRs specifically.
+
 ## Questions
 
 Open an issue or reach out via GitHub.
