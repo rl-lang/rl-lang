@@ -2,8 +2,8 @@
 
 rl-lang is dual-licensed under your choice of either:
 
-- [MIT License](MIT-LICENSE)
-- [Apache License, Version 2.0](APACHE-LICENSE)
+- [MIT License](LICENSE-MIT.md)
+- [Apache License, Version 2.0](LICENSE-APACHE.md)
 
 You may use, modify, and distribute this project under the terms of **either** license - you don't need to comply with both, just pick whichever fits your situation.
 

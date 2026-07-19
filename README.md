@@ -165,4 +165,4 @@ Feature flags:
 
 ## License
 
-Licensed under either of [MIT](MIT-LICENSE) or [Apache 2.0](APACHE-LICENSE) at your option.
+Licensed under either of [MIT](LICENSE-MIT.md) or [Apache 2.0](APACHE-LICENSE) at your option.
