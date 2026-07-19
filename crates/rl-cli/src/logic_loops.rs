@@ -25,6 +25,7 @@ use {
     rl_ast::statements::Statement,
     rl_lexer::{tokenizer::Tokenizer, tokentypes::Token},
     rl_parser::parser_logic::Parser,
+    rl_utils::line_index::LineIndex,
     rl_utils::source::SourceFile,
 };
 
@@ -92,7 +93,7 @@ pub fn eval_loop(
 #[cfg(all(feature = "eval", feature = "vm"))]
 pub fn vm_loop(source: SourceFile, ast: Ast, statements: Vec<Statement>) {
     let chunk = compile_to_chunk(source.clone(), ast, statements);
-    run_chunk(&chunk, Some(source));
+    run_chunk(&chunk, Some(source), None);
 }
 
 /// Resolves and compiles `statements` down to a bytecode [`rl_vm::Chunk`],
@@ -126,17 +127,23 @@ pub fn compile_to_chunk(source: SourceFile, ast: Ast, statements: Vec<Statement>
 }
 
 /// Runs an already-compiled [`rl_vm::Chunk`] on a fresh [`rl_vm::Vm`], or
-/// prints the error and exits. Used both for freshly compiled `.rl` code
-/// (pass `source` so runtime errors render a snippet) and bytecode loaded
-/// from a `.rlc` file (pass `None` - `.rlc` files don't embed the original
-/// source text, so those errors fall back to a bare message).
+/// prints the error and exits.
+///
+/// - `source`: pass `Some` for freshly compiled `.rl` code so runtime
+///   errors render a full ariadne snippet.
+/// - `line_index`: pass `Some` for bytecode loaded from a `.rlc` file -
+///   `.rlc` doesn't embed the original source text, but does embed a
+///   [`LineIndex`], so those errors still get a precise `file:line:col`
+///   location instead of a bare message. Ignored when `source` is `Some`.
 #[cfg(all(feature = "eval", feature = "vm"))]
-pub fn run_chunk(chunk: &rl_vm::Chunk, source: Option<SourceFile>) {
+pub fn run_chunk(chunk: &rl_vm::Chunk, source: Option<SourceFile>, line_index: Option<LineIndex>) {
     use rl_vm::Vm;
 
     let mut vm = Vm::new();
     if let Some(source) = source {
         vm = vm.with_source_file(source);
+    } else if let Some(index) = line_index {
+        vm = vm.with_line_index(index);
     }
     match vm.run(chunk) {
         Ok(_) => {}
@@ -165,7 +172,7 @@ pub fn run_rlc_file(path: &std::path::Path) {
 pub fn run_rlc_bytes(bytes: &[u8], label: &str) {
     use rl_vm::{deserialize_chunk, stdlib};
 
-    let chunk = match deserialize_chunk(bytes, &stdlib::root()) {
+    let (chunk, line_index) = match deserialize_chunk(bytes, &stdlib::root()) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("error: failed to load '{}': {}", label, e);
@@ -173,7 +180,7 @@ pub fn run_rlc_bytes(bytes: &[u8], label: &str) {
         }
     };
 
-    run_chunk(&chunk, None);
+    run_chunk(&chunk, None, line_index);
 }
 
 #[cfg(all(feature = "eval", feature = "cranelift", feature = "vm"))]
