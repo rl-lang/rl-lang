@@ -90,6 +90,26 @@ impl Error {
         self
     }
 
+    /// (Re-)anchors the primary span of this report at `span`. Unlike
+    /// [`Error::at`], this works on an error that was built without span
+    /// context (e.g. deep inside generic conversion code with no access to
+    /// the call site) - the caller sets the real location once it's known.
+    pub fn with_span(mut self, span: Span) -> Self {
+        match &mut self.detail {
+            Some(d) => d.primary.0 = span,
+            None => {
+                self.detail = Some(Box::new(ErrorDetail {
+                    primary: (span, self.message.clone()),
+                    labels: Vec::new(),
+                    source: None,
+                    source_name: None,
+                    help: None,
+                }));
+            }
+        }
+        self
+    }
+
     /// add a secondary label to the report.
     pub fn with_label(mut self, span: Span, label: impl Into<String>) -> Self {
         if let Some(d) = &mut self.detail {
