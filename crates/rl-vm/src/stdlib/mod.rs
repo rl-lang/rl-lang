@@ -5,6 +5,7 @@
 //! ported yet - most of it needs `VmValue` to grow array/tuple/error
 //! variants first.
 
+mod array;
 mod collections;
 pub mod common;
 mod io;
@@ -19,6 +20,7 @@ pub fn root() -> Module {
     Module::new("root").with_module(
         Module::new("std")
             .with_module(io::module())
-            .with_module(collections::module()),
+            .with_module(collections::module())
+            .with_module(array::module()),
     )
 }
