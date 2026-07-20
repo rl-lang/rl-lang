@@ -3,13 +3,25 @@
 //!
 //! This mirrors `rl-interpreter`'s `native.rs`, scoped down to what `VmValue`
 //! currently supports: no array/tuple/map/error/ok variants yet (so no
-//! `Vec<T>` impls), and `VmError` carries no `Span` (the VM doesn't track
-//! spans at runtime), unlike the interpreter's `Error`.
+//! `Vec<T>` impls). Errors built in here (arity mismatches, `FromValue`
+//! conversions) have no access to a `Span` - this generic machinery runs
+//! before the call site is known - so they're built with a dummy span via
+//! [`rt_err`], then re-anchored at the actual call site by `Vm::annotate`
+//! the moment they rejoin the main dispatch loop (see the `OpCode::Call`
+//! handler in `vm_logic.rs`).
 
 use crate::values::{VmNativeFn, VmValue};
 use crate::vm_logic::{Vm, VmError};
+use rl_utils::errors::{Error, Reason};
+use rl_utils::span::Span;
 use std::collections::HashMap;
 use std::rc::Rc;
+
+/// Builds a runtime error with no span/source context yet; callers further
+/// up the stack re-anchor it once the call site is known (see module docs).
+fn rt_err(message: impl Into<String>) -> VmError {
+    Error::at(Reason::Runtime, message, Span::dummy())
+}
 
 /// A heap-allocated native function callable from rl bytecode.
 pub type NativeFn = Rc<dyn Fn(&mut Vm, Vec<VmValue>) -> Result<VmValue, VmError>>;
@@ -103,7 +115,7 @@ impl FromValue for i64 {
         match v {
             VmValue::Int(i) => Ok(i),
             VmValue::Byte(b) => Ok(b as i64),
-            other => Err(VmError(format!("expected int, got {other:?}"))),
+            other => Err(rt_err(format!("expected int, got {other:?}"))),
         }
     }
 }
@@ -112,7 +124,7 @@ impl FromValue for f64 {
     fn from_value(v: VmValue) -> Result<Self, VmError> {
         match v {
             VmValue::Float(f) => Ok(f),
-            other => Err(VmError(format!("expected float, got {other:?}"))),
+            other => Err(rt_err(format!("expected float, got {other:?}"))),
         }
     }
 }
@@ -121,7 +133,7 @@ impl FromValue for String {
     fn from_value(v: VmValue) -> Result<Self, VmError> {
         match v {
             VmValue::Str(s) => Ok(s.to_string()),
-            other => Err(VmError(format!("expected string, got {other:?}"))),
+            other => Err(rt_err(format!("expected string, got {other:?}"))),
         }
     }
 }
@@ -130,7 +142,7 @@ impl FromValue for bool {
     fn from_value(v: VmValue) -> Result<Self, VmError> {
         match v {
             VmValue::Bool(b) => Ok(b),
-            other => Err(VmError(format!("expected bool, got {other:?}"))),
+            other => Err(rt_err(format!("expected bool, got {other:?}"))),
         }
     }
 }
@@ -139,7 +151,7 @@ impl FromValue for char {
     fn from_value(v: VmValue) -> Result<Self, VmError> {
         match v {
             VmValue::Char(c) => Ok(c),
-            other => Err(VmError(format!("expected char, got {other:?}"))),
+            other => Err(rt_err(format!("expected char, got {other:?}"))),
         }
     }
 }
@@ -206,7 +218,7 @@ where
         Rc::new(
             move |vm: &mut Vm, args: Vec<VmValue>| -> Result<VmValue, VmError> {
                 if !args.is_empty() {
-                    return Err(VmError(format!(
+                    return Err(rt_err(format!(
                         "expected 0 argument(s), got {}",
                         args.len()
                     )));
@@ -231,7 +243,7 @@ macro_rules! impl_into_native_fn {
             fn into_native(self) -> NativeFn {
                 Rc::new(move |vm: &mut Vm, args: Vec<VmValue>| -> Result<VmValue, VmError> {
                     if args.len() != $count {
-                        return Err(VmError(format!(
+                        return Err(rt_err(format!(
                             "expected {} argument(s), got {}",
                             $count,
                             args.len()
@@ -253,7 +265,7 @@ macro_rules! impl_into_native_fn {
             fn into_native(self) -> NativeFn {
                 Rc::new(move |vm: &mut Vm, args: Vec<VmValue>| -> Result<VmValue, VmError> {
                     if args.len() != $count {
-                        return Err(VmError(format!(
+                        return Err(rt_err(format!(
                             "expected {} argument(s), got {}",
                             $count,
                             args.len()

@@ -49,7 +49,9 @@ pub static CONTROL_FLOW: ConceptEntry = ConceptEntry {
             kind: DescriptionKind::Pitfall,
             title: Some("while checks the condition before the first iteration, not after"),
             description: "unlike a do-while loop, `while`'s condition is checked before the body ever runs, so the loop can execute zero times - rl has no post-condition loop that guarantees at least one iteration",
-            examples: &["dec int i = 10\nwhile (i < 5) {\n    println(i)  // never runs, i is already >= 5\n}"],
+            examples: &[
+                "dec int i = 10\nwhile (i < 5) {\n    println(i)  // never runs, i is already >= 5\n}",
+            ],
             expected_output: &[],
         },
         DescriptionEntry {

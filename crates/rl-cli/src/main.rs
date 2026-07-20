@@ -809,8 +809,12 @@ fn main() {
                         std::process::exit(1);
                     }
 
+                    let line_index = rl_utils::line_index::LineIndex::new(
+                        source.name.clone(),
+                        source.text.as_str(),
+                    );
                     let chunk = compile_to_chunk(source, ast, statements);
-                    let bytecode = rl_vm::serialize_chunk(&chunk);
+                    let bytecode = rl_vm::serialize_chunk(&chunk, Some(&line_index));
                     package_vm(&bytecode, &output);
                 }
                 #[cfg(not(all(feature = "eval", feature = "vm")))]
@@ -883,8 +887,10 @@ fn main() {
                     std::process::exit(1);
                 }
 
+                let line_index =
+                    rl_utils::line_index::LineIndex::new(source.name.clone(), source.text.as_str());
                 let chunk = compile_to_chunk(source, ast, statements);
-                let bytes = rl_vm::serialize_chunk(&chunk);
+                let bytes = rl_vm::serialize_chunk(&chunk, Some(&line_index));
 
                 let out_path = output.unwrap_or_else(|| file.with_extension("rlc"));
                 if let Err(e) = std::fs::write(&out_path, &bytes) {

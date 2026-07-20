@@ -36,19 +36,27 @@ impl Evaluator {
                 let val = self.evaluate(*value)?;
 
                 let val_type = Self::infer_type(&val, false);
-                if !Self::types_compatible(&val_type, type_annotation)
-                    && val_type != *type_annotation
-                    && val_type != TypeAnnotation::Null
-                {
-                    return Err(self.err(
-                        format!(
-                            "type mismatch: expected {:?}, got {:?}",
-                            type_annotation, val_type
-                        ),
-                        statement.span,
-                    ));
-                }
-                self.insert_value(*slot, val, type_annotation.clone(), statement.span)?;
+
+                // `dec name = value` - the type was never stated, so the
+                // initialiser's runtime type *is* the declared type.
+                let effective_type = if *type_annotation == TypeAnnotation::Infer {
+                    val_type
+                } else {
+                    if !Self::types_compatible(&val_type, type_annotation)
+                        && val_type != *type_annotation
+                        && val_type != TypeAnnotation::Null
+                    {
+                        return Err(self.err(
+                            format!(
+                                "type mismatch: expected {:?}, got {:?}",
+                                type_annotation, val_type
+                            ),
+                            statement.span,
+                        ));
+                    }
+                    type_annotation.clone()
+                };
+                self.insert_value(*slot, val, effective_type, statement.span)?;
             }
 
             StatementKind::ResolvedConstantDeclaration {

@@ -1,3 +1,5 @@
+use rl_utils::span::Span;
+
 use crate::VmValue;
 
 #[repr(u8)]
@@ -152,8 +154,11 @@ pub struct Chunk {
     pub code: Vec<u8>,
     /// value/literals storage
     pub constants: Vec<VmValue>,
-    /// instruction location in source
-    pub lines: Vec<u32>,
+    /// source [`Span`] of the statement/expression that produced each byte
+    /// in `code`, so runtime errors can point back at exact source ranges
+    /// (fed into `rl_utils::errors::Error` / ariadne, same as the
+    /// interpreter and checker).
+    pub spans: Vec<Span>,
 }
 
 impl Chunk {
@@ -162,19 +167,24 @@ impl Chunk {
     }
 
     /// Helper function for appending one OpCode to Chunk.code
-    /// also appends the line of OpCode of source to lines
-    pub fn write_op(&mut self, op: OpCode, line: u32) {
+    /// also appends the span of OpCode's origin in source to `spans`
+    pub fn write_op(&mut self, op: OpCode, span: Span) {
         self.code.push(op as u8);
-        self.lines.push(line);
+        self.spans.push(span);
     }
 
     /// Helpder function same as write_op() but for 2 byte operand
-    pub fn write_u16(&mut self, val: u16, line: u32) {
+    pub fn write_u16(&mut self, val: u16, span: Span) {
         let bytes = val.to_le_bytes();
         self.code.push(bytes[0]);
         self.code.push(bytes[1]);
-        self.lines.push(line);
-        self.lines.push(line);
+        self.spans.push(span);
+        self.spans.push(span);
+    }
+
+    /// The [`Span`] that produced the instruction starting at `ip`.
+    pub fn span_at(&self, ip: usize) -> Span {
+        self.spans.get(ip).copied().unwrap_or_default()
     }
 
     /// Helper function appends the given constant/literal to Chunk.constants

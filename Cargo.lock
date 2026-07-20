@@ -1450,7 +1450,7 @@ dependencies = [
 
 [[package]]
 name = "rl-ast"
-version = "0.2.0"
+version = "0.3.2"
 dependencies = [
  "rl-lexer",
  "rl-utils",
@@ -1458,7 +1458,7 @@ dependencies = [
 
 [[package]]
 name = "rl-benches"
-version = "0.2.0"
+version = "0.2.2"
 dependencies = [
  "criterion",
  "rl-ast",
@@ -1470,7 +1470,7 @@ dependencies = [
 
 [[package]]
 name = "rl-checker"
-version = "0.2.0"
+version = "0.3.2"
 dependencies = [
  "rl-ast",
  "rl-commons",
@@ -1482,7 +1482,7 @@ dependencies = [
 
 [[package]]
 name = "rl-cli"
-version = "0.2.0"
+version = "0.2.2"
 dependencies = [
  "clap",
  "env_logger",
@@ -1507,11 +1507,11 @@ dependencies = [
 
 [[package]]
 name = "rl-commons"
-version = "0.2.0"
+version = "0.2.2"
 
 [[package]]
 name = "rl-cranelift"
-version = "0.2.0"
+version = "0.2.2"
 dependencies = [
  "cranelift-codegen",
  "cranelift-frontend",
@@ -1523,7 +1523,7 @@ dependencies = [
 
 [[package]]
 name = "rl-docs"
-version = "0.2.0"
+version = "0.2.2"
 dependencies = [
  "crossterm",
  "ratatui",
@@ -1535,7 +1535,7 @@ dependencies = [
 
 [[package]]
 name = "rl-interpreter"
-version = "0.2.0"
+version = "0.3.2"
 dependencies = [
  "crossterm",
  "log",
@@ -1552,7 +1552,7 @@ dependencies = [
 
 [[package]]
 name = "rl-lexer"
-version = "0.2.0"
+version = "0.2.2"
 dependencies = [
  "log",
  "rl-utils",
@@ -1560,7 +1560,7 @@ dependencies = [
 
 [[package]]
 name = "rl-lsp"
-version = "0.2.0"
+version = "0.2.2"
 dependencies = [
  "rl-checker",
  "rl-lexer",
@@ -1572,7 +1572,7 @@ dependencies = [
 
 [[package]]
 name = "rl-parser"
-version = "0.2.0"
+version = "0.3.2"
 dependencies = [
  "log",
  "rl-ast",
@@ -1582,7 +1582,7 @@ dependencies = [
 
 [[package]]
 name = "rl-repl"
-version = "0.2.0"
+version = "0.2.2"
 dependencies = [
  "crossterm",
  "ratatui",
@@ -1596,7 +1596,7 @@ dependencies = [
 
 [[package]]
 name = "rl-resolver"
-version = "0.2.0"
+version = "0.2.2"
 dependencies = [
  "rl-ast",
  "rl-lexer",
@@ -1606,7 +1606,7 @@ dependencies = [
 
 [[package]]
 name = "rl-tests"
-version = "0.2.0"
+version = "0.2.2"
 dependencies = [
  "rl-ast",
  "rl-interpreter",
@@ -1618,7 +1618,7 @@ dependencies = [
 
 [[package]]
 name = "rl-tooling"
-version = "0.2.0"
+version = "0.2.2"
 dependencies = [
  "rl-lexer",
  "serde",
@@ -1629,7 +1629,7 @@ dependencies = [
 
 [[package]]
 name = "rl-utils"
-version = "0.2.0"
+version = "0.2.2"
 dependencies = [
  "ariadne",
  "log",
@@ -1637,10 +1637,11 @@ dependencies = [
 
 [[package]]
 name = "rl-vm"
-version = "0.2.0"
+version = "0.2.2"
 dependencies = [
  "rl-ast",
  "rl-lexer",
+ "rl-utils",
  "zstd",
 ]
 
