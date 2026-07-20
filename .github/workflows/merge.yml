@@ -52,25 +52,27 @@ jobs:
       - name: Create or update release PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+          BUMP: ${{ inputs.bump }}
+          NOTES: ${{ inputs.notes }}
+          CHANGELOG: ${{ steps.log.outputs.changelog }}
+          PR_NUMBER: ${{ steps.existing.outputs.number }}
         run: |
-          body=$(cat <<BODY
-          ## ${{ inputs.version }} (${{ inputs.bump }})
+          body="## ${VERSION} (${BUMP})
 
-          ${{ inputs.notes }}
+          ${NOTES}
 
           ### Commits
-          ${{ steps.log.outputs.changelog }}
-          BODY
-          )
+          ${CHANGELOG}"
 
-          if [ -n "${{ steps.existing.outputs.number }}" ]; then
-            gh pr edit "${{ steps.existing.outputs.number }}" \
-              --title "release ${{ inputs.version }}" \
+          if [ -n "$PR_NUMBER" ]; then
+            gh pr edit "$PR_NUMBER" \
+              --title "release ${VERSION}" \
               --body "$body"
           else
             gh pr create \
               --base main \
               --head dev \
-              --title "release ${{ inputs.version }}" \
+              --title "release ${VERSION}" \
               --body "$body"
           fi
