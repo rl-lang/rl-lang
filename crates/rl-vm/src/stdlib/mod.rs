@@ -5,7 +5,11 @@
 //! ported yet - most of it needs `VmValue` to grow array/tuple/error
 //! variants first.
 
-pub mod io;
+mod array;
+mod collections;
+pub mod common;
+mod io;
+pub mod macros;
 
 use crate::native::Module;
 
@@ -13,5 +17,10 @@ use crate::native::Module;
 /// a `std` submodule, mirroring `rl-interpreter`'s `root_module` shape so
 /// `std::io::println` resolves the same way in both.
 pub fn root() -> Module {
-    Module::new("root").with_module(Module::new("std").with_module(io::module()))
+    Module::new("root").with_module(
+        Module::new("std")
+            .with_module(io::module())
+            .with_module(collections::module())
+            .with_module(array::module()),
+    )
 }
