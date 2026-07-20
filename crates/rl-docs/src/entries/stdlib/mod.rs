@@ -1,6 +1,7 @@
 //! Standard library documentation entries, one module per file.
 pub mod array;
 pub mod bitwise;
+pub mod collections;
 pub mod debug;
 pub mod fs;
 pub mod http;
