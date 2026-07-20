@@ -21,6 +21,15 @@ impl TypeChecker {
                 value,
             } => {
                 let value_type = self.check_expression(*value);
+
+                // `dec name = value` - the type wasn't stated, so whatever
+                // the initialiser resolved to *is* the declared type. There
+                // is nothing to mismatch against.
+                if *type_annotation == TypeAnnotation::Infer {
+                    self.declare(name.clone(), value_type, false, statement.span);
+                    return;
+                }
+
                 let declared = CheckType::Known(type_annotation.clone());
 
                 if !value_type.matches(&declared) {
@@ -724,14 +733,14 @@ impl TypeChecker {
                 StatementKind::VariableDeclaration {
                     name,
                     type_annotation,
-                    ..
+                    value,
                 } if wanted(name) => {
-                    self.declare(
-                        name.clone(),
-                        CheckType::Known(type_annotation.clone()),
-                        false,
-                        stmt.span,
-                    );
+                    let declared = if *type_annotation == TypeAnnotation::Infer {
+                        self.check_expression(*value)
+                    } else {
+                        CheckType::Known(type_annotation.clone())
+                    };
+                    self.declare(name.clone(), declared, false, stmt.span);
                 }
                 StatementKind::ConstantDeclaration {
                     name,

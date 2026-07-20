@@ -88,7 +88,9 @@ pub static ERROR_TYPE: ConceptEntry = ConceptEntry {
             kind: DescriptionKind::Explanation,
             title: Some("the error type"),
             description: "`error` is a separate, non-generic wrapper type from `result[T]` - construct it with `error(value)`, check with `is_error`, and unwrap with `unwrap_error`, both from `std::types` (not `std::res`)",
-            examples: &["get is_error from std::types\ndec error e = error(\"disk full\")\nprintln(is_error(e))  // true"],
+            examples: &[
+                "get is_error from std::types\ndec error e = error(\"disk full\")\nprintln(is_error(e))  // true",
+            ],
             expected_output: &["true"],
         },
         DescriptionEntry {
@@ -113,7 +115,9 @@ pub static ERROR_TYPE: ConceptEntry = ConceptEntry {
             kind: DescriptionKind::Pitfall,
             title: Some("ok/err can nest a result, error can't nest an error"),
             description: "unlike `error`, `ok`/`err` don't reject wrapping another `result` - `ok(ok(5))` is allowed and produces a nested `result[result[int]]`",
-            examples: &["dec result[result[int]] nested = ok(ok(5))\nprintln(nested)  // ok(ok(5))"],
+            examples: &[
+                "dec result[result[int]] nested = ok(ok(5))\nprintln(nested)  // ok(ok(5))",
+            ],
             expected_output: &["ok(ok(5))"],
         },
         DescriptionEntry {

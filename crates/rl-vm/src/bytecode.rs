@@ -207,7 +207,10 @@ fn write_line_index(index: Option<&LineIndex>, pool: &StringPoolBuilder, out: &m
     }
 }
 
-fn read_line_index(cursor: &mut Cursor, pool: &[String]) -> Result<Option<LineIndex>, BytecodeError> {
+fn read_line_index(
+    cursor: &mut Cursor,
+    pool: &[String],
+) -> Result<Option<LineIndex>, BytecodeError> {
     match cursor.u8()? {
         0 => Ok(None),
         1 => {
