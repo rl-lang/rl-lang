@@ -1,6 +1,7 @@
 [package]
 name = "rl-cli"
-version.workspace = true
+version = "0.2.2"
+readme = "readme.md"
 edition.workspace = true
 license.workspace = true
 description = "Command-line interface for the rl-lang toolchain"
@@ -32,7 +33,7 @@ log = { workspace = true, optional = true }
 env_logger = { workspace = true, optional = true }
 
 [features]
-default = ["repl", "run", "eval", "vm"]
+default = ["repl", "run", "eval", "vm", "docs-tui"]
 run = []
 repl = ["dep:rl-repl"]
 debug = ["dep:env_logger", "dep:log"]
@@ -40,3 +41,4 @@ eval = []
 vm = []
 cranelift = ["rl-cranelift"]
 lsp = ["dep:rl-lsp", "dep:tokio"]
+docs-tui = ["rl-docs/tui"]

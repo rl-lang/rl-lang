@@ -22,8 +22,11 @@ use tower_lsp::{LspService, Server};
 use crate::backend::Backend;
 
 mod backend;
+mod goto_definition;
 mod hover;
 mod pipeline;
+mod references;
+mod rename;
 mod to_diagnostic;
 mod utils;
 

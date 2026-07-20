@@ -8,7 +8,7 @@ use rl_ast::statements::TypeAnnotation;
 pub fn std_arr_insert(_: &mut Evaluator, array: Value, value: Value, index: i64) -> Value {
     match array {
         Value::Values { items_type, items } => {
-            if index as usize >= items.len() {
+            if index < 0 || index as usize > items.len() {
                 return verr!(vs!(format!("arr_insert: index out of bounds: {}", index)));
             }
 

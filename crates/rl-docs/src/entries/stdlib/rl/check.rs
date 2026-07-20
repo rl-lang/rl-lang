@@ -3,8 +3,7 @@ use crate::entry::FnEntry;
 pub static CHECK: FnEntry = FnEntry {
     signature: "check(code)",
     description: "parses and type-checks a string of rl source code without running it; useful for validating snippets before evaluating them",
-    example: r#"
-get std::rl::check
+    example: r#"get std::rl::check
 
 check("dec int x = 1")?
 check("dec int x = \"a\"")?"#,

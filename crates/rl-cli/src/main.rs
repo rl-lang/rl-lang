@@ -141,6 +141,10 @@ enum Commands {
         #[arg(value_name = "TOPIC")]
         topic: Option<String>,
 
+        /// Browse docs in an interactive terminal UI instead of printing them
+        #[arg(long)]
+        tui: bool,
+
         /// Print output as JSON instead of Markdown
         #[arg(long)]
         json: bool,
@@ -457,6 +461,7 @@ fn main() {
             highlight_js,
             no_highlight,
             out_dir,
+            tui,
         } => {
             if generate {
                 #[cfg(feature = "eval")]
@@ -689,6 +694,29 @@ fn main() {
                 }
             };
 
+            if tui {
+                #[cfg(feature = "docs-tui")]
+                {
+                    if let Err(e) = rl_docs::tui::run_docs_tui(
+                        &matched_std,
+                        &matched_concepts,
+                        &matched_tutorial,
+                        topic.as_deref(),
+                    ) {
+                        eprintln!("error: docs tui failed: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+                #[cfg(not(feature = "docs-tui"))]
+                {
+                    eprintln!(
+                        "error: this build of rl was compiled without --tui support (missing 'docs-tui' feature)"
+                    );
+                    std::process::exit(1);
+                }
+                return;
+            }
+
             let rendered = if json {
                 match docs_to_json(&matched_std, &matched_concepts, &matched_tutorial) {
                     Ok(s) => s,
@@ -781,8 +809,12 @@ fn main() {
                         std::process::exit(1);
                     }
 
+                    let line_index = rl_utils::line_index::LineIndex::new(
+                        source.name.clone(),
+                        source.text.as_str(),
+                    );
                     let chunk = compile_to_chunk(source, ast, statements);
-                    let bytecode = rl_vm::serialize_chunk(&chunk);
+                    let bytecode = rl_vm::serialize_chunk(&chunk, Some(&line_index));
                     package_vm(&bytecode, &output);
                 }
                 #[cfg(not(all(feature = "eval", feature = "vm")))]
@@ -855,8 +887,10 @@ fn main() {
                     std::process::exit(1);
                 }
 
+                let line_index =
+                    rl_utils::line_index::LineIndex::new(source.name.clone(), source.text.as_str());
                 let chunk = compile_to_chunk(source, ast, statements);
-                let bytes = rl_vm::serialize_chunk(&chunk);
+                let bytes = rl_vm::serialize_chunk(&chunk, Some(&line_index));
 
                 let out_path = output.unwrap_or_else(|| file.with_extension("rlc"));
                 if let Err(e) = std::fs::write(&out_path, &bytes) {

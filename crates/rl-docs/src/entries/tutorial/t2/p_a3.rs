@@ -47,12 +47,14 @@ pub static ADV_STRING_PARSING: ConceptEntry = ConceptEntry {
             title: None,
             description: "exercise: write a function csv_parse_row in csv.rl that takes a single CSV line as a string and returns an array of trimmed fields. test it in main.rl\n\nexpected output:\n  [1, pending, 1750000000, buy groceries]",
             examples: &[
-                "// csv.rl\nget split, trim from std::str\n\nCONST string DELIMITER = \";\"\n\nfn csv_parse_row(string line) -> arr[string] {\n    get arr_map from std::array\n    dec arr[string] fields = split(line, DELIMITER)\n    return arr_map(fields, fn(string f) -> string { return trim(f) })\n}\n\n// main.rl\nget csv\nget concat from std::str\n\nfn main() {\n    dec arr[string] row = csv_parse_row(\"1;pending;1750000000;buy groceries\")\n    println(row)\n}",
+                "// csv.rl\nget split, trim   from std::str\nget arr_map        from std::array\n\nCONST string DELIMITER = \";\"\n\nfn csv_parse_row(string line) -> arr[string] {\n    dec arr[string] fields = split(line, DELIMITER)\n    return arr_map(fields, fn(string f) -> string { return trim(f) })?\n}\n\n// main.rl\nget csv\nget concat from std::str\n\nfn main() {\n    dec arr[string] row = csv_parse_row(\"1;pending;1750000000;buy groceries\")\n    println(row)\n}",
             ],
             expected_output: &[],
         },
     ],
-    pitfalls: &[],
+    pitfalls: &[
+        "csv_parse_row uses `?` even though it returns plain arr[string], not a result. that is fine here - if arr_map ever does fail, `?` still stops execution at that point, it just is not passed back to csv_parse_row's caller as a result they can check. as your CSV helpers grow you will keep this same shape: plain return types, `?` used freely inside for the failures you don't expect to actually happen in practice",
+    ],
     related: &[],
     related_stdlib: &[],
     since: None,

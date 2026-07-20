@@ -1,6 +1,7 @@
 [package]
 name = "rl-checker"
-version.workspace = true
+version = "0.3.2"
+readme = "readme.md"
 edition.workspace = true
 license.workspace = true
 description = "Static type checker for the rl-lang programming language"

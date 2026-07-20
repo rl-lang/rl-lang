@@ -12,6 +12,8 @@
 
 pub mod entries;
 pub mod entry;
+#[cfg(feature = "tui")]
+pub mod tui;
 use serde::Serialize;
 use serde_json::to_string_pretty;
 

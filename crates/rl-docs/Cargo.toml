@@ -1,6 +1,7 @@
 [package]
 name = "rl-docs"
-version.workspace = true
+version = "0.2.2"
+readme = "readme.md"
 edition.workspace = true
 license.workspace = true
 description = "Documentation generation tooling for the rl-lang programming language"
@@ -9,3 +10,10 @@ repository.workspace = true
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
+ratatui = { workspace = true, optional = true }
+crossterm = { workspace = true, optional = true }
+rl-lexer = { workspace = true, optional = true }
+rl-utils = { workspace = true, optional = true }
+
+[features]
+tui = ["dep:ratatui", "dep:crossterm", "dep:rl-lexer", "dep:rl-utils"]

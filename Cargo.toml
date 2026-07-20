@@ -21,26 +21,26 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.5"
+version = "0.2.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/rl-lang/rl-lang"
 
 [workspace.dependencies]
-rl-commons = { path = "crates/rl-commons", version = "0.1.5" }
-rl-utils = { path = "crates/rl-utils", version = "0.1.5" }
-rl-lexer = { path = "crates/rl-lexer", version = "0.1.5" }
-rl-ast = { path = "crates/rl-ast", version = "0.1.5" }
-rl-parser = { path = "crates/rl-parser", version = "0.1.5" }
-rl-resolver = { path = "crates/rl-resolver", version = "0.1.5" }
-rl-vm = { path = "crates/rl-vm", version = "0.1.5" }
-rl-cranelift = { path = "crates/rl-cranelift", version = "0.1.5" }
-rl-interpreter = { path = "crates/rl-interpreter", version = "0.1.5" }
-rl-checker = { path = "crates/rl-checker", version = "0.1.5" }
-rl-docs = { path = "crates/rl-docs", version = "0.1.5" }
-rl-tooling = { path = "crates/rl-tooling", version = "0.1.5" }
-rl-repl = { path = "crates/rl-repl", version = "0.1.5" }
-rl-lsp = { path = "crates/rl-lsp", version = "0.1.5" }
+rl-commons = { path = "crates/rl-commons", version = "0.2.2" }
+rl-utils = { path = "crates/rl-utils", version = "0.2.2" }
+rl-lexer = { path = "crates/rl-lexer", version = "0.2.2" }
+rl-ast = { path = "crates/rl-ast", version = "0.3.2" }
+rl-parser = { path = "crates/rl-parser", version = "0.3.2" }
+rl-resolver = { path = "crates/rl-resolver", version = "0.2.2" }
+rl-vm = { path = "crates/rl-vm", version = "0.2.2" }
+rl-cranelift = { path = "crates/rl-cranelift", version = "0.2.2" }
+rl-interpreter = { path = "crates/rl-interpreter", version = "0.3.2" }
+rl-checker = { path = "crates/rl-checker", version = "0.3.2" }
+rl-docs = { path = "crates/rl-docs", version = "0.2.2" }
+rl-tooling = { path = "crates/rl-tooling", version = "0.2.2" }
+rl-repl = { path = "crates/rl-repl", version = "0.2.2" }
+rl-lsp = { path = "crates/rl-lsp", version = "0.2.2" }
 
 criterion = { version = "0.5", features = ["html_reports"] }
 ariadne = "0.5"

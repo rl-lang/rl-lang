@@ -13,6 +13,7 @@ mod for_statement;
 mod function_declaration;
 mod if_statement;
 mod import_statement;
+mod infer_declaration;
 mod match_statement;
 mod record_declaration;
 mod tag_declaration;
@@ -35,6 +36,7 @@ impl Parser {
     /// | `Newline` | skip - emits a no-op `Expression(0)` placeholder |
     /// | `get` | [`parse_import`] |
     /// | `dec` | [`parse_variable_declaration`] |
+    /// | `dec` (infer) | [`parse_let_declaration`] |
     /// | `CONST` | [`parse_const_declaration`] |
     /// | `while` | [`parse_while`] |
     /// | `for` | [`parse_for`] |
@@ -48,6 +50,7 @@ impl Parser {
     ///
     /// [`parse_import`]: Parser::parse_import
     /// [`parse_variable_declaration`]: Parser::parse_variable_declartion
+    /// [`parse_infer_declaration`]: Parser::parse_infer_declaration
     /// [`parse_const_declaration`]: Parser::parse_const_declartion
     /// [`parse_while`]: Parser::parse_while
     /// [`parse_for`]: Parser::parse_for
@@ -79,9 +82,22 @@ impl Parser {
             }
             TokenType::Dec => {
                 self.advance();
-                #[cfg(feature = "debug")]
-                log::info!("found `declaration` for variable while parsing");
-                self.parse_variable_declartion(start)
+
+                let is_inferred = if let TokenType::Identifier(name) = self.peek() {
+                    !self.record_names.contains(&name) && !self.tag_names.contains(&name)
+                } else {
+                    false
+                };
+
+                if is_inferred {
+                    #[cfg(feature = "debug")]
+                    log::info!("found `dec` for inferred variable while parsing");
+                    self.parse_infer_declaration(start)
+                } else {
+                    #[cfg(feature = "debug")]
+                    log::info!("found `dec` for variable (record|tag) while parsing");
+                    self.parse_variable_declartion(start)
+                }
             }
             TokenType::Const => {
                 self.advance();
@@ -94,6 +110,12 @@ impl Parser {
                 #[cfg(feature = "debug")]
                 log::info!("found `while` while parsing");
                 self.parse_while(start)
+            }
+            TokenType::Loop => {
+                self.advance();
+                #[cfg(feature = "debug")]
+                log::info!("found `loop` while parsing");
+                self.parse_loop(start)
             }
             TokenType::For => {
                 self.advance();

@@ -280,6 +280,12 @@ impl Resolver {
                 self.pop_scope();
                 StatementKind::While { condition, body }
             }
+            StatementKind::Loop(body) => {
+                self.push_scope();
+                let body = self.resolve_statements(body);
+                self.pop_scope();
+                StatementKind::Loop(body)
+            }
             StatementKind::Conditional {
                 if_branch,
                 else_branch,

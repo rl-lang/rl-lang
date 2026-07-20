@@ -21,8 +21,17 @@ pub fn std_arr_zip(_: &mut Evaluator, args: Vec<Value>, span: Span) -> Result<Va
         ));
     }
 
-    let (a, b) = match (&args[0], &args[1]) {
-        (Value::Values { items: a, .. }, Value::Values { items: b, .. }) => (a, b),
+    let (a, b, a_type, b_type) = match (&args[0], &args[1]) {
+        (
+            Value::Values {
+                items: a,
+                items_type: a_type,
+            },
+            Value::Values {
+                items: b,
+                items_type: b_type,
+            },
+        ) => (a, b, a_type.clone(), b_type.clone()),
         _ => {
             return Err(Error::at(
                 Reason::Runtime,
@@ -43,10 +52,7 @@ pub fn std_arr_zip(_: &mut Evaluator, args: Vec<Value>, span: Span) -> Result<Va
         .collect();
 
     Ok(Value::Values {
-        items_type: TypeAnnotation::Tuple(Rc::new(vec![
-            TypeAnnotation::Null,
-            TypeAnnotation::Null,
-        ])),
+        items_type: TypeAnnotation::Tuple(Rc::new(vec![a_type, b_type])),
         items,
     })
 }

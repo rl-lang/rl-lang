@@ -1,6 +1,7 @@
 [package]
 name = "rl-cranelift"
-version.workspace = true
+version = "0.2.2"
+readme = "readme.md"
 edition.workspace = true
 license.workspace = true
 description = "Cranelift-based JIT compiler backend for the rl-lang programming language"

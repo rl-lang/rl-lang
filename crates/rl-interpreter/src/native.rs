@@ -133,6 +133,12 @@ impl<T: ValueType> ValueType for Vec<T> {
     }
 }
 
+impl ValueType for u8 {
+    fn type_annotation() -> TypeAnnotation {
+        TypeAnnotation::Byte
+    }
+}
+
 /// Converts a [`Value`] into a typed Rust value, or returns a runtime error.
 /// Implemented for `i64`, `f64`, `String`, `bool`, `char`, `Vec<T>`, and `Value` itself.
 pub trait FromValue: Sized {
@@ -272,6 +278,12 @@ impl IntoValue for bool {
 impl IntoValue for char {
     fn into_value(self) -> Value {
         Value::Char(self)
+    }
+}
+
+impl IntoValue for u8 {
+    fn into_value(self) -> Value {
+        Value::Byte(self)
     }
 }
 

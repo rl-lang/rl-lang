@@ -31,6 +31,12 @@ pub struct Error {
     reason: Option<ErrorReason>,
     /// boxed span-aware detail; `None` for legacy errors that have no span
     detail: Option<Box<ErrorDetail>>,
+    /// file name + 1-indexed (line, col), set from a [`crate::line_index::LineIndex`]
+    /// when no source text is available to render an ariadne snippet (e.g.
+    /// errors raised while running compiled `.rlc` bytecode, which embeds a
+    /// `LineIndex` but not the original source). Used by [`Error::fallback_text`]
+    /// to print a `file:line:col` diagnostic instead of a bare message.
+    location: Option<(Arc<str>, usize, usize)>,
 }
 
 /// provides an error category with optional error context
@@ -79,13 +85,49 @@ impl Error {
                 source_name: None,
                 help: None,
             })),
+            location: None,
         }
+    }
+
+    /// Attaches a `file:line:col` fallback location, resolved from a
+    /// [`crate::line_index::LineIndex`] against this error's primary span.
+    /// Used when no source text is available to render a full ariadne
+    /// snippet (see [`Error::fallback_text`]); a no-op when full source
+    /// is later attached via [`Error::with_source`] /
+    /// [`Error::with_source_file`], since [`Error::report_to_stderr`]
+    /// prefers the ariadne path whenever source is present.
+    pub fn with_location_from(mut self, index: &crate::line_index::LineIndex) -> Self {
+        if let Some(span) = self.span() {
+            let (line, col) = index.line_col(span.start);
+            self.location = Some((Arc::clone(index.source_name()), line, col));
+        }
+        self
     }
 
     /// override the primary label text (defaults to the error message).
     pub fn with_primary_label(mut self, label: impl Into<String>) -> Self {
         if let Some(d) = &mut self.detail {
             d.primary.1 = label.into();
+        }
+        self
+    }
+
+    /// (Re-)anchors the primary span of this report at `span`. Unlike
+    /// [`Error::at`], this works on an error that was built without span
+    /// context (e.g. deep inside generic conversion code with no access to
+    /// the call site) - the caller sets the real location once it's known.
+    pub fn with_span(mut self, span: Span) -> Self {
+        match &mut self.detail {
+            Some(d) => d.primary.0 = span,
+            None => {
+                self.detail = Some(Box::new(ErrorDetail {
+                    primary: (span, self.message.clone()),
+                    labels: Vec::new(),
+                    source: None,
+                    source_name: None,
+                    help: None,
+                }));
+            }
         }
         self
     }
@@ -172,11 +214,18 @@ impl Error {
         self.fallback_text();
     }
 
-    /// legacy text rendering kept verbatim from the original implementation.
+    /// text rendering used when no source is available to render an
+    /// ariadne snippet. Prefers a precise `file:line:col` location
+    /// (set via [`Error::with_location_from`]) over the legacy bare
+    /// `[N) Error: ...]` / `[Error: ...]` format, which is now only a
+    /// fallback for errors that have neither source nor a line index.
     fn fallback_text(&self) {
-        match &self.line {
-            Some(l) => println!("[{}) Error: {}]", l, self.message),
-            None => println!("[Error: {}]", self.message),
+        match (&self.location, &self.line) {
+            (Some((name, line, col)), _) => {
+                println!("{}:{}:{}: [Error: {}]", name, line, col, self.message)
+            }
+            (None, Some(l)) => println!("[{}) Error: {}]", l, self.message),
+            (None, None) => println!("[Error: {}]", self.message),
         }
 
         if let Some(r) = &self.reason {

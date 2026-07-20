@@ -4,17 +4,24 @@
   <p>A statically-typed interpreted language written in Rust with a clean syntax, a TUI REPL, and a growing standard library.</p>
 </div>
 
+<!-- Static Project Info -->
 [![Discord](https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/9T9mB4VJB)
 [![Rust](https://img.shields.io/badge/Made%20with-Rust-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![License](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue?style=for-the-badge)](https://github.com/rl-lang/rl-lang/blob/main/LICENSE)
 
-[![Website](https://img.shields.io/website?url=https%3A%2F%2Frl-lang.github.io%2Fthe-book%2F&label=Wiki&message=online)](https://rl-lang.github.io/the-book/)
-[![License](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue)](https://github.com/rl-lang/rl-lang/blob/main/LICENSE)
-[![Last Commit](https://img.shields.io/github/last-commit/rl-lang/rl-lang)](https://github.com/rl-lang/rl-lang/commits/main)
+<!-- Website Status -->
+[![Website](https://img.shields.io/website?url=https%3A%2F%2Frl-lang.github.io%2Fthe-book%2F&label=Wiki&message=online&style=for-the-badge)](https://rl-lang.github.io/the-book/)
+[![Website](https://img.shields.io/website?url=https%3A%2F%2Frl-lang.github.io%2Frl-lang%2F&label=api-docs&message=online&style=for-the-badge)](https://rl-lang.github.io/rl-lang/)
+
+<!-- Repository & Package Metrics -->
+[![Last Commit](https://img.shields.io/github/last-commit/rl-lang/rl-lang?style=for-the-badge)](https://github.com/rl-lang/rl-lang/commits/main)
+[![Crates.io](https://img.shields.io/crates/v/rl_cli?style=for-the-badge)](https://crates.io/crates/rl-cli)
+[![Crates.io Downloads](https://img.shields.io/crates/d/rl_cli?style=for-the-badge)](https://crates.io/crates/rl-cli)
+[![GitHub Repo stars](https://img.shields.io/github/stars/rl-lang/rl-lang?style=for-the-badge)](https://github.com/rl-lang/rl-lang)
+
+<!-- CI/CD -->
 [![Check CI](https://github.com/rl-lang/rl-lang/actions/workflows/check.yaml/badge.svg)](https://github.com/rl-lang/rl-lang/actions/workflows/check.yaml)
 [![Release](https://github.com/rl-lang/rl-lang/actions/workflows/release.yml/badge.svg)](https://github.com/rl-lang/rl-lang/actions/workflows/release.yml)
-[![Crates.io](https://img.shields.io/crates/v/rl-lang)](https://crates.io/crates/rl-lang)
-[![Crates.io Downloads](https://img.shields.io/crates/d/rl-lang)](https://crates.io/crates/rl-lang)
-[![GitHub Repo stars](https://img.shields.io/github/stars/rl-lang/rl-lang?style=social)](https://github.com/rl-lang/rl-lang)
 
 ## Quick look
 
@@ -51,7 +58,7 @@ println(PI() * pow(r, 2.0))  // 78.53981633974483
 
 ```bash
 git clone https://github.com/rl-lang/rl-lang
-cd rl-lang
+cd rl-lang/crates/rl-cli
 cargo build --release
 # binary at target/release/rl
 ```
@@ -59,18 +66,37 @@ cargo build --release
 ### Via cargo install
 
 ```bash
-cargo install rl-lang
+cargo install rl-cli
 ```
+
+### Via releases
+
+from [releases](https://github.com/rl-lang/rl-lang/releases) you can choose `nightly` builds or the `latest` build
 
 ## Usage
 
+Firstly i highly suggest using the `docs` command
 ```bash
-rl run <file.rl>    # run a source file
-rl repl             # start the TUI REPL
-rl check <file.rl>  # check for errors without running
-rl dev              # run project via rl.toml
-rl new <name>       # create a new project
-rl docs             # print language reference
+rl docs
+
+# for TUI mode
+rl docs --tui
+```
+
+for using the compiled `rl` binary
+```bash
+# to check available commands
+rl -h
+# or
+rl --help
+
+# to start a new project
+rl new example-project
+
+# in project root you can run it via
+rl dev
+# or run the file directly
+rl run src/main.rl
 ```
 
 ## Documentation
@@ -91,7 +117,7 @@ A Tree-sitter grammar is available at [rl-lang/tree-sitter-rl](https://github.co
 
 ## Benchmarks
 
-Criterion benchmarks live in `benches/v0_1_0.rs`. Run with:
+Criterion benchmarks live in `crates/rl-benches`. Run with:
 
 ```bash
 cargo bench
@@ -105,7 +131,18 @@ cargo clippy -- -D warnings # lints
 cargo bench                 # criterion benchmarks
 ```
 
-Feature flags: `run`, `repl`, `repl_tui`, `eval`. All are on by default except `debug` and `lsp` (unstable but works).
+Feature flags:
+
+| Flag        | State              | Description  |
+| :---------: | :----------------: | :----------: |
+| `run`       | `On` by default    | -            |
+| `eval`      | `On` by default    | This flag for actually running the code ( weather in `interpreter` or `vm )            |
+| `vm`        | `On` by default    | This flag for `vm` backend         |
+| `cranelift` | `Off` experimental | This flag for `cranelift` backend used for native compilations             |
+| `repl`      | `On` by default    | This flag for the interactive TUI shell `REPL`             |
+| `docs-tui`  | `On` by default    | This flag for the interactive TUI mode for browsing `rl-docs`             |
+| `debug`     | `Off` by default   | This flag for logging and debugging purposes             |
+| `lsp`       | `Off` by default   | This flag for language server protocol used by IDEs and other editors             | 
 
 ## Contributors
 
@@ -132,4 +169,4 @@ Feature flags: `run`, `repl`, `repl_tui`, `eval`. All are on by default except `
 
 ## License
 
-Licensed under either of [MIT](MIT-LICENSE) or [Apache 2.0](APACHE-LICENSE) at your option.
+Licensed under either of [MIT](LICENSE-MIT.md) or [Apache 2.0](APACHE-LICENSE) at your option.

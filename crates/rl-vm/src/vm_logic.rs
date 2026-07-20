@@ -4,9 +4,18 @@ use std::rc::Rc;
 
 use crate::chunk::{Chunk, OpCode};
 use crate::values::{RecordFields, VmFunction, VmMapKey, VmValue};
+use rl_utils::errors::{Error, Reason};
+use rl_utils::line_index::LineIndex;
+use rl_utils::source::SourceFile;
+use rl_utils::span::Span;
 
-#[derive(Debug)]
-pub struct VmError(pub String);
+/// Errors raised while executing a compiled [`Chunk`].
+///
+/// A plain alias over the shared [`Error`] type (see `rl-vm::compiler::CompileError`),
+/// so runtime errors get the same ariadne-rendered source snippets as
+/// everywhere else in the pipeline, anchored at the currently executing
+/// instruction's [`Span`].
+pub type VmError = Error;
 
 enum FrameSource<'a> {
     Top(&'a Chunk),
@@ -34,6 +43,17 @@ pub struct Vm {
     globals: Vec<VmValue>,
     locals: Vec<VmValue>,
     scope_starts: Vec<usize>,
+    /// [`Span`] of the instruction currently executing, refreshed once per
+    /// dispatch loop iteration in [`Vm::run`]. Every runtime error is
+    /// anchored here.
+    current_span: Span,
+    /// Original source text, so runtime errors can render ariadne snippets.
+    source: Option<SourceFile>,
+    /// Byte-offset -> line/col table, used when `source` is `None` (e.g.
+    /// running compiled `.rlc` bytecode, which embeds this instead of the
+    /// full source) so runtime errors can still report a precise
+    /// `file:line:col` location instead of a bare message.
+    line_index: Option<LineIndex>,
 }
 
 impl Vm {
@@ -43,7 +63,59 @@ impl Vm {
             globals: Vec::new(),
             locals: Vec::new(),
             scope_starts: Vec::new(),
+            current_span: Span::dummy(),
+            source: None,
+            line_index: None,
         }
+    }
+
+    /// Attaches the original source text so runtime errors can render
+    /// ariadne source snippets instead of a bare message.
+    pub fn with_source_file(mut self, source: SourceFile) -> Self {
+        self.source = Some(source);
+        self
+    }
+
+    /// Attaches a [`LineIndex`] so runtime errors can still report a
+    /// precise `file:line:col` location when no source text is available
+    /// (see the `line_index` field docs). No-op when `source` is also set -
+    /// [`Error::report_to_stderr`] always prefers the full ariadne snippet.
+    pub fn with_line_index(mut self, index: LineIndex) -> Self {
+        self.line_index = Some(index);
+        self
+    }
+
+    /// Builds a [`Reason::Runtime`] error anchored at the currently
+    /// executing instruction, with source (or a line-index location)
+    /// attached when known.
+    pub fn err(&self, message: impl Into<String>) -> VmError {
+        let err = Error::at(Reason::Runtime, message, self.current_span);
+        self.attach_location(err)
+    }
+
+    /// Re-anchors an error built without span/source context - e.g. deep
+    /// inside the generic native-function binding machinery, which has no
+    /// access to the VM - at the currently executing instruction. Used at
+    /// the single point where a native call's `Result` rejoins the main
+    /// loop, so every native-function error still gets a correct source
+    /// snippet without threading a `Span` through `FromValue`/`IntoNativeFn`.
+    pub fn annotate(&self, e: VmError) -> VmError {
+        let e = e.with_span(self.current_span);
+        self.attach_location(e)
+    }
+
+    /// Shared by [`Vm::err`] and [`Vm::annotate`]: attaches full source
+    /// when available, otherwise falls back to a `LineIndex`-derived
+    /// `file:line:col` location, otherwise leaves the error as-is (plain
+    /// message only).
+    fn attach_location(&self, e: VmError) -> VmError {
+        if let Some(file) = &self.source {
+            return e.with_source_file(file);
+        }
+        if let Some(index) = &self.line_index {
+            return e.with_location_from(index);
+        }
+        e
     }
 
     pub fn run_and_return(&mut self, chunk: &Chunk) -> Result<VmValue, VmError> {
@@ -86,6 +158,7 @@ impl Vm {
 
             let op = OpCode::from_u8_unchecked(chunk!().code[ip]);
             ip += 1;
+            self.current_span = chunk!().span_at(ip - 1);
 
             match op {
                 OpCode::Const => {
@@ -105,7 +178,7 @@ impl Vm {
                     let out = match v {
                         VmValue::Int(n) => VmValue::Int(-n),
                         VmValue::Float(n) => VmValue::Float(-n),
-                        other => return Err(VmError(format!("cannot negate {other:?}"))),
+                        other => return Err(self.err(format!("cannot negate {other:?}"))),
                     };
                     self.stack.push(out);
                 }
@@ -113,7 +186,7 @@ impl Vm {
                     let v = self.pop()?;
                     let out = match v {
                         VmValue::Bool(b) => VmValue::Bool(!b),
-                        other => return Err(VmError(format!("cannot apply ! to {other:?}"))),
+                        other => return Err(self.err(format!("cannot apply ! to {other:?}"))),
                     };
                     self.stack.push(out);
                 }
@@ -144,7 +217,7 @@ impl Vm {
                         .stack
                         .last()
                         .cloned()
-                        .ok_or_else(|| VmError("stack underflow on assignment".into()))?;
+                        .ok_or_else(|| self.err("stack underflow on assignment"))?;
                     let frame_base = self.scope_starts[scope_base];
                     self.locals[frame_base + flat] = val;
                 }
@@ -153,7 +226,7 @@ impl Vm {
                     ip += 2;
                     let val =
                         self.globals.get(slot).cloned().ok_or_else(|| {
-                            VmError(format!("read of undefined global slot {slot}"))
+                            self.err(format!("read of undefined global slot {slot}"))
                         })?;
                     self.stack.push(val);
                 }
@@ -164,11 +237,9 @@ impl Vm {
                         .stack
                         .last()
                         .cloned()
-                        .ok_or_else(|| VmError("stack underflow on assignment".into()))?;
+                        .ok_or_else(|| self.err("stack underflow on assignment"))?;
                     if slot >= self.globals.len() {
-                        return Err(VmError(format!(
-                            "assignment to undefined global slot {slot}"
-                        )));
+                        return Err(self.err(format!("assignment to undefined global slot {slot}")));
                     }
                     self.globals[slot] = val;
                 }
@@ -210,8 +281,9 @@ impl Vm {
                 OpCode::PushScope => self.scope_starts.push(self.locals.len()),
                 OpCode::PopScope => {
                     let num_active = self.scope_starts.len() - scope_base;
-                    if num_active <= 1 {
-                        return Err(VmError("cannot pop the base call frame".into()));
+                    let min_active = if frames.len() > 1 { 1 } else { 0 };
+                    if num_active <= min_active {
+                        return Err(self.err("cannot pop the base call frame"));
                     }
                     let start = self.scope_starts.pop().unwrap();
                     self.locals.truncate(start);
@@ -229,9 +301,9 @@ impl Vm {
                         VmValue::Bool(false) => ip += offset,
                         VmValue::Bool(true) => {}
                         other => {
-                            return Err(VmError(format!(
-                                "if/while condition must be bool, got {other:?}"
-                            )));
+                            return Err(
+                                self.err(format!("if/while condition must be bool, got {other:?}"))
+                            );
                         }
                     }
                 }
@@ -256,7 +328,7 @@ impl Vm {
                             self.pop()?; // discard the callee itself
 
                             if arg_count != func.arity {
-                                return Err(VmError(format!(
+                                return Err(self.err(format!(
                                     "{} expects {} args, got {}",
                                     func.name, func.arity, arg_count
                                 )));
@@ -284,7 +356,8 @@ impl Vm {
                             call_args.reverse();
                             self.pop()?; // discard the callee itself
 
-                            let result = (native.func)(self, call_args)?;
+                            let result =
+                                (native.func)(self, call_args).map_err(|e| self.annotate(e))?;
                             self.stack.push(result);
                         }
 
@@ -294,7 +367,7 @@ impl Vm {
                             capture_start,
                         } => {
                             if arg_count != func.arity {
-                                return Err(VmError(format!(
+                                return Err(self.err(format!(
                                     "closure expects {} args, got {}",
                                     func.arity, arg_count
                                 )));
@@ -324,7 +397,7 @@ impl Vm {
                             scope_base = new_scope_base;
                         }
 
-                        other => return Err(VmError(format!("cannot call {other:?}"))),
+                        other => return Err(self.err(format!("cannot call {other:?}"))),
                     }
                 }
 
@@ -366,7 +439,7 @@ impl Vm {
                     let count = chunk!().read_u16(ip) as usize;
                     ip += 2;
                     if self.stack.len() < count {
-                        return Err(VmError("stack underflow building array".into()));
+                        return Err(self.err("stack underflow building array"));
                     }
                     let items = self.stack.split_off(self.stack.len() - count);
                     self.stack.push(VmValue::Arr(Rc::new(items)));
@@ -376,7 +449,7 @@ impl Vm {
                     let count = chunk!().read_u16(ip) as usize;
                     ip += 2;
                     if self.stack.len() < count {
-                        return Err(VmError("stack underflow building tuple".into()));
+                        return Err(self.err("stack underflow building tuple"));
                     }
                     let items = self.stack.split_off(self.stack.len() - count);
                     self.stack.push(VmValue::Tuple(Rc::new(items)));
@@ -385,28 +458,41 @@ impl Vm {
                 OpCode::Index => {
                     let index = self.pop()?;
                     let arr = self.pop()?;
-                    let elem = Self::index_get(&arr, &index)?;
+                    let elem = self.index_get(&arr, &index)?;
                     self.stack.push(elem);
+                }
+
+                OpCode::ArrLen => {
+                    let arr = self.pop()?;
+                    match arr {
+                        VmValue::Arr(items) => self.stack.push(VmValue::Int(items.len() as i64)),
+                        other => {
+                            return Err(
+                                self.err(format!("cannot get length of {}", other.type_name()))
+                            );
+                        }
+                    }
                 }
 
                 OpCode::ArrSet => {
                     let value = self.pop()?;
                     let index = self.pop()?;
                     let arr = self.pop()?;
-                    self.stack.push(Self::index_set(arr, &index, value)?);
+                    let updated = self.index_set(arr, &index, value)?;
+                    self.stack.push(updated);
                 }
 
                 OpCode::BuildSet => {
                     let count = chunk!().read_u16(ip) as usize;
                     ip += 2;
                     if self.stack.len() < count {
-                        return Err(VmError("stack underflow building set".into()));
+                        return Err(self.err("stack underflow building set"));
                     }
                     let items = self.stack.split_off(self.stack.len() - count);
                     let mut set = HashSet::with_capacity(count);
                     for v in items {
                         let key = VmMapKey::from_value(&v).ok_or_else(|| {
-                            VmError(format!("type {} cannot be a set element", v.type_name()))
+                            self.err(format!("type {} cannot be a set element", v.type_name()))
                         })?;
                         set.insert(key);
                     }
@@ -417,13 +503,13 @@ impl Vm {
                     let count = chunk!().read_u16(ip) as usize; // number of entries
                     ip += 2;
                     if self.stack.len() < count * 2 {
-                        return Err(VmError("stack underflow building map".into()));
+                        return Err(self.err("stack underflow building map"));
                     }
                     let flat = self.stack.split_off(self.stack.len() - count * 2);
                     let mut map = HashMap::with_capacity(count);
                     for pair in flat.chunks_exact(2) {
                         let key = VmMapKey::from_value(&pair[0]).ok_or_else(|| {
-                            VmError(format!(
+                            self.err(format!(
                                 "type {} cannot be used as a map key",
                                 pair[0].type_name()
                             ))
@@ -442,17 +528,13 @@ impl Vm {
                     ip += 2;
 
                     let VmValue::Str(name) = chunk!().constants[name_idx].clone() else {
-                        return Err(VmError(
-                            "corrupt bytecode: struct name is not a string".into(),
-                        ));
+                        return Err(self.err("corrupt bytecode: struct name is not a string"));
                     };
                     let VmValue::Arr(field_names) = chunk!().constants[fields_idx].clone() else {
-                        return Err(VmError(
-                            "corrupt bytecode: struct field list is not an array".into(),
-                        ));
+                        return Err(self.err("corrupt bytecode: struct field list is not an array"));
                     };
                     if self.stack.len() < count {
-                        return Err(VmError("stack underflow building struct".into()));
+                        return Err(self.err("stack underflow building struct"));
                     }
                     let values = self.stack.split_off(self.stack.len() - count);
                     let fields = field_names
@@ -475,20 +557,18 @@ impl Vm {
                     let field_idx = chunk!().read_u16(ip) as usize;
                     ip += 2;
                     let VmValue::Str(field) = chunk!().constants[field_idx].clone() else {
-                        return Err(VmError(
-                            "corrupt bytecode: field name is not a string".into(),
-                        ));
+                        return Err(self.err("corrupt bytecode: field name is not a string"));
                     };
                     let target = self.pop()?;
                     let VmValue::Record { name, fields } = &target else {
-                        return Err(VmError(format!(
+                        return Err(self.err(format!(
                             "cannot access field `{}` on {}",
                             field,
                             target.type_name()
                         )));
                     };
                     let value = fields.get(&field).ok_or_else(|| {
-                        VmError(format!("record `{}` has no field `{}`", name, field))
+                        self.err(format!("record `{}` has no field `{}`", name, field))
                     })?;
                     self.stack.push(value);
                 }
@@ -497,24 +577,19 @@ impl Vm {
                     let field_idx = chunk!().read_u16(ip) as usize;
                     ip += 2;
                     let VmValue::Str(field) = chunk!().constants[field_idx].clone() else {
-                        return Err(VmError(
-                            "corrupt bytecode: field name is not a string".into(),
-                        ));
+                        return Err(self.err("corrupt bytecode: field name is not a string"));
                     };
                     let value = self.pop()?;
                     let target = self.pop()?;
                     let VmValue::Record { name, fields } = &target else {
-                        return Err(VmError(format!(
+                        return Err(self.err(format!(
                             "cannot assign field `{}` on {}",
                             field,
                             target.type_name()
                         )));
                     };
                     if !fields.has(&field) {
-                        return Err(VmError(format!(
-                            "record `{}` has no field `{}`",
-                            name, field
-                        )));
+                        return Err(self.err(format!("record `{}` has no field `{}`", name, field)));
                     }
                     fields.set(&field, value.clone());
                     self.stack.push(value);
@@ -525,9 +600,9 @@ impl Vm {
                     let capture_start = chunk!().read_u16(ip);
                     ip += 2;
                     let VmValue::Function(func) = chunk!().constants[const_idx].clone() else {
-                        return Err(VmError(
-                            "corrupt bytecode: closure template is not a function".into(),
-                        ));
+                        return Err(
+                            self.err("corrupt bytecode: closure template is not a function")
+                        );
                     };
 
                     let captured = if self.scope_starts.len() == scope_base {
@@ -536,7 +611,7 @@ impl Vm {
                         let frame_base = self.scope_starts[scope_base];
                         let start = frame_base + capture_start as usize;
                         if start > self.locals.len() {
-                            return Err(VmError(format!(
+                            return Err(self.err(format!(
                                 "corrupt bytecode: closure capture_start {capture_start} exceeds live locals ({} available)",
                                 self.locals.len() - frame_base
                             )));
@@ -564,34 +639,32 @@ impl Vm {
         Ok(!frames.is_empty())
     }
 
-    fn index_as_usize(index: &VmValue, len: usize) -> Result<usize, VmError> {
+    fn index_as_usize(&self, index: &VmValue, len: usize) -> Result<usize, VmError> {
         let i = match index {
             VmValue::Int(n) => *n,
             VmValue::Byte(b) => *b as i64,
             other => {
-                return Err(VmError(format!(
+                return Err(self.err(format!(
                     "array index must be int or byte, got {}",
                     other.type_name()
                 )));
             }
         };
         if i < 0 || i as usize >= len {
-            return Err(VmError(format!(
-                "array index out of bounds: {i} (len {len})"
-            )));
+            return Err(self.err(format!("array index out of bounds: {i} (len {len})")));
         }
         Ok(i as usize)
     }
 
-    fn index_get(arr: &VmValue, index: &VmValue) -> Result<VmValue, VmError> {
+    fn index_get(&self, arr: &VmValue, index: &VmValue) -> Result<VmValue, VmError> {
         match arr {
             VmValue::Arr(items) | VmValue::Tuple(items) => {
-                let i = Self::index_as_usize(index, items.len())?;
+                let i = self.index_as_usize(index, items.len())?;
                 Ok(items[i].clone())
             }
             VmValue::Map(entries) => {
                 let key = VmMapKey::from_value(index).ok_or_else(|| {
-                    VmError(format!(
+                    self.err(format!(
                         "type {} cannot be used as a map key",
                         index.type_name()
                     ))
@@ -600,23 +673,23 @@ impl Vm {
                     .borrow()
                     .get(&key)
                     .cloned()
-                    .ok_or_else(|| VmError(format!("key {} not found in map", index)))
+                    .ok_or_else(|| self.err(format!("key {} not found in map", index)))
             }
-            other => Err(VmError(format!("cannot index into {}", other.type_name()))),
+            other => Err(self.err(format!("cannot index into {}", other.type_name()))),
         }
     }
 
-    fn index_set(arr: VmValue, index: &VmValue, value: VmValue) -> Result<VmValue, VmError> {
+    fn index_set(&self, arr: VmValue, index: &VmValue, value: VmValue) -> Result<VmValue, VmError> {
         match arr {
             VmValue::Arr(items) => {
-                let i = Self::index_as_usize(index, items.len())?;
+                let i = self.index_as_usize(index, items.len())?;
                 let mut items = Rc::try_unwrap(items).unwrap_or_else(|rc| (*rc).clone());
                 items[i] = value;
                 Ok(VmValue::Arr(Rc::new(items)))
             }
             VmValue::Map(entries) => {
                 let key = VmMapKey::from_value(index).ok_or_else(|| {
-                    VmError(format!(
+                    self.err(format!(
                         "type {} cannot be used as a map key",
                         index.type_name()
                     ))
@@ -624,7 +697,7 @@ impl Vm {
                 entries.borrow_mut().insert(key, value);
                 Ok(VmValue::Map(entries))
             }
-            other => Err(VmError(format!("cannot index into {}", other.type_name()))),
+            other => Err(self.err(format!("cannot index into {}", other.type_name()))),
         }
     }
 
@@ -646,9 +719,7 @@ impl Vm {
 
     /// Helper functions that wraps the Vec::pop to return valid VmError or VmValue
     fn pop(&mut self) -> Result<VmValue, VmError> {
-        self.stack
-            .pop()
-            .ok_or_else(|| VmError("stack underflow".into()))
+        self.stack.pop().ok_or_else(|| self.err("stack underflow"))
     }
     fn pop_two(&mut self) -> Result<(VmValue, VmValue), VmError> {
         let b = self.pop()?;
@@ -673,9 +744,7 @@ impl Vm {
             (VmValue::Int(a), VmValue::Float(b)) => VmValue::Float(float_op(a as f64, b)),
             (VmValue::Float(a), VmValue::Int(b)) => VmValue::Float(float_op(a, b as f64)),
             (a, b) => {
-                return Err(VmError(format!(
-                    "cannot apply arithmetic op to {a:?} and {b:?}"
-                )));
+                return Err(self.err(format!("cannot apply arithmetic op to {a:?} and {b:?}")));
             }
         };
         self.stack.push(out);
@@ -688,12 +757,14 @@ impl Vm {
     fn binary_div(&mut self) -> Result<(), VmError> {
         let (a, b) = self.pop_two_unchecked();
         let out = match (a, b) {
-            (VmValue::Int(_), VmValue::Int(0)) => return Err(VmError("division by zero".into())),
+            (VmValue::Int(_), VmValue::Int(0)) => {
+                return Err(self.err("division by zero"));
+            }
             (VmValue::Int(a), VmValue::Int(b)) => VmValue::Int(a / b),
             (VmValue::Float(a), VmValue::Float(b)) => VmValue::Float(a / b),
             (VmValue::Int(a), VmValue::Float(b)) => VmValue::Float(a as f64 / b),
             (VmValue::Float(a), VmValue::Int(b)) => VmValue::Float(a / b as f64),
-            (a, b) => return Err(VmError(format!("cannot divide {a:?} by {b:?}"))),
+            (a, b) => return Err(self.err(format!("cannot divide {a:?} by {b:?}"))),
         };
         self.stack.push(out);
         Ok(())
@@ -709,9 +780,9 @@ impl Vm {
             (VmValue::Float(a), VmValue::Float(b)) => a.partial_cmp(b),
             (VmValue::Int(a), VmValue::Float(b)) => (*a as f64).partial_cmp(b),
             (VmValue::Float(a), VmValue::Int(b)) => a.partial_cmp(&(*b as f64)),
-            _ => return Err(VmError(format!("cannot compare {a:?} and {b:?}"))),
+            _ => return Err(self.err(format!("cannot compare {a:?} and {b:?}"))),
         }
-        .ok_or_else(|| VmError("comparison produced no ordering (NaN?)".into()))?;
+        .ok_or_else(|| self.err("comparison produced no ordering (NaN?)"))?;
         self.stack.push(VmValue::Bool(pred(ord)));
         Ok(())
     }

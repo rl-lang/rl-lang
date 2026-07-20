@@ -3,10 +3,10 @@ use crate::entry::FnEntry;
 pub static SIN: FnEntry = FnEntry {
     signature: "sin(x)",
     description: "sine of x in radians",
-    example: "get std::math::sin\n\nsin(0.0) // 0.0",
-    expected_output: None,
-    returns: "",
+    example: "get std::math::sin\n\nsin(0.0)",
+    expected_output: Some("0.0"),
+    returns: "float",
     errors: None,
-    see_also: &[],
+    see_also: &["cos", "tan"],
     since: Some("v0.1.5"),
 };

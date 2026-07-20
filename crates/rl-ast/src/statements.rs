@@ -145,6 +145,7 @@ pub enum StatementKind {
         condition: ExprId,
         body: Vec<Statement>,
     },
+    Loop(Vec<Statement>),
     /// A C-style `for [init, cond, incr] { body }` loop.
     For {
         initializer: Box<Statement>,
@@ -237,7 +238,9 @@ pub enum StatementKind {
         path: Vec<String>,
     },
     /// A file module import: `get mymodule` or `get mymodule::sub`.
-    ImportFile { path: Vec<String> },
+    ImportFile {
+        path: Vec<String>,
+    },
     /// A resolved file import - the imported file's statements are inlined here.
     ResolvedImportFile {
         path: Vec<String>,
@@ -271,7 +274,10 @@ pub enum StatementKind {
     },
 
     /// A tag (enum) type declaration: `tag Name { VariantA, VariantB }`.
-    TagDeclaration { name: String, variants: Vec<String> },
+    TagDeclaration {
+        name: String,
+        variants: Vec<String>,
+    },
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -331,6 +337,8 @@ pub enum TypeAnnotation {
     Fn,
     /// Absence of a type - used as the default return type when none is annotated.
     Null,
+    /// Placeholder used by `dec name = value` bindings.
+    Infer,
 
     Tuple(Rc<Vec<TypeAnnotation>>),
     CTuple(Rc<Vec<TypeAnnotation>>),
