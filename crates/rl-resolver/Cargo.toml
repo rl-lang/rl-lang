@@ -1,6 +1,7 @@
 [package]
 name = "rl-resolver"
-version = "0.2.1"
+version = "0.2.2"
+readme = "readme.md"
 edition.workspace = true
 license.workspace = true
 description = "Name and import resolution for the rl-lang programming language"

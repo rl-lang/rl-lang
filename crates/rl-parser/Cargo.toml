@@ -1,6 +1,7 @@
 [package]
 name = "rl-parser"
-version = "0.2.1"
+version = "0.3.2"
+readme = "readme.md"
 edition.workspace = true
 license.workspace = true
 description = "Parser for the rl-lang programming language"
