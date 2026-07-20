@@ -10,7 +10,7 @@ mod set_remove;
 mod set_to_array;
 
 pub fn module() -> Module {
-    Module::new("set")
+    Module::new("collections")
         .with_function("set_add", set_add::std_set_add)
         .with_function("set_remove", set_remove::std_set_remove)
         .with_function("set_contains", set_contains::std_set_contains)

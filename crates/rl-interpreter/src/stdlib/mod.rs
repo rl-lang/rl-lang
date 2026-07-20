@@ -2,6 +2,7 @@
 
 pub mod array;
 pub mod bitwise;
+pub mod collections;
 mod common;
 pub mod debug;
 pub mod fs;
@@ -19,4 +20,3 @@ pub mod string;
 pub mod terminal;
 pub mod time;
 pub mod types;
-pub mod set;

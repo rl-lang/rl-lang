@@ -6,7 +6,7 @@ use crate::common::eval_program;
 fn set_add_to_empty() {
     let ev = eval_program(
         r#"
-get set_add, set_to_array from std::set
+get set_add, set_to_array from std::collections
 dec set[int] s = {}
 s = set_add(s, 42)?
 dec arr[int] a = set_to_array(s)?
@@ -26,7 +26,7 @@ dec arr[int] a = set_to_array(s)?
 fn set_add_multiple() {
     let ev = eval_program(
         r#"
-get set_add, set_len from std::set
+get set_add, set_len from std::collections
 dec set[int] s = {}
 s = set_add(s, 1)?
 s = set_add(s, 2)?
@@ -42,7 +42,7 @@ dec int n = set_len(s)?
 fn set_add_duplicate_is_noop() {
     let ev = eval_program(
         r#"
-get set_add, set_len from std::set
+get set_add, set_len from std::collections
 dec set[int] s = {}
 s = set_add(s, 5)?
 s = set_add(s, 5)?
@@ -57,7 +57,7 @@ dec int n = set_len(s)?
 fn set_add_with_existing_elements() {
     let ev = eval_program(
         r#"
-get set_add, set_len from std::set
+get set_add, set_len from std::collections
 dec set[int] s = {10, 20, 30}
 s = set_add(s, 40)?
 dec int n = set_len(s)?
@@ -71,7 +71,7 @@ dec int n = set_len(s)?
 fn set_add_type_mismatch() {
     let ev = eval_program(
         r#"
-get set_add from std::set
+get set_add from std::collections
 dec set[int] s = {1, 2}
 s = set_add(s, "hello")?
 "#,
@@ -84,7 +84,7 @@ s = set_add(s, "hello")?
 fn set_remove_existing() {
     let ev = eval_program(
         r#"
-get set_remove, set_contains from std::set
+get set_remove, set_contains from std::collections
 dec set[int] s = {1, 2, 3}
 s = set_remove(s, 2)?
 dec bool has_1 = set_contains(s, 1)?
@@ -102,7 +102,7 @@ dec bool has_3 = set_contains(s, 3)?
 fn set_remove_nonexistent_is_noop() {
     let ev = eval_program(
         r#"
-get set_remove, set_len from std::set
+get set_remove, set_len from std::collections
 dec set[int] s = {1, 2, 3}
 s = set_remove(s, 99)?
 dec int n = set_len(s)?
@@ -116,7 +116,7 @@ dec int n = set_len(s)?
 fn set_remove_from_empty() {
     let ev = eval_program(
         r#"
-get set_remove, set_len from std::set
+get set_remove, set_len from std::collections
 dec set[int] s = {}
 s = set_remove(s, 1)?
 dec int n = set_len(s)?
@@ -130,7 +130,7 @@ dec int n = set_len(s)?
 fn set_remove_all_elements() {
     let ev = eval_program(
         r#"
-get set_remove, set_is_empty from std::set
+get set_remove, set_is_empty from std::collections
 dec set[int] s = {1}
 s = set_remove(s, 1)?
 dec bool empty = set_is_empty(s)?
@@ -144,7 +144,7 @@ dec bool empty = set_is_empty(s)?
 fn set_contains_found() {
     let ev = eval_program(
         r#"
-get set_contains from std::set
+get set_contains from std::collections
 dec set[int] s = {10, 20, 30}
 dec bool x = set_contains(s, 20)?
 "#,
@@ -157,7 +157,7 @@ dec bool x = set_contains(s, 20)?
 fn set_contains_not_found() {
     let ev = eval_program(
         r#"
-get set_contains from std::set
+get set_contains from std::collections
 dec set[int] s = {10, 20, 30}
 dec bool x = set_contains(s, 99)?
 "#,
@@ -170,7 +170,7 @@ dec bool x = set_contains(s, 99)?
 fn set_contains_empty_set() {
     let ev = eval_program(
         r#"
-get set_contains from std::set
+get set_contains from std::collections
 dec set[int] s = {}
 dec bool x = set_contains(s, 1)?
 "#,
@@ -183,7 +183,7 @@ dec bool x = set_contains(s, 1)?
 fn set_contains_strings() {
     let ev = eval_program(
         r#"
-get set_contains from std::set
+get set_contains from std::collections
 dec set[string] s = {"a", "b", "c"}
 dec bool x = set_contains(s, "b")?
 "#,
@@ -196,7 +196,7 @@ dec bool x = set_contains(s, "b")?
 fn set_len_empty() {
     let ev = eval_program(
         r#"
-get set_len from std::set
+get set_len from std::collections
 dec set[int] s = {}
 dec int n = set_len(s)?
 "#,
@@ -209,7 +209,7 @@ dec int n = set_len(s)?
 fn set_len_nonempty() {
     let ev = eval_program(
         r#"
-get set_len from std::set
+get set_len from std::collections
 dec set[int] s = {1, 2, 3, 4, 5}
 dec int n = set_len(s)?
 "#,
@@ -222,7 +222,7 @@ dec int n = set_len(s)?
 fn set_is_empty_true() {
     let ev = eval_program(
         r#"
-get set_is_empty from std::set
+get set_is_empty from std::collections
 dec set[int] s = {}
 dec bool x = set_is_empty(s)?
 "#,
@@ -235,7 +235,7 @@ dec bool x = set_is_empty(s)?
 fn set_is_empty_false() {
     let ev = eval_program(
         r#"
-get set_is_empty from std::set
+get set_is_empty from std::collections
 dec set[int] s = {42}
 dec bool x = set_is_empty(s)?
 "#,
@@ -248,7 +248,7 @@ dec bool x = set_is_empty(s)?
 fn set_to_array_empty() {
     let ev = eval_program(
         r#"
-get set_to_array from std::set
+get set_to_array from std::collections
 get len from std::array
 dec set[int] s = {}
 dec arr[int] a = set_to_array(s)?
@@ -263,7 +263,7 @@ dec int n = len(a)?
 fn set_to_array_preserves_elements() {
     let ev = eval_program(
         r#"
-get set_to_array, set_len from std::set
+get set_to_array, set_len from std::collections
 get arr_sort from std::array
 dec set[int] s = {3, 1, 2}
 dec arr[int] a = set_to_array(s)?
@@ -288,7 +288,7 @@ dec int n = set_len(s)?
 fn set_to_array_type_mismatch() {
     let result = eval_program(
         r#"
-get set_to_array from std::set
+get set_to_array from std::collections
 dec set[int] s = {1, 2}
 dec arr[string] a = set_to_array(s)?
 "#,
@@ -300,7 +300,7 @@ dec arr[string] a = set_to_array(s)?
 fn set_with_booleans() {
     let ev = eval_program(
         r#"
-get set_add, set_len from std::set
+get set_add, set_len from std::collections
 dec set[bool] s = {}
 s = set_add(s, true)?
 s = set_add(s, false)?
@@ -316,7 +316,7 @@ dec int n = set_len(s)?
 fn set_add_remove_roundtrip() {
     let ev = eval_program(
         r#"
-get set_add, set_remove, set_contains from std::set
+get set_add, set_remove, set_contains from std::collections
 dec set[int] s = {}
 s = set_add(s, 1)?
 s = set_add(s, 2)?
