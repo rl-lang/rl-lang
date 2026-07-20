@@ -172,6 +172,14 @@ impl Parser {
                     self.advance();
                     path.push(segment);
                 }
+                TokenType::Set => {
+                    self.advance();
+                    path.push("set".to_string());
+                }
+                TokenType::Map => {
+                    self.advance();
+                    path.push("map".to_string());
+                }
                 _ => return Err(self.err("expected path after 'from'", self.peek_span())),
             }
             if !self.match_type(&[TokenType::ColonColon]) {

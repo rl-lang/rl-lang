@@ -27,6 +27,7 @@ pub fn stdlib_entries() -> Vec<&'static StdEntry> {
         &stdlib::debug::DEBUG,
         &stdlib::net::NET,
         &stdlib::http::HTTP,
+        &stdlib::collections::COLLECTIONS,
     ]
 }
 

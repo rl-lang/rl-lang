@@ -1,0 +1,78 @@
+name: Open Release PR
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g. v0.4.0)"
+        required: true
+        type: string
+      bump:
+        description: "Bump type"
+        required: true
+        type: choice
+        options: [patch, minor, major]
+      notes:
+        description: "Extra release notes (optional, prepended above the commit list)"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  open-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build commit log
+        id: log
+        run: |
+          {
+            echo "changelog<<EOF"
+            git log origin/main..origin/dev --pretty=format:"- %s (%h)" --no-merges
+            echo ""
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check for existing PR
+        id: existing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          number=$(gh pr list --base main --head dev --json number --jq '.[0].number // empty')
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update release PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+          BUMP: ${{ inputs.bump }}
+          NOTES: ${{ inputs.notes }}
+          CHANGELOG: ${{ steps.log.outputs.changelog }}
+          PR_NUMBER: ${{ steps.existing.outputs.number }}
+        run: |
+          body="## ${VERSION} (${BUMP})
+
+          ${NOTES}
+
+          ### Commits
+          ${CHANGELOG}"
+
+          if [ -n "$PR_NUMBER" ]; then
+            gh pr edit "$PR_NUMBER" \
+              --title "release ${VERSION}" \
+              --body "$body"
+          else
+            gh pr create \
+              --base main \
+              --head dev \
+              --title "release ${VERSION}" \
+              --body "$body"
+          fi

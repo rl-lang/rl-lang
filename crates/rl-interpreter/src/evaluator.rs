@@ -169,7 +169,8 @@ impl Evaluator {
                 .with_module(stdlib::rl::module())
                 .with_module(stdlib::debug::module())
                 .with_module(stdlib::net::module())
-                .with_module(stdlib::http::module()),
+                .with_module(stdlib::http::module())
+                .with_module(stdlib::collections::module()),
         )
     }
 
@@ -1098,6 +1099,7 @@ impl Evaluator {
                 .chain(stdlib::debug::KEYWORDS)
                 .chain(stdlib::net::KEYWORDS)
                 .chain(stdlib::http::KEYWORDS)
+                .chain(stdlib::collections::KEYWORDS)
                 .copied();
             if let Some(suggestion) = closest_match(last, candidates) {
                 err = err.with_help(format!("did you mean `{}`?", suggestion));
