@@ -337,6 +337,8 @@ pub enum TypeAnnotation {
     Fn,
     /// Absence of a type - used as the default return type when none is annotated.
     Null,
+    /// Placeholder used by `dec name = value` bindings.
+    Infer,
 
     Tuple(Rc<Vec<TypeAnnotation>>),
     CTuple(Rc<Vec<TypeAnnotation>>),
