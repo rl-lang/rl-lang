@@ -84,6 +84,7 @@ pub fn stdlib_names() -> ModuleNames {
         .with_module(ModuleNames::new("debug").with_functions(keywords::debug::KEYWORDS))
         .with_module(ModuleNames::new("net").with_functions(keywords::net::KEYWORDS))
         .with_module(ModuleNames::new("http").with_functions(keywords::http::KEYWORDS))
+        .with_module(ModuleNames::new("set").with_functions(keywords::set::KEYWORDS))
 }
 
 #[cfg(test)]
