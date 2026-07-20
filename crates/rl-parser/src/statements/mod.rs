@@ -82,26 +82,20 @@ impl Parser {
             }
             TokenType::Dec => {
                 self.advance();
-                if matches!(self.peek(), TokenType::Identifier(_)) {
-                    let peeked = match self.peek() {
-                        TokenType::Identifier(a) => a,
-                        _ => "1".to_string(),
-                    };
-                    if &peeked != "1"
-                        && !self.record_names.contains(&peeked)
-                        && !self.tag_names.contains(&peeked)
-                    {
-                        #[cfg(feature = "debug")]
-                        log::info!("found `dec` for inferred variable while parsing");
-                        self.parse_infer_declaration(start)
-                    } else {
-                        #[cfg(feature = "debug")]
-                        log::info!("found `dec` for variable (record|tag) while parsing");
-                        self.parse_variable_declartion(start)
-                    }
+
+                let is_inferred = if let TokenType::Identifier(name) = self.peek() {
+                    !self.record_names.contains(&name) && !self.tag_names.contains(&name)
+                } else {
+                    false
+                };
+
+                if is_inferred {
+                    #[cfg(feature = "debug")]
+                    log::info!("found `dec` for inferred variable while parsing");
+                    self.parse_infer_declaration(start)
                 } else {
                     #[cfg(feature = "debug")]
-                    log::info!("found `dec` for variable while parsing");
+                    log::info!("found `dec` for variable (record|tag) while parsing");
                     self.parse_variable_declartion(start)
                 }
             }
