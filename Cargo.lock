@@ -1458,7 +1458,7 @@ dependencies = [
 
 [[package]]
 name = "rl-benches"
-version = "0.2.2"
+version = "0.4.0"
 dependencies = [
  "criterion",
  "rl-ast",
@@ -1507,7 +1507,7 @@ dependencies = [
 
 [[package]]
 name = "rl-commons"
-version = "0.2.2"
+version = "0.3.0"
 
 [[package]]
 name = "rl-cranelift"
@@ -1535,7 +1535,7 @@ dependencies = [
 
 [[package]]
 name = "rl-interpreter"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "crossterm",
  "log",
@@ -1572,7 +1572,7 @@ dependencies = [
 
 [[package]]
 name = "rl-parser"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "log",
  "rl-ast",
@@ -1606,7 +1606,7 @@ dependencies = [
 
 [[package]]
 name = "rl-tests"
-version = "0.2.2"
+version = "0.4.0"
 dependencies = [
  "rl-ast",
  "rl-interpreter",
@@ -1637,7 +1637,7 @@ dependencies = [
 
 [[package]]
 name = "rl-vm"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "rl-ast",
  "rl-lexer",
