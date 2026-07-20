@@ -18,8 +18,10 @@ impl TypeChecker {
             StatementKind::VariableDeclaration {
                 name,
                 type_annotation,
+                unit_annotation,
                 value,
             } => {
+                let _ = unit_annotation;
                 let value_type = self.check_expression(*value);
 
                 // `dec name = value` - the type wasn't stated, so whatever
@@ -51,8 +53,10 @@ impl TypeChecker {
             StatementKind::ConstantDeclaration {
                 name,
                 type_annotation,
+                unit_annotation,
                 value,
             } => {
+                let _ = unit_annotation;
                 let value_type = self.check_expression(*value).into_const();
                 let declared = CheckType::Known(type_annotation.clone());
 
@@ -734,6 +738,7 @@ impl TypeChecker {
                     name,
                     type_annotation,
                     value,
+                    ..
                 } if wanted(name) => {
                     let declared = if *type_annotation == TypeAnnotation::Infer {
                         self.check_expression(*value)

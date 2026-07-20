@@ -228,6 +228,7 @@ macro_rules! assert_decl {
                 name,
                 type_annotation,
                 value,
+                ..
             } => {
                 assert_eq!(name, $name);
                 assert_eq!(*type_annotation, $ty);
@@ -346,4 +347,5 @@ macro_rules! assert_array_decl {
         assert_eq!(statements[0].span, $stmt_span);
     }};
 }
+
 // ---- macro end   ----

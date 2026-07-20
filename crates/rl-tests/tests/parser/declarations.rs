@@ -1,7 +1,7 @@
 use {
     rl_ast::{
         nodes::ExpressionKind,
-        statements::{StatementKind, TypeAnnotation},
+        statements::{StatementKind, TypeAnnotation, UnitAnnotation},
     },
     rl_utils::span::Span,
 };
@@ -200,4 +200,74 @@ fn const_fn() {
         value: ExpressionKind::Lambda { params: vec![], return_type: None, body: vec![] }, Span::new(13, 19),
         span: Span::new(0, 19),
     );
+}
+
+#[test]
+fn dec_float_with_unit() {
+    let (ast, statements) = common::parse("dec float speed: m/s = 12.5");
+
+    assert_eq!(statements.len(), 1);
+
+    match &statements[0].kind {
+        StatementKind::VariableDeclaration {
+            name,
+            type_annotation,
+            unit_annotation,
+            value,
+        } => {
+            assert_eq!(name, "speed");
+            assert_eq!(*type_annotation, TypeAnnotation::Float);
+
+            assert_eq!(
+                unit_annotation,
+                &Some(UnitAnnotation::Divide(
+                    Box::new(UnitAnnotation::Symbol("m".to_string())),
+                    Box::new(UnitAnnotation::Symbol("s".to_string())),
+                ))
+            );
+
+            assert_eq!(ast.exprs.get(*value).kind, ExpressionKind::Float(12.5));
+
+            assert_eq!(ast.exprs.get(*value).span, Span::new(23, 27));
+        }
+
+        other => panic!("expected VariableDeclaration, got {:?}", other),
+    }
+
+    assert_eq!(statements[0].span, Span::new(0, 27));
+}
+
+#[test]
+fn const_float_with_unit() {
+    let (ast, statements) = common::parse("CONST float speed: m/s = 12.5");
+
+    assert_eq!(statements.len(), 1);
+
+    match &statements[0].kind {
+        StatementKind::ConstantDeclaration {
+            name,
+            type_annotation,
+            unit_annotation,
+            value,
+        } => {
+            assert_eq!(name, "speed");
+            assert_eq!(*type_annotation, TypeAnnotation::CFloat);
+
+            assert_eq!(
+                unit_annotation,
+                &Some(UnitAnnotation::Divide(
+                    Box::new(UnitAnnotation::Symbol("m".to_string())),
+                    Box::new(UnitAnnotation::Symbol("s".to_string())),
+                ))
+            );
+
+            assert_eq!(ast.exprs.get(*value).kind, ExpressionKind::Float(12.5));
+
+            assert_eq!(ast.exprs.get(*value).span, Span::new(25, 29));
+        }
+
+        other => panic!("expected ConstantDeclaration, got {:?}", other),
+    }
+
+    assert_eq!(statements[0].span, Span::new(0, 29));
 }

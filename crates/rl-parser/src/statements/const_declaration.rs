@@ -82,6 +82,7 @@ impl Parser {
                     StatementKind::ConstantDeclaration {
                         name,
                         type_annotation: TypeAnnotation::CTuple(Rc::new(types)),
+                        unit_annotation: None,
                         value,
                     },
                     span,
@@ -248,6 +249,7 @@ impl Parser {
                     StatementKind::ConstantDeclaration {
                         name,
                         type_annotation: annoation_type,
+                        unit_annotation: None,
                         value,
                     },
                     span,
@@ -316,6 +318,7 @@ impl Parser {
                     StatementKind::ConstantDeclaration {
                         name,
                         type_annotation: TypeAnnotation::CSet(Box::new(annoation_type)),
+                        unit_annotation: None,
                         value,
                     },
                     span,
@@ -385,6 +388,7 @@ impl Parser {
                     StatementKind::ConstantDeclaration {
                         name,
                         type_annotation: TypeAnnotation::CArray(Box::new(annoation_type)),
+                        unit_annotation: None,
                         value,
                     },
                     span,
@@ -397,6 +401,7 @@ impl Parser {
 
     fn parse_const_declartion_scalar(&mut self, start: Span) -> Result<Statement, Error> {
         let const_type = self.parse_type(false)?;
+
         while self.match_type(&[TokenType::Newline]) {}
         let name = match self.peek() {
             TokenType::Identifier(n) => {
@@ -407,6 +412,22 @@ impl Parser {
         };
 
         while self.match_type(&[TokenType::Newline]) {}
+
+        let unit_annotation = if self.match_type(&[TokenType::Colon]) {
+            if !matches!(&const_type, TypeAnnotation::CInt | TypeAnnotation::CFloat) {
+                return Err(self.err(
+                    "units are only supported for int and float",
+                    self.previous_span(),
+                ));
+            }
+
+            Some(self.parse_unit_annotation()?)
+        } else {
+            None
+        };
+
+        while self.match_type(&[TokenType::Newline]) {}
+
         if !self.match_type(&[TokenType::Assign]) {
             return Err(self.err("expected `=` after name", self.peek_span()));
         }
@@ -420,6 +441,7 @@ impl Parser {
             StatementKind::ConstantDeclaration {
                 name,
                 type_annotation: const_type,
+                unit_annotation,
                 value,
             },
             span,

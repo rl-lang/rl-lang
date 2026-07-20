@@ -22,6 +22,7 @@ fn for_c() {
                     name,
                     type_annotation,
                     value,
+                    ..
                 } => {
                     assert_eq!(name, "i");
                     assert_eq!(*type_annotation, TypeAnnotation::Int);

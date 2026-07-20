@@ -1,4 +1,6 @@
 mod parse_type;
+pub mod parse_unit;
+
 use std::rc::Rc;
 
 use crate::parser_logic::Parser;

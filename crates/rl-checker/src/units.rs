@@ -14,7 +14,6 @@ pub struct Unit {
 }
 
 impl Unit {
-
     /// Create a dimensionless unit
     ///
     /// Example: m / m.
@@ -47,7 +46,7 @@ impl Unit {
     pub fn is_dimensionless(&self) -> bool {
         self.powers.is_empty()
     }
-    
+
     /// Addition and subtraction require compatible units.
     pub fn is_compatible_with(&self, other: &Self) -> bool {
         self == other

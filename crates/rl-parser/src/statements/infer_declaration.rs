@@ -54,6 +54,7 @@ impl Parser {
             StatementKind::VariableDeclaration {
                 name,
                 type_annotation: TypeAnnotation::Infer,
+                unit_annotation: None,
                 value,
             },
             span,
