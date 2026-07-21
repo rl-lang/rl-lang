@@ -310,7 +310,7 @@ impl Parser {
                 let value_id = self.ast_arena.exprs.get(value);
                 let span = start.join(value_id.span);
                 return Ok(Statement::new(
-                    StatementKind::ConstantDeclaration {
+                    StatementKind::VariableDeclaration {
                         name,
                         type_annotation: TypeAnnotation::Set(Box::new(annoation_type)),
                         value,
