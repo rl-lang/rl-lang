@@ -3,7 +3,7 @@
 
 use std::{collections::HashSet, path::PathBuf};
 
-use crate::{TypeChecker, structs::CheckType};
+use crate::{TypeChecker, structs::CheckType, units::Unit};
 use rl_ast::statements::{MatchPattern, Statement, StatementKind, TypeAnnotation};
 use rl_lexer::tokenizer::Tokenizer;
 use rl_parser::parser_logic::Parser;
@@ -21,14 +21,20 @@ impl TypeChecker {
                 unit_annotation,
                 value,
             } => {
-                let _ = unit_annotation;
+                let declared_unit = unit_annotation.as_ref().map(Unit::from_annotation);
                 let value_type = self.check_expression(*value);
 
                 // `dec name = value` - the type wasn't stated, so whatever
                 // the initialiser resolved to *is* the declared type. There
                 // is nothing to mismatch against.
                 if *type_annotation == TypeAnnotation::Infer {
-                    self.declare(name.clone(), value_type, false, statement.span);
+                    self.declare_with_unit(
+                        name.clone(),
+                        value_type,
+                        declared_unit,
+                        false,
+                        statement.span,
+                    );
                     return;
                 }
 
@@ -45,7 +51,13 @@ impl TypeChecker {
                     );
                 }
 
-                self.declare(name.clone(), declared, false, statement.span);
+                self.declare_with_unit(
+                    name.clone(),
+                    declared,
+                    declared_unit,
+                    false,
+                    statement.span,
+                );
             }
 
             // checks if the type is null or same type and declares it as
@@ -56,7 +68,7 @@ impl TypeChecker {
                 unit_annotation,
                 value,
             } => {
-                let _ = unit_annotation;
+                let declared_unit = unit_annotation.as_ref().map(Unit::from_annotation);
                 let value_type = self.check_expression(*value).into_const();
                 let declared = CheckType::Known(type_annotation.clone());
 
@@ -71,7 +83,7 @@ impl TypeChecker {
                     );
                 }
 
-                self.declare(name.clone(), declared, true, statement.span);
+                self.declare_with_unit(name.clone(), declared, declared_unit, true, statement.span);
             }
 
             // checks the array if valid or not and declares it with correct

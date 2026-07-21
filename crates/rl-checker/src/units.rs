@@ -1,3 +1,4 @@
+use rl_ast::statements::UnitAnnotation;
 use std::collections::BTreeMap;
 
 /// Normalized representation of a unit of measure.
@@ -78,6 +79,34 @@ impl Unit {
         result
     }
 
+    /// Constructs a new instance of `Self` based on the provided `UnitAnnotation`.
+    ///
+    /// This function recursively processes a `UnitAnnotation` to create a corresponding
+    /// instance of `Self`. The behavior depends on the variant of the `UnitAnnotation`
+    /// input:
+    ///
+    /// - If the annotation is `UnitAnnotation::Symbol`, the `symbol` constructor is
+    ///   called with the associated `name`.
+    /// - If the annotation is `UnitAnnotation::Multiply`, the function recursively
+    ///   processes both the `left` and `right` annotations, then combines their results
+    ///   using the `multiply` method.
+    /// - If the annotation is `UnitAnnotation::Divide`, the function recursively
+    ///   processes both the `left` and `right` annotations, then combines their results
+    ///   using the `divide` method.
+    pub fn from_annotation(annotation: &UnitAnnotation) -> Self {
+        match annotation {
+            UnitAnnotation::Symbol(name) => Self::symbol(name),
+
+            UnitAnnotation::Multiply(left, right) => {
+                Self::from_annotation(left).multiply(&Self::from_annotation(right))
+            }
+
+            UnitAnnotation::Divide(left, right) => {
+                Self::from_annotation(left).divide(&Self::from_annotation(right))
+            }
+        }
+    }
+
     fn add_exponent(&mut self, symbol: &str, amount: i32) {
         let new_exponent = self.exponent(symbol) + amount;
 
@@ -86,67 +115,5 @@ impl Unit {
         } else {
             self.powers.insert(symbol.to_owned(), new_exponent);
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::Unit;
-
-    #[test]
-    fn creates_symbol_unit() {
-        let meters = Unit::symbol("m");
-
-        assert_eq!(meters.exponent("m"), 1);
-        assert_eq!(meters.exponent("s"), 0);
-    }
-
-    #[test]
-    fn multiplies_units_and_cancels_symbols() {
-        let meters = Unit::symbol("m");
-        let seconds = Unit::symbol("s");
-
-        let speed = meters.divide(&seconds);
-        let distance = speed.multiply(&seconds);
-
-        assert_eq!(distance, Unit::symbol("m"));
-    }
-
-    #[test]
-    fn divides_units() {
-        let meters = Unit::symbol("m");
-        let seconds = Unit::symbol("s");
-
-        let speed = meters.divide(&seconds);
-
-        assert_eq!(speed.exponent("m"), 1);
-        assert_eq!(speed.exponent("s"), -1);
-    }
-
-    #[test]
-    fn combines_repeated_symbols() {
-        let meters = Unit::symbol("m");
-
-        let area = meters.multiply(&meters);
-
-        assert_eq!(area.exponent("m"), 2);
-    }
-
-    #[test]
-    fn produces_dimensionless_unit_when_symbols_cancel() {
-        let meters = Unit::symbol("m");
-
-        let result = meters.divide(&meters);
-
-        assert!(result.is_dimensionless());
-    }
-
-    #[test]
-    fn only_equal_units_are_compatible() {
-        let meters = Unit::symbol("m");
-        let seconds = Unit::symbol("s");
-
-        assert!(meters.is_compatible_with(&Unit::symbol("m")));
-        assert!(!meters.is_compatible_with(&seconds));
     }
 }

@@ -1,6 +1,9 @@
 //! Variable and constant declaration for the type checker scope.
 
-use crate::structs::{CheckType, ScopeItem, TypeChecker};
+use crate::{
+    structs::{CheckType, ScopeItem, TypeChecker},
+    units::Unit,
+};
 use rl_utils::span::Span;
 
 impl TypeChecker {
@@ -21,6 +24,33 @@ impl TypeChecker {
             let hover_text = format!("```rl\n{} {}: {}\n```", kind, name, item_type.info());
 
             scope.insert(name, ScopeItem::new(item_type, is_const, span));
+            self.push_hover(span, hover_text);
+        }
+    }
+
+    pub fn declare_with_unit(
+        &mut self,
+        name: String,
+        item_type: CheckType,
+        unit: Option<Unit>,
+        is_const: bool,
+        span: Span,
+    ) {
+        if let Some(scope) = self.scopes.last_mut() {
+            if is_const && scope.contains_key(&name) {
+                self.errors
+                    .push(self.err(format!("'{}' is already declared", name), span));
+                return;
+            }
+
+            let kind = if is_const { "const" } else { "variable" };
+            let hover_text = format!("```rl\n{} {}: {}\n```", kind, name, item_type.info());
+
+            scope.insert(
+                name,
+                ScopeItem::new_with_unit(item_type, unit, is_const, span),
+            );
+
             self.push_hover(span, hover_text);
         }
     }
