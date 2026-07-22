@@ -360,6 +360,7 @@ pub enum TypeAnnotation {
     CEnum(String),
 
     Generic(String),
+    Callback(Vec<TypeAnnotation>, Box<TypeAnnotation>),
 }
 
 /// A single function or lambda parameter: a name and its type annotation.
