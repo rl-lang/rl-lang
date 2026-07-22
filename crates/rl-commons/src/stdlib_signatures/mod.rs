@@ -22,6 +22,7 @@ pub mod io;
 pub mod math;
 pub mod str;
 pub mod terminal;
+pub mod time;
 pub mod types;
 
 /// Builds the "input" half of a signature pair: a `Tuple` of the expected
