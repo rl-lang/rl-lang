@@ -131,6 +131,6 @@ pub fn stdlib_names() -> ModuleNames {
         .with_module(stdlib_signatures::process::module())
         .with_module(stdlib_signatures::res::module())
         .with_module(stdlib_signatures::net::module())
-        .with_module(ModuleNames::new("http").with_functions(keywords::http::KEYWORDS))
+        .with_module(stdlib_signatures::http::module())
         .with_module(ModuleNames::new("collections").with_functions(keywords::set::KEYWORDS))
 }
