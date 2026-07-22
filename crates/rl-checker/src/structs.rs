@@ -22,8 +22,9 @@ pub struct TypeChecker {
     pub return_type_stack: Vec<TypeAnnotation>,
     /// Nesting depth of loops - used to validate `break` and `continue`.
     pub loop_depth: u32,
-    /// Flat set of all stdlib function names for fast single-name lookup.
-    pub stdlib_fn_names: std::collections::HashSet<String>,
+    /// Flat map of all stdlib function names to their (possibly-untyped)
+    /// signature, for fast single-name lookup (`print` vs `std::io::print`).
+    pub stdlib_fn_names: HashMap<String, rl_commons::StdFn>,
     /// `(span, markdown)` pairs collected at every declaration and usage site,
     /// consumed by the LSP hover provider.
     pub hovers: Vec<(Span, String)>,

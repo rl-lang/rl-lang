@@ -2,7 +2,7 @@
 
 use crate::structs::{CheckType, TypeChecker};
 use rl_ast::statements::TypeAnnotation;
-use rl_commons::keywords;
+use rl_commons::{StdFn, keywords};
 use rl_utils::{span::Span, suggest::closest_match};
 
 impl TypeChecker {
@@ -14,8 +14,9 @@ impl TypeChecker {
     /// 3. User-defined name via [`lookup`]
     /// 4. Error - unknown function, with a "did you mean?" suggestion from stdlib keywords
     ///
-    /// Stdlib calls always return [`CheckType::Unknown`] since their return
-    /// types are not tracked statically.
+    /// Stdlib calls are checked against their known signature(s), if any
+    /// (see [`TypeChecker::check_stdlib_call`]) - functions not yet typed
+    /// still return [`CheckType::Unknown`] unchecked.
     pub fn check_call_path(
         &mut self,
         path: &[String],
@@ -23,17 +24,17 @@ impl TypeChecker {
         span: Span,
     ) -> CheckType {
         // stdlib path (std::io::print)
-        if self.root_module.resolve(path) {
+        if let Some(f) = self.root_module.resolve(path).cloned() {
             self.push_stdlib_hover(path, span);
-            return CheckType::Unknown;
+            return self.check_stdlib_call(&f, arg_types, span);
         }
 
         if path.len() == 1 {
             let name = &path[0];
 
-            if self.stdlib_fn_names.contains(name.as_str()) {
+            if let Some(f) = self.stdlib_fn_names.get(name.as_str()).cloned() {
                 self.push_stdlib_hover(path, span);
-                return CheckType::Unknown;
+                return self.check_stdlib_call(&f, arg_types, span);
             }
             let item_type = self.lookup(name, span);
             return self.check_call_value(item_type, arg_types, span);
@@ -62,6 +63,89 @@ impl TypeChecker {
         );
 
         CheckType::Unknown
+    }
+
+    /// Checks a call to a `std` function against its known signature(s), if any (rl-lang#250).
+    ///
+    /// - An empty `f.signatures` means the function isn't typed yet: the call
+    ///   passes through unchecked as [`CheckType::Unknown`] (pre-#250 behavior).
+    /// - Otherwise each `(params, return_type)` overload is tried in turn;
+    ///   the first whose param types all `matches()` the call's argument
+    ///   types wins, and its `return_type` is returned as `CheckType::Known`.
+    /// - If no overload matches, an error is reported (arity mismatch if the
+    ///   argument *count* doesn't match any overload, otherwise a type
+    ///   mismatch) and the first overload's return type is used to keep
+    ///   type inference going for the rest of the check pass.
+    pub fn check_stdlib_call(
+        &mut self,
+        f: &StdFn,
+        arg_types: &[(CheckType, Span)],
+        span: Span,
+    ) -> CheckType {
+        if f.signatures.is_empty() {
+            return CheckType::Unknown;
+        }
+
+        for (params, return_type) in &f.signatures {
+            let expected = tuple_members(params);
+            if expected.len() != arg_types.len() {
+                continue;
+            }
+            let all_match =
+                expected
+                    .iter()
+                    .zip(arg_types.iter())
+                    .all(|(expected_type, (actual_type, _))| {
+                        actual_type.matches(&CheckType::Known(expected_type.clone()))
+                    });
+            if all_match {
+                return CheckType::Known(return_type.clone());
+            }
+        }
+
+        // No overload matched - report the most useful error we can.
+        let first_return = &f.signatures[0].1;
+        let arities: Vec<usize> = f
+            .signatures
+            .iter()
+            .map(|(p, _)| tuple_members(p).len())
+            .collect();
+
+        if !arities.contains(&arg_types.len()) {
+            let expected = if arities.iter().all(|a| *a == arities[0]) {
+                arities[0].to_string()
+            } else {
+                let mut sorted = arities.clone();
+                sorted.sort_unstable();
+                sorted.dedup();
+                sorted
+                    .iter()
+                    .map(usize::to_string)
+                    .collect::<Vec<_>>()
+                    .join(" or ")
+            };
+            self.error(
+                format!(
+                    "{} expects {} argument(s), got {}",
+                    f.name,
+                    expected,
+                    arg_types.len()
+                ),
+                span,
+            );
+        } else {
+            let got: Vec<String> = arg_types.iter().map(|(t, _)| t.info()).collect();
+            self.error(
+                format!(
+                    "{}: no overload matches argument type(s) ({})",
+                    f.name,
+                    got.join(", ")
+                ),
+                span,
+            );
+        }
+
+        CheckType::Known(first_return.clone())
     }
 
     /// Checks that a resolved callee value is callable and receives the correct arguments.
@@ -117,5 +201,15 @@ impl TypeChecker {
                 CheckType::Unknown
             }
         }
+    }
+}
+
+/// Unwraps the `params` half of a `StdFn` overload (built as
+/// `TypeAnnotation::Tuple(..)` by `rl_commons::stdlib_signatures`) back into
+/// a plain list of expected argument types.
+fn tuple_members(params: &TypeAnnotation) -> Vec<TypeAnnotation> {
+    match params {
+        TypeAnnotation::Tuple(v) | TypeAnnotation::CTuple(v) => v.as_ref().clone(),
+        other => vec![other.clone()],
     }
 }
