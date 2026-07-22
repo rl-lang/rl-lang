@@ -97,9 +97,9 @@ impl ModuleNames {
         }
         let mut module = self;
         for seg in &path[..path.len() - 1] {
-            match module.submodules.get(seg) {
-                Some(m) => module = m,
-                None => return None,
+            {
+                let m = module.submodules.get(seg)?;
+                module = m
             }
         }
         module.functions.get(&path[path.len() - 1])
