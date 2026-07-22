@@ -12,7 +12,7 @@
 //! system, so a fixed `TypeAnnotation` signature for them would either
 //! reject valid calls or silently accept bad ones.
 
-use rl_ast::statements::TypeAnnotation;
+use rl_ast::statements::TypeAnnotation as T;
 use std::rc::Rc;
 
 pub mod bitwise;
@@ -24,12 +24,14 @@ pub mod types;
 
 /// Builds the "input" half of a signature pair: a `Tuple` of the expected
 /// argument types, in order. An empty `Vec` means "no arguments".
-pub fn params(types: Vec<TypeAnnotation>) -> TypeAnnotation {
-    TypeAnnotation::Tuple(Rc::new(types))
+pub fn params(types: Vec<T>) -> T {
+    T::Tuple(Rc::new(types))
 }
 
 /// Wraps a type as `Result[T]` - the return type of every stdlib function
 /// that can fail and follows the `vok!`/`verr!` runtime convention.
-pub fn result(inner: TypeAnnotation) -> TypeAnnotation {
-    TypeAnnotation::Result(Box::new(inner))
+pub fn result(inner: T) -> T {
+    T::Result(Box::new(inner))
 }
+
+pub const NUMERIC: [T; 3] = [T::Int, T::Float, T::Byte];
