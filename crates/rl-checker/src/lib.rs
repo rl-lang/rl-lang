@@ -48,7 +48,7 @@ impl TypeChecker {
     pub fn new() -> Self {
         // getting all stdlib modules
         let root_module = rl_commons::stdlib_names();
-        let mut stdlib_fn_names = std::collections::HashSet::new();
+        let mut stdlib_fn_names = HashMap::new();
         root_module.collect_fn_names(&mut stdlib_fn_names);
 
         Self {

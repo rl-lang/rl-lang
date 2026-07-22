@@ -358,6 +358,9 @@ pub enum TypeAnnotation {
     Enum(String),
     /// A named tag (enum) type, constant binding.
     CEnum(String),
+
+    Generic(String),
+    Callback(Vec<TypeAnnotation>, Box<TypeAnnotation>),
 }
 
 /// A single function or lambda parameter: a name and its type annotation.

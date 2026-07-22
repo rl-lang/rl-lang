@@ -34,7 +34,10 @@ pub fn func(_: &mut Evaluator) -> Value {
                     KeyCode::Null => "Null".into(),
                     _ => "Unknown".into(),
                 };
-                return vok!(vs!(s));
+                return vok!(Value::Values {
+                    items_type: TypeAnnotation::String,
+                    items: vec![vs!(s)],
+                });
             }
 
             // mouse events
@@ -66,8 +69,18 @@ pub fn func(_: &mut Evaluator) -> Value {
                     ],
                 });
             }
-            Ok(Event::FocusGained) => return vok!(vs!("FocusGained".into())),
-            Ok(Event::FocusLost) => return vok!(vs!("FocusLost".into())),
+            Ok(Event::FocusGained) => {
+                return vok!(Value::Values {
+                    items_type: TypeAnnotation::String,
+                    items: vec![vs!("FocusGained".into())],
+                });
+            }
+            Ok(Event::FocusLost) => {
+                return vok!(Value::Values {
+                    items_type: TypeAnnotation::String,
+                    items: vec![vs!("FocusLost".into())],
+                });
+            }
 
             Err(e) => return verr!(vs!(format!("term_read_key(): {}", e))),
             _ => continue,
