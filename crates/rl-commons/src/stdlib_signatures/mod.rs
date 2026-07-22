@@ -15,12 +15,18 @@
 use rl_ast::statements::TypeAnnotation as T;
 use std::rc::Rc;
 
+pub mod array;
 pub mod bitwise;
+pub mod collections;
 pub mod constants;
 pub mod debug;
+pub mod fs;
 pub mod io;
 pub mod math;
 pub mod path;
+pub mod process;
+pub mod random;
+pub mod res;
 pub mod rl;
 pub mod str;
 pub mod terminal;
