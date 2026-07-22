@@ -10,17 +10,15 @@ use rl_ast::statements::TypeAnnotation as T;
 
 pub fn module() -> ModuleNames {
     ModuleNames::new("types")
-        .with_functions(&[
-            "is_bool",
-            "is_null",
-            "is_char",
-            "is_int",
-            "is_float",
-            "is_string",
-            "is_byte",
-            "is_error",
-            "error_unwrap",
-        ])
+        .with_functions(&["error_unwrap"])
+        .with_typed_function(is_x("is_bool"))
+        .with_typed_function(is_x("is_null"))
+        .with_typed_function(is_x("is_char"))
+        .with_typed_function(is_x("is_int"))
+        .with_typed_function(is_x("is_float"))
+        .with_typed_function(is_x("is_string"))
+        .with_typed_function(is_x("is_byte"))
+        .with_typed_function(is_x("is_error"))
         .with_typed_function(to_bin())
         .with_typed_function(to_bool())
         .with_typed_function(to_byte())
@@ -30,6 +28,10 @@ pub fn module() -> ModuleNames {
         .with_typed_function(to_int())
         .with_typed_function(to_oct())
         .with_typed_function(to_string())
+}
+
+fn is_x(name: &'static str) -> StdFn {
+    StdFn::typed(name, vec![(params(vec![T::Generic]), T::Bool)])
 }
 
 /// Builds one `(single_arg) -> Result[ret]` overload per accepted input
