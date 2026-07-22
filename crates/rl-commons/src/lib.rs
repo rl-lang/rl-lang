@@ -276,4 +276,45 @@ mod tests {
             vec![(params(vec![TypeAnnotation::Float]), TypeAnnotation::Bool)]
         );
     }
+
+    #[test]
+    fn types_to_int_has_six_overloads_no_null() {
+        let tree = stdlib_names();
+        let path = vec!["types".to_string(), "to_int".to_string()];
+        let f = tree.resolve(&path).expect("to_int should resolve");
+        assert_eq!(f.signatures.len(), 6);
+        assert!(
+            f.signatures
+                .iter()
+                .all(|(p, _)| *p != params(vec![TypeAnnotation::Null]))
+        );
+    }
+
+    #[test]
+    fn types_is_int_stays_untyped() {
+        let tree = stdlib_names();
+        let path = vec!["types".to_string(), "is_int".to_string()];
+        let f = tree.resolve(&path).expect("is_int should resolve");
+        assert!(f.signatures.is_empty());
+    }
+
+    #[test]
+    fn types_error_unwrap_stays_untyped() {
+        let tree = stdlib_names();
+        let path = vec!["types".to_string(), "error_unwrap".to_string()];
+        let f = tree.resolve(&path).expect("error_unwrap should resolve");
+        assert!(f.signatures.is_empty());
+    }
+
+    #[test]
+    fn types_to_char_rejects_bool() {
+        let tree = stdlib_names();
+        let path = vec!["types".to_string(), "to_char".to_string()];
+        let f = tree.resolve(&path).expect("to_char should resolve");
+        assert!(
+            f.signatures
+                .iter()
+                .all(|(p, _)| *p != params(vec![TypeAnnotation::Bool]))
+        );
+    }
 }
