@@ -17,6 +17,7 @@ use std::rc::Rc;
 
 pub mod bitwise;
 pub mod constants;
+pub mod debug;
 pub mod io;
 pub mod math;
 pub mod terminal;
