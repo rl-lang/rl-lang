@@ -31,7 +31,7 @@ pub fn module() -> ModuleNames {
 }
 
 fn is_x(name: &'static str) -> StdFn {
-    StdFn::typed(name, vec![(params(vec![T::Generic]), T::Bool)])
+    StdFn::typed(name, vec![(params(vec![T::Generic("_".into())]), T::Bool)])
 }
 
 /// Builds one `(single_arg) -> Result[ret]` overload per accepted input

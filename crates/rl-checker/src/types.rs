@@ -56,8 +56,8 @@ impl CheckType {
             // to represent the absence of value
             (CheckType::Known(TypeAnnotation::Null), _) => true,
 
-            (_, CheckType::Known(TypeAnnotation::Generic))
-            | (CheckType::Known(TypeAnnotation::Generic), _) => true,
+            (_, CheckType::Known(TypeAnnotation::Generic(_)))
+            | (CheckType::Known(TypeAnnotation::Generic(_)), _) => true,
 
             // matches different functions types and returns true
             (CheckType::Function { .. }, CheckType::Known(TypeAnnotation::Fn))
@@ -222,4 +222,21 @@ fn const_matches(a: &TypeAnnotation, b: &TypeAnnotation) -> bool {
             | (TypeAnnotation::Array(_), TypeAnnotation::CArray(_))
             | (TypeAnnotation::CArray(_), TypeAnnotation::Array(_))
     )
+}
+
+pub fn has_generic(ty: &TypeAnnotation) -> bool {
+    match ty {
+        TypeAnnotation::Generic(_) => true,
+        TypeAnnotation::Array(inner)
+        | TypeAnnotation::CArray(inner)
+        | TypeAnnotation::Set(inner)
+        | TypeAnnotation::CSet(inner)
+        | TypeAnnotation::Result(inner)
+        | TypeAnnotation::CResult(inner) => has_generic(inner),
+        TypeAnnotation::Map(k, v) | TypeAnnotation::CMap(k, v) => has_generic(k) || has_generic(v),
+        TypeAnnotation::Tuple(items) | TypeAnnotation::CTuple(items) => {
+            items.iter().any(has_generic)
+        }
+        _ => false,
+    }
 }

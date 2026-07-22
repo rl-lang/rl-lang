@@ -359,7 +359,7 @@ pub enum TypeAnnotation {
     /// A named tag (enum) type, constant binding.
     CEnum(String),
 
-    Generic,
+    Generic(String),
 }
 
 /// A single function or lambda parameter: a name and its type annotation.
