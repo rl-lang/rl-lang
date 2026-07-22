@@ -1,9 +1,11 @@
 //! Function call type checking - path resolution and argument validation.
 
 use crate::structs::{CheckType, TypeChecker};
+use crate::types::{has_generic, substitute, unify};
 use rl_ast::statements::TypeAnnotation;
 use rl_commons::{StdFn, keywords};
 use rl_utils::{span::Span, suggest::closest_match};
+use std::collections::HashMap;
 
 impl TypeChecker {
     /// Resolves a call path and checks argument types.
@@ -91,6 +93,35 @@ impl TypeChecker {
             if expected.len() != arg_types.len() {
                 continue;
             }
+
+            if expected.iter().any(has_generic) {
+                let mut bindings = HashMap::new();
+                let mut all_match = true;
+                for (expected_type, (actual_type, _)) in expected.iter().zip(arg_types.iter()) {
+                    let ok = match actual_type {
+                        CheckType::Unknown => true,
+                        CheckType::Known(actual) => unify(expected_type, actual, &mut bindings),
+                        CheckType::Function { .. } => {
+                            actual_type.matches(&CheckType::Known(expected_type.clone()))
+                        }
+                    };
+                    if !ok {
+                        all_match = false;
+                        break;
+                    }
+                }
+                if all_match {
+                    let resolved = substitute(return_type, &bindings);
+                    return if has_generic(&resolved) {
+                        CheckType::Unknown
+                    } else {
+                        CheckType::Known(resolved)
+                    };
+                }
+                continue;
+            }
+
+            // unchanged plain-matches path below
             let all_match =
                 expected
                     .iter()

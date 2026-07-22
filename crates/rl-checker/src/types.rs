@@ -1,5 +1,7 @@
 //! Helper methods on [`CheckType`] and [`ScopeItem`], plus private type-matching utilities.
 
+use std::{collections::HashMap, rc::Rc};
+
 use crate::structs::{CheckType, ScopeItem};
 use rl_ast::statements::TypeAnnotation;
 use rl_utils::span::Span;
@@ -238,5 +240,82 @@ pub fn has_generic(ty: &TypeAnnotation) -> bool {
             items.iter().any(has_generic)
         }
         _ => false,
+    }
+}
+
+pub fn unify(
+    expected: &TypeAnnotation,
+    actual: &TypeAnnotation,
+    bindings: &mut HashMap<String, TypeAnnotation>,
+) -> bool {
+    match (expected, actual) {
+        (TypeAnnotation::Generic(name), _) => match bindings.get(name) {
+            Some(bound) => {
+                CheckType::Known(bound.clone()).matches(&CheckType::Known(actual.clone()))
+            }
+            None => {
+                bindings.insert(name.clone(), actual.clone());
+                true
+            }
+        },
+        (
+            TypeAnnotation::Array(e) | TypeAnnotation::CArray(e),
+            TypeAnnotation::Array(a) | TypeAnnotation::CArray(a),
+        ) => unify(e, a, bindings),
+        (
+            TypeAnnotation::Set(e) | TypeAnnotation::CSet(e),
+            TypeAnnotation::Set(a) | TypeAnnotation::CSet(a),
+        ) => unify(e, a, bindings),
+        (
+            TypeAnnotation::Result(e) | TypeAnnotation::CResult(e),
+            TypeAnnotation::Result(a) | TypeAnnotation::CResult(a),
+        ) => unify(e, a, bindings),
+        (
+            TypeAnnotation::Map(ek, ev) | TypeAnnotation::CMap(ek, ev),
+            TypeAnnotation::Map(ak, av) | TypeAnnotation::CMap(ak, av),
+        ) => unify(ek, ak, bindings) && unify(ev, av, bindings),
+        (
+            TypeAnnotation::Tuple(e) | TypeAnnotation::CTuple(e),
+            TypeAnnotation::Tuple(a) | TypeAnnotation::CTuple(a),
+        ) => e.len() == a.len() && e.iter().zip(a.iter()).all(|(e, a)| unify(e, a, bindings)),
+        (e, a) => CheckType::Known(e.clone()).matches(&CheckType::Known(a.clone())),
+    }
+}
+
+pub fn substitute(
+    ty: &TypeAnnotation,
+    bindings: &HashMap<String, TypeAnnotation>,
+) -> TypeAnnotation {
+    match ty {
+        TypeAnnotation::Generic(name) => bindings.get(name).cloned().unwrap_or_else(|| ty.clone()),
+        TypeAnnotation::Array(inner) => {
+            TypeAnnotation::Array(Box::new(substitute(inner, bindings)))
+        }
+        TypeAnnotation::CArray(inner) => {
+            TypeAnnotation::CArray(Box::new(substitute(inner, bindings)))
+        }
+        TypeAnnotation::Set(inner) => TypeAnnotation::Set(Box::new(substitute(inner, bindings))),
+        TypeAnnotation::CSet(inner) => TypeAnnotation::CSet(Box::new(substitute(inner, bindings))),
+        TypeAnnotation::Result(inner) => {
+            TypeAnnotation::Result(Box::new(substitute(inner, bindings)))
+        }
+        TypeAnnotation::CResult(inner) => {
+            TypeAnnotation::CResult(Box::new(substitute(inner, bindings)))
+        }
+        TypeAnnotation::Map(k, v) => TypeAnnotation::Map(
+            Box::new(substitute(k, bindings)),
+            Box::new(substitute(v, bindings)),
+        ),
+        TypeAnnotation::CMap(k, v) => TypeAnnotation::CMap(
+            Box::new(substitute(k, bindings)),
+            Box::new(substitute(v, bindings)),
+        ),
+        TypeAnnotation::Tuple(items) => TypeAnnotation::Tuple(Rc::new(
+            items.iter().map(|t| substitute(t, bindings)).collect(),
+        )),
+        TypeAnnotation::CTuple(items) => TypeAnnotation::CTuple(Rc::new(
+            items.iter().map(|t| substitute(t, bindings)).collect(),
+        )),
+        other => other.clone(),
     }
 }
