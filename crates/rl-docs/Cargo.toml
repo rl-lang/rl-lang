@@ -10,7 +10,7 @@ repository.workspace = true
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
-ratatui = { workspace = true, optional = true }
+ratatui = { workspace = true, optional = true, features = ["unstable-rendered-line-info"]}
 crossterm = { workspace = true, optional = true }
 rl-lexer = { workspace = true, optional = true }
 rl-utils = { workspace = true, optional = true }
