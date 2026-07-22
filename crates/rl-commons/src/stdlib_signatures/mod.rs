@@ -20,6 +20,7 @@ pub mod constants;
 pub mod debug;
 pub mod io;
 pub mod math;
+pub mod str;
 pub mod terminal;
 pub mod types;
 

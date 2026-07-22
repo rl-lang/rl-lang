@@ -122,7 +122,7 @@ pub fn stdlib_names() -> ModuleNames {
         .with_module(stdlib_signatures::types::module())
         .with_module(stdlib_signatures::debug::module())
         .with_module(stdlib_signatures::array::module())
-        .with_module(ModuleNames::new("string").with_functions(keywords::string::KEYWORDS))
+        .with_module(stdlib_signatures::str::module())
         .with_module(ModuleNames::new("path").with_functions(keywords::path::KEYWORDS))
         .with_module(ModuleNames::new("fs").with_functions(keywords::fs::KEYWORDS))
         .with_module(ModuleNames::new("random").with_functions(keywords::random::KEYWORDS))
