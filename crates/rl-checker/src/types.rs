@@ -1,10 +1,10 @@
 //! Helper methods on [`CheckType`] and [`ScopeItem`], plus private type-matching utilities.
 
-use std::{collections::HashMap, rc::Rc};
-
 use crate::structs::{CheckType, ScopeItem};
 use rl_ast::statements::TypeAnnotation;
 use rl_utils::span::Span;
+use std::collections::HashMap;
+use std::rc::Rc;
 
 impl ScopeItem {
     pub fn new(type_annotation: CheckType, is_const: bool, decl_span: Span) -> Self {
@@ -46,6 +46,7 @@ impl CheckType {
     /// Compatibility rules:
     /// - Either side being `Unknown` always matches (avoids cascading errors)
     /// - `Null` matches anything (represents the absence of a value)
+    /// - `Generic` is a wildcard and matches anything (no binding tracked here)
     /// - `Function { .. }` matches `Known(Fn)` and vice versa
     /// - Two `Function` types match only if params and return type are identical
     /// - Two `Known` types match if equal, or via [`null_array_elision`] or [`const_matches`]
@@ -239,6 +240,7 @@ pub fn has_generic(ty: &TypeAnnotation) -> bool {
         TypeAnnotation::Tuple(items) | TypeAnnotation::CTuple(items) => {
             items.iter().any(has_generic)
         }
+        TypeAnnotation::Callback(params, ret) => params.iter().any(has_generic) || has_generic(ret),
         _ => false,
     }
 }
@@ -258,26 +260,32 @@ pub fn unify(
                 true
             }
         },
+
         (
             TypeAnnotation::Array(e) | TypeAnnotation::CArray(e),
             TypeAnnotation::Array(a) | TypeAnnotation::CArray(a),
         ) => unify(e, a, bindings),
+
         (
             TypeAnnotation::Set(e) | TypeAnnotation::CSet(e),
             TypeAnnotation::Set(a) | TypeAnnotation::CSet(a),
         ) => unify(e, a, bindings),
+
         (
             TypeAnnotation::Result(e) | TypeAnnotation::CResult(e),
             TypeAnnotation::Result(a) | TypeAnnotation::CResult(a),
         ) => unify(e, a, bindings),
+
         (
             TypeAnnotation::Map(ek, ev) | TypeAnnotation::CMap(ek, ev),
             TypeAnnotation::Map(ak, av) | TypeAnnotation::CMap(ak, av),
         ) => unify(ek, ak, bindings) && unify(ev, av, bindings),
+
         (
             TypeAnnotation::Tuple(e) | TypeAnnotation::CTuple(e),
             TypeAnnotation::Tuple(a) | TypeAnnotation::CTuple(a),
         ) => e.len() == a.len() && e.iter().zip(a.iter()).all(|(e, a)| unify(e, a, bindings)),
+
         (e, a) => CheckType::Known(e.clone()).matches(&CheckType::Known(a.clone())),
     }
 }
@@ -316,6 +324,39 @@ pub fn substitute(
         TypeAnnotation::CTuple(items) => TypeAnnotation::CTuple(Rc::new(
             items.iter().map(|t| substitute(t, bindings)).collect(),
         )),
+        TypeAnnotation::Callback(params, ret) => TypeAnnotation::Callback(
+            params.iter().map(|t| substitute(t, bindings)).collect(),
+            Box::new(substitute(ret, bindings)),
+        ),
         other => other.clone(),
+    }
+}
+
+pub fn unify_arg(
+    expected: &TypeAnnotation,
+    actual: &CheckType,
+    bindings: &mut HashMap<String, TypeAnnotation>,
+) -> bool {
+    match (expected, actual) {
+        (
+            TypeAnnotation::Callback(eparams, eret),
+            CheckType::Function {
+                params: aparams,
+                return_type: aret,
+            },
+        ) => {
+            eparams.len() == aparams.len()
+                && eparams
+                    .iter()
+                    .zip(aparams.iter())
+                    .all(|(e, a)| unify(e, a, bindings))
+                && unify(eret, aret, bindings)
+        }
+
+        (_, CheckType::Unknown) => true,
+
+        (_, CheckType::Known(actual)) => unify(expected, actual, bindings),
+
+        (_, CheckType::Function { .. }) => actual.matches(&CheckType::Known(expected.clone())),
     }
 }

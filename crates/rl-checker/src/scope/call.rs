@@ -1,7 +1,7 @@
 //! Function call type checking - path resolution and argument validation.
 
 use crate::structs::{CheckType, TypeChecker};
-use crate::types::{has_generic, substitute, unify};
+use crate::types::{has_generic, substitute, unify_arg};
 use rl_ast::statements::TypeAnnotation;
 use rl_commons::{StdFn, keywords};
 use rl_utils::{span::Span, suggest::closest_match};
@@ -98,14 +98,7 @@ impl TypeChecker {
                 let mut bindings = HashMap::new();
                 let mut all_match = true;
                 for (expected_type, (actual_type, _)) in expected.iter().zip(arg_types.iter()) {
-                    let ok = match actual_type {
-                        CheckType::Unknown => true,
-                        CheckType::Known(actual) => unify(expected_type, actual, &mut bindings),
-                        CheckType::Function { .. } => {
-                            actual_type.matches(&CheckType::Known(expected_type.clone()))
-                        }
-                    };
-                    if !ok {
+                    if !unify_arg(expected_type, actual_type, &mut bindings) {
                         all_match = false;
                         break;
                     }
@@ -121,7 +114,6 @@ impl TypeChecker {
                 continue;
             }
 
-            // unchanged plain-matches path below
             let all_match =
                 expected
                     .iter()
