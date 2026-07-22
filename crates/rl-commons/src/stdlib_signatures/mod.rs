@@ -5,12 +5,6 @@
 //! non-generic signature. Modules are typed incrementally - anything not
 //! covered yet stays registered via `ModuleNames::with_functions` (untyped,
 //! unchecked) in [`crate::stdlib_names`].
-//!
-//! Functions that are generic over their element type (`arr_push`,
-//! `arr_map`, `set_add`, `result_map`, ...) or variadic (`print`, `format`)
-//! are intentionally left untyped for now: the checker has no generics
-//! system, so a fixed `TypeAnnotation` signature for them would either
-//! reject valid calls or silently accept bad ones.
 
 use crate::StdFn;
 use rl_ast::statements::TypeAnnotation as T;
