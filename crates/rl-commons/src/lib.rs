@@ -136,13 +136,13 @@ pub fn stdlib_names() -> ModuleNames {
         .with_module(ModuleNames::new("random").with_functions(keywords::random::KEYWORDS))
         .with_module(ModuleNames::new("time").with_functions(keywords::time::KEYWORDS))
         .with_module(ModuleNames::new("process").with_functions(keywords::process::KEYWORDS))
-        .with_module(ModuleNames::new("result").with_functions(keywords::result::KEYWORDS))
-        .with_module(ModuleNames::new("terminal").with_functions(keywords::terminal::KEYWORDS))
+        .with_module(ModuleNames::new("res").with_functions(keywords::result::KEYWORDS))
+        .with_module(ModuleNames::new("term").with_functions(keywords::terminal::KEYWORDS))
         .with_module(ModuleNames::new("rl").with_functions(keywords::rl::KEYWORDS))
         .with_module(ModuleNames::new("debug").with_functions(keywords::debug::KEYWORDS))
         .with_module(ModuleNames::new("net").with_functions(keywords::net::KEYWORDS))
         .with_module(ModuleNames::new("http").with_functions(keywords::http::KEYWORDS))
-        .with_module(ModuleNames::new("set").with_functions(keywords::set::KEYWORDS))
+        .with_module(ModuleNames::new("collections").with_functions(keywords::set::KEYWORDS))
 }
 
 #[cfg(test)]
