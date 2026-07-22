@@ -24,12 +24,12 @@ pub mod types;
 
 /// Builds the "input" half of a signature pair: a `Tuple` of the expected
 /// argument types, in order. An empty `Vec` means "no arguments".
-pub(crate) fn params(types: Vec<TypeAnnotation>) -> TypeAnnotation {
+pub fn params(types: Vec<TypeAnnotation>) -> TypeAnnotation {
     TypeAnnotation::Tuple(Rc::new(types))
 }
 
 /// Wraps a type as `Result[T]` - the return type of every stdlib function
 /// that can fail and follows the `vok!`/`verr!` runtime convention.
-pub(crate) fn result(inner: TypeAnnotation) -> TypeAnnotation {
+pub fn result(inner: TypeAnnotation) -> TypeAnnotation {
     TypeAnnotation::Result(Box::new(inner))
 }
