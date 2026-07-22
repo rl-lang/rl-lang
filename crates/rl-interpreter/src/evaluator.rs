@@ -414,32 +414,31 @@ impl Evaluator {
                     &self.resolver.ast_arena.exprs.get(target).kind
                 {
                     let (depth, slot) = (*depth, *slot);
+                    let is_map = matches!(
+                        self.slot_ref(depth, slot),
+                        Some(EnvironmentItem::PItem(p)) if matches!(p.value, Value::Map { .. })
+                    );
                     let idx = self.evaluate(index)?;
                     self.check_not_null(&idx, index_span)?;
-                    match idx {
-                        Value::Integer(i) => {
-                            if i < 0 {
-                                return Err(
-                                    self.err(format!("index cannot be negative: {}", i), span)
-                                );
+                    if !is_map {
+                        match idx {
+                            Value::Integer(i) => {
+                                if i < 0 {
+                                    return Err(
+                                        self.err(format!("index cannot be negative: {}", i), span)
+                                    );
+                                }
+                                return self.index_read(depth, slot, &[i as usize], span);
                             }
-                            return self.index_read(depth, slot, &[i as usize], span);
-                        }
-                        Value::Byte(b) => {
-                            return self.index_read(depth, slot, &[b as usize], span);
-                        }
-                        _ => {
-                            let arr = self.evaluate(target)?;
-                            self.check_not_null(&arr, target_span)?;
-                            return self.index_read_value(
-                                &arr,
-                                &idx,
-                                target_span,
-                                index_span,
-                                span,
-                            );
+                            Value::Byte(b) => {
+                                return self.index_read(depth, slot, &[b as usize], span);
+                            }
+                            _ => {}
                         }
                     }
+                    let arr = self.evaluate(target)?;
+                    self.check_not_null(&arr, target_span)?;
+                    return self.index_read_value(&arr, &idx, target_span, index_span, span);
                 }
 
                 let arr = self.evaluate(target)?;
