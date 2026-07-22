@@ -75,7 +75,9 @@ impl Parser {
                             while self.match_type(&[TokenType::Newline]) {}
                         }
                     }
-                    self.match_type(&[TokenType::RightParen]);
+                    if !self.match_type(&[TokenType::RightParen]) {
+                        return Err(self.err("expected `)` after arguments", self.peek_span()));
+                    }
                     let span = start.join(self.previous_span());
                     #[cfg(feature = "debug")]
                     log::trace!(
@@ -227,7 +229,9 @@ impl Parser {
                             }
                         }
                         while self.match_type(&[TokenType::Newline]) {}
-                        self.match_type(&[TokenType::RightParen]);
+                        if !self.match_type(&[TokenType::RightParen]) {
+                            return Err(self.err("expected `)` after arguments", self.peek_span()));
+                        }
                         let span = start.join(self.previous_span());
                         #[cfg(feature = "debug")]
                         log::trace!(
