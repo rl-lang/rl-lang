@@ -1,6 +1,6 @@
 //! Typed signatures for `std::net`.
 
-use super::{params, result};
+use super::{fixed, handle, handle_to_string, overloads, params, result};
 use crate::{ModuleNames, StdFn};
 use rl_ast::statements::TypeAnnotation as T;
 use std::rc::Rc;
@@ -26,34 +26,6 @@ pub fn module() -> ModuleNames {
         .with_typed_function(udp_recv_from())
         .with_typed_function(udp_close())
         .with_typed_function(resolve())
-}
-
-fn handle() -> Vec<T> {
-    vec![T::Int, T::Byte]
-}
-fn fixed(t: T) -> Vec<T> {
-    vec![t]
-}
-
-fn combos(parts: Vec<Vec<T>>) -> Vec<Vec<T>> {
-    parts.into_iter().fold(vec![vec![]], |acc, options| {
-        acc.into_iter()
-            .flat_map(|prefix| {
-                options.iter().map(move |o| {
-                    let mut next = prefix.clone();
-                    next.push(o.clone());
-                    next
-                })
-            })
-            .collect()
-    })
-}
-
-fn overloads(parts: Vec<Vec<T>>, ret: T) -> Vec<(T, T)> {
-    combos(parts)
-        .into_iter()
-        .map(|combo| (params(combo), ret.clone()))
-        .collect()
 }
 
 fn tcp_listen() -> StdFn {
@@ -88,14 +60,11 @@ fn tcp_write() -> StdFn {
     )
 }
 
-fn handle_to_addr(name: &'static str) -> StdFn {
-    StdFn::typed(name, overloads(vec![handle()], result(T::String)))
-}
 fn tcp_peer_addr() -> StdFn {
-    handle_to_addr("tcp_peer_addr")
+    handle_to_string("tcp_peer_addr")
 }
 fn tcp_local_addr() -> StdFn {
-    handle_to_addr("tcp_local_addr")
+    handle_to_string("tcp_local_addr")
 }
 
 fn tcp_set_timeout() -> StdFn {

@@ -1,6 +1,6 @@
 //! Typed signatures for `std::random`.
 
-use super::{params, result};
+use super::{arr_t, params, result, t};
 use crate::{ModuleNames, StdFn};
 use rl_ast::statements::TypeAnnotation as T;
 
@@ -24,13 +24,6 @@ pub fn module() -> ModuleNames {
         .with_typed_function(rand_bytes())
         .with_typed_function(rand_char())
         .with_typed_function(rand_string())
-}
-
-fn t() -> T {
-    T::Generic("T".into())
-}
-fn arr_t() -> T {
-    T::Array(Box::new(t()))
 }
 
 fn rand_int() -> StdFn {

@@ -1,6 +1,6 @@
 //! Typed signatures for `std::path`.
 
-use super::params;
+use super::{params, string_to_string};
 use crate::{ModuleNames, StdFn};
 use rl_ast::statements::TypeAnnotation as T;
 
@@ -32,23 +32,20 @@ fn path_is_file() -> StdFn {
     path_predicate("path_is_file")
 }
 
-fn path_to_string(name: &'static str) -> StdFn {
-    StdFn::typed(name, vec![(params(vec![T::String]), T::String)])
-}
 fn path_extension() -> StdFn {
-    path_to_string("path_extension")
+    string_to_string("path_extension")
 }
 fn path_filename() -> StdFn {
-    path_to_string("path_filename")
+    string_to_string("path_filename")
 }
 fn path_parent() -> StdFn {
-    path_to_string("path_parent")
+    string_to_string("path_parent")
 }
 fn path_pop() -> StdFn {
-    path_to_string("path_pop")
+    string_to_string("path_pop")
 }
 fn path_stem() -> StdFn {
-    path_to_string("path_stem")
+    string_to_string("path_stem")
 }
 
 fn path_string_string(name: &'static str) -> StdFn {

@@ -1,6 +1,6 @@
 //! Typed signatures for `std::http`.
 
-use super::{params, result};
+use super::{fixed, handle, handle_to_string, overloads, params, result};
 use crate::{ModuleNames, StdFn};
 use rl_ast::statements::TypeAnnotation as T;
 use std::rc::Rc;
@@ -21,34 +21,6 @@ pub fn module() -> ModuleNames {
         .with_typed_function(http_request())
 }
 
-fn handle() -> Vec<T> {
-    vec![T::Int, T::Byte]
-}
-fn fixed(t: T) -> Vec<T> {
-    vec![t]
-}
-
-fn combos(parts: Vec<Vec<T>>) -> Vec<Vec<T>> {
-    parts.into_iter().fold(vec![vec![]], |acc, options| {
-        acc.into_iter()
-            .flat_map(|prefix| {
-                options.iter().map(move |o| {
-                    let mut next = prefix.clone();
-                    next.push(o.clone());
-                    next
-                })
-            })
-            .collect()
-    })
-}
-
-fn overloads(parts: Vec<Vec<T>>, ret: T) -> Vec<(T, T)> {
-    combos(parts)
-        .into_iter()
-        .map(|combo| (params(combo), ret.clone()))
-        .collect()
-}
-
 fn status_and_body() -> T {
     T::Tuple(Rc::new(vec![T::Int, T::String]))
 }
@@ -67,9 +39,6 @@ fn http_server_recv() -> StdFn {
     )
 }
 
-fn handle_to_string(name: &'static str) -> StdFn {
-    StdFn::typed(name, overloads(vec![handle()], result(T::String)))
-}
 fn http_request_method() -> StdFn {
     handle_to_string("http_request_method")
 }

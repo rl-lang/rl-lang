@@ -1,6 +1,6 @@
 //! Typed signatures for `std::collections`.
 
-use super::{params, result};
+use super::{params, result, t};
 use crate::{ModuleNames, StdFn};
 use rl_ast::statements::TypeAnnotation as T;
 
@@ -14,9 +14,6 @@ pub fn module() -> ModuleNames {
         .with_typed_function(set_to_array())
 }
 
-fn t() -> T {
-    T::Generic("T".into())
-}
 fn set_t() -> T {
     T::Set(Box::new(t()))
 }

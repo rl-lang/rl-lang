@@ -1,6 +1,6 @@
 //! Typed signatures for `std::array`
 
-use super::{params, result};
+use super::{arr_t, params, result, t};
 use crate::{ModuleNames, StdFn};
 use rl_ast::statements::TypeAnnotation as T;
 use std::rc::Rc;
@@ -43,14 +43,8 @@ pub fn module() -> ModuleNames {
         .with_typed_function(arr_range())
 }
 
-fn t() -> T {
-    T::Generic("T".into())
-}
 fn u() -> T {
     T::Generic("U".into())
-}
-fn arr_t() -> T {
-    T::Array(Box::new(t()))
 }
 fn arr_u() -> T {
     T::Array(Box::new(u()))

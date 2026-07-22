@@ -1,6 +1,6 @@
 //! Typed signatures for `std::res`.
 
-use super::{params, result};
+use super::{params, result, t};
 use crate::{ModuleNames, StdFn};
 use rl_ast::statements::TypeAnnotation as T;
 
@@ -11,10 +11,6 @@ pub fn module() -> ModuleNames {
         .with_typed_function(is_err())
         .with_typed_function(result_unwrap())
         .with_typed_function(result_unwrap_or())
-}
-
-fn t() -> T {
-    T::Generic("T".into())
 }
 
 fn result_predicate(name: &'static str) -> StdFn {

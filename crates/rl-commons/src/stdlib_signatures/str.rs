@@ -1,6 +1,6 @@
 //! Typed signatures for `std::string`.
 
-use super::{params, result};
+use super::{params, result, string_to_string};
 use crate::{ModuleNames, StdFn};
 use rl_ast::statements::TypeAnnotation as T;
 
@@ -31,9 +31,6 @@ pub fn module() -> ModuleNames {
         .with_typed_function(index_of())
 }
 
-fn string_to_string(name: &'static str) -> StdFn {
-    StdFn::typed(name, vec![(params(vec![T::String]), T::String)])
-}
 fn to_lower() -> StdFn {
     string_to_string("to_lower")
 }
