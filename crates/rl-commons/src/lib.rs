@@ -129,7 +129,7 @@ pub fn stdlib_names() -> ModuleNames {
         .with_module(stdlib_signatures::fs::module())
         .with_module(stdlib_signatures::random::module())
         .with_module(stdlib_signatures::process::module())
-        .with_module(ModuleNames::new("res").with_functions(keywords::result::KEYWORDS))
+        .with_module(stdlib_signatures::res::module())
         .with_module(ModuleNames::new("net").with_functions(keywords::net::KEYWORDS))
         .with_module(ModuleNames::new("http").with_functions(keywords::http::KEYWORDS))
         .with_module(ModuleNames::new("collections").with_functions(keywords::set::KEYWORDS))
