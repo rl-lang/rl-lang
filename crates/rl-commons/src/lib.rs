@@ -1,11 +1,55 @@
 pub mod keywords;
+pub mod stdlib_signatures;
 
-use std::collections::{HashMap, HashSet};
+use rl_ast::statements::TypeAnnotation;
+use std::collections::HashMap;
+
+/// A `std` function's known signature(s), used by the checker to validate
+/// call arguments and infer the result type statically (see rl-lang#250).
+///
+/// Each entry in `signatures` is one accepted overload: `(params, return_type)`.
+/// `params` is a `TypeAnnotation::Tuple(..)` listing the expected argument
+/// types in order (an empty tuple means the function takes no arguments).
+/// Several functions accept more than one combination of argument types
+/// (e.g. `pow(int, int)`, `pow(int, float)`, ...) - that's why this is a
+/// `Vec` rather than a single pair: the checker tries each overload in turn
+/// and uses the first one whose params match the call's argument types.
+///
+/// A function with an **empty** `signatures` vec is considered "not yet
+/// typed": the checker treats calls to it as fully permissive
+/// (`CheckType::Unknown`), which is the behavior every stdlib function had
+/// before this field existed. This lets modules be typed incrementally.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct StdFn {
+    pub name: String,
+    pub signatures: Vec<(TypeAnnotation, TypeAnnotation)>,
+}
+
+impl StdFn {
+    /// A function with no recorded signature - calls to it are unchecked.
+    pub fn untyped(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            signatures: Vec::new(),
+        }
+    }
+
+    /// A function with one or more known `(params, return_type)` overloads.
+    pub fn typed(
+        name: impl Into<String>,
+        signatures: Vec<(TypeAnnotation, TypeAnnotation)>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            signatures,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct ModuleNames {
     pub name: String,
-    pub functions: HashSet<String>,
+    pub functions: HashMap<String, StdFn>,
     pub submodules: HashMap<String, ModuleNames>,
 }
 
@@ -13,13 +57,23 @@ impl ModuleNames {
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
-            functions: HashSet::new(),
+            functions: HashMap::new(),
             submodules: HashMap::new(),
         }
     }
 
+    /// Bulk-adds function names with no signature (unchecked calls).
+    /// Use [`ModuleNames::with_typed_function`] to give a specific function
+    /// known argument/return types.
     pub fn with_functions(mut self, names: &[&str]) -> Self {
-        self.functions.extend(names.iter().map(|s| s.to_string()));
+        self.functions
+            .extend(names.iter().map(|s| (s.to_string(), StdFn::untyped(*s))));
+        self
+    }
+
+    /// Adds (or overwrites) a single function with a known signature.
+    pub fn with_typed_function(mut self, f: StdFn) -> Self {
+        self.functions.insert(f.name.clone(), f);
         self
     }
 
@@ -28,9 +82,10 @@ impl ModuleNames {
         self
     }
 
-    pub fn resolve(&self, path: &[String]) -> bool {
+    /// Resolves a full stdlib path (e.g. `std::io::print`) to its [`StdFn`].
+    pub fn resolve(&self, path: &[String]) -> Option<&StdFn> {
         if path.is_empty() {
-            return false;
+            return None;
         }
         let path = if path.first().map(String::as_str) == Some(self.name.as_str()) {
             &path[1..]
@@ -38,20 +93,20 @@ impl ModuleNames {
             path
         };
         if path.is_empty() {
-            return false;
+            return None;
         }
         let mut module = self;
         for seg in &path[..path.len() - 1] {
             match module.submodules.get(seg) {
                 Some(m) => module = m,
-                None => return false,
+                None => return None,
             }
         }
-        module.functions.contains(&path[path.len() - 1])
+        module.functions.get(&path[path.len() - 1])
     }
 
-    pub fn collect_fn_names(&self, out: &mut HashSet<String>) {
-        out.extend(self.functions.iter().cloned());
+    pub fn collect_fn_names(&self, out: &mut HashMap<String, StdFn>) {
+        out.extend(self.functions.iter().map(|(k, v)| (k.clone(), v.clone())));
         for sub in self.submodules.values() {
             sub.collect_fn_names(out);
         }
@@ -63,13 +118,16 @@ pub fn stdlib_names() -> ModuleNames {
         .with_module(
             ModuleNames::new("math")
                 .with_functions(keywords::math::KEYWORDS)
+                // `pow` accepts 4 different (int|float, int|float) combinations,
+                // each with its own return type - see stdlib_signatures::math::pow.
+                .with_typed_function(stdlib_signatures::math::pow())
                 .with_module(
                     ModuleNames::new("constants")
                         .with_functions(keywords::math::constants::KEYWORDS),
                 ),
         )
-        .with_module(ModuleNames::new("io").with_functions(keywords::io::KEYWORDS))
-        .with_module(ModuleNames::new("bitwise").with_functions(keywords::bitwise::KEYWORDS))
+        .with_module(stdlib_signatures::io::module())
+        .with_module(stdlib_signatures::bitwise::module())
         .with_module(ModuleNames::new("string").with_functions(keywords::string::KEYWORDS))
         .with_module(ModuleNames::new("types").with_functions(keywords::types::KEYWORDS))
         .with_module(ModuleNames::new("array").with_functions(keywords::array::KEYWORDS))
@@ -95,7 +153,7 @@ mod tests {
     fn resolves_nested_path() {
         let tree = stdlib_names();
         let path = vec!["math".to_string(), "sin".to_string()];
-        assert!(tree.resolve(&path));
+        assert!(tree.resolve(&path).is_some());
     }
 
     #[test]
@@ -106,13 +164,37 @@ mod tests {
             "constants".to_string(),
             "PI".to_string(),
         ];
-        assert!(tree.resolve(&path));
+        assert!(tree.resolve(&path).is_some());
     }
 
     #[test]
     fn rejects_unknown_path() {
         let tree = stdlib_names();
         let path = vec!["math".to_string(), "not_a_real_fn".to_string()];
-        assert!(!tree.resolve(&path));
+        assert!(tree.resolve(&path).is_none());
+    }
+
+    #[test]
+    fn pow_has_four_overloads() {
+        let tree = stdlib_names();
+        let path = vec!["math".to_string(), "pow".to_string()];
+        let f = tree.resolve(&path).expect("pow should resolve");
+        assert_eq!(f.signatures.len(), 4);
+    }
+
+    #[test]
+    fn bitwise_bit_and_resolves_with_signatures() {
+        let tree = stdlib_names();
+        let path = vec!["bitwise".to_string(), "bit_and".to_string()];
+        let f = tree.resolve(&path).expect("bit_and should resolve");
+        assert_eq!(f.signatures.len(), 4);
+    }
+
+    #[test]
+    fn io_read_int_resolves_with_signatures() {
+        let tree = stdlib_names();
+        let path = vec!["io".to_string(), "read_int".to_string()];
+        let f = tree.resolve(&path).expect("read_int should resolve");
+        assert!(!f.signatures.is_empty());
     }
 }

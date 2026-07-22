@@ -1508,6 +1508,9 @@ dependencies = [
 [[package]]
 name = "rl-commons"
 version = "0.3.0"
+dependencies = [
+ "rl-ast",
+]
 
 [[package]]
 name = "rl-cranelift"
