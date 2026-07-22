@@ -136,12 +136,6 @@ pub fn run(
                     Style::default().fg(Color::DarkGray),
                 ))],
             };
-            let total = content_lines.len() as u16;
-            let visible = cols[1].height.saturating_sub(2);
-            let max_scroll = total.saturating_sub(visible);
-            if content_scroll > max_scroll {
-                content_scroll = max_scroll;
-            }
             let content_title = selected_item
                 .map(|item| format!(" {} ", item.label))
                 .unwrap_or_else(|| " docs ".to_string());
@@ -157,8 +151,15 @@ pub fn run(
                                 .add_modifier(Modifier::BOLD),
                         )),
                 )
-                .wrap(Wrap { trim: false })
-                .scroll((content_scroll, 0));
+                .wrap(Wrap { trim: false });
+
+            let visible = cols[1].height.saturating_sub(2);
+            let total = content_widget.line_count(cols[1].width) as u16;
+            let max_scroll = total.saturating_sub(visible);
+            if content_scroll > max_scroll {
+                content_scroll = max_scroll;
+            }
+            let content_widget = content_widget.scroll((content_scroll, 0));
             frame.render_widget(content_widget, cols[1]);
 
             // footer
