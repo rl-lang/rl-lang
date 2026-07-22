@@ -56,6 +56,9 @@ impl CheckType {
             // to represent the absence of value
             (CheckType::Known(TypeAnnotation::Null), _) => true,
 
+            (_, CheckType::Known(TypeAnnotation::Generic))
+            | (CheckType::Known(TypeAnnotation::Generic), _) => true,
+
             // matches different functions types and returns true
             (CheckType::Function { .. }, CheckType::Known(TypeAnnotation::Fn))
             | (CheckType::Known(TypeAnnotation::Fn), CheckType::Function { .. }) => true,
