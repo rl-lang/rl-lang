@@ -18,6 +18,7 @@ use std::rc::Rc;
 pub mod bitwise;
 pub mod io;
 pub mod math;
+pub mod terminal;
 
 /// Builds the "input" half of a signature pair: a `Tuple` of the expected
 /// argument types, in order. An empty `Vec` means "no arguments".
