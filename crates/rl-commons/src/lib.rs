@@ -115,17 +115,7 @@ impl ModuleNames {
 
 pub fn stdlib_names() -> ModuleNames {
     ModuleNames::new("std")
-        .with_module(
-            ModuleNames::new("math")
-                .with_functions(keywords::math::KEYWORDS)
-                // `pow` accepts 4 different (int|float, int|float) combinations,
-                // each with its own return type - see stdlib_signatures::math::pow.
-                .with_typed_function(stdlib_signatures::math::pow())
-                .with_module(
-                    ModuleNames::new("constants")
-                        .with_functions(keywords::math::constants::KEYWORDS),
-                ),
-        )
+        .with_module(stdlib_signatures::math::module())
         .with_module(stdlib_signatures::io::module())
         .with_module(stdlib_signatures::bitwise::module())
         .with_module(stdlib_signatures::terminal::module())

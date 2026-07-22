@@ -16,6 +16,7 @@ use rl_ast::statements::TypeAnnotation;
 use std::rc::Rc;
 
 pub mod bitwise;
+pub mod constants;
 pub mod io;
 pub mod math;
 pub mod terminal;
