@@ -20,6 +20,7 @@ pub mod constants;
 pub mod io;
 pub mod math;
 pub mod terminal;
+pub mod types;
 
 /// Builds the "input" half of a signature pair: a `Tuple` of the expected
 /// argument types, in order. An empty `Vec` means "no arguments".
