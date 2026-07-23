@@ -404,13 +404,23 @@ pub mod math {
     }
 }
 
-pub mod set {
+pub mod collections {
     pub const KEYWORDS: &[&str] = &[
         "set_add",
         "set_contains",
         "set_is_empty",
         "set_len",
         "set_remove",
-        "set_to_array"
+        "set_to_array",
+        "map_contains",
+        "map_remove",
+        "map_len",
+        "map_is_empty",
+        "map_to_array",
+        "map_get",
+        "map_keys",
+        "map_values",
+        "map_clear",
+        "map_merge"
     ];
 }
