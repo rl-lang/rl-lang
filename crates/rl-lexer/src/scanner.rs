@@ -106,6 +106,21 @@ impl Tokenizer {
                 } else if self.peek() == '=' {
                     self.advance();
                     self.add_token(TokenType::SlashEqual);
+                } else if self.peek() == '*' {
+                    self.advance();
+                    let start = self.current;
+                    while !(self.peek() == '*' && self.peek_next() == '/') {
+                        if self.peek() == '\n' {
+                            self.line += 1;
+                        }
+                        if !self.is_at_end() {
+                            self.advance();
+                        }
+                    }
+                    let text: String = self.source[start..self.current].iter().collect();
+                    let text = text.trim().to_string();
+                    let trivia = Trivia::BlockComment(text);
+                    self.pending_trivia.push(trivia);
                 } else {
                     self.add_token(TokenType::Slash);
                 }
