@@ -68,14 +68,14 @@ pub static SETS: ConceptEntry = ConceptEntry {
         DescriptionEntry {
             kind: DescriptionKind::Note,
             title: None,
-            description: "unlike map keys, set items are not restricted to hashable types - any type usable in an array (including nested arrays, records, or other sets) can be used as a set item, since a set is stored the same way as an array under the hood",
+            description: "like map keys, set items are restricted to hashable types",
             examples: &[],
             expected_output: &[],
         },
         DescriptionEntry {
             kind: DescriptionKind::Note,
             title: None,
-            description: "there's no iteration syntax for sets yet (no `for item in set`), and no stdlib module (`set_add`, `set_contains`, `set_remove`, `set_union`, `set_intersect`) - only declaration-site construction and positional `set[index]` reads are currently supported",
+            description: "`std::collections` provides `set_add`, `set_remove`, `set_contains`, `set_len`, `set_is_empty`, and `set_to_array` - but there's still no iteration syntax for sets (no `for item in set`), so looping over items means going through `set_to_array` first",
             examples: &[],
             expected_output: &[],
         },
@@ -85,6 +85,6 @@ pub static SETS: ConceptEntry = ConceptEntry {
         "a set literal only parses correctly as the initializer of a `dec set[T]`/`const set[T]` declaration - it is not yet a general-purpose expression",
     ],
     related: &["arrays", "maps", "types"],
-    related_stdlib: &[],
+    related_stdlib: &["collections"],
     since: Some("v0.1.5"),
 };
