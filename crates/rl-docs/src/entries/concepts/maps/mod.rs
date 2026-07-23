@@ -65,14 +65,14 @@ pub static MAPS: ConceptEntry = ConceptEntry {
         DescriptionEntry {
             kind: DescriptionKind::Pitfall,
             title: Some("missing keys error, they don't return null"),
-            description: "reading a key that doesn't exist is a runtime error, not `null` - there is no `map_get`-with-default yet, so check with a lookup helper once the map stdlib module exists, or guard with a `match`/`if`",
+            description: "reading a key that doesn't exist with `map[key]` is a runtime error, not `null` - use `map_contains` (from `std::collections`) to check first, or `map_get` to get a `result[V]` back instead of a panic",
             examples: &[],
             expected_output: &[],
         },
         DescriptionEntry {
             kind: DescriptionKind::Note,
-            title: Some("no iteration or stdlib module yet"),
-            description: "there's no iteration syntax for maps yet (no `for key, value in map`), and no stdlib module (`map_get`, `map_keys`, `map_values`, `map_has`, `map_remove`) - only literal construction and single-level `map[key]` read/write are currently supported",
+            title: Some("stdlib module and no iteration yet"),
+            description: "`std::collections` provides `map_contains`, `map_get`, `map_remove`, `map_len`, `map_is_empty`, `map_keys`, `map_values`, `map_to_array`, `map_clear`, and `map_merge` - but there's still no iteration syntax for maps (no `for key, value in map`), so looping over entries means going through `map_to_array` first",
             examples: &[],
             expected_output: &[],
         },
@@ -81,6 +81,6 @@ pub static MAPS: ConceptEntry = ConceptEntry {
         "assigning through more than one level of nesting, e.g. `arr[0][\"key\"] = value` where the outer container is an array of maps, is not yet supported - only a bare `map[key] = value` works",
     ],
     related: &["arrays", "types"],
-    related_stdlib: &[],
+    related_stdlib: &["collections"],
     since: Some("v0.1.5"),
 };
