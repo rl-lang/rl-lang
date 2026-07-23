@@ -522,7 +522,7 @@ dec arr[string] keys = map_keys(m)?
         Value::Values { items, .. } => items.clone(),
         other => panic!("expected array, got {:?}", other),
     };
-    items.sort_by(|a, b| a.to_string().cmp(&b.to_string()));
+    items.sort_by_key(|a| a.to_string());
     assert_eq!(
         items,
         vec![
@@ -550,7 +550,7 @@ dec int n = map_len(m)?
         Value::Values { items, .. } => items.clone(),
         other => panic!("expected array, got {:?}", other),
     };
-    items.sort_by(|a, b| a.to_string().cmp(&b.to_string()));
+    items.sort_by_key(|a| a.to_string());
     assert_eq!(
         items,
         vec![Value::Integer(1), Value::Integer(2), Value::Integer(3)]
