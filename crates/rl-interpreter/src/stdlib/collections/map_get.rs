@@ -13,7 +13,7 @@ pub fn std_map_get(_: &mut Evaluator, map: Value, key: Value) -> Value {
                     return verr!(vs!(format!(
                         "map_get: cannot use {} as a map key",
                         key.type_name()
-                    )))
+                    )));
                 }
             };
             match entries.borrow().get(&map_key) {

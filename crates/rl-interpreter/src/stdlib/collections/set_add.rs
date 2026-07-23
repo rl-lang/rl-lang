@@ -20,7 +20,7 @@ pub fn std_set_add(_: &mut Evaluator, set: Value, value: Value) -> Value {
                     return verr!(vs!(format!(
                         "set_add: cannot add {} to a set",
                         value.type_name()
-                    )))
+                    )));
                 }
             };
             items.borrow_mut().insert(key);

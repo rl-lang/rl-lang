@@ -13,7 +13,7 @@ pub fn std_set_remove(_: &mut Evaluator, set: Value, value: Value) -> Value {
                     return verr!(vs!(format!(
                         "set_remove: cannot remove {} from a set",
                         value.type_name()
-                    )))
+                    )));
                 }
             };
             items.borrow_mut().remove(&key);

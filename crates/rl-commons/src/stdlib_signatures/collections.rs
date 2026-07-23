@@ -115,10 +115,7 @@ fn map_to_array() -> StdFn {
 }
 
 fn map_get() -> StdFn {
-    StdFn::typed(
-        "map_get",
-        vec![(params(vec![map_t(), k()]), result(v()))],
-    )
+    StdFn::typed("map_get", vec![(params(vec![map_t(), k()]), result(v()))])
 }
 
 fn map_keys() -> StdFn {

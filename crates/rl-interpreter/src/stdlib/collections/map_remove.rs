@@ -17,7 +17,7 @@ pub fn std_map_remove(_: &mut Evaluator, map: Value, key: Value) -> Value {
                     return verr!(vs!(format!(
                         "map_remove: cannot remove {} from a map",
                         key.type_name()
-                    )))
+                    )));
                 }
             };
             entries.borrow_mut().remove(&map_key);

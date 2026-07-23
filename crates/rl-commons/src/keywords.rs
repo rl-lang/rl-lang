@@ -421,6 +421,6 @@ pub mod collections {
         "map_keys",
         "map_values",
         "map_clear",
-        "map_merge"
+        "map_merge",
     ];
 }
