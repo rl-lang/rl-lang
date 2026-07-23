@@ -106,6 +106,42 @@ impl Tokenizer {
                 } else if self.peek() == '=' {
                     self.advance();
                     self.add_token(TokenType::SlashEqual);
+                } else if self.peek() == '*' {
+                    self.advance(); // consume '*'
+                    let start = self.current;
+                    let mut depth = 1;
+
+                    while depth > 0 && !self.is_at_end() {
+                        if self.peek() == '/' && self.peek_next() == '*' {
+                            self.advance(); // consume '/'
+                            self.advance(); // consume '*'
+                            depth += 1;
+                        } else if self.peek() == '*' && self.peek_next() == '/' {
+                            self.advance(); // consume '*'
+                            self.advance(); // consume '/'
+                            depth -= 1;
+                        } else {
+                            if self.peek() == '\n' {
+                                self.line += 1;
+                            }
+                            self.advance();
+                        }
+                    }
+
+                    if depth > 0 {
+                        return Err(self.err(
+                            "unterminated block comment".to_string(),
+                            self.current_span(),
+                        ));
+                    }
+
+                    // Exclude the closing '*/' from the captured comment body text
+                    let end = self.current - 2;
+                    let text: String = self.source[start..end].iter().collect();
+                    let text = text.trim().to_string();
+
+                    let trivia = Trivia::BlockComment(text);
+                    self.pending_trivia.push(trivia);
                 } else {
                     self.add_token(TokenType::Slash);
                 }
