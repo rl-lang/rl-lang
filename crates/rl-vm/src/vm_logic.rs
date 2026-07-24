@@ -662,6 +662,31 @@ impl Vm {
                         .ok_or_else(|| self.err(format!("undefined function {key}")))?;
                     self.stack.push(VmValue::Function(func));
                 }
+
+                OpCode::LookupMethod => {
+                    let name_idx = chunk!().read_u16(ip) as usize;
+                    ip += 2;
+
+                    let VmValue::Str(method) = chunk!().constants[name_idx].clone() else {
+                        return Err(self.err("corrupt bytecode: method name is not a string"));
+                    };
+                    let caller = self
+                        .stack
+                        .last()
+                        .ok_or_else(|| self.err("stack underflow on method call"))?;
+                    let VmValue::Record { name, .. } = caller else {
+                        return Err(self.err(format!(
+                            "cannot call method `{method}` on {}",
+                            caller.type_name()
+                        )));
+                    };
+                    let key = format!("{name}::{method}");
+                    let func = self.impl_methods.get(&key).cloned().ok_or_else(|| {
+                        self.err(format!("record `{name}` has no method `{method}`"))
+                    })?;
+                    let insert_pos = self.stack.len() - 1;
+                    self.stack.insert(insert_pos, VmValue::Function(func));
+                }
             }
         }
     }
