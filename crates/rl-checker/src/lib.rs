@@ -115,6 +115,23 @@ impl TypeChecker {
                 self.tags.insert(name.clone(), variants.clone());
                 self.tag_spans.insert(name.clone(), statement.span);
             }
+            if let StatementKind::ImplBlock { record, methods } = &statement.kind {
+                for m in methods {
+                    if let StatementKind::FunctionDeclaration {
+                        name,
+                        params,
+                        return_type,
+                        ..
+                    } = &m.kind
+                    {
+                        let fn_type = CheckType::Function {
+                            params: params.iter().map(|p| p.param_type.clone()).collect(),
+                            return_type: return_type.clone(),
+                        };
+                        self.methods.insert((record.clone(), name.clone()), fn_type);
+                    }
+                }
+            }
         }
         for statement in statements {
             self.check_statement(statement);
