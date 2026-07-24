@@ -494,6 +494,38 @@ impl TypeChecker {
                 self.pop_return_type();
                 self.pop_scope();
             }
+
+            StatementKind::ImplBlock { record, methods } => {
+                if !self.records.contains_key(record) {
+                    self.error(format!("unknown record type `{}`", record), statement.span);
+                }
+                for m in methods {
+                    let StatementKind::FunctionDeclaration {
+                        params,
+                        return_type,
+                        body,
+                        ..
+                    } = &m.kind
+                    else {
+                        continue;
+                    };
+                    self.push_scope();
+                    for param in params {
+                        self.declare(
+                            param.param_name.clone(),
+                            CheckType::Known(param.param_type.clone()),
+                            false,
+                            m.span,
+                        );
+                    }
+                    self.push_return_type(return_type.clone());
+                    for stmt in body {
+                        self.check_statement(stmt);
+                    }
+                    self.pop_return_type();
+                    self.pop_scope();
+                }
+            }
             StatementKind::Return(expr) => {
                 // is the expression a valid type? otherwise null
                 let actual_type = match expr {
