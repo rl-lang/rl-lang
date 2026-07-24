@@ -632,6 +632,21 @@ impl Vm {
                         capture_start,
                     });
                 }
+
+                OpCode::RegisterMethod => {
+                    let key_idx = chunk!().read_u16(ip) as usize;
+                    ip += 2;
+                    let func_idx = chunk!().read_u16(ip) as usize;
+                    ip += 2;
+
+                    let VmValue::Str(key) = chunk!().constants[key_idx].clone() else {
+                        return Err(self.err("corrupt bytecode: method key is not a string"));
+                    };
+                    let VmValue::Function(func) = chunk!().constants[func_idx].clone() else {
+                        return Err(self.err("corrupt bytecode: method body is not a function"));
+                    };
+                    self.impl_methods.insert(key.to_string(), func);
+                }
             }
         }
     }
