@@ -273,6 +273,25 @@ pub enum StatementKind {
         fields: Vec<(String, TypeAnnotation)>,
     },
 
+    /// An `impl` block attaching methods to a record:
+    /// `impl Name { fn method(self) { ... } }`.
+    ///
+    /// A method with `self` as its first parameter is an instance method,
+    /// called via `value.method(args)`. A method without `self` is an
+    /// associated function, called via `Name::method(args)`.
+    ///
+    /// `methods` holds unresolved `FunctionDeclaration` statements.
+    ImplBlock {
+        record: String,
+        methods: Vec<Statement>,
+    },
+    /// Resolver-annotated impl block. `methods` holds
+    /// `ResolvedFunctionDeclaration` statements whose `slot` is unused
+    ResolvedImplBlock {
+        record: String,
+        methods: Vec<Statement>,
+    },
+
     /// A tag (enum) type declaration: `tag Name { VariantA, VariantB }`.
     TagDeclaration {
         name: String,
