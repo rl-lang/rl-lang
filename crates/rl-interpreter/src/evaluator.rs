@@ -88,6 +88,12 @@ pub struct Evaluator {
     /// Maps `tag` (enum) type names to their declared variant name list,
     /// in declaration order. Populated when a `TagDeclaration` statement runs.
     pub tags: HashMap<String, Vec<String>>,
+    /// Maps `"Record::method"` names to their function body, populated when
+    /// an `impl` block statement runs. Instance methods (declared with a
+    /// leading `self` param) are dispatched here from `MethodCall`; associated
+    /// functions (no `self`, e.g. `Point::new`) are dispatched here from
+    /// `call_path` when given a two-segment path.
+    pub impl_methods: HashMap<String, Rc<FunctionData>>,
 }
 
 impl Default for Evaluator {
@@ -118,6 +124,7 @@ impl Evaluator {
             http_next_handle: 1,
             records: HashMap::new(),
             tags: HashMap::new(),
+            impl_methods: HashMap::new(),
         }
     }
 
