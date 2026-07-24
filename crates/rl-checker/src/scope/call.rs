@@ -25,6 +25,13 @@ impl TypeChecker {
         arg_types: &[(CheckType, Span)],
         span: Span,
     ) -> CheckType {
+        // `Record::method` associated function, e.g. `Point::new(1, 2)`.
+        if path.len() == 2
+            && let Some(sig) = self.methods.get(&(path[0].clone(), path[1].clone())).cloned()
+        {
+            return self.check_call_value(sig, arg_types, span);
+        }
+
         // stdlib path (std::io::print)
         if let Some(f) = self.root_module.resolve(path).cloned() {
             self.push_stdlib_hover(path, span);
