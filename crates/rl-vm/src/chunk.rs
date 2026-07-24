@@ -83,6 +83,16 @@ pub enum OpCode {
     FieldSet = 38,
     BuildClosure = 39,
     ArrLen = 40,
+    /// registers a compiled `impl` method under its `"Record::method"` key,
+    /// so `LookupAssoc`/`LookupMethod` can find it later at runtime
+    RegisterMethod = 41,
+    /// looks up an associated function (`Record::method`) by its
+    /// `"Record::method"` key and pushes it as a callable value
+    LookupAssoc = 42,
+    /// looks up an instance method by name against the record value
+    /// currently on top of the stack (without popping it), and inserts
+    /// the resolved callable just below it
+    LookupMethod = 43,
 }
 
 impl OpCode {
@@ -92,7 +102,7 @@ impl OpCode {
     #[inline(always)]
     pub fn from_u8_unchecked(byte: u8) -> Self {
         debug_assert!(
-            byte <= OpCode::ArrLen as u8,
+            byte <= OpCode::LookupMethod as u8,
             "corrupt bytecode: opcode {byte}"
         );
         unsafe { std::mem::transmute::<u8, OpCode>(byte) }
@@ -143,6 +153,9 @@ impl OpCode {
             38 => OpCode::FieldSet,
             39 => OpCode::BuildClosure,
             40 => OpCode::ArrLen,
+            41 => OpCode::RegisterMethod,
+            42 => OpCode::LookupAssoc,
+            43 => OpCode::LookupMethod,
             other => panic!("corrupt bytecode: unknown opcode byte {other}"),
         }
     }
