@@ -42,6 +42,12 @@ pub struct TypeChecker {
     pub records: HashMap<String, Vec<(String, TypeAnnotation)>>,
     /// Maps `tag` (enum) type names to their declared variant name list.
     pub tags: HashMap<String, Vec<String>>,
+    /// Maps `(record name, method name)` to its checked function signature,
+    /// populated during the pre-scan pass from `ImplBlock` statements.
+    /// Instance methods (with a leading `self` param) include `self`'s
+    /// record type as their first param, matching how `MethodCall` prepends
+    /// the caller as arg 0.
+    pub methods: HashMap<(String, String), CheckType>,
 }
 
 /// A single entry in a type checker scope.

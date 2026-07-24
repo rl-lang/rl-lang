@@ -69,6 +69,7 @@ impl TypeChecker {
             ast_arena: Ast::new(),
             records: HashMap::new(),
             tags: HashMap::new(),
+            methods: HashMap::new(),
         }
     }
 
