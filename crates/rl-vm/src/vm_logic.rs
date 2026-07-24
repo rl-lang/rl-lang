@@ -54,6 +54,12 @@ pub struct Vm {
     /// full source) so runtime errors can still report a precise
     /// `file:line:col` location instead of a bare message.
     line_index: Option<LineIndex>,
+    /// `impl` methods registered via `OpCode::RegisterMethod`, keyed by
+    /// `"Record::method"`. Populated as the enclosing `impl` block's
+    /// statement runs, then consulted by `OpCode::LookupAssoc` (associated
+    /// functions, `Record::method(...)`) and `OpCode::LookupMethod`
+    /// (instance methods, `value.method(...)`).
+    impl_methods: HashMap<String, Rc<VmFunction>>,
 }
 
 impl Vm {
@@ -66,6 +72,7 @@ impl Vm {
             current_span: Span::dummy(),
             source: None,
             line_index: None,
+            impl_methods: HashMap::new(),
         }
     }
 
