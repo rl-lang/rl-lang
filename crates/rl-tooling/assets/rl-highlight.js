@@ -20,6 +20,8 @@
     "as",
     "match",
     "CONST",
+    "loop",
+    "impl",
   ];
 
   var TYPES = [

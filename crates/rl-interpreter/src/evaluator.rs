@@ -88,6 +88,12 @@ pub struct Evaluator {
     /// Maps `tag` (enum) type names to their declared variant name list,
     /// in declaration order. Populated when a `TagDeclaration` statement runs.
     pub tags: HashMap<String, Vec<String>>,
+    /// Maps `"Record::method"` names to their function body, populated when
+    /// an `impl` block statement runs. Instance methods (declared with a
+    /// leading `self` param) are dispatched here from `MethodCall`; associated
+    /// functions (no `self`, e.g. `Point::new`) are dispatched here from
+    /// `call_path` when given a two-segment path.
+    pub impl_methods: HashMap<String, Rc<FunctionData>>,
 }
 
 impl Default for Evaluator {
@@ -118,6 +124,7 @@ impl Evaluator {
             http_next_handle: 1,
             records: HashMap::new(),
             tags: HashMap::new(),
+            impl_methods: HashMap::new(),
         }
     }
 
@@ -707,6 +714,10 @@ impl Evaluator {
                     _ => unreachable!(),
                 };
                 let first_arg = self.evaluate(caller)?;
+                let record_name = match &first_arg {
+                    Value::Struct { name, .. } => Some(name.clone()),
+                    _ => None,
+                };
                 let mut evaluated_args = vec![first_arg];
                 for i in 0..len {
                     let arg_id = match &self.resolver.ast_arena.exprs.get(id).kind {
@@ -714,6 +725,13 @@ impl Evaluator {
                         _ => unreachable!(),
                     };
                     evaluated_args.push(self.evaluate(arg_id)?);
+                }
+                if method.len() == 1
+                    && let Some(rname) = record_name
+                    && let Some(f) = self.impl_methods.get(&format!("{rname}::{}", method[0]))
+                {
+                    let f = Rc::clone(f);
+                    return self.call_value(Value::Function(f), evaluated_args, span);
                 }
                 self.call_path(&method, evaluated_args, span)
             }
@@ -1059,6 +1077,13 @@ impl Evaluator {
         args: Vec<Value>,
         span: Span,
     ) -> Result<Value, Error> {
+        // `Record::method` associated function, e.g. `Point::new(1, 2)`.
+        if path.len() == 2
+            && let Some(f) = self.impl_methods.get(&format!("{}::{}", path[0], path[1]))
+        {
+            let f = Rc::clone(f);
+            return self.call_value(Value::Function(f), args, span);
+        }
         if let Some(f) = self.root_module.resolve(path) {
             let f = Arc::clone(f);
             return match f(self, args, span) {

@@ -222,6 +222,48 @@ impl Resolver {
                     attribute,
                 }
             }
+            StatementKind::ImplBlock { record, methods } => {
+                let methods = methods
+                    .into_iter()
+                    .map(|m| {
+                        let m_span = m.span;
+                        match m.kind {
+                            StatementKind::FunctionDeclaration {
+                                name,
+                                params,
+                                return_type,
+                                body,
+                                attribute,
+                            } => {
+                                self.push_scope();
+                                for p in &params {
+                                    self.declare(p.param_name.clone());
+                                }
+                                let body = self.resolve_statements(body);
+                                self.pop_scope();
+                                Statement::new(
+                                    StatementKind::ResolvedFunctionDeclaration {
+                                        name,
+                                        // impl methods are dispatched by
+                                        // `record::method` name, not by
+                                        // lexical address - this slot is
+                                        // never read.
+                                        slot: usize::MAX,
+                                        params,
+                                        return_type,
+                                        body,
+                                        attribute,
+                                    },
+                                    m_span,
+                                )
+                            }
+                            other => Statement::new(other, m_span),
+                        }
+                    })
+                    .collect();
+                StatementKind::ResolvedImplBlock { record, methods }
+            }
+
             StatementKind::ForEach {
                 variable,
                 iterable,

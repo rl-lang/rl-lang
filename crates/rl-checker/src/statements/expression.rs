@@ -276,11 +276,21 @@ impl TypeChecker {
             } => {
                 let caller_type = self.check_expression(caller);
                 let caller_id = self.ast_arena.exprs.get(caller);
-                let mut arg_types: Vec<(CheckType, Span)> = vec![(caller_type, caller_id.span)];
+                let mut arg_types: Vec<(CheckType, Span)> = vec![(caller_type.clone(), caller_id.span)];
                 for arg in args {
                     let arg_span = self.ast_arena.exprs.get(arg).span;
                     arg_types.push((self.check_expression(arg), arg_span));
                 }
+
+                if method.len() == 1
+                    && let CheckType::Known(
+                        TypeAnnotation::Record(rname) | TypeAnnotation::CRecord(rname),
+                    ) = &caller_type
+                    && let Some(sig) = self.methods.get(&(rname.clone(), method[0].clone())).cloned()
+                {
+                    return self.check_call_value(sig, &arg_types, expr_span);
+                }
+
                 self.check_call_path(&method, &arg_types, expr_span)
             }
 

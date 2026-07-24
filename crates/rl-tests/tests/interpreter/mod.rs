@@ -5,5 +5,6 @@ mod control_flow;
 mod functions;
 mod general;
 mod numbers;
+mod records;
 mod stdlib;
 mod tuples;

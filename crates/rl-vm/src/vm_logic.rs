@@ -54,6 +54,12 @@ pub struct Vm {
     /// full source) so runtime errors can still report a precise
     /// `file:line:col` location instead of a bare message.
     line_index: Option<LineIndex>,
+    /// `impl` methods registered via `OpCode::RegisterMethod`, keyed by
+    /// `"Record::method"`. Populated as the enclosing `impl` block's
+    /// statement runs, then consulted by `OpCode::LookupAssoc` (associated
+    /// functions, `Record::method(...)`) and `OpCode::LookupMethod`
+    /// (instance methods, `value.method(...)`).
+    impl_methods: HashMap<String, Rc<VmFunction>>,
 }
 
 impl Vm {
@@ -66,6 +72,7 @@ impl Vm {
             current_span: Span::dummy(),
             source: None,
             line_index: None,
+            impl_methods: HashMap::new(),
         }
     }
 
@@ -624,6 +631,61 @@ impl Vm {
                         captured: Rc::new(captured),
                         capture_start,
                     });
+                }
+
+                OpCode::RegisterMethod => {
+                    let key_idx = chunk!().read_u16(ip) as usize;
+                    ip += 2;
+                    let func_idx = chunk!().read_u16(ip) as usize;
+                    ip += 2;
+
+                    let VmValue::Str(key) = chunk!().constants[key_idx].clone() else {
+                        return Err(self.err("corrupt bytecode: method key is not a string"));
+                    };
+                    let VmValue::Function(func) = chunk!().constants[func_idx].clone() else {
+                        return Err(self.err("corrupt bytecode: method body is not a function"));
+                    };
+                    self.impl_methods.insert(key.to_string(), func);
+                }
+
+                OpCode::LookupAssoc => {
+                    let key_idx = chunk!().read_u16(ip) as usize;
+                    ip += 2;
+
+                    let VmValue::Str(key) = chunk!().constants[key_idx].clone() else {
+                        return Err(self.err("corrupt bytecode: method key is not a string"));
+                    };
+                    let func = self
+                        .impl_methods
+                        .get(&*key)
+                        .cloned()
+                        .ok_or_else(|| self.err(format!("undefined function {key}")))?;
+                    self.stack.push(VmValue::Function(func));
+                }
+
+                OpCode::LookupMethod => {
+                    let name_idx = chunk!().read_u16(ip) as usize;
+                    ip += 2;
+
+                    let VmValue::Str(method) = chunk!().constants[name_idx].clone() else {
+                        return Err(self.err("corrupt bytecode: method name is not a string"));
+                    };
+                    let caller = self
+                        .stack
+                        .last()
+                        .ok_or_else(|| self.err("stack underflow on method call"))?;
+                    let VmValue::Record { name, .. } = caller else {
+                        return Err(self.err(format!(
+                            "cannot call method `{method}` on {}",
+                            caller.type_name()
+                        )));
+                    };
+                    let key = format!("{name}::{method}");
+                    let func = self.impl_methods.get(&key).cloned().ok_or_else(|| {
+                        self.err(format!("record `{name}` has no method `{method}`"))
+                    })?;
+                    let insert_pos = self.stack.len() - 1;
+                    self.stack.insert(insert_pos, VmValue::Function(func));
                 }
             }
         }

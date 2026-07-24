@@ -270,6 +270,10 @@ fn remap_stmt_kind(kind: &mut StatementKind, offset: u32, target_arena_id: u32) 
             remap_stmts(body, offset, target_arena_id);
         }
 
+        ImplBlock { methods, .. } | ResolvedImplBlock { methods, .. } => {
+            remap_stmts(methods, offset, target_arena_id);
+        }
+
         Match { value, arms } => {
             remap_id(value, offset, target_arena_id);
             for (pattern, body) in arms {

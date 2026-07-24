@@ -27,6 +27,27 @@ impl Evaluator {
             StatementKind::TagDeclaration { name, variants } => {
                 self.tags.insert(name.clone(), variants.clone());
             }
+            StatementKind::ResolvedImplBlock { record, methods } => {
+                for m in methods {
+                    if let StatementKind::ResolvedFunctionDeclaration {
+                        name,
+                        params,
+                        return_type,
+                        body,
+                        ..
+                    } = &m.kind
+                    {
+                        let func = Rc::new(FunctionData {
+                            params: Rc::new(params.clone()),
+                            body: Rc::new(body.clone()),
+                            return_type: Some(return_type.clone()),
+                            captured_env: vec![],
+                        });
+                        self.impl_methods
+                            .insert(format!("{record}::{name}"), func);
+                    }
+                }
+            }
             StatementKind::ResolvedVariableDeclaration {
                 slot,
                 value,
@@ -976,7 +997,8 @@ impl Evaluator {
                 | StatementKind::ResolvedMap { .. }
                 | StatementKind::ResolvedConstantMap { .. }
                 | StatementKind::TagDeclaration { .. }
-                | StatementKind::RecordDeclaration { .. } => self.evaluate_statement(statement)?,
+                | StatementKind::RecordDeclaration { .. }
+                | StatementKind::ResolvedImplBlock { .. } => self.evaluate_statement(statement)?,
                 _ => {}
             }
         }

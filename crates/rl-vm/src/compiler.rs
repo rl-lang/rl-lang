@@ -132,6 +132,35 @@ impl<'a> Compiler<'a> {
                 Ok(())
             }
 
+            StatementKind::ResolvedImplBlock { record, methods } => {
+                for m in methods {
+                    let StatementKind::ResolvedFunctionDeclaration { name, params, body, .. } =
+                        &m.kind
+                    else {
+                        continue;
+                    };
+                    let func_chunk = Self::compile_function_chunk(
+                        self.ast,
+                        body,
+                        params.len(),
+                        self.source.clone(),
+                    )?;
+                    let func = VmValue::Function(Rc::new(VmFunction {
+                        name: name.clone(),
+                        arity: params.len(),
+                        chunk: func_chunk,
+                    }));
+                    let func_idx = self.chunk.add_constant(func);
+                    let key = format!("{record}::{name}");
+                    let key_idx = self.chunk.add_constant(VmValue::Str(Rc::from(key.as_str())));
+
+                    self.chunk.write_op(OpCode::RegisterMethod, span);
+                    self.chunk.write_u16(key_idx, span);
+                    self.chunk.write_u16(func_idx, span);
+                }
+                Ok(())
+            }
+
             StatementKind::While { condition, body } => {
                 let loop_start = self.chunk.code.len();
                 self.compile_expr(*condition)?;
@@ -649,15 +678,63 @@ impl<'a> Compiler<'a> {
             }
 
             ExpressionKind::Call { path, args } => {
-                let native = self.stdlib.resolve(path).ok_or_else(|| {
-                    self.err(format!("undefined function {}", path.join("::")), span)
-                })?;
-                self.emit_const(VmValue::Native(native), span);
+                match self.stdlib.resolve(path) {
+                    Some(native) => self.emit_const(VmValue::Native(native), span),
+                    None if path.len() == 2 => {
+                        // `Record::method` associated function, e.g.
+                        // `Point::new(1, 2)` - resolved at runtime against
+                        // the `impl_methods` table (see `LookupAssoc`),
+                        // since the compiler doesn't track record impls.
+                        let key = format!("{}::{}", path[0], path[1]);
+                        let key_idx =
+                            self.chunk.add_constant(VmValue::Str(Rc::from(key.as_str())));
+                        self.chunk.write_op(OpCode::LookupAssoc, span);
+                        self.chunk.write_u16(key_idx, span);
+                    }
+                    None => {
+                        return Err(
+                            self.err(format!("undefined function {}", path.join("::")), span)
+                        );
+                    }
+                }
                 for arg in args {
                     self.compile_expr(*arg)?;
                 }
                 self.chunk.write_op(OpCode::Call, span);
                 self.chunk.write_u16(args.len() as u16, span);
+            }
+
+            ExpressionKind::MethodCall {
+                caller,
+                method,
+                args,
+            } => {
+                if method.len() != 1 {
+                    return Err(self.err(
+                        "namespaced method calls (`value.module::method(...)`) are not yet \
+                         supported by the vm compiler",
+                        span,
+                    ));
+                }
+                // Instance method dispatch, e.g. `point.magnitude()`. The
+                // record type is only known at runtime, so the caller is
+                // compiled first and `LookupMethod` resolves against it
+                // there (see the `LookupMethod` handler in `vm_logic.rs`),
+                // inserting the resolved function below it on the stack so
+                // it lines up with `OpCode::Call`'s `[callee, args...]`
+                // layout, with `self` as the first argument.
+                self.compile_expr(*caller)?;
+                let name_idx = self
+                    .chunk
+                    .add_constant(VmValue::Str(Rc::from(method[0].as_str())));
+                self.chunk.write_op(OpCode::LookupMethod, span);
+                self.chunk.write_u16(name_idx, span);
+
+                for arg in args {
+                    self.compile_expr(*arg)?;
+                }
+                self.chunk.write_op(OpCode::Call, span);
+                self.chunk.write_u16((args.len() + 1) as u16, span);
             }
 
             ExpressionKind::CallExpr { callee, args } => {
