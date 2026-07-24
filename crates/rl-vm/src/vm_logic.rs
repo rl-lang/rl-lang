@@ -647,6 +647,21 @@ impl Vm {
                     };
                     self.impl_methods.insert(key.to_string(), func);
                 }
+
+                OpCode::LookupAssoc => {
+                    let key_idx = chunk!().read_u16(ip) as usize;
+                    ip += 2;
+
+                    let VmValue::Str(key) = chunk!().constants[key_idx].clone() else {
+                        return Err(self.err("corrupt bytecode: method key is not a string"));
+                    };
+                    let func = self
+                        .impl_methods
+                        .get(&*key)
+                        .cloned()
+                        .ok_or_else(|| self.err(format!("undefined function {key}")))?;
+                    self.stack.push(VmValue::Function(func));
+                }
             }
         }
     }
