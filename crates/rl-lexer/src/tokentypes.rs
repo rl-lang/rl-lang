@@ -106,6 +106,7 @@ pub enum TokenType {
     Err,
     Match,
     Record,
+    Impl,
     Tag,
     Loop,
 
