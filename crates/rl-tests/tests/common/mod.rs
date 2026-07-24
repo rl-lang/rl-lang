@@ -7,6 +7,7 @@ use rl_lexer::tokentypes::Token;
 use rl_lexer::tokentypes::TokenType;
 use rl_utils::span::Span;
 use rl_utils::{errors::Error, source::SourceFile};
+use rl_checker::TypeChecker;
 
 pub fn lex(source: &str) -> Vec<Token> {
     let text = SourceFile::new("test", source.to_string());
@@ -39,6 +40,25 @@ pub fn compile_and_run(source: &str) -> Result<rl_vm::VmValue, rl_vm::VmError> {
         .compile(&stmts)
         .expect("compile failed");
     rl_vm::Vm::new().run_and_return(&chunk)
+}
+
+pub fn check(source: &str) -> TypeChecker {
+    let file = SourceFile::new("test", source.to_string());
+
+    let tokens =
+        rl_lexer::tokenizer::Tokenizer::lex(file.clone()).expect("lex failed");
+
+    let (ast, statements) =
+        rl_parser::parser_logic::Parser::parse(tokens, file.clone())
+            .expect("parse failed");
+
+    let mut checker = TypeChecker::new()
+        .with_source_file(file)
+        .with_ast_arena(ast);
+
+    checker.check(&statements);
+
+    checker
 }
 
 // ---- helpers start ----
@@ -228,6 +248,7 @@ macro_rules! assert_decl {
                 name,
                 type_annotation,
                 value,
+                ..
             } => {
                 assert_eq!(name, $name);
                 assert_eq!(*type_annotation, $ty);
@@ -346,4 +367,5 @@ macro_rules! assert_array_decl {
         assert_eq!(statements[0].span, $stmt_span);
     }};
 }
+
 // ---- macro end   ----

@@ -1,5 +1,6 @@
 //! Core data structures for the type checker.
 //!
+use crate::units::Unit;
 use rl_ast::{Ast, statements::TypeAnnotation};
 use rl_commons::ModuleNames;
 use rl_utils::{errors::Error, source::SourceFile, span::Span};
@@ -55,6 +56,7 @@ pub struct ScopeItem {
     /// The static type of this variable or function.
     pub type_annotation: CheckType,
     /// Whether this binding is immutable (`CONST`).
+    pub unit: Option<Unit>,
     pub is_const: bool,
     pub decl_span: Span,
 }

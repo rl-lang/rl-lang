@@ -23,6 +23,7 @@ pub mod scope;
 pub mod statements;
 pub mod structs;
 pub mod types;
+pub mod units;
 
 use crate::structs::CheckType;
 use rl_ast::{

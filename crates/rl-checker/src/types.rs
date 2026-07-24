@@ -1,6 +1,9 @@
 //! Helper methods on [`CheckType`] and [`ScopeItem`], plus private type-matching utilities.
 
-use crate::structs::{CheckType, ScopeItem};
+use crate::{
+    structs::{CheckType, ScopeItem},
+    units::Unit,
+};
 use rl_ast::statements::TypeAnnotation;
 use rl_utils::span::Span;
 use std::collections::HashMap;
@@ -8,8 +11,18 @@ use std::rc::Rc;
 
 impl ScopeItem {
     pub fn new(type_annotation: CheckType, is_const: bool, decl_span: Span) -> Self {
+        Self::new_with_unit(type_annotation, None, is_const, decl_span)
+    }
+
+    pub fn new_with_unit(
+        type_annotation: CheckType,
+        unit: Option<Unit>,
+        is_const: bool,
+        decl_span: Span,
+    ) -> Self {
         Self {
             type_annotation,
+            unit,
             is_const,
             decl_span,
         }

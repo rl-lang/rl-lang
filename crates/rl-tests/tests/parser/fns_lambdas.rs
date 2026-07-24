@@ -112,6 +112,7 @@ fn dec_fn_lambda() {
             name,
             type_annotation,
             value,
+            ..
         } => {
             assert_eq!(name, "x");
             assert_eq!(*type_annotation, TypeAnnotation::Fn);

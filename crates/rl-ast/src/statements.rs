@@ -33,13 +33,21 @@ impl Statement {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UnitAnnotation {
+    Symbol(String),
+    Multiply(Box<UnitAnnotation>, Box<UnitAnnotation>),
+    Divide(Box<UnitAnnotation>, Box<UnitAnnotation>),
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum StatementKind {
-    /// A mutable variable declaration: `dec T name = value`.
+    /// A mutable variable declaration: `dec T name: unit = value`.
     VariableDeclaration {
         name: String,
         type_annotation: TypeAnnotation,
         value: ExprId,
+        unit_annotation: Option<UnitAnnotation>,
     },
     /// Resolver-annotated mutable variable declaration. `slot` is the index
     /// in the current environment frame.
@@ -47,12 +55,14 @@ pub enum StatementKind {
         name: String,
         slot: usize,
         type_annotation: TypeAnnotation,
+        unit_annotation: Option<UnitAnnotation>,
         value: ExprId,
     },
     /// An immutable constant declaration: `const T NAME = value`.
     ConstantDeclaration {
         name: String,
         type_annotation: TypeAnnotation,
+        unit_annotation: Option<UnitAnnotation>,
         value: ExprId,
     },
     /// Resolver-annotated constant declaration.
@@ -60,6 +70,7 @@ pub enum StatementKind {
         name: String,
         slot: usize,
         type_annotation: TypeAnnotation,
+        unit_annotation: Option<UnitAnnotation>,
         value: ExprId,
     },
     /// A mutable array declaration with an inline literal: `dec array[T] name = [items]`.

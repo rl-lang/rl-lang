@@ -7,6 +7,7 @@ publish = false
 
 [dev-dependencies]
 rl-ast.workspace = true
+rl-checker.workspace = true
 rl-lexer.workspace = true
 rl-parser.workspace = true
 rl-interpreter.workspace = true
