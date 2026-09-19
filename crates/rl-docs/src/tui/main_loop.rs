@@ -291,38 +291,36 @@ pub fn run(
                     }
                     (_, KeyCode::Enter) | (_, KeyCode::Right) | (_, KeyCode::Char('l')) => {
                         // Toggle expand/collapse on the selected group
-                        if let Some(&idx) = filtered.get(selected) {
-                            if let Some(node) = visible.get(idx) {
-                                if let TreeNode::Group { key, .. } = node {
-                                    let key = key.clone();
-                                    if expanded.contains(&key) {
-                                        expanded.remove(&key);
-                                    } else {
-                                        expanded.insert(key);
-                                    }
-                                    content_scroll = 0;
-                                }
+                        if let Some(&idx) = filtered.get(selected)
+                            && let Some(TreeNode::Group { key, .. }) = visible.get(idx)
+                        {
+                            let key = key.clone();
+                            if expanded.contains(&key) {
+                                expanded.remove(&key);
+                            } else {
+                                expanded.insert(key);
                             }
+                            content_scroll = 0;
                         }
                     }
                     (_, KeyCode::Left) | (_, KeyCode::Char('h')) => {
                         // Collapse the selected group, or collapse its parent
-                        if let Some(&idx) = filtered.get(selected) {
-                            if let Some(node) = visible.get(idx) {
-                                match node {
-                                    TreeNode::Group { key, .. } => {
-                                        let key = key.clone();
-                                        expanded.remove(&key);
-                                    }
-                                    TreeNode::Leaf(_) => {
-                                        // Find parent group and collapse it
-                                        if let Some(parent_key) = find_parent_key(&tree, idx) {
-                                            expanded.remove(&parent_key);
-                                        }
+                        if let Some(&idx) = filtered.get(selected)
+                            && let Some(node) = visible.get(idx)
+                        {
+                            match node {
+                                TreeNode::Group { key, .. } => {
+                                    let key = key.clone();
+                                    expanded.remove(&key);
+                                }
+                                TreeNode::Leaf(_) => {
+                                    // Find parent group and collapse it
+                                    if let Some(parent_key) = find_parent_key(&tree, idx) {
+                                        expanded.remove(&parent_key);
                                     }
                                 }
-                                content_scroll = 0;
                             }
+                            content_scroll = 0;
                         }
                     }
                     (_, KeyCode::Char('g')) => {

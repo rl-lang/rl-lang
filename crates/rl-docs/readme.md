@@ -20,11 +20,11 @@ Part of the [rl-lang](https://github.com/rl-lang/rl-lang) workspace. Powers the 
 |---|---|
 | `entries` | Static entry data for stdlib modules, concepts, and tutorials |
 | `entry` | `StdEntry`, `FnEntry`, and `ConceptEntry` type definitions |
-| `tui` (feature-gated) | Interactive terminal browser for the docs, built on `ratatui` / `crossterm` |
+| `tui` (feature-gated) | Interactive terminal browser for the docs, built on `ratatui` / `crossterm`. Features a collapsible tree sidebar, per-function pages, search, and keyboard navigation (j/k/arrows, Enter to expand, Tab to toggle focus). |
 
 ## Features
 
-- `tui` - enables the interactive terminal doc browser (`dep:ratatui`, `dep:crossterm`, `dep:rl-lexer`, `dep:rl-utils`)
+- `tui` - enables the interactive terminal doc browser (`dep:ratatui`, `dep:crossterm`, `dep:rl-lexer`, `dep:rl-utils`). Use `rldocs --tui` to launch it, or `rldocs --json` to dump structured JSON for tooling.
 
 ## Usage
 

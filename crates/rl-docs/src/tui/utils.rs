@@ -10,11 +10,11 @@ pub fn build_tree(
     concept_entries: &[&ConceptEntry],
     tutorial_entries: &[&ConceptEntry],
 ) -> TreeNode {
-    let mut children = Vec::new();
-
-    children.push(build_std_tree(std_entries));
-    children.push(build_concepts_tree(concept_entries));
-    children.push(build_tutorial_tree(tutorial_entries));
+    let children = vec![
+        build_std_tree(std_entries),
+        build_concepts_tree(concept_entries),
+        build_tutorial_tree(tutorial_entries),
+    ];
 
     TreeNode::Group {
         label: String::new(),
