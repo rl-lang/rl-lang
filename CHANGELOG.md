@@ -20,6 +20,7 @@ All notable changes to the rl-lang toolchain are documented here. The format is 
 - **`rl new --lib`** - generates `src/lib.rl` with `[dependencies]` section in rl.toml
 - **`rl dev` dependency warning** - warns if rl.toml is missing a `[dependencies]` section
 - **`scripts/build-local.sh`** - local build script with `--release`/`--nightly`/`--dev` profiles, `-j` for parallel jobs, `--clean` to wipe target, outputs to `target-bins/`
+- **`scripts/install-local.sh`** - install locally built binaries from `target-bins/` to `~/.local/bin/`, with interactive binary picker and `--force` overwrite
 - **rl-docs concepts** - new documentation entries for package manager and toolchain manager
 - **`rl-cli` lib target** - shared pipeline module (lex, parse, vm, cc) for binary targets
 - **`std::collections` expansion** - 16 new functions for set operations, map defaults, heap, deque, and sorted insertion:
