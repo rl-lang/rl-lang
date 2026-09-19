@@ -2,6 +2,7 @@
   <img src="assets/logo-circle.svg" width="200">
   <h1>RL</h1>
   <p>A statically-typed interpreted language written in Rust with a clean syntax, a TUI REPL, and a growing standard library.</p>
+  <p>Toolchain: <code>rl</code> (core CLI) · <code>rlc</code> (compiler) · <code>rlt</code> (C transpiler) · <code>rlrepl</code> (REPL) · <code>rlsp</code> (LSP) · <code>rldocs</code> (docs) · <code>rlm</code> (toolchain manager)</p>
 </div>
 
 <!-- Static Project Info -->
@@ -81,7 +82,7 @@ bash install.sh
 Non-interactively (install the standard `rl` build of `v1.0.0`):
 
 ```bash
-RL_VARIANT=rl bash install.sh v1.0.0
+bash install.sh v1.0.0
 ```
 
 **Windows (PowerShell)** (installs to `%LOCALAPPDATA%\rl-lang\bin` and adds it to your user PATH - restart your terminal afterwards):
@@ -91,7 +92,7 @@ Invoke-WebRequest https://raw.githubusercontent.com/rl-lang/rl-lang/main/install
 .\install.ps1
 ```
 
-Available builds include `rl` (VM), `rlc` (VM-only), and `rlsp` (language server). Debug variants are suffixed with `d` (e.g. `rld`).
+The installer lets you pick which binaries to install: `rl`, `rlc`, `rlt`, `rlrepl`, `rlsp`, `rldocs`, `rlm`.
 
 ### From source
 
@@ -114,28 +115,33 @@ from [releases](https://github.com/rl-lang/rl-lang/releases) you can choose `nig
 
 ## Usage
 
-Firstly i highly suggest using the `docs` command
 ```bash
-rl docs
-
-# for TUI mode
-rl docs --tui
-```
-
-for using the compiled `rl` binary
-```bash
-# to check available commands
-rl -h
-# or
+# check available commands
 rl --help
 
-# to start a new project
+# start a new project
 rl new example-project
 
-# in project root you can run it via
-rl dev
-# or run the file directly
-rl run src/main.rl
+# in project root
+rl dev              # run project
+rl run src/main.rl  # run file directly
+rl check            # type-check only
+
+# standalone binaries
+rlc compile src/main.rl  # compile to .rlc bytecode
+rlc run src/main.rl      # lex+parse+check+compile+run
+rlt transpile src/main.rl --compile  # transpile to C and compile
+rlrepl                   # interactive REPL
+rldocs --tui             # browse docs in TUI
+rlsp                     # LSP server for editors
+
+# package manager
+rl pm install some-package
+rl pm list
+
+# toolchain manager
+rlm install
+rlm list
 ```
 
 ## Documentation
@@ -174,14 +180,17 @@ Feature flags:
 
 | Flag        | State              | Description  |
 | :---------: | :----------------: | :----------: |
-| `run`       | `Off` by default   | -            |
-| `vm`        | `On` by default    | This flag for `vm` backend         |
-| `cranelift` | `Off` experimental | This flag for `cranelift` backend used for native compilations             |
-| `repl`      | `On` by default    | This flag for the interactive TUI shell `REPL`             |
-| `docs`      | `On` by default    | This flag for the `rl-docs` documentation tooling             |
-| `docs-tui`  | `On` by default    | This flag for the interactive TUI mode for browsing `rl-docs`             |
-| `debug`     | `Off` by default   | This flag for logging and debugging purposes             |
-| `lsp`       | `Off` by default   | This flag for language server protocol used by IDEs and other editors             | 
+| `vm`        | `On` by default    | Bytecode VM backend |
+| `repl`      | `On` by default    | Interactive TUI REPL |
+| `docs`      | `On` by default    | Documentation tooling |
+| `docs-tui`  | `On` by default    | Interactive TUI mode for docs |
+| `pm`        | `On` by default    | Package manager |
+| `cranelift` | `Off` experimental | Cranelift JIT backend |
+| `debug`     | `Off` by default   | Logging and debugging |
+
+Per-module std feature flags (all on by default, disable for custom builds):
+
+`std-array`, `std-audio`, `std-bitwise`, `std-c`, `std-collections`, `std-debug`, `std-fs`, `std-gui`, `std-http`, `std-io`, `std-math`, `std-net`, `std-path`, `std-process`, `std-random`, `std-result`, `std-string`, `std-terminal`, `std-time`, `std-types`
 
 ## Contributors
 

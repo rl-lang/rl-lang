@@ -17,6 +17,19 @@ rl-utils.workspace = true
 rl-std-core.workspace = true
 rl-std = { workspace = true, features = ["impls"] }
 zstd.workspace = true
+
+[features]
+default = ["impls"]
+impls = ["rl-std/impls"]
+std-audio = ["rl-std/std-audio"]
+std-c = ["rl-std/std-c"]
+std-fs = ["rl-std/std-fs"]
+std-gui = ["rl-std/std-gui"]
+std-http = ["rl-std/std-http"]
+std-io = ["rl-std/std-io"]
+std-net = ["rl-std/std-net"]
+std-process = ["rl-std/std-process"]
+std-terminal = ["rl-std/std-terminal"]
 # The OS-facing stdlib dependencies (eframe, rodio, libffi, crossterm, ...) now
 # live in `rl-std` (pulled in transitively via its `impls` feature); the VM no
 # longer depends on them directly.

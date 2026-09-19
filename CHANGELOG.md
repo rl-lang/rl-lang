@@ -6,6 +6,23 @@ All notable changes to the rl-lang toolchain are documented here. The format is 
 
 ### Added
 
+- **Standalone binaries** - the rl-lang toolchain is now split into focused binaries:
+  - `rl` - core CLI (run, check, new, dev, format, print, package, workflows, pm)
+  - `rlc` - lean compiler and runner (compile .rl to .rlc, or run source/bytecode directly)
+  - `rlt` - transpiler to C99 (with optional `--compile` to invoke cc)
+  - `rlrepl` - interactive TUI REPL
+  - `rlsp` - LSP server for editor integration
+  - `rldocs` - documentation viewer (TUI, JSON, Markdown output)
+  - `rlm` - toolchain manager (install, update, uninstall, list)
+- **`rlm` (rl manager)** - standalone toolchain manager with TUI version/variant picker, `--no-tui` for CI, self-update capability, and SHA256 verification
+- **`rl-pm` (package manager)** - manages project dependencies via `rl pm`: install, add, remove, list, update, cache clean. Dependencies declared in `rl.toml` under `[dependencies]`
+- **Per-module std feature flags** - 20 feature flags (`std-array`, `std-audio`, `std-bitwise`, `std-c`, `std-collections`, `std-debug`, `std-fs`, `std-gui`, `std-http`, `std-io`, `std-math`, `std-net`, `std-path`, `std-process`, `std-random`, `std-result`, `std-string`, `std-terminal`, `std-time`, `std-types`) with `impls` as meta-feature enabling all. All enabled by default; per-module flags are for custom builds
+- **`rl new --lib`** - generates `src/lib.rl` with `[dependencies]` section in rl.toml
+- **`rl dev` dependency warning** - warns if rl.toml is missing a `[dependencies]` section
+- **`scripts/build-local.sh`** - local build script with `--release`/`--nightly`/`--dev` profiles, `-j` for parallel jobs, `--clean` to wipe target, outputs to `target-bins/`
+- **`scripts/install-local.sh`** - install locally built binaries from `target-bins/` to `~/.local/bin/`, with interactive binary picker and `--force` overwrite
+- **rl-docs concepts** - new documentation entries for package manager and toolchain manager
+- **`rl-cli` lib target** - shared pipeline module (lex, parse, vm, cc) for binary targets
 - **`std::collections` expansion** - 16 new functions for set operations, map defaults, heap, deque, and sorted insertion:
   - Set algebra: `set_union`, `set_intersection`, `set_difference`, `set_symmetric_difference`, `set_is_subset`, `set_is_superset`
   - Map defaults: `map_get_or`, `map_get_or_insert`
@@ -40,7 +57,28 @@ All notable changes to the rl-lang toolchain are documented here. The format is 
 
 ### Changed
 
+- **`rl` stripped** - removed `compile`, `transpile`, `repl`, `lsp`, `docs` commands from main `rl` binary (moved to standalone binaries)
+- **`rl-vm` optional in `rl-cli`** - the `vm` feature enables `rl-vm`, `rl` binary no longer bundles everything
+- **`rl-pm` optional in `rl-cli`** - the `pm` feature enables `rl-pm`
+- **`rl-repl` optional in `rl-cli`** - the `repl` feature enables `rl-repl`
+- **CI matrix simplified** - 7 jobs (one per platform-arch) instead of 28, each building all binaries
+- **Install scripts updated** - now install all 7 binaries instead of old variants, with interactive binary picker
+- **Module declarations gated** - rl-std and rl-vm gate module registration behind per-module feature flags
 - **`std::debug::warn` now outputs in yellow** - the `[warn]` prefix is ANSI-colored (yellow) on terminals that support it.
+
+### Fixed
+
+- **`styled_text`/`paint_bg` gated** - now properly gated behind `#[cfg(feature = "impls")]` in gui.rs
+
+### Removed
+
+- **Old build variants** - removed `rl_no_docs`, `rl_no_repl`, `rl_debug`, `rl_vm`, `rl_lsp`, and all variant combinations from CI and install scripts
+
+### Documentation
+
+- **Tooling concept updated** - reflects new binary separation (rl, rlc, rlt, rlrepl, rlsp, rldocs, rlm)
+- **Package manager concept** - full documentation for `rl pm` commands and rl.toml dependencies
+- **Toolchain manager concept** - full documentation for `rlm install`, `update`, `list`, `uninstall`
 
 ## [2.1.0] - 2026-09-09
 

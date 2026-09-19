@@ -4,6 +4,13 @@ set -euo pipefail
 REPO="rl-lang/rl-lang"
 INSTALL_DIR="${RL_INSTALL_DIR:-$HOME/.local/bin}"
 
+# --- Bootstrap note ---
+# This script is a one-time bootstrapper. Once installed, use `rlm` to manage
+# your rl-lang toolchain (install, update, uninstall).
+#   curl -fsSL https://raw.githubusercontent.com/rl-lang/rl-lang/main/install.sh | bash
+# Or install rlm directly from GitHub Releases and use:
+#   rlm install
+
 # --- Colors (disabled when not a terminal) ---
 
 if [ -t 1 ] && [ -t 2 ]; then
@@ -24,37 +31,10 @@ else
   C_YELLOW=""
 fi
 
-# --- Variant definitions ---
+# --- Binary definitions ---
+# 7 binaries: rl, rlc, rlt, rlrepl, rlsp, rldocs, rlm
 
-BASES=(rl rl_vm rl_debug rl_vm_debug)
-SUFFIXES=("" "_no_docs" "_no_repl" "_no_docs_repl")
-
-declare -A ACTUAL_NAME=(
-  ["rl"]="rl"
-  ["rl_no_docs"]="rl_nd"
-  ["rl_no_repl"]="rl_nr"
-  ["rl_no_docs_repl"]="rl_ndr"
-  ["rl_debug"]="rld"
-  ["rl_debug_no_docs"]="rld_nd"
-  ["rl_debug_no_repl"]="rld_nr"
-  ["rl_debug_no_docs_repl"]="rld_ndr"
-  ["rl_vm"]="rlc"
-  ["rl_vm_no_docs"]="rlc_nd"
-  ["rl_vm_no_repl"]="rlc_nr"
-  ["rl_vm_no_docs_repl"]="rlc_ndr"
-  ["rl_vm_debug"]="rlcd"
-  ["rl_vm_debug_no_docs"]="rlcd_nd"
-  ["rl_vm_debug_no_repl"]="rlcd_nr"
-  ["rl_vm_debug_no_docs_repl"]="rlcd_ndr"
-  ["rl_lsp"]="rlsp"
-)
-
-SECTIONS=(
-  "1|Standard (vm)"
-  "5|VM-only"
-  "9|Debug builds"
-  "17|Language server"
-)
+BINARIES=(rl rlc rlt rlrepl rlsp rldocs rlm)
 
 # --- Output helpers ---
 
@@ -80,94 +60,74 @@ Options:
   -h, --help              Show this help message
   -p, --prefix DIR        Install directory (default: ~/.local/bin)
   -f, --force             Overwrite existing binaries without prompting
-  -v, --variant VARIANTS  Comma-separated list of variants to install
+  -b, --binaries BINS     Comma-separated list of binaries to install
                           (default: interactive picker)
-                          Use "all" to install all variants
-  --uninstall             Remove installed binaries, man pages, and info pages
+                          Use "all" to install all binaries
+  --uninstall             Remove installed binaries
 
 Environment variables:
   RL_INSTALL_DIR          Same as --prefix
   RL_VERSION              Same as VERSION argument
-  RL_VARIANT              Same as --variant
-  RL_BUILD_PROFILE        Build profile for nightly: release, nightly, dev-release
+  RL_BINARIES             Same as --binaries
 
 Examples:
   install.sh                          # interactive install
   install.sh latest                   # install latest stable
   install.sh nightly                  # install nightly build
   install.sh v2.0.0                   # install specific version
-  install.sh -v rl,rl_vm latest       # install specific variants
+  install.sh -b rl,rlc,rlm latest     # install specific binaries
   install.sh -p /usr/local/bin -f v2.0.0  # force install to /usr/local/bin
   install.sh --uninstall              # remove all installed binaries
 EOF
 }
 
-# --- Variant helpers ---
-
-grouped_list() {
-  local b s
-  for b in "${BASES[@]}"; do
-    for s in "${SUFFIXES[@]}"; do
-      echo "${b}${s}"
-    done
-  done
-  echo "rl_lsp"
-}
+# --- Binary selection ---
 
 print_menu() {
-  local i=1 v short sec_start sec_label
-  msg "  Select a build to install:"
-  while IFS= read -r v; do
-    for entry in "${SECTIONS[@]}"; do
-      sec_start="${entry%%|*}"
-      sec_label="${entry#*|}"
-      if [ "$i" = "$sec_start" ]; then
-        msg ""
-        printf '  %s%s%s\n' "${C_BOLD}${C_CYAN}" "${sec_label}" "${C_RESET}"
-      fi
-    done
-    short="${ACTUAL_NAME[$v]:-}"
-    printf '    %s%2d%s) %-24s %s(%s)%s\n' "${C_BOLD}" "$i" "${C_RESET}" "$v" "${C_DIM}" "$short" "${C_RESET}"
-    i=$((i + 1))
-  done < <(grouped_list)
+  msg "  Select binaries to install:"
   msg ""
-  msg "  ${C_DIM}Enter number(s), comma-separated (e.g. 1,3,9), or 'all'.${C_RESET}"
+  printf '    %s1) rl%s        - core (run, check, new, dev, format, pm)\n' "${C_BOLD}" "${C_RESET}"
+  printf '    %s2) rlc%s       - compiler (VM backend)\n' "${C_BOLD}" "${C_RESET}"
+  printf '    %s3) rlt%s       - transpiler (to C99)\n' "${C_BOLD}" "${C_RESET}"
+  printf '    %s4) rlrepl%s    - interactive TUI REPL\n' "${C_BOLD}" "${C_RESET}"
+  printf '    %s5) rlsp%s      - LSP server\n' "${C_BOLD}" "${C_RESET}"
+  printf '    %s6) rldocs%s    - documentation viewer\n' "${C_BOLD}" "${C_RESET}"
+  printf '    %s7) rlm%s       - toolchain manager\n' "${C_BOLD}" "${C_RESET}"
+  msg ""
+  msg "  ${C_DIM}Enter number(s), comma-separated (e.g. 1,3,7), or 'all'.${C_RESET}"
 }
 
-select_variants() {
-  if [ -n "${VARIANT_ARG:-}" ]; then
-    if [ "$VARIANT_ARG" = "all" ]; then
-      grouped_list
+select_binaries() {
+  if [ -n "${BINARIES_ARG:-}" ]; then
+    if [ "$BINARIES_ARG" = "all" ]; then
+      echo "${BINARIES[*]}"
       return
     fi
-    echo "$VARIANT_ARG" | tr ',' '\n' | sed 's/^ *//; s/ *$//'
+    echo "$BINARIES_ARG" | tr ',' '\n' | sed 's/^ *//; s/ *$//'
     return
   fi
 
-  if [ -n "${RL_VARIANT:-}" ]; then
-    if [ "$RL_VARIANT" = "all" ]; then
-      grouped_list
+  if [ -n "${RL_BINARIES:-}" ]; then
+    if [ "$RL_BINARIES" = "all" ]; then
+      echo "${BINARIES[*]}"
       return
     fi
-    echo "$RL_VARIANT" | tr ',' '\n' | sed 's/^ *//; s/ *$//'
+    echo "$RL_BINARIES" | tr ',' '\n' | sed 's/^ *//; s/ *$//'
     return
   fi
 
   if [ ! -t 0 ]; then
-    err "No TTY detected and RL_VARIANT is not set."
-    err "Non-interactive use requires: RL_VARIANT=rl,rl_vm ./install.sh [version]"
+    err "No TTY detected and RL_BINARIES is not set."
+    err "Non-interactive use requires: RL_BINARIES=rl,rlc,rlm ./install.sh [version]"
     exit 1
   fi
 
   print_menu >&2
   local choices
-  read -rp "  Enter number(s), comma-separated (e.g. 1,3,9), or 'all': " choices >&2
-
-  local all_variants
-  all_variants="$(grouped_list)"
+  read -rp "  Enter number(s), comma-separated (e.g. 1,3,7), or 'all': " choices >&2
 
   if [ "$(echo "$choices" | tr -d '[:space:]')" = "all" ]; then
-    echo "$all_variants"
+    echo "${BINARIES[*]}"
     return
   fi
 
@@ -178,20 +138,19 @@ select_variants() {
     part="$(echo "$part" | tr -d '[:space:]')"
     [ -z "$part" ] && continue
 
-    local i=1 found=0
-    while IFS= read -r v; do
-      if [ "$i" = "$part" ]; then
-        echo "$v"
-        found=1
-        break
-      fi
-      i=$((i + 1))
-    done <<<"$all_variants"
-
-    if [ "$found" = "0" ]; then
-      echo "Invalid selection: $part" >&2
-      exit 1
-    fi
+    case "$part" in
+      1) echo "rl" ;;
+      2) echo "rlc" ;;
+      3) echo "rlt" ;;
+      4) echo "rlrepl" ;;
+      5) echo "rlsp" ;;
+      6) echo "rldocs" ;;
+      7) echo "rlm" ;;
+      *)
+        echo "Invalid selection: $part" >&2
+        exit 1
+        ;;
+    esac
   done
 }
 
@@ -343,27 +302,21 @@ verify_checksum() {
 # --- Install ---
 
 install_one() {
-  local variant="$1" arch="$2" version="$3" platform="$4" force="$5"
-  local actual url tmpdir asset sha_url
-
-  actual="${ACTUAL_NAME[$variant]:-}"
-  if [ -z "$actual" ]; then
-    err "No actual-name mapping for '$variant' - skipping..."
-    return 1
-  fi
+  local binary="$1" arch="$2" version="$3" platform="$4" force="$5"
+  local url tmpdir asset sha_url
 
   # Check if already installed
-  if [ -f "$INSTALL_DIR/${actual}" ] && [ "$force" != "1" ]; then
-    warn "${actual} already exists at $INSTALL_DIR/${actual}. Use --force to overwrite."
+  if [ -f "$INSTALL_DIR/${binary}" ] && [ "$force" != "1" ]; then
+    warn "${binary} already exists at $INSTALL_DIR/${binary}. Use --force to overwrite."
     return 0
   fi
 
-  info "Installing ${variant} (${actual}) ${version} (${platform}-${arch})..."
+  info "Installing ${binary} ${version} (${platform}-${arch})..."
 
   if [ "$platform" = "windows" ]; then
-    asset="${actual}-windows-${arch}.zip"
+    asset="${binary}-windows-${arch}.zip"
   else
-    asset="${actual}-${platform}-${arch}.tar.gz"
+    asset="${binary}-${platform}-${arch}.tar.gz"
   fi
   url="https://github.com/${REPO}/releases/download/${version}/${asset}"
 
@@ -373,7 +326,7 @@ install_one() {
   if ! curl -fsSL "$url" -o "$tmpdir/${asset}"; then
     rm -rf "$tmpdir"
     err "Failed to download $url"
-    err "Check that this variant/version combination was published."
+    err "Check that this binary/version combination was published."
     return 1
   fi
 
@@ -398,54 +351,15 @@ install_one() {
   mkdir -p "$INSTALL_DIR"
 
   if [ "$platform" = "windows" ]; then
-    cp "$tmpdir/${actual}.exe" "$INSTALL_DIR/${actual}.exe"
+    cp "$tmpdir/${binary}.exe" "$INSTALL_DIR/${binary}.exe"
   else
-    cp "$tmpdir/${actual}" "$INSTALL_DIR/${actual}"
-    chmod +x "$INSTALL_DIR/${actual}"
+    cp "$tmpdir/${binary}" "$INSTALL_DIR/${binary}"
+    chmod +x "$INSTALL_DIR/${binary}"
   fi
-
-  # Install man/info pages if present in the archive
-  install_man_info "$tmpdir" "$platform"
 
   rm -rf "$tmpdir"
 
-  ok "Installed: $INSTALL_DIR/${actual}"
-}
-
-# --- Man/Info page installation ---
-
-install_man_info() {
-  local tmpdir="$1" platform="$2"
-
-  # Windows has no man/info infrastructure
-  if [ "$platform" = "windows" ]; then
-    return 0
-  fi
-
-  # Derive share prefix from INSTALL_DIR (e.g. ~/.local/bin -> ~/.local/share)
-  local share_dir="${INSTALL_DIR%/*}"
-  if [ "$share_dir" = "$INSTALL_DIR" ]; then
-    # No parent (e.g. INSTALL_DIR is already a top-level path)
-    share_dir="$INSTALL_DIR/share"
-  else
-    share_dir="${share_dir}/share"
-  fi
-
-  # Install man page
-  if [ -f "$tmpdir/rl.1" ]; then
-    local man_dir="$share_dir/man/man1"
-    mkdir -p "$man_dir"
-    cp "$tmpdir/rl.1" "$man_dir/rl.1"
-    ok "Installed man page: $man_dir/rl.1"
-  fi
-
-  # Install info page
-  if [ -f "$tmpdir/rl.info" ]; then
-    local info_dir="$share_dir/info"
-    mkdir -p "$info_dir"
-    cp "$tmpdir/rl.info" "$info_dir/rl.info"
-    ok "Installed info page: $info_dir/rl.info"
-  fi
+  ok "Installed: $INSTALL_DIR/${binary}"
 }
 
 # --- Uninstall ---
@@ -457,39 +371,15 @@ do_uninstall() {
   msg "  ${C_BOLD}Uninstalling rl-lang binaries from ${INSTALL_DIR}...${C_RESET}"
   msg ""
 
-  for name in "${ACTUAL_NAME[@]}"; do
+  for binary in "${BINARIES[@]}"; do
     for ext in "" ".exe"; do
-      local path="$INSTALL_DIR/${name}${ext}"
+      local path="$INSTALL_DIR/${binary}${ext}"
       if [ -f "$path" ]; then
         rm -f "$path"
         ok "Removed: $path"
         removed=$((removed + 1))
       fi
     done
-  done
-
-  # Remove man/info pages
-  local share_dir="${INSTALL_DIR%/*}"
-  if [ "$share_dir" != "$INSTALL_DIR" ]; then
-    share_dir="${share_dir}/share"
-  else
-    share_dir="$INSTALL_DIR/share"
-  fi
-
-  for manpage in "$share_dir/man/man1/rl.1"; do
-    if [ -f "$manpage" ]; then
-      rm -f "$manpage"
-      ok "Removed: $manpage"
-      removed=$((removed + 1))
-    fi
-  done
-
-  for infopage in "$share_dir/info/rl.info"; do
-    if [ -f "$infopage" ]; then
-      rm -f "$infopage"
-      ok "Removed: $infopage"
-      removed=$((removed + 1))
-    fi
   done
 
   msg ""
@@ -503,7 +393,7 @@ do_uninstall() {
 # --- Main ---
 
 main() {
-  local force=0 version requested variants platform arch
+  local force=0 version requested binaries platform arch
 
   # Parse arguments
   while [ $# -gt 0 ]; do
@@ -520,8 +410,8 @@ main() {
         force=1
         shift
         ;;
-      -v|--variant)
-        VARIANT_ARG="$2"
+      -b|--binaries)
+        BINARIES_ARG="$2"
         shift 2
         ;;
       --uninstall)
@@ -565,18 +455,18 @@ main() {
   msg "  ${C_DIM}----------------------------------------${C_RESET}"
   msg ""
 
-  variants="$(select_variants)"
+  binaries="$(select_binaries)"
 
   local failed=0 installed=0 total=0
-  while IFS= read -r variant; do
-    [ -z "$variant" ] && continue
+  while IFS= read -r binary; do
+    [ -z "$binary" ] && continue
     total=$((total + 1))
-    if install_one "$variant" "$arch" "$version" "$platform" "$force"; then
+    if install_one "$binary" "$arch" "$version" "$platform" "$force"; then
       installed=$((installed + 1))
     else
       failed=1
     fi
-  done <<<"$variants"
+  done <<<"$binaries"
 
   msg ""
   if [ "$failed" = "1" ]; then

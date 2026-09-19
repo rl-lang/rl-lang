@@ -360,6 +360,7 @@ fn extract_handle<R: GuiStore>(v: &R::Value, name: &str) -> Result<u64, String> 
 }
 
 /// Build an `egui::RichText` applying optional font size and text colour.
+#[cfg(feature = "impls")]
 fn styled_text(text: &str, font_size: Option<f32>, color: Option<(u8, u8, u8)>) -> egui::RichText {
     let mut rt = egui::RichText::new(text);
     if let Some(size) = font_size {
@@ -372,6 +373,7 @@ fn styled_text(text: &str, font_size: Option<f32>, color: Option<(u8, u8, u8)>) 
 }
 
 /// Paint a background rect at the given position, if `bg` is set.
+#[cfg(feature = "impls")]
 fn paint_bg(
     painter: &egui::Painter,
     bg: &Option<(u8, u8, u8)>,

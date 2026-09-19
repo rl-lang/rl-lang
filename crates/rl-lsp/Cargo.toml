@@ -7,10 +7,19 @@ license.workspace = true
 description = "Language Server Protocol implementation for the rl-lang programming language"
 repository.workspace = true
 
+[lib]
+name = "rl_lsp"
+path = "src/lib.rs"
+
+[[bin]]
+name = "rlsp"
+path = "src/bin/rlsp.rs"
+
 [dependencies]
 rl-lexer.workspace = true
 rl-utils.workspace = true
 rl-checker.workspace = true
 rl-parser.workspace = true
+clap.workspace = true
 tower-lsp.workspace = true
 tokio.workspace = true

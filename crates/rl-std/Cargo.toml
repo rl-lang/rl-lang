@@ -38,6 +38,15 @@ signatures = []
 # Full runtime build: the actual function implementations and their handle
 # dependencies. Used by the VM and the interpreter.
 impls = [
+    "std-audio",
+    "std-c",
+    "std-fs",
+    "std-gui",
+    "std-http",
+    "std-io",
+    "std-net",
+    "std-process",
+    "std-terminal",
     "dep:crossterm",
     "dep:tiny_http",
     "dep:ureq",
@@ -52,3 +61,26 @@ impls = [
     "dep:tempfile",
     "dep:glob",
 ]
+
+# Per-module feature flags. Enable individual modules to build smaller binaries.
+# Each feature gates both the module declaration and its dependencies.
+std-array = []
+std-audio = ["dep:rodio", "dep:cpal", "dep:symphonia"]
+std-bitwise = []
+std-c = ["dep:libffi", "dep:libloading"]
+std-collections = []
+std-debug = []
+std-fs = ["dep:tempfile", "dep:glob"]
+std-gui = ["dep:eframe"]
+std-http = ["dep:ureq", "dep:tiny_http"]
+std-io = []
+std-math = []
+std-net = []
+std-path = []
+std-process = ["dep:shell-words"]
+std-random = []
+std-result = []
+std-string = []
+std-terminal = ["dep:crossterm"]
+std-time = []
+std-types = []

@@ -7,6 +7,14 @@ license.workspace = true
 description = "Interactive REPL for the rl-lang programming language"
 repository.workspace = true
 
+[lib]
+name = "rl_repl"
+path = "src/lib.rs"
+
+[[bin]]
+name = "rlrepl"
+path = "src/bin/rlrepl.rs"
+
 [dependencies]
 rl-ast.workspace = true
 rl-docs.workspace = true
@@ -15,6 +23,7 @@ rl-lexer.workspace = true
 rl-resolver = { workspace = true, optional = true }
 rl-utils.workspace = true
 rl-vm = { workspace = true, optional = true }
+clap.workspace = true
 crossterm.workspace = true
 ratatui.workspace = true
 

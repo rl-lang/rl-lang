@@ -64,6 +64,8 @@ pub fn concept_entries() -> Vec<&'static ConceptEntry> {
         &concepts::sets::SETS,
         &concepts::tags::TAGS,
         &concepts::tooling::TOOLING,
+        &concepts::package_manager::PACKAGE_MANAGER,
+        &concepts::toolchain_manager::TOOLCHAIN_MANAGER,
         &concepts::tuples::TUPLES,
         &concepts::types::TYPES,
         &concepts::units::UNITS,

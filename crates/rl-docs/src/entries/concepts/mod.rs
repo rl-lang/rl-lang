@@ -23,6 +23,8 @@ pub mod semicolons;
 pub mod sets;
 pub mod tags;
 pub mod tooling;
+pub mod toolchain_manager;
+pub mod package_manager;
 pub mod tuples;
 pub mod types;
 pub mod units;

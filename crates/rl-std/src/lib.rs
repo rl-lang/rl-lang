@@ -26,24 +26,45 @@
     allow(unused_imports, dead_code, unused_macros)
 )]
 
+// Per-module declarations gated behind feature flags.
+// `impls` enables all modules for backward compatibility.
+#[cfg(any(feature = "std-array", feature = "impls"))]
 pub mod array;
+#[cfg(any(feature = "std-audio", feature = "impls"))]
 pub mod audio;
+#[cfg(any(feature = "std-bitwise", feature = "impls"))]
 pub mod bitwise;
+#[cfg(any(feature = "std-c", feature = "impls"))]
 pub mod c;
+#[cfg(any(feature = "std-collections", feature = "impls"))]
 pub mod collections;
+#[cfg(any(feature = "std-debug", feature = "impls"))]
 pub mod debug;
+#[cfg(any(feature = "std-fs", feature = "impls"))]
 pub mod fs;
+#[cfg(any(feature = "std-gui", feature = "impls"))]
 pub mod gui;
+#[cfg(any(feature = "std-http", feature = "impls"))]
 pub mod http;
+#[cfg(any(feature = "std-io", feature = "impls"))]
 pub mod io;
+#[cfg(any(feature = "std-math", feature = "impls"))]
 pub mod math;
+#[cfg(any(feature = "std-net", feature = "impls"))]
 pub mod net;
+#[cfg(any(feature = "std-path", feature = "impls"))]
 pub mod path;
+#[cfg(any(feature = "std-process", feature = "impls"))]
 pub mod process;
+#[cfg(any(feature = "std-random", feature = "impls"))]
 pub mod random;
+#[cfg(any(feature = "std-result", feature = "impls"))]
 pub mod result;
+#[cfg(any(feature = "std-string", feature = "impls"))]
 pub mod string;
+#[cfg(any(feature = "std-terminal", feature = "impls"))]
 pub mod terminal;
+#[cfg(any(feature = "std-time", feature = "impls"))]
 pub mod time;
 pub mod types;
 
@@ -52,26 +73,48 @@ pub mod types;
 /// from implementations. Available without the `impls` feature (no OS-facing
 /// deps), so the checker and LSP stay light.
 pub fn signatures() -> rl_std_core::ModuleNames {
-    rl_std_core::ModuleNames::new("std")
-        .with_functions(&["len"])
-        .with_module(array::signatures().with_functions(&["len"]))
-        .with_module(audio::signatures())
-        .with_module(bitwise::signatures())
-        .with_module(c::signatures())
-        .with_module(collections::signatures())
-        .with_module(debug::signatures())
-        .with_module(fs::signatures())
-        .with_module(gui::signatures())
-        .with_module(http::signatures())
-        .with_module(io::signatures())
-        .with_module(math::signatures())
-        .with_module(net::signatures())
-        .with_module(path::signatures())
-        .with_module(process::signatures())
-        .with_module(random::signatures())
-        .with_module(result::signatures())
-        .with_module(string::signatures())
-        .with_module(terminal::signatures())
-        .with_module(time::signatures())
-        .with_module(types::signatures())
+    #[allow(unused_mut)]
+    let mut m = rl_std_core::ModuleNames::new("std")
+        .with_functions(&["len"]);
+    #[cfg(any(feature = "std-array", feature = "impls"))]
+    { m = m.with_module(array::signatures().with_functions(&["len"])); }
+    #[cfg(any(feature = "std-audio", feature = "impls"))]
+    { m = m.with_module(audio::signatures()); }
+    #[cfg(any(feature = "std-bitwise", feature = "impls"))]
+    { m = m.with_module(bitwise::signatures()); }
+    #[cfg(any(feature = "std-c", feature = "impls"))]
+    { m = m.with_module(c::signatures()); }
+    #[cfg(any(feature = "std-collections", feature = "impls"))]
+    { m = m.with_module(collections::signatures()); }
+    #[cfg(any(feature = "std-debug", feature = "impls"))]
+    { m = m.with_module(debug::signatures()); }
+    #[cfg(any(feature = "std-fs", feature = "impls"))]
+    { m = m.with_module(fs::signatures()); }
+    #[cfg(any(feature = "std-gui", feature = "impls"))]
+    { m = m.with_module(gui::signatures()); }
+    #[cfg(any(feature = "std-http", feature = "impls"))]
+    { m = m.with_module(http::signatures()); }
+    #[cfg(any(feature = "std-io", feature = "impls"))]
+    { m = m.with_module(io::signatures()); }
+    #[cfg(any(feature = "std-math", feature = "impls"))]
+    { m = m.with_module(math::signatures()); }
+    #[cfg(any(feature = "std-net", feature = "impls"))]
+    { m = m.with_module(net::signatures()); }
+    #[cfg(any(feature = "std-path", feature = "impls"))]
+    { m = m.with_module(path::signatures()); }
+    #[cfg(any(feature = "std-process", feature = "impls"))]
+    { m = m.with_module(process::signatures()); }
+    #[cfg(any(feature = "std-random", feature = "impls"))]
+    { m = m.with_module(random::signatures()); }
+    #[cfg(any(feature = "std-result", feature = "impls"))]
+    { m = m.with_module(result::signatures()); }
+    #[cfg(any(feature = "std-string", feature = "impls"))]
+    { m = m.with_module(string::signatures()); }
+    #[cfg(any(feature = "std-terminal", feature = "impls"))]
+    { m = m.with_module(terminal::signatures()); }
+    #[cfg(any(feature = "std-time", feature = "impls"))]
+    { m = m.with_module(time::signatures()); }
+    #[cfg(any(feature = "std-types", feature = "impls"))]
+    { m = m.with_module(types::signatures()); }
+    m
 }
