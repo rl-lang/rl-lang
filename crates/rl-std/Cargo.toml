@@ -33,8 +33,31 @@ glob = { workspace = true, optional = true }
 [features]
 default = ["signatures"]
 # Signature-only build: pure `rl-ast`, no OS-facing dependencies. Used by the
-# type checker and the language server.
-signatures = []
+# type checker and the language server. Enables all per-module features so the
+# full `std::*` signature tree is available; OS-facing deps stay gated behind
+# `impls` in each module file.
+signatures = [
+    "std-array",
+    "std-audio",
+    "std-bitwise",
+    "std-c",
+    "std-collections",
+    "std-debug",
+    "std-fs",
+    "std-gui",
+    "std-http",
+    "std-io",
+    "std-math",
+    "std-net",
+    "std-path",
+    "std-process",
+    "std-random",
+    "std-result",
+    "std-string",
+    "std-terminal",
+    "std-time",
+    "std-types",
+]
 # Full runtime build: the actual function implementations and their handle
 # dependencies. Used by the VM and the interpreter.
 impls = [
