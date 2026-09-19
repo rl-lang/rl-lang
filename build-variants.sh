@@ -88,7 +88,7 @@ package_one "rlc" "target/${TARGET}/${pdir}/rlc${EXE}"
 
 # rlt (transpiler)
 echo "--- rlt ---"
-cargo build $pflag --target "$TARGET" -p rl-cli --bin rlt --features cc
+cargo build $pflag --no-default-features --features cc --target "$TARGET" -p rl-cli --bin rlt
 package_one "rlt" "target/${TARGET}/${pdir}/rlt${EXE}"
 
 # rlrepl
@@ -103,7 +103,7 @@ package_one "rlsp" "target/${TARGET}/${pdir}/rlsp${EXE}"
 
 # rldocs
 echo "--- rldocs ---"
-cargo build $pflag --target "$TARGET" -p rl-docs --bin rldocs
+cargo build $pflag --features tui --target "$TARGET" -p rl-docs --bin rldocs
 package_one "rldocs" "target/${TARGET}/${pdir}/rldocs${EXE}"
 
 # rlm (toolchain manager)

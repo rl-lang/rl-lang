@@ -168,7 +168,7 @@ build_one "rlrepl" "rl-repl" "--bin rlrepl" ""
 build_one "rlsp" "rl-lsp" "--bin rlsp" ""
 
 # rldocs
-build_one "rldocs" "rl-docs" "--bin rldocs" ""
+build_one "rldocs" "rl-docs" "--bin rldocs" "--features tui"
 
 # rlm
 build_one "rlm" "rl-manager" "--bin rlm" ""
