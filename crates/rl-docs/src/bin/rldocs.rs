@@ -96,7 +96,12 @@ fn main() {
                 std_entries
                     .iter()
                     .copied()
-                    .filter(|e| e.name.contains(query))
+                    .filter(|e| {
+                        e.name.contains(query)
+                            || e.functions
+                                .iter()
+                                .any(|f| func_name(f).contains(query))
+                    })
                     .collect()
             } else {
                 Vec::new()
@@ -164,7 +169,36 @@ fn main() {
     } else {
         let mut out = String::new();
         if !matched_std.is_empty() {
-            out.push_str(&rl_docs::std_to_markdown(&matched_std));
+            if let Some(ref query) = cli.topic {
+                // Check if any function names match the query
+                let has_func_match = matched_std
+                    .iter()
+                    .any(|e| {
+                        e.name != *query
+                            && e.functions.iter().any(|f| func_name(f).contains(query.as_str()))
+                    });
+
+                if has_func_match {
+                    // Render individual matching functions
+                    for entry in &matched_std {
+                        if entry.name.contains(query.as_str()) {
+                            // Module name matches - render whole module
+                            out.push_str(&rl_docs::std_to_markdown(std::slice::from_ref(entry)));
+                        } else {
+                            // Render only matching functions
+                            for func in entry.functions {
+                                if func_name(func).contains(query.as_str()) {
+                                    out.push_str(&render_function(entry, func));
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    out.push_str(&rl_docs::std_to_markdown(&matched_std));
+                }
+            } else {
+                out.push_str(&rl_docs::std_to_markdown(&matched_std));
+            }
         }
         if !matched_concepts.is_empty() {
             out.push_str(&rl_docs::concept_to_markdown(&matched_concepts));
@@ -190,4 +224,42 @@ fn main() {
     } else {
         println!("{}", rendered);
     }
+}
+
+fn func_name(func: &rl_docs::entry::FnEntry) -> &str {
+    func.signature.split('(').next().unwrap_or(func.signature)
+}
+
+fn render_function(module: &rl_docs::entry::StdEntry, func: &rl_docs::entry::FnEntry) -> String {
+    let mut out = String::new();
+    out.push_str(&format!(
+        "# std::{}::{}\n\n",
+        module.name,
+        func_name(func)
+    ));
+    if let Some(since) = func.since {
+        out.push_str(&format!("*since {}*", since));
+        if let Some(updated) = func.updated {
+            out.push_str(&format!(" *updated {}*", updated));
+        }
+        out.push_str("\n\n");
+    }
+    if let Some(deprecated) = func.deprecated {
+        out.push_str(&format!("**Deprecated:** {}\n\n", deprecated));
+    }
+    out.push_str(&format!("{}\n\n", func.description));
+    out.push_str(&format!("**Returns:** {}\n\n", func.returns));
+    if let Some(errors) = func.errors {
+        out.push_str(&format!("**Errors:** {}\n\n", errors));
+    }
+    out.push_str(&format!("```\n{}\n```\n\n", func.example));
+    if let Some(expected) = func.expected_output {
+        out.push_str(&format!("output:\n```\n{}\n```\n\n", expected));
+    }
+    if !func.see_also.is_empty() {
+        out.push_str("**See also:** ");
+        out.push_str(&func.see_also.join(", "));
+        out.push_str("\n\n");
+    }
+    out
 }
