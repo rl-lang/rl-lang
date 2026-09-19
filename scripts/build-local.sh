@@ -88,9 +88,9 @@ mkdir -p "$OUT_DIR"
 
 # Build profile flag
 case "$PROFILE" in
-  release) PROFILE_FLAG="--release" ;;
-  nightly) PROFILE_FLAG="--profile nightly" ;;
-  dev)     PROFILE_FLAG="" ;;
+  release) PROFILE_FLAG="--release";  PROFILE_DIR="target/release" ;;
+  nightly) PROFILE_FLAG="--profile nightly"; PROFILE_DIR="target/nightly" ;;
+  dev)     PROFILE_FLAG="";           PROFILE_DIR="target/debug" ;;
 esac
 
 JOBS_FLAG=""
@@ -123,24 +123,31 @@ build_one() {
     return
   fi
 
-  # Find the binary in target/
-  local search_dirs=("target/debug" "target/release" "target/nightly")
-  for dir in "${search_dirs[@]}"; do
-    local src="$dir/$name"
-    if [ -f "$src" ]; then
-      cp "$src" "$OUT_DIR/$name"
-      chmod +x "$OUT_DIR/$name"
-      BUILT=$((BUILT + 1))
-      return
+  # Find the binary in the profile-specific target dir
+  local src="$PROFILE_DIR/$name"
+  local src_exe="$PROFILE_DIR/$name.exe"
+  if [ -f "$src" ]; then
+    cp "$src" "$OUT_DIR/$name"
+    chmod +x "$OUT_DIR/$name"
+    BUILT=$((BUILT + 1))
+  elif [ -f "$src_exe" ]; then
+    cp "$src_exe" "$OUT_DIR/$name.exe"
+    BUILT=$((BUILT + 1))
+  else
+    warn "could not find $name binary in $PROFILE_DIR/"
+    return
+  fi
+
+  # Strip release and nightly binaries
+  if [ "$PROFILE" != "dev" ]; then
+    local dst="$OUT_DIR/$name"
+    local dst_exe="$OUT_DIR/$name.exe"
+    if [ -f "$dst" ]; then
+      strip "$dst" 2>/dev/null || true
+    elif [ -f "$dst_exe" ]; then
+      strip "$dst_exe" 2>/dev/null || true
     fi
-    local src_exe="$dir/$name.exe"
-    if [ -f "$src_exe" ]; then
-      cp "$src_exe" "$OUT_DIR/$name.exe"
-      BUILT=$((BUILT + 1))
-      return
-    fi
-  done
-  warn "could not find $name binary in target/"
+  fi
 }
 
 header "Building binaries"
