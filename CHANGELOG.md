@@ -6,6 +6,7 @@ All notable changes to the rl-lang toolchain are documented here. The format is 
 
 ### Added
 
+- **`std::process::exec_fg` / `with_exec_fg`** - foreground process execution with inherited stdin/stdout/stderr. Unlike `exec` (which pipes stdout), `exec_fg` lets interactive programs (editors, TUIs, pagers) access the terminal directly. Returns the exit code as `int`. Intended pattern: call `term_leave()` before `exec_fg`, then `term_enter()` after to restore the TUI.
 - **Standalone binaries** - the rl-lang toolchain is now split into focused binaries:
   - `rl` - core CLI (run, check, new, dev, format, print, package, workflows, pm)
   - `rlc` - lean compiler and runner (compile .rl to .rlc, or run source/bytecode directly)
