@@ -45,8 +45,9 @@ All notable changes to the rl-lang toolchain are documented here. The format is 
   - `copy_dir` (recursive directory copy), `dir_size` (total size in bytes), `is_symlink`
 - **`std::debug` expansion** - 2 new functions:
   - `warn` (colored yellow `[warn]` output to stderr), `stack_trace` (capture current call stack)
-- **`std::time` expansion** - 1 new function:
+- **`std::time` expansion** - 2 new functions:
   - `monotonic_now` (monotonic clock for benchmarks)
+  - `format_time` now supports 21 strftime tokens: `%Y`, `%y`, `%m`, `%B`, `%b`, `%d`, `%A`, `%a`, `%w`, `%j`, `%U`, `%W`, `%V`, `%H`, `%I`, `%M`, `%S`, `%p`, `%P`, `%z`, `%Z`
 - **`std::random` expansion** - 1 new function:
   - `rand_seed` (re-seed the PRNG for deterministic output)
 - **`std::gui` expansion** - 6 new functions for widget styling and window queries:
