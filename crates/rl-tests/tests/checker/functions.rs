@@ -57,3 +57,36 @@ fn lambda_return_type_mismatch_errors() {
         "return type mismatch",
     );
 }
+
+#[test]
+fn propagate_in_non_result_function_errors() {
+    assert_checker_msg(
+        r#"fn demo() -> string {
+            dec result[string] r = err("oops")
+            dec cleaned = r?
+            return cleaned
+        }"#,
+        "`?` cannot be used in a function that does not return a result",
+    );
+}
+
+#[test]
+fn propagate_in_result_function_passes() {
+    assert_checker_clean(
+        r#"fn demo() -> result[string] {
+            dec result[string] r = err("oops")
+            dec cleaned = r?
+            return ok(cleaned)
+        }"#,
+    );
+}
+
+#[test]
+fn propagate_in_lambda_non_result_errors() {
+    assert_checker_msg(
+        r#"get arr_map from std::array
+dec result[string] r = err("oops")
+arr_map([1], fn(int x) -> string { dec cleaned = r? return cleaned })"#,
+        "`?` cannot be used in a function that does not return a result",
+    );
+}

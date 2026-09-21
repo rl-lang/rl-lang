@@ -478,7 +478,20 @@ impl TypeChecker {
                 let result = match inner_typed.ty {
                     CheckType::Known(
                         TypeAnnotation::Result(inner_ty) | TypeAnnotation::CResult(inner_ty),
-                    ) => CheckType::Known(*inner_ty),
+                    ) => {
+                        if let Some(return_ty) = self.current_return_type()
+                            && !matches!(
+                                return_ty,
+                                TypeAnnotation::Result(_) | TypeAnnotation::CResult(_)
+                            )
+                        {
+                            self.error(
+                                "`?` cannot be used in a function that does not return a result",
+                                expr_span,
+                            );
+                        }
+                        CheckType::Known(*inner_ty)
+                    }
                     CheckType::Unknown => CheckType::Unknown,
                     other => {
                         self.error(
