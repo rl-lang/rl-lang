@@ -60,8 +60,20 @@ enum Child<'a> {
 
 fn stmt_summary(kind: &StatementKind, arena: &Arena<Expression>) -> String {
     match kind {
-        StatementKind::Import { names, path } =>
-            format!("Import [{}] from {}", names.join(", "), path.join("::")),
+        StatementKind::Import { names, wildcard, path } => {
+            if *wildcard {
+                format!("Import * from {}", path.join("::"))
+            } else {
+                let display: Vec<String> = names
+                    .iter()
+                    .map(|(name, alias)| match alias {
+                        Some(a) => format!("{name} as {a}"),
+                        None => name.clone(),
+                    })
+                    .collect();
+                format!("Import [{}] from {}", display.join(", "), path.join("::"))
+            }
+        }
         StatementKind::ImportFile { path } =>
             format!("ImportFile \"{}\"", path.join("::")),
         StatementKind::VariableDeclaration { name, type_annotation, value, .. } => {
