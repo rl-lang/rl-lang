@@ -286,9 +286,11 @@ pub enum StatementKind {
     Continue,
     /// A stdlib import: `get std::ns::fn` or `get fn from std::ns`.
     Import {
-        /// names of the imported functions
-        names: Vec<String>,
-        /// module path (e.g. `["std", "math"]`)
+        /// Imported names as `(original_name, alias)`. Empty when `wildcard` is true.
+        names: Vec<(String, Option<String>)>,
+        /// When true, imports all functions from the module (`get * from std::ns`).
+        wildcard: bool,
+        /// Module path (e.g. `["std", "math"]`).
         path: Vec<String>,
     },
     /// A file module import: `get mymodule` or `get mymodule::sub`.
