@@ -2,13 +2,18 @@
 #define _POSIX_C_SOURCE 200809L
 #include "rl_runtime.h"
 
+
+// ---- string ----
+// Borrowed string buffers and basic ops; concat allocates.
 rl_string rl_str_literal(const char *s, uint64_t len) {
     rl_string str = { .data = s, .len = len, .rc = 0 };
     return str;
 }
 
+// Length of the string in bytes.
 uint64_t rl_str_len(rl_string s) { return s.len; }
 
+// Allocate a new string holding `a` followed by `b` (caller owns).
 rl_string rl_str_concat(rl_string a, rl_string b) {
     uint64_t total = a.len + b.len;
     char *buf = (char *)malloc(total + 1);
@@ -19,11 +24,13 @@ rl_string rl_str_concat(rl_string a, rl_string b) {
     return result;
 }
 
+// Byte-wise equality comparison.
 bool rl_str_eq(rl_string a, rl_string b) {
     if (a.len != b.len) return false;
     return memcmp(a.data, b.data, a.len) == 0;
 }
 
+// Format result payload into a fresh string (caller owns via out).
 static void _rl_result_to_str(rl_result v, char **out, uint64_t *out_len) {
     char buf[128];
     int n = 0;
@@ -43,6 +50,7 @@ static void _rl_result_to_str(rl_result v, char **out, uint64_t *out_len) {
     *out_len = n;
 }
 
+// Concatenate argc string results (used for `+` on strings).
 rl_string rl_str_concat_variadic(rl_result *args, uint64_t argc) {
     uint64_t total = 0;
     char **parts = malloc(argc * sizeof(char *));
@@ -64,6 +72,7 @@ rl_string rl_str_concat_variadic(rl_result *args, uint64_t argc) {
     return (rl_string){ .data = buf, .len = total, .rc = 1 };
 }
 
+// Interpolate args into a `{}` template string (caller owns).
 rl_result rl_str_format(rl_string tmpl, rl_result *args, uint64_t argc) {
     uint64_t total = 0;
     char **parts = malloc((argc + 1) * sizeof(char *));
@@ -113,6 +122,7 @@ rl_result rl_str_format(rl_string tmpl, rl_result *args, uint64_t argc) {
     return rl_ok_str((rl_string){ .data = buf, .len = total, .rc = 1 });
 }
 
+// Pairwise tuples up to the shorter length.
 rl_result rl_arr_zip(rl_array a, rl_array b) {
     uint64_t min_len = a.len < b.len ? a.len : b.len;
     int64_t *a_elems = (int64_t *)a.data;
@@ -130,67 +140,80 @@ rl_result rl_arr_zip(rl_array a, rl_array b) {
 
 // ---- result type ----
 
+// Wrap a null in a successful result.
 rl_result rl_ok_null(void) {
     rl_result r = { .is_ok = true, .tag = RL_TAG_NULL, .err_code = 0 };
     return r;
 }
 
+// Wrap an int64 value in a successful result.
 rl_result rl_ok_i64(int64_t v) {
     rl_result r = { .is_ok = true, .tag = RL_TAG_I64, .data.i64 = v, .err_code = 0 };
     return r;
 }
 
+// Wrap a float64 value in a successful result.
 rl_result rl_ok_f64(double v) {
     rl_result r = { .is_ok = true, .tag = RL_TAG_F64, .data.f64 = v, .err_code = 0 };
     return r;
 }
 
+// Wrap a bool value in a successful result.
 rl_result rl_ok_bool(bool v) {
     rl_result r = { .is_ok = true, .tag = RL_TAG_BOOL, .data.boolean = v, .err_code = 0 };
     return r;
 }
 
+// Wrap a string value in a successful result.
 rl_result rl_ok_str(rl_string v) {
     rl_result r = { .is_ok = true, .tag = RL_TAG_STR, .data.str = v, .err_code = 0 };
     return r;
 }
 
+// Wrap an array value in a successful result.
 rl_result rl_ok_arr(rl_array v) {
     rl_result r = { .is_ok = true, .tag = RL_TAG_ARR, .data.arr = v, .err_code = 0 };
     return r;
 }
 
+// Wrap a map value in a successful result.
 rl_result rl_ok_map(rl_map v) {
     rl_result r = { .is_ok = true, .tag = RL_TAG_MAP, .data.map = v, .err_code = 0 };
     return r;
 }
 
+// Wrap a set value in a successful result.
 rl_result rl_ok_set(rl_set v) {
     rl_result r = { .is_ok = true, .tag = RL_TAG_SET, .data.set = v, .err_code = 0 };
     return r;
 }
 
+// Build an error result with code and C string message.
 static rl_result rl_make_err(int64_t code, const char *msg) {
     rl_string s = rl_str_literal(msg, strlen(msg));
     rl_result r = { .is_ok = false, .tag = RL_TAG_STR, .data.str = s, .err_code = (int32_t)code };
     return r;
 }
 
+// Build a failed result carrying a message.
 rl_result rl_err_msg(rl_string msg) {
     rl_result r = { .is_ok = false, .tag = RL_TAG_STR, .data.str = msg, .err_code = 0 };
     return r;
 }
 
+// Build a failed result with numeric code plus message.
 rl_result rl_err_code(int64_t code, rl_string msg) {
     rl_result r = { .is_ok = false, .tag = RL_TAG_STR, .data.str = msg, .err_code = (int32_t)code };
     return r;
 }
 
+// Build a failed result carrying a numeric code.
 rl_result rl_err(int64_t v) {
     rl_result r = { .is_ok = false, .tag = RL_TAG_I64, .data.i64 = v, .err_code = 0 };
     return r;
 }
 
+// Alias of rl_err kept for older generated code.
 rl_result rl_error(int64_t v) {
     rl_result r = { .is_ok = false, .tag = RL_TAG_I64, .data.i64 = v, .err_code = -1 };
     return r;
@@ -198,6 +221,7 @@ rl_result rl_error(int64_t v) {
 
 // ---- array type ----
 
+// Copy count elements of elem_size bytes into a new array.
 rl_array rl_arr_from_vals(const void *vals, uint64_t count, int32_t elem_size) {
     rl_array arr;
     arr.len = count;
@@ -213,6 +237,7 @@ rl_array rl_arr_from_vals(const void *vals, uint64_t count, int32_t elem_size) {
     return arr;
 }
 
+// Allocate an empty array for elements of elem_size bytes.
 rl_array rl_arr_new(int32_t elem_size) {
     rl_array arr = { .data = NULL, .len = 0, .cap = 0, .elem_size = elem_size, .type_tag = RL_TAG_I64 };
     return arr;
@@ -220,11 +245,13 @@ rl_array rl_arr_new(int32_t elem_size) {
 
 // ---- map type ----
 
+// Allocate an empty map.
 rl_map rl_map_new(void) {
     rl_map m = { .entries = NULL, .len = 0, .cap = 0 };
     return m;
 }
 
+// Grow map capacity to hold at least needed entries.
 static void rl_map_grow(rl_map *m, uint64_t needed) {
     if (m->cap >= needed) return;
     uint64_t new_cap = m->cap == 0 ? 8 : m->cap * 2;
@@ -233,6 +260,7 @@ static void rl_map_grow(rl_map *m, uint64_t needed) {
     m->cap = new_cap;
 }
 
+// Insert or overwrite `key` (a copy of the key string is kept).
 void rl_map_set(rl_map *m, const char *key, rl_value val) {
     for (uint64_t i = 0; i < m->len; i++) {
         if (strcmp(m->entries[i].key, key) == 0) {
@@ -246,6 +274,7 @@ void rl_map_set(rl_map *m, const char *key, rl_value val) {
     m->len++;
 }
 
+// Look up `key`; returns a null-valued `rl_value` when absent.
 rl_value rl_map_get(rl_map m, const char *key) {
     for (uint64_t i = 0; i < m.len; i++) {
         if (strcmp(m.entries[i].key, key) == 0) {
@@ -256,6 +285,7 @@ rl_value rl_map_get(rl_map m, const char *key) {
     return null_val;
 }
 
+// True when `key` is present.
 bool rl_map_contains(rl_map m, const char *key) {
     for (uint64_t i = 0; i < m.len; i++) {
         if (strcmp(m.entries[i].key, key) == 0) return true;
@@ -263,8 +293,10 @@ bool rl_map_contains(rl_map m, const char *key) {
     return false;
 }
 
+// Number of entries in the map.
 uint64_t rl_map_len(rl_map m) { return m.len; }
 
+// Delete `key` if present (no-op otherwise).
 void rl_map_remove(rl_map *m, const char *key) {
     for (uint64_t i = 0; i < m->len; i++) {
         if (strcmp(m->entries[i].key, key) == 0) {
@@ -278,11 +310,13 @@ void rl_map_remove(rl_map *m, const char *key) {
 
 // ---- set type ----
 
+// Allocate an empty set.
 rl_set rl_set_new(void) {
     rl_set s = { .data = NULL, .len = 0, .cap = 0 };
     return s;
 }
 
+// Grow set buffer to hold at least needed elements.
 static void rl_set_grow(rl_set *s, uint64_t needed) {
     if (s->cap >= needed) return;
     uint64_t new_cap = s->cap == 0 ? 8 : s->cap * 2;
@@ -291,6 +325,7 @@ static void rl_set_grow(rl_set *s, uint64_t needed) {
     s->cap = new_cap;
 }
 
+// Compare two boxed values for equality by tag and payload.
 static bool rl_value_eq(rl_value a, rl_value b) {
     if (a.tag != b.tag) return false;
     switch (a.tag) {
@@ -304,6 +339,7 @@ static bool rl_value_eq(rl_value a, rl_value b) {
     }
 }
 
+// Insert `val` unless an equal value is already present.
 void rl_set_add(rl_set *s, rl_value val) {
     for (uint64_t i = 0; i < s->len; i++) {
         if (rl_value_eq(s->data[i], val)) return;
@@ -312,6 +348,7 @@ void rl_set_add(rl_set *s, rl_value val) {
     s->data[s->len++] = val;
 }
 
+// True when an equal value is present.
 bool rl_set_contains(rl_set s, rl_value val) {
     for (uint64_t i = 0; i < s.len; i++) {
         if (rl_value_eq(s.data[i], val)) return true;
@@ -319,8 +356,10 @@ bool rl_set_contains(rl_set s, rl_value val) {
     return false;
 }
 
+// Number of elements in the set.
 uint64_t rl_set_len(rl_set s) { return s.len; }
 
+// Delete the first element equal to `val` (no-op when absent).
 void rl_set_remove(rl_set *s, rl_value val) {
     for (uint64_t i = 0; i < s->len; i++) {
         if (rl_value_eq(s->data[i], val)) {
@@ -333,6 +372,7 @@ void rl_set_remove(rl_set *s, rl_value val) {
 
 // ---- print functions ----
 
+// Print double with shortest round-trip precision.
 static void rl_print_f64(double v) {
     if (isnan(v)) { printf("NaN"); return; }
     if (isinf(v) > 0) { printf("inf"); return; }
@@ -351,30 +391,52 @@ static void rl_print_f64(double v) {
     printf("%s", buf);
 }
 
+// Print int64 payload (inner helper, no newline).
 static void rl_print_i64_val(int64_t v) { printf("%ld", v); }
+// Print float64 payload (inner helper, no newline).
 static void rl_print_f64_val(double v) { rl_print_f64(v); }
+// Print bool payload (inner helper, no newline).
 static void rl_print_bool_val(bool v) { printf(v ? "true" : "false"); }
+// Print string payload bytes (inner helper, no newline).
 static void rl_print_str_val(rl_string v) { printf("%.*s", (int)v.len, v.data); }
+// Print array payload (inner helper, no newline).
 static void rl_print_arr_val(rl_array v) { rl_print_rl_array(v); }
+// Print map payload (inner helper, no newline).
 static void rl_print_map_val(rl_map v) { rl_print_rl_map(v); }
+// Print set payload (inner helper, no newline).
 static void rl_print_set_val(rl_set v) { rl_print_rl_set(v); }
 
+// Print int64 value with no trailing newline.
 void rl_print_int64(int64_t v) { printf("%ld", v); }
+// Print float64 value with no trailing newline.
 void rl_print_float64(double v) { rl_print_f64(v); }
+// Print bool value with no trailing newline.
 void rl_print_bool(bool v) { printf(v ? "true" : "false"); }
+// Print char value with no trailing newline.
 void rl_print_char(char v) { printf("%c", v); }
+// Print string bytes with no trailing newline.
 void rl_print_str(rl_string v) { printf("%.*s", (int)v.len, v.data); }
+// Print pointer as <ptr:...> with no trailing newline.
 void rl_print_ptr(void *v) { printf("<ptr:%p>", v); }
+// Print null with no trailing newline.
 void rl_print_null(void) { printf("null"); }
 
+// Print int64 value plus a trailing newline.
 void rl_println_int64(int64_t v) { printf("%ld\n", v); }
+// Print float64 value plus a trailing newline.
 void rl_println_float64(double v) { rl_print_f64(v); printf("\n"); }
+// Print bool value plus a trailing newline.
 void rl_println_bool(bool v) { printf("%s\n", v ? "true" : "false"); }
+// Print char value plus a trailing newline.
 void rl_println_char(char v) { printf("%c\n", v); }
+// Print string bytes plus a trailing newline.
 void rl_println_str(rl_string v) { printf("%.*s\n", (int)v.len, v.data); }
+// Print pointer as <ptr:...> plus a trailing newline.
 void rl_println_ptr(void *v) { printf("<ptr:%p>\n", v); }
+// Print null plus a trailing newline.
 void rl_println_null(void) { printf("null\n"); }
 
+// Print result as ok(...) or err(...) (inner helper).
 static void rl_print_result_inner(rl_result v) {
     if (v.is_ok) {
         printf("ok(");
@@ -409,9 +471,12 @@ static void rl_print_result_inner(rl_result v) {
     }
 }
 
+// Print a result payload as ok(...) or err(...).
 void rl_print_result(rl_result v) { rl_print_result_inner(v); }
+// Print a result payload as ok(...) or err(...) plus newline.
 void rl_println_result(rl_result v) { rl_print_result_inner(v); printf("\n"); }
 
+// Print result payload without ok/err wrapper (inner helper).
 static void rl_print_raw_inner(rl_result v) {
     switch (v.tag) {
         case RL_TAG_NULL: printf("null"); break;
@@ -426,9 +491,12 @@ static void rl_print_raw_inner(rl_result v) {
         case RL_TAG_CLOSURE: printf("<fn>"); break;
     }
 }
+// Print a result payload without type decoration.
 void rl_print_raw(rl_result v) { rl_print_raw_inner(v); }
+// Print a result payload without decoration plus newline.
 void rl_println_raw(rl_result v) { rl_print_raw_inner(v); printf("\n"); }
 
+// Print array in RL literal syntax ([1, 2]).
 void rl_print_rl_array(rl_array v) {
     printf("[");
     for (uint64_t i = 0; i < v.len; i++) {
@@ -451,11 +519,13 @@ void rl_print_rl_array(rl_array v) {
     printf("]");
 }
 
+// Print array in RL syntax plus a trailing newline.
 void rl_println_rl_array(rl_array v) {
     rl_print_rl_array(v);
     printf("\n");
 }
 
+// Print a boxed map/set element value.
 static void _rl_print_value(rl_value v) {
     switch (v.tag) {
         case RL_VTAG_NULL: printf("null"); break;
@@ -470,6 +540,7 @@ static void _rl_print_value(rl_value v) {
     }
 }
 
+// Print map in RL literal syntax ({k: v}).
 void rl_print_rl_map(rl_map v) {
     printf("{");
     for (uint64_t i = 0; i < v.len; i++) {
@@ -480,11 +551,13 @@ void rl_print_rl_map(rl_map v) {
     printf("}");
 }
 
+// Print map in RL syntax plus a trailing newline.
 void rl_println_rl_map(rl_map v) {
     rl_print_rl_map(v);
     printf("\n");
 }
 
+// Print set values in braces.
 void rl_print_rl_set(rl_set v) {
     printf("{");
     for (uint64_t i = 0; i < v.len; i++) {
@@ -494,15 +567,18 @@ void rl_print_rl_set(rl_set v) {
     printf("}");
 }
 
+// Print set values in braces plus a trailing newline.
 void rl_println_rl_set(rl_set v) {
     rl_print_rl_set(v);
     printf("\n");
 }
 
+// Print a closure as an opaque <fn> placeholder.
 void rl_print_closure(rl_closure v) {
     printf("<fn>");
 }
 
+// Print a closure placeholder plus a trailing newline.
 void rl_println_closure(rl_closure v) {
     rl_print_closure(v);
     printf("\n");
@@ -510,6 +586,7 @@ void rl_println_closure(rl_closure v) {
 
 // ---- math ----
 
+// Return n! (0 for negative n).
 int64_t rl_math_factorial(int64_t n) {
     if (n < 0) return 0;
     int64_t result = 1;
@@ -517,6 +594,7 @@ int64_t rl_math_factorial(int64_t n) {
     return result;
 }
 
+// Greatest common divisor of a and b.
 int64_t rl_math_gcd(int64_t a, int64_t b) {
     a = a < 0 ? -a : a;
     b = b < 0 ? -b : b;
@@ -524,6 +602,7 @@ int64_t rl_math_gcd(int64_t a, int64_t b) {
     return a;
 }
 
+// Least common multiple of a and b (0 when either is 0).
 int64_t rl_math_lcm(int64_t a, int64_t b) {
     if (a == 0 || b == 0) return 0;
     a = a < 0 ? -a : a;
@@ -531,6 +610,7 @@ int64_t rl_math_lcm(int64_t a, int64_t b) {
     return (a / rl_math_gcd(a, b)) * b;
 }
 
+// True when n is prime.
 bool rl_math_is_prime(int64_t n) {
     if (n < 2) return false;
     if (n == 2) return true;
@@ -541,6 +621,7 @@ bool rl_math_is_prime(int64_t n) {
     return true;
 }
 
+// Nth Fibonacci number (0 for n <= 0).
 int64_t rl_math_fibonacci(int64_t n) {
     if (n <= 0) return 0;
     if (n == 1) return 1;
@@ -555,6 +636,7 @@ int64_t rl_math_fibonacci(int64_t n) {
 
 // ---- time ----
 
+// Wall-clock time in milliseconds since the Unix epoch.
 int64_t rl_time_now_ms(void) {
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
@@ -563,6 +645,7 @@ int64_t rl_time_now_ms(void) {
 
 // ---- fs ----
 
+// Create a single directory; result is an error when it fails.
 rl_result rl_fs_mkdir(rl_string path) {
     char buf[path.len + 1];
     memcpy(buf, path.data, path.len);
@@ -574,6 +657,7 @@ rl_result rl_fs_mkdir(rl_string path) {
 
 // ---- string ----
 
+// out-of-range indexes clamp instead of trapping. ASCII case conversion.
 rl_string rl_str_to_upper(rl_string s) {
     char *buf = malloc(s.len + 1);
     for (uint64_t i = 0; i < s.len; i++) {
@@ -584,6 +668,7 @@ rl_string rl_str_to_upper(rl_string s) {
     return result;
 }
 
+// out-of-range indexes clamp instead of trapping. ASCII case conversion.
 rl_string rl_str_to_lower(rl_string s) {
     char *buf = malloc(s.len + 1);
     for (uint64_t i = 0; i < s.len; i++) {
@@ -594,18 +679,21 @@ rl_string rl_str_to_lower(rl_string s) {
     return result;
 }
 
+// Count leading whitespace bytes.
 static uint64_t rl_str_skip_space_start(const char *s, uint64_t len) {
     uint64_t i = 0;
     while (i < len && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r')) i++;
     return i;
 }
 
+// Return offset of trailing whitespace start.
 static uint64_t rl_str_skip_space_end(const char *s, uint64_t len) {
     uint64_t i = len;
     while (i > 0 && (s[i-1] == ' ' || s[i-1] == '\t' || s[i-1] == '\n' || s[i-1] == '\r')) i--;
     return i;
 }
 
+// Strip whitespace on both sides, or on one side only.
 rl_string rl_str_trim(rl_string s) {
     uint64_t start = rl_str_skip_space_start(s.data, s.len);
     uint64_t end = rl_str_skip_space_end(s.data, s.len);
@@ -620,6 +708,7 @@ rl_string rl_str_trim(rl_string s) {
     return result;
 }
 
+// Strip whitespace on both sides, or on one side only.
 rl_string rl_str_trim_start(rl_string s) {
     uint64_t start = rl_str_skip_space_start(s.data, s.len);
     char *buf = malloc(s.len - start + 1);
@@ -629,6 +718,7 @@ rl_string rl_str_trim_start(rl_string s) {
     return result;
 }
 
+// Strip whitespace on both sides, or on one side only.
 rl_string rl_str_trim_end(rl_string s) {
     uint64_t end = rl_str_skip_space_end(s.data, s.len);
     char *buf = malloc(end + 1);
@@ -638,6 +728,7 @@ rl_string rl_str_trim_end(rl_string s) {
     return result;
 }
 
+// Substring predicates.
 bool rl_str_contains(rl_string haystack, rl_string needle) {
     if (needle.len == 0) return true;
     if (needle.len > haystack.len) return false;
@@ -647,16 +738,19 @@ bool rl_str_contains(rl_string haystack, rl_string needle) {
     return false;
 }
 
+// Substring predicates.
 bool rl_str_starts_with(rl_string s, rl_string prefix) {
     if (prefix.len > s.len) return false;
     return memcmp(s.data, prefix.data, prefix.len) == 0;
 }
 
+// Substring predicates.
 bool rl_str_ends_with(rl_string s, rl_string suffix) {
     if (suffix.len > s.len) return false;
     return memcmp(s.data + s.len - suffix.len, suffix.data, suffix.len) == 0;
 }
 
+// Replace every occurrence of `from` with `to`.
 rl_string rl_str_replace(rl_string s, rl_string from, rl_string to) {
     if (from.len == 0) {
         char *buf = malloc(s.len + 1);
@@ -700,6 +794,7 @@ rl_string rl_str_replace(rl_string s, rl_string from, rl_string to) {
     return result;
 }
 
+// Repeat `s` `count` times (empty string for `count <= 0`).
 rl_string rl_str_repeat(rl_string s, int64_t count) {
     if (count <= 0 || s.len == 0) {
         rl_string result = { .data = "", .len = 0, .rc = 1 };
@@ -715,6 +810,7 @@ rl_string rl_str_repeat(rl_string s, int64_t count) {
     return result;
 }
 
+// Byte offset of the first `needle` hit, or -1 when absent.
 int64_t rl_str_index_of(rl_string haystack, rl_string needle) {
     if (needle.len == 0) return 0;
     if (needle.len > haystack.len) return -1;
@@ -724,6 +820,7 @@ int64_t rl_str_index_of(rl_string haystack, rl_string needle) {
     return -1;
 }
 
+// Number of non-overlapping `needle` occurrences.
 int64_t rl_str_count(rl_string haystack, rl_string needle) {
     if (needle.len == 0) return 0;
     int64_t count = 0;
@@ -739,6 +836,7 @@ int64_t rl_str_count(rl_string haystack, rl_string needle) {
     return count;
 }
 
+// Pad with `c` up to `width` bytes on the left / right.
 rl_string rl_str_pad_left(rl_string s, int64_t width, char c) {
     int64_t pad = width - (int64_t)s.len;
     if (pad <= 0) {
@@ -757,6 +855,7 @@ rl_string rl_str_pad_left(rl_string s, int64_t width, char c) {
     return result;
 }
 
+// Pad with `c` up to `width` bytes on the left / right.
 rl_string rl_str_pad_right(rl_string s, int64_t width, char c) {
     int64_t pad = width - (int64_t)s.len;
     if (pad <= 0) {
@@ -775,6 +874,7 @@ rl_string rl_str_pad_right(rl_string s, int64_t width, char c) {
     return result;
 }
 
+// Byte-range slice `[start, end)` with clamping.
 rl_string rl_str_slice(rl_string s, int64_t start, int64_t end) {
     if (start < 0) start = 0;
     if (end > (int64_t)s.len) end = (int64_t)s.len;
@@ -790,6 +890,7 @@ rl_string rl_str_slice(rl_string s, int64_t start, int64_t end) {
     return result;
 }
 
+// Byte-reversed copy.
 rl_string rl_str_reverse(rl_string s) {
     char *buf = malloc(s.len + 1);
     uint64_t j = 0;
@@ -810,6 +911,7 @@ rl_string rl_str_reverse(rl_string s) {
     return result;
 }
 
+// Raw bytes and one-char strings for each byte.
 rl_array rl_str_bytes(rl_string s) {
     int64_t *buf = malloc(s.len * sizeof(int64_t));
     for (uint64_t i = 0; i < s.len; i++) {
@@ -818,6 +920,7 @@ rl_array rl_str_bytes(rl_string s) {
     return rl_arr_from_vals(buf, s.len, sizeof(int64_t));
 }
 
+// Raw bytes and one-char strings for each byte.
 rl_array rl_str_chars(rl_string s) {
     uint64_t cap = 16;
     char *buf = malloc(cap);
@@ -859,6 +962,7 @@ rl_array rl_str_chars(rl_string s) {
     return arr;
 }
 
+// Byte at `index` (0 when out of range).
 char rl_str_char_at(rl_string s, int64_t index) {
     if (index < 0) return '\0';
     uint64_t pos = 0;
@@ -881,6 +985,7 @@ char rl_str_char_at(rl_string s, int64_t index) {
     return '\0';
 }
 
+// Join an array of strings with `delim` between elements.
 rl_string rl_str_join(rl_array arr, rl_string delim) {
     if (arr.len == 0) {
         rl_string result = { .data = "", .len = 0, .rc = 1 };
@@ -905,6 +1010,7 @@ rl_string rl_str_join(rl_array arr, rl_string delim) {
     return result;
 }
 
+// Split on `delim` into an array of strings.
 rl_array rl_str_split(rl_string s, rl_string delim) {
     if (delim.len == 0 || s.len == 0) {
         rl_array arr = { .data = NULL, .len = 0, .cap = 0, .elem_size = sizeof(rl_string), .type_tag = RL_TAG_STR };
@@ -951,6 +1057,7 @@ rl_array rl_str_split(rl_string s, rl_string delim) {
 
 // ---- debug ----
 
+// Abort with message (RL panic).
 void rl_panic(rl_string msg) {
     if (msg.len > 0) {
         fprintf(stderr, "panic: %.*s\n", (int)msg.len, msg.data);
@@ -960,28 +1067,33 @@ void rl_panic(rl_string msg) {
     exit(1);
 }
 
+// Abort as unreachable code.
 void rl_unreachable(void) {
     fprintf(stderr, "error: reached unreachable code\n");
     exit(1);
 }
 
+// Abort as unimplemented (RL todo).
 void rl_todo(void) {
     fprintf(stderr, "error: not yet implemented\n");
     exit(1);
 }
 
+// Abort reporting a failed `assert_eq` (got `a`, wanted `b`).
 void rl_assert_fail(rl_string label, int64_t a, int64_t b) {
     fprintf(stderr, "assertion failed: %.*s: %ld != %ld\n",
             (int)label.len, label.data, (long)a, (long)b);
     exit(1);
 }
 
+// Abort reporting a failed `assert` with a custom message.
 void rl_assert_fail_msg(rl_string label, rl_string msg) {
     fprintf(stderr, "assertion failed: %.*s: %.*s\n",
             (int)label.len, label.data, (int)msg.len, msg.data);
     exit(1);
 }
 
+// RL type name for a numeric type tag (for `type_of`).
 rl_string rl_type_of(int64_t type_tag) {
     const char *name;
     switch (type_tag) {
@@ -998,21 +1110,25 @@ rl_string rl_type_of(int64_t type_tag) {
     return result;
 }
 
+// Print int64 value to stderr and return it unchanged (RL dbg).
 int64_t rl_dbg_int64(int64_t v) {
     fprintf(stderr, "[dbg] %ld (int)\n", (long)v);
     return v;
 }
 
+// Print float64 value to stderr and return it unchanged.
 double rl_dbg_float64(double v) {
     fprintf(stderr, "[dbg] %.15g (float)\n", v);
     return v;
 }
 
+// Print bool value to stderr and return it unchanged.
 bool rl_dbg_bool(bool v) {
     fprintf(stderr, "[dbg] %s (bool)\n", v ? "true" : "false");
     return v;
 }
 
+// Print string value to stderr and return it unchanged.
 rl_string rl_dbg_str(rl_string v) {
     fprintf(stderr, "[dbg] \"%.*s\" (string)\n", (int)v.len, v.data);
     return v;
@@ -1020,6 +1136,7 @@ rl_string rl_dbg_str(rl_string v) {
 
 // ---- path ----
 
+// Pure path parsing (no filesystem access except the `is_*` checks).
 rl_string rl_path_extension(rl_string path) {
     int64_t last_dot = -1;
     for (int64_t i = (int64_t)path.len - 1; i >= 0; i--) {
@@ -1037,6 +1154,7 @@ rl_string rl_path_extension(rl_string path) {
     return result;
 }
 
+// Pure path parsing (no filesystem access except the `is_*` checks).
 rl_string rl_path_filename(rl_string path) {
     int64_t last_sep = -1;
     for (int64_t i = (int64_t)path.len - 1; i >= 0; i--) {
@@ -1051,6 +1169,7 @@ rl_string rl_path_filename(rl_string path) {
     return result;
 }
 
+// Pure path parsing (no filesystem access except the `is_*` checks).
 rl_string rl_path_parent(rl_string path) {
     int64_t last_sep = -1;
     for (int64_t i = (int64_t)path.len - 1; i >= 0; i--) {
@@ -1071,6 +1190,7 @@ rl_string rl_path_parent(rl_string path) {
     return result;
 }
 
+// Pure path parsing (no filesystem access except the `is_*` checks).
 rl_string rl_path_stem(rl_string path) {
     int64_t last_sep = -1;
     int64_t last_dot = -1;
@@ -1088,10 +1208,12 @@ rl_string rl_path_stem(rl_string path) {
     return result;
 }
 
+// Drop the last component; join/push append one (push mutates in spirit, both return a fresh string).
 rl_string rl_path_pop(rl_string path) {
     return rl_path_parent(path);
 }
 
+// Drop the last component; join/push append one (push mutates in spirit, both return a fresh string).
 rl_string rl_path_join(rl_string path, rl_string target) {
     if (target.len == 0) {
         char *buf = malloc(path.len + 1);
@@ -1110,10 +1232,12 @@ rl_string rl_path_join(rl_string path, rl_string target) {
     return result;
 }
 
+// Drop the last component; join/push append one (push mutates in spirit, both return a fresh string).
 rl_string rl_path_push(rl_string path, rl_string target) {
     return rl_path_join(path, target);
 }
 
+// Drop the last component; join/push append one (push mutates in spirit, both return a fresh string).
 rl_string rl_path_set_extension(rl_string path, rl_string ext) {
     int64_t last_dot = -1;
     for (int64_t i = (int64_t)path.len - 1; i >= 0; i--) {
@@ -1130,6 +1254,7 @@ rl_string rl_path_set_extension(rl_string path, rl_string ext) {
     return result;
 }
 
+// Filesystem checks: true when the path exists and is a dir / file.
 bool rl_path_is_dir(rl_string path) {
     char buf[path.len + 1];
     memcpy(buf, path.data, path.len);
@@ -1139,6 +1264,7 @@ bool rl_path_is_dir(rl_string path) {
     return S_ISDIR(st.st_mode);
 }
 
+// Filesystem checks: true when the path exists and is a dir / file.
 bool rl_path_is_file(rl_string path) {
     char buf[path.len + 1];
     memcpy(buf, path.data, path.len);
@@ -1150,6 +1276,7 @@ bool rl_path_is_file(rl_string path) {
 
 // ---- fs ----
 
+// Size of the file at path.
 int64_t rl_fs_file_size(rl_string path) {
     char buf[path.len + 1];
     memcpy(buf, path.data, path.len);
@@ -1159,6 +1286,7 @@ int64_t rl_fs_file_size(rl_string path) {
     return (int64_t)st.st_size;
 }
 
+// Last-modified time of the file at `path`.
 int64_t rl_fs_file_modified(rl_string path) {
     char buf[path.len + 1];
     memcpy(buf, path.data, path.len);
@@ -1168,6 +1296,7 @@ int64_t rl_fs_file_modified(rl_string path) {
     return (int64_t)st.st_mtime;
 }
 
+// Copy `src` to `dst`; 0 on success, -1 on failure.
 int64_t rl_fs_copy_file(rl_string src, rl_string dst) {
     char sbuf[src.len + 1];
     memcpy(sbuf, src.data, src.len);
@@ -1189,6 +1318,7 @@ int64_t rl_fs_copy_file(rl_string src, rl_string dst) {
     return 0;
 }
 
+// Create `path` plus missing parents; 0 on success, -1 on failure.
 int64_t rl_fs_mkdir_all(rl_string path) {
     char buf[path.len + 1];
     memcpy(buf, path.data, path.len);
@@ -1203,6 +1333,7 @@ int64_t rl_fs_mkdir_all(rl_string path) {
     return mkdir(buf, 0755);
 }
 
+// Delete the directory tree at `path`; 0 on success, -1 on failure.
 int64_t rl_fs_rmdir_all(rl_string path) {
     char buf[path.len + 1];
     memcpy(buf, path.data, path.len);
@@ -1210,6 +1341,7 @@ int64_t rl_fs_rmdir_all(rl_string path) {
     return rmdir(buf);
 }
 
+// Names (not full paths) of entries in the directory at `path`.
 rl_array rl_fs_list_dir(rl_string path) {
     char buf[path.len + 1];
     memcpy(buf, path.data, path.len);
@@ -1249,6 +1381,7 @@ rl_array rl_fs_list_dir(rl_string path) {
     return arr;
 }
 
+// Rename to `new_name` in the same directory; returns the new full path.
 rl_string rl_fs_rename_file(rl_string path, rl_string new_name) {
     char pbuf[path.len + 1];
     memcpy(pbuf, path.data, path.len);
@@ -1262,6 +1395,7 @@ rl_string rl_fs_rename_file(rl_string path, rl_string new_name) {
 
 // ---- process ----
 
+// Current working directory of the process.
 rl_string rl_process_cwd(void) {
     char buf[4096];
     if (getcwd(buf, sizeof(buf)) == NULL) {
@@ -1275,6 +1409,7 @@ rl_string rl_process_cwd(void) {
     return result;
 }
 
+// Change directory; 0 on success, -1 on failure.
 int64_t rl_process_set_cwd(rl_string path) {
     char buf[path.len + 1];
     memcpy(buf, path.data, path.len);
@@ -1282,6 +1417,8 @@ int64_t rl_process_set_cwd(rl_string path) {
     return chdir(buf);
 }
 
+// Run `cmd` through the shell and capture stdout (variants return
+// the exit code or one array element per output line instead).
 rl_string rl_process_exec(rl_string cmd) {
     char buf[cmd.len + 1];
     memcpy(buf, cmd.data, cmd.len);
@@ -1311,6 +1448,8 @@ rl_string rl_process_exec(rl_string cmd) {
     return result;
 }
 
+// Run `cmd` through the shell and capture stdout (variants return
+// the exit code or one array element per output line instead).
 int64_t rl_process_exec_code(rl_string cmd) {
     char buf[cmd.len + 1];
     memcpy(buf, cmd.data, cmd.len);
@@ -1318,12 +1457,15 @@ int64_t rl_process_exec_code(rl_string cmd) {
     return (int64_t)system(buf);
 }
 
+// Run `cmd` through the shell and capture stdout (variants return
+// the exit code or one array element per output line instead).
 rl_array rl_process_exec_lines(rl_string cmd) {
     rl_string output = rl_process_exec(cmd);
     rl_string nl = { .data = "\n", .len = 1, .rc = 1 };
     return rl_str_split(output, nl);
 }
 
+// Same, but with `env` assignments (e.g. `"A=1 B=2"`) prepended.
 rl_string rl_process_with_exec(rl_string env, rl_string cmd) {
     uint64_t total = env.len + 1 + cmd.len;
     char buf[total + 1];
@@ -1335,6 +1477,7 @@ rl_string rl_process_with_exec(rl_string env, rl_string cmd) {
     return rl_process_exec(combined);
 }
 
+// Same, but with `env` assignments (e.g. `"A=1 B=2"`) prepended.
 int64_t rl_process_with_exec_code(rl_string env, rl_string cmd) {
     uint64_t total = env.len + 1 + cmd.len;
     char buf[total + 1];
@@ -1346,6 +1489,7 @@ int64_t rl_process_with_exec_code(rl_string env, rl_string cmd) {
     return rl_process_exec_code(combined);
 }
 
+// Same, but with `env` assignments (e.g. `"A=1 B=2"`) prepended.
 rl_array rl_process_with_exec_lines(rl_string env, rl_string cmd) {
     uint64_t total = env.len + 1 + cmd.len;
     char buf[total + 1];
@@ -1360,11 +1504,13 @@ rl_array rl_process_with_exec_lines(rl_string env, rl_string cmd) {
 static int _rl_stored_argc = 0;
 static char **_rl_stored_argv = NULL;
 
+// Snapshot argv at startup; generated `main` calls this first.
 void rl_store_args(int argc, char **argv) {
     _rl_stored_argc = argc;
     _rl_stored_argv = argv;
 }
 
+// Command-line arguments (excluding argv[0]) as an array of strings.
 rl_array rl_process_args(void) {
     if (!_rl_stored_argv) {
         rl_array arr = { .data = NULL, .len = 0, .cap = 0, .elem_size = sizeof(rl_string), .type_tag = RL_TAG_STR };
@@ -1385,6 +1531,7 @@ rl_array rl_process_args(void) {
 
 // ---- time ----
 
+// Format a Unix timestamp with a strftime-style `pattern`.
 rl_string rl_time_format_time(int64_t timestamp, rl_string pattern) {
     time_t t = (time_t)timestamp;
     struct tm *tm = gmtime(&t);
@@ -1397,6 +1544,7 @@ rl_string rl_time_format_time(int64_t timestamp, rl_string pattern) {
     return result;
 }
 
+// Format as `YYYY-MM-DD` / `HH:MM:SS` in local time.
 rl_string rl_time_format_date_str(int64_t timestamp) {
     time_t t = (time_t)timestamp;
     struct tm *tm = gmtime(&t);
@@ -1409,6 +1557,7 @@ rl_string rl_time_format_date_str(int64_t timestamp) {
     return result;
 }
 
+// Format as `YYYY-MM-DD` / `HH:MM:SS` in local time.
 rl_string rl_time_format_time_str(int64_t timestamp) {
     time_t t = (time_t)timestamp;
     struct tm *tm = gmtime(&t);
@@ -1421,6 +1570,7 @@ rl_string rl_time_format_time_str(int64_t timestamp) {
     return result;
 }
 
+// Split into `[year, month, day, hour, min, sec]` components.
 rl_array rl_time_parts(int64_t timestamp) {
     time_t t = (time_t)timestamp;
     struct tm *tm = gmtime(&t);
@@ -1437,6 +1587,7 @@ rl_array rl_time_parts(int64_t timestamp) {
 
 // ---- io ----
 
+// Read the whole file as one string / one array element per line; the result is an error when the file cannot be read.
 rl_result rl_io_read_file(rl_string path) {
     char buf[path.len + 1];
     memcpy(buf, path.data, path.len);
@@ -1459,6 +1610,7 @@ rl_result rl_io_read_file(rl_string path) {
     return rl_ok_str(result);
 }
 
+// Read the whole file as one string / one array element per line; the result is an error when the file cannot be read.
 rl_result rl_io_read_lines(rl_string path) {
     rl_result content_r = rl_io_read_file(path);
     if (!content_r.is_ok) return content_r;
@@ -1467,6 +1619,7 @@ rl_result rl_io_read_lines(rl_string path) {
     return rl_ok_arr(lines);
 }
 
+// Read one whitespace-separated token / int / float from stdin.
 rl_string rl_io_read(void) {
     uint64_t cap = 256;
     char *buf = malloc(cap);
@@ -1484,18 +1637,21 @@ rl_string rl_io_read(void) {
     return result;
 }
 
+// Read one whitespace-separated token / int / float from stdin.
 int64_t rl_io_read_int(void) {
     int64_t v = 0;
     scanf("%ld", &v);
     return v;
 }
 
+// Read one whitespace-separated token / int / float from stdin.
 double rl_io_read_float(void) {
     double v = 0.0;
     scanf("%lf", &v);
     return v;
 }
 
+// Overwrite / append `content`; the result is an error on failure.
 rl_result rl_io_write_file(rl_string path, rl_string content) {
     char buf[path.len + 1];
     memcpy(buf, path.data, path.len);
@@ -1507,6 +1663,7 @@ rl_result rl_io_write_file(rl_string path, rl_string content) {
     return rl_ok_null();
 }
 
+// Overwrite / append `content`; the result is an error on failure.
 rl_result rl_io_append_file(rl_string path, rl_string content) {
     char buf[path.len + 1];
     memcpy(buf, path.data, path.len);
@@ -1518,6 +1675,7 @@ rl_result rl_io_append_file(rl_string path, rl_string content) {
     return rl_ok_null();
 }
 
+// Delete the file at `path`; 0 on success, -1 on failure.
 int64_t rl_io_delete_file(rl_string path) {
     char buf[path.len + 1];
     memcpy(buf, path.data, path.len);
@@ -1525,14 +1683,17 @@ int64_t rl_io_delete_file(rl_string path) {
     return remove(buf);
 }
 
+// Write to stderr without / with a trailing newline.
 void rl_io_eprint(rl_string msg) {
     fprintf(stderr, "%.*s", (int)msg.len, msg.data);
 }
 
+// Write to stderr without / with a trailing newline.
 void rl_io_eprintln(rl_string msg) {
     fprintf(stderr, "%.*s\n", (int)msg.len, msg.data);
 }
 
+// Read the whole file as an array of byte values (error when unreadable).
 rl_result rl_io_read_bytes(rl_string path) {
     char buf[path.len + 1];
     memcpy(buf, path.data, path.len);
@@ -1561,6 +1722,7 @@ rl_result rl_io_read_bytes(rl_string path) {
 
 // ---- types ----
 
+// Format an int as decimal / binary (`0b...`) / hex (`0x...`) / octal.
 rl_string rl_types_to_string(int64_t v) {
     char buf[32];
     int len = snprintf(buf, sizeof(buf), "%ld", (long)v);
@@ -1570,6 +1732,7 @@ rl_string rl_types_to_string(int64_t v) {
     return result;
 }
 
+// Format an int as decimal / binary (`0b...`) / hex (`0x...`) / octal.
 rl_string rl_types_to_bin(int64_t v) {
     if (v == 0) {
         rl_string result = { .data = "0", .len = 1, .rc = 1 };
@@ -1590,6 +1753,7 @@ rl_string rl_types_to_bin(int64_t v) {
     return result;
 }
 
+// Format an int as decimal / binary (`0b...`) / hex (`0x...`) / octal.
 rl_string rl_types_to_hex(int64_t v) {
     char buf[32];
     int len = snprintf(buf, sizeof(buf), "%lx", (unsigned long)v);
@@ -1599,6 +1763,7 @@ rl_string rl_types_to_hex(int64_t v) {
     return result;
 }
 
+// Format an int as decimal / binary (`0b...`) / hex (`0x...`) / octal.
 rl_string rl_types_to_oct(int64_t v) {
     char buf[32];
     int len = snprintf(buf, sizeof(buf), "%lo", (unsigned long)v);
@@ -1608,6 +1773,7 @@ rl_string rl_types_to_oct(int64_t v) {
     return result;
 }
 
+// Turn an error result into a panic; wrap an int as a byte / char value.
 rl_result rl_types_error_unwrap(rl_result x) {
     if (x.is_ok) {
         return rl_err_msg(rl_str_literal("error_unwrap: expected error, got ok", 36));
@@ -1615,6 +1781,7 @@ rl_result rl_types_error_unwrap(rl_result x) {
     return x;
 }
 
+// Turn an error result into a panic; wrap an int as a byte / char value.
 rl_result rl_types_to_byte(rl_result x) {
     switch (x.tag) {
         case RL_TAG_I64: return rl_ok_i64((int64_t)(unsigned char)x.data.i64);
@@ -1633,6 +1800,7 @@ rl_result rl_types_to_byte(rl_result x) {
     }
 }
 
+// Turn an error result into a panic; wrap an int as a byte / char value.
 rl_result rl_types_to_char(rl_result x) {
     switch (x.tag) {
         case RL_TAG_I64: return rl_ok_i64(x.data.i64);
@@ -1651,6 +1819,7 @@ rl_result rl_types_to_char(rl_result x) {
 
 static int rl_rand_initialized = 0;
 
+// Seed the C RNG once on first use.
 static void rl_rand_ensure_init(void) {
     if (!rl_rand_initialized) {
         srand((unsigned int)time(NULL));
@@ -1658,59 +1827,70 @@ static void rl_rand_ensure_init(void) {
     }
 }
 
+// Unseeded pseudo-random values from the C library RNG. Full-range non-negative int / float in [0, 1).
 int64_t rl_rand_int(void) {
     rl_rand_ensure_init();
     return (int64_t)rand();
 }
 
+// Unseeded pseudo-random values from the C library RNG. Full-range non-negative int / float in [0, 1).
 double rl_rand_float(void) {
     rl_rand_ensure_init();
     return (double)rand() / (double)RAND_MAX;
 }
 
+// Fair coin flip / flip that is true with probability `weight`.
 bool rl_rand_bool(void) {
     rl_rand_ensure_init();
     return rand() % 2 == 0;
 }
 
+// Fair coin flip / flip that is true with probability `weight`.
 bool rl_rand_bool_weighted(double weight) {
     rl_rand_ensure_init();
     return rl_rand_float() < weight;
 }
 
+// Random printable ASCII char / byte in [0, 255].
 char rl_rand_char(void) {
     rl_rand_ensure_init();
     return (char)('a' + rand() % 26);
 }
 
+// Random printable ASCII char / byte in [0, 255].
 int64_t rl_rand_byte(void) {
     rl_rand_ensure_init();
     return (int64_t)(rand() % 256);
 }
 
+// Int in [min, max] / float in [min, max).
 int64_t rl_rand_int_range(int64_t min, int64_t max) {
     rl_rand_ensure_init();
     if (min >= max) return min;
     return min + (int64_t)(rand() % (uint64_t)(max - min));
 }
 
+// Int in [min, max] / float in [min, max).
 double rl_rand_float_range(double min, double max) {
     rl_rand_ensure_init();
     return min + (max - min) * rl_rand_float();
 }
 
+// Die roll in [1, sides] / int in [0, stop) / stepped range value.
 int64_t rl_rand_dice(int64_t sides) {
     rl_rand_ensure_init();
     if (sides <= 0) return 0;
     return 1 + (int64_t)(rand() % (uint64_t)sides);
 }
 
+// Die roll in [1, sides] / int in [0, stop) / stepped range value.
 int64_t rl_rand_range(int64_t stop) {
     rl_rand_ensure_init();
     if (stop <= 0) return 0;
     return (int64_t)(rand() % (uint64_t)stop);
 }
 
+// Die roll in [1, sides] / int in [0, stop) / stepped range value.
 int64_t rl_rand_range_step(int64_t start, int64_t stop, int64_t step) {
     rl_rand_ensure_init();
     if (step == 0 || (start < stop && step < 0) || (start > stop && step > 0)) return start;
@@ -1724,6 +1904,7 @@ int64_t rl_rand_range_step(int64_t start, int64_t stop, int64_t step) {
     return start + (int64_t)((uint64_t)(rand() % (int)range) * (uint64_t)step);
 }
 
+// Random alphanumeric string of `count` chars.
 rl_string rl_rand_string(int64_t count) {
     rl_rand_ensure_init();
     if (count <= 0) {
@@ -1739,6 +1920,7 @@ rl_string rl_rand_string(int64_t count) {
     return result;
 }
 
+// Array of `count` die rolls in [1, sides].
 rl_result rl_rand_dices(int64_t count, int64_t sides) {
     rl_rand_ensure_init();
     if (count <= 0) return rl_err_msg(rl_str_literal("count should be 1 or higher", 27));
@@ -1751,6 +1933,7 @@ rl_result rl_rand_dices(int64_t count, int64_t sides) {
     return rl_ok_arr(result);
 }
 
+// Array of `count` random bytes.
 rl_result rl_rand_bytes(int64_t count) {
     rl_rand_ensure_init();
     if (count <= 0) return rl_err_msg(rl_str_literal("count cannot be less than zero", 29));
@@ -1762,6 +1945,7 @@ rl_result rl_rand_bytes(int64_t count) {
     return rl_ok_arr(result);
 }
 
+// One uniform pick from `arr` (error when empty).
 rl_result rl_rand_choice(rl_array arr) {
     if (arr.len == 0) return rl_err_msg(rl_str_literal("array is empty", 14));
     rl_rand_ensure_init();
@@ -1770,6 +1954,7 @@ rl_result rl_rand_choice(rl_array arr) {
     return rl_ok_i64(elems[idx]);
 }
 
+// `count` picks with replacement / without replacement.
 rl_result rl_rand_choices(rl_array arr, int64_t count) {
     if (arr.len == 0) return rl_err_msg(rl_str_literal("array is empty", 14));
     if (count <= 0) return rl_err_msg(rl_str_literal("count should be 1 or higher", 27));
@@ -1783,6 +1968,7 @@ rl_result rl_rand_choices(rl_array arr, int64_t count) {
     return rl_ok_arr(result);
 }
 
+// `count` picks with replacement / without replacement.
 rl_result rl_rand_sample(rl_array arr, int64_t count) {
     if (arr.len == 0) return rl_err_msg(rl_str_literal("array is empty", 14));
     if (count <= 0) return rl_err_msg(rl_str_literal("count should be 1 or higher", 27));
@@ -1804,6 +1990,7 @@ rl_result rl_rand_sample(rl_array arr, int64_t count) {
     return rl_ok_arr(result);
 }
 
+// Shuffled copy of `arr`.
 rl_result rl_rand_shuffle(rl_array arr) {
     if (arr.len == 0) return rl_err_msg(rl_str_literal("array is empty", 14));
     rl_rand_ensure_init();
@@ -1819,20 +2006,24 @@ rl_result rl_rand_shuffle(rl_array arr) {
 
 // ---- collections (rl_string key wrappers) ----
 
+// Add / remove / membership test, each reporting success as a result.
 rl_result rl_set_add_s(rl_set *s, rl_value value) {
     rl_set_add(s, value);
     return rl_ok_i64(1);
 }
 
+// Add / remove / membership test, each reporting success as a result.
 rl_result rl_set_remove_s(rl_set *s, rl_value value) {
     rl_set_remove(s, value);
     return rl_ok_i64(1);
 }
 
+// Add / remove / membership test, each reporting success as a result.
 rl_result rl_set_contains_s(rl_set s, rl_value value) {
     return rl_ok_bool(rl_set_contains(s, value));
 }
 
+// Copy all elements into a fresh array.
 rl_array rl_set_to_array(rl_set s) {
     rl_value *buf = malloc(s.len * sizeof(rl_value));
     memcpy(buf, s.data, s.len * sizeof(rl_value));
@@ -1840,6 +2031,7 @@ rl_array rl_set_to_array(rl_set s) {
     return arr;
 }
 
+// Membership test / removal returning a result; lookup returning the value or an error when the key is missing.
 rl_result rl_map_contains_s(rl_map m, rl_string key) {
     char buf[key.len + 1];
     memcpy(buf, key.data, key.len);
@@ -1847,6 +2039,7 @@ rl_result rl_map_contains_s(rl_map m, rl_string key) {
     return rl_ok_bool(rl_map_contains(m, buf));
 }
 
+// Membership test / removal returning a result; lookup returning the value or an error when the key is missing.
 rl_result rl_map_remove_s(rl_map m, rl_string key) {
     char buf[key.len + 1];
     memcpy(buf, key.data, key.len);
@@ -1855,6 +2048,7 @@ rl_result rl_map_remove_s(rl_map m, rl_string key) {
     return rl_ok(m);
 }
 
+// Membership test / removal returning a result; lookup returning the value or an error when the key is missing.
 rl_result rl_map_get_s(rl_map m, rl_string key) {
     char buf[key.len + 1];
     memcpy(buf, key.data, key.len);
@@ -1878,6 +2072,7 @@ rl_result rl_map_get_s(rl_map m, rl_string key) {
     }
 }
 
+// Fresh arrays holding copies of all keys / all values.
 rl_array rl_map_keys_s(rl_map m) {
     int64_t *buf = malloc(m.len * sizeof(int64_t));
     for (uint64_t i = 0; i < m.len; i++) {
@@ -1889,6 +2084,7 @@ rl_array rl_map_keys_s(rl_map m) {
     return rl_arr_from_vals(buf, m.len, sizeof(int64_t));
 }
 
+// Fresh arrays holding copies of all keys / all values.
 rl_array rl_map_values_s(rl_map m) {
     rl_value *buf = malloc(m.len * sizeof(rl_value));
     for (uint64_t i = 0; i < m.len; i++) {
@@ -1898,6 +2094,7 @@ rl_array rl_map_values_s(rl_map m) {
     return arr;
 }
 
+// New map holding `b` layered over `a` (`b` wins on conflicts).
 rl_map rl_map_merge_s(rl_map a, rl_map b) {
     rl_map result;
     result.len = a.len;
@@ -1925,6 +2122,7 @@ rl_map rl_map_merge_s(rl_map a, rl_map b) {
     return result;
 }
 
+// Array of single-entry maps, one per key.
 rl_array rl_map_to_array_s(rl_map m) {
     rl_value *buf = malloc(m.len * sizeof(rl_value));
     for (uint64_t i = 0; i < m.len; i++) {
@@ -1936,6 +2134,7 @@ rl_array rl_map_to_array_s(rl_map m) {
 
 // ---- array (generic) ----
 
+// Append v / drop and return the last element.
 rl_result rl_arr_push(rl_array a, int64_t v) {
     uint64_t new_len = a.len + 1;
     int64_t *buf = malloc(new_len * sizeof(int64_t));
@@ -1944,11 +2143,13 @@ rl_result rl_arr_push(rl_array a, int64_t v) {
     return rl_ok_arr(rl_arr_from_vals(buf, new_len, sizeof(int64_t)));
 }
 
+// Append v / drop and return the last element.
 rl_result rl_arr_pop(rl_array a) {
     if (a.len == 0) return rl_make_err(-1, "pop from empty array");
     return rl_ok_i64(((int64_t *)a.data)[a.len - 1]);
 }
 
+// Insert `v` at `idx` / drop the element at `idx`.
 rl_result rl_arr_insert(rl_array a, int64_t idx, int64_t v) {
     if (idx < 0) idx = 0;
     if ((uint64_t)idx > a.len) idx = (int64_t)a.len;
@@ -1961,6 +2162,7 @@ rl_result rl_arr_insert(rl_array a, int64_t idx, int64_t v) {
     return rl_ok_arr(rl_arr_from_vals(buf, new_len, sizeof(int64_t)));
 }
 
+// Insert `v` at `idx` / drop the element at `idx`.
 rl_result rl_arr_remove(rl_array a, int64_t idx) {
     if (idx < 0 || (uint64_t)idx >= a.len) return rl_make_err(-1, "index out of bounds");
     int64_t *src = (int64_t *)a.data;
@@ -1971,6 +2173,7 @@ rl_result rl_arr_remove(rl_array a, int64_t idx) {
     return rl_ok_arr(rl_arr_from_vals(buf, new_len, sizeof(int64_t)));
 }
 
+// Reversed / concatenated copies (inputs unchanged).
 rl_array rl_arr_reverse(rl_array a) {
     int64_t *src = (int64_t *)a.data;
     int64_t *buf = malloc(a.len * sizeof(int64_t));
@@ -1980,6 +2183,7 @@ rl_array rl_arr_reverse(rl_array a) {
     return rl_arr_from_vals(buf, a.len, sizeof(int64_t));
 }
 
+// Reversed / concatenated copies (inputs unchanged).
 rl_array rl_arr_concat(rl_array a, rl_array b) {
     uint64_t new_len = a.len + b.len;
     int64_t *buf = malloc(new_len * sizeof(int64_t));
@@ -1988,16 +2192,19 @@ rl_array rl_arr_concat(rl_array a, rl_array b) {
     return rl_arr_from_vals(buf, new_len, sizeof(int64_t));
 }
 
+// First / last element, or an error when empty.
 rl_result rl_arr_first(rl_array a) {
     if (a.len == 0) return rl_make_err(-1, "first of empty array");
     return rl_ok_i64(((int64_t *)a.data)[0]);
 }
 
+// First / last element, or an error when empty.
 rl_result rl_arr_last(rl_array a) {
     if (a.len == 0) return rl_make_err(-1, "last of empty array");
     return rl_ok_i64(((int64_t *)a.data)[a.len - 1]);
 }
 
+// Copy with duplicates removed, keeping first-seen order.
 rl_array rl_arr_unique(rl_array a) {
     int64_t *src = (int64_t *)a.data;
     int64_t *buf = malloc(a.len * sizeof(int64_t));
@@ -2012,6 +2219,7 @@ rl_array rl_arr_unique(rl_array a) {
     return rl_arr_from_vals(buf, w, sizeof(int64_t));
 }
 
+// Copy of `[start, end)` with clamping.
 rl_array rl_arr_slice(rl_array a, int64_t start, int64_t end) {
     if (start < 0) start = 0;
     if (end > (int64_t)a.len) end = (int64_t)a.len;
@@ -2024,6 +2232,7 @@ rl_array rl_arr_slice(rl_array a, int64_t start, int64_t end) {
     return rl_arr_from_vals(buf, len, sizeof(int64_t));
 }
 
+// Membership test / first index (or -1) wrapped as results.
 rl_result rl_arr_contains(rl_array a, int64_t v) {
     int64_t *src = (int64_t *)a.data;
     for (uint64_t i = 0; i < a.len; i++) {
@@ -2032,6 +2241,7 @@ rl_result rl_arr_contains(rl_array a, int64_t v) {
     return rl_ok_bool(false);
 }
 
+// Membership test / first index (or -1) wrapped as results.
 rl_result rl_arr_index_of(rl_array a, int64_t v) {
     int64_t *src = (int64_t *)a.data;
     for (uint64_t i = 0; i < a.len; i++) {
@@ -2040,6 +2250,7 @@ rl_result rl_arr_index_of(rl_array a, int64_t v) {
     return rl_ok_i64(-1);
 }
 
+// Fresh array of `count` copies of `v`.
 rl_array rl_arr_fill(int64_t v, int64_t count) {
     if (count <= 0) return rl_arr_from_vals(NULL, 0, sizeof(int64_t));
     int64_t *buf = malloc((uint64_t)count * sizeof(int64_t));
@@ -2047,6 +2258,7 @@ rl_array rl_arr_fill(int64_t v, int64_t count) {
     return rl_arr_from_vals(buf, (uint64_t)count, sizeof(int64_t));
 }
 
+// Stepped integer sequence, or an error for a zero step.
 rl_result rl_arr_range(int64_t start, int64_t end, int64_t step) {
     if (step == 0) {
         return rl_make_err(-1, "arr_range: step must be positive, got 0");
@@ -2071,6 +2283,7 @@ rl_result rl_arr_range(int64_t start, int64_t end, int64_t step) {
     return rl_ok_arr(rl_arr_from_vals(buf, count, sizeof(int64_t)));
 }
 
+// Sum / product / max / min, erroring on empty input.
 rl_result rl_arr_sum(rl_array a) {
     int64_t *src = (int64_t *)a.data;
     int64_t sum = 0;
@@ -2078,6 +2291,7 @@ rl_result rl_arr_sum(rl_array a) {
     return rl_ok_i64(sum);
 }
 
+// Sum / product / max / min, erroring on empty input.
 rl_result rl_arr_product(rl_array a) {
     int64_t *src = (int64_t *)a.data;
     int64_t prod = 1;
@@ -2085,6 +2299,7 @@ rl_result rl_arr_product(rl_array a) {
     return rl_ok_i64(prod);
 }
 
+// Sum / product / max / min, erroring on empty input.
 rl_result rl_arr_max(rl_array a) {
     if (a.len == 0) return rl_make_err(-1, "max of empty array");
     int64_t *src = (int64_t *)a.data;
@@ -2095,6 +2310,7 @@ rl_result rl_arr_max(rl_array a) {
     return rl_ok_i64(max);
 }
 
+// Sum / product / max / min, erroring on empty input.
 rl_result rl_arr_min(rl_array a) {
     if (a.len == 0) return rl_make_err(-1, "min of empty array");
     int64_t *src = (int64_t *)a.data;
@@ -2105,18 +2321,21 @@ rl_result rl_arr_min(rl_array a) {
     return rl_ok_i64(min);
 }
 
+// Compare two int64 elements for qsort (ascending).
 static int rl_arr_cmp_i64(const void *a, const void *b) {
     int64_t va = *(const int64_t *)a;
     int64_t vb = *(const int64_t *)b;
     return (va > vb) - (va < vb);
 }
 
+// Compare two float64 elements for qsort (ascending).
 static int rl_arr_cmp_f64(const void *a, const void *b) {
     double va = *(const double *)a;
     double vb = *(const double *)b;
     return (va > vb) - (va < vb);
 }
 
+// Compare two string elements for qsort (ascending).
 static int rl_arr_cmp_str(const void *a, const void *b) {
     rl_string sa = *(const rl_string *)a;
     rl_string sb = *(const rl_string *)b;
@@ -2126,6 +2345,7 @@ static int rl_arr_cmp_str(const void *a, const void *b) {
     return (sa.len > sb.len) - (sa.len < sb.len);
 }
 
+// Sorted copy (input unchanged).
 rl_array rl_arr_sort(rl_array a) {
     if (a.len == 0) return a;
     switch (a.type_tag) {
@@ -2152,6 +2372,7 @@ rl_array rl_arr_sort(rl_array a) {
     }
 }
 
+// One-level flatten of nested arrays.
 rl_array rl_arr_flatten(rl_array a) {
     int64_t *buf = malloc(a.len * sizeof(int64_t));
     if (a.data) memcpy(buf, a.data, a.len * sizeof(int64_t));
@@ -2160,6 +2381,7 @@ rl_array rl_arr_flatten(rl_array a) {
 
 // ---- closure-consuming array functions ----
 
+// Keep elements where pred returns true.
 rl_result rl_arr_filter_closure(rl_array arr, rl_closure pred) {
     uint64_t cap = 16;
     int64_t *buf = malloc(cap * sizeof(int64_t));
@@ -2182,6 +2404,7 @@ rl_result rl_arr_filter_closure(rl_array arr, rl_closure pred) {
     return rl_ok_arr(rl_arr_from_vals(buf, count, sizeof(int64_t)));
 }
 
+// Apply `fn` to every element, collecting the outputs.
 rl_result rl_arr_map_closure(rl_array arr, rl_closure fn) {
     uint64_t cap = arr.len > 0 ? arr.len : 16;
     int64_t *buf = malloc(cap * sizeof(int64_t));
@@ -2206,6 +2429,7 @@ rl_result rl_arr_map_closure(rl_array arr, rl_closure fn) {
     return rl_ok_arr(rl_arr_from_vals(buf, count, sizeof(int64_t)));
 }
 
+// First element where `pred` returns true (error when none matches).
 rl_result rl_arr_find_closure(rl_array arr, rl_closure pred) {
     int64_t *elems = (int64_t *)arr.data;
     for (uint64_t i = 0; i < arr.len; i++) {
@@ -2218,6 +2442,7 @@ rl_result rl_arr_find_closure(rl_array arr, rl_closure pred) {
     return rl_err_msg(rl_str_literal("not found", 9));
 }
 
+// Left fold starting from `init`.
 rl_result rl_arr_reduce_closure(rl_array arr, rl_closure fn, rl_result init) {
     int64_t *elems = (int64_t *)arr.data;
     rl_result acc = init;
@@ -2228,6 +2453,7 @@ rl_result rl_arr_reduce_closure(rl_array arr, rl_closure fn, rl_result init) {
     return acc;
 }
 
+// Index of the first match (error when none matches).
 rl_result rl_arr_find_index_closure(rl_array arr, rl_closure pred) {
     int64_t *elems = (int64_t *)arr.data;
     for (uint64_t i = 0; i < arr.len; i++) {
@@ -2240,6 +2466,7 @@ rl_result rl_arr_find_index_closure(rl_array arr, rl_closure pred) {
     return rl_ok_i64((int64_t)-1);
 }
 
+// True when `pred` holds for all / for at least one element.
 rl_result rl_arr_all_closure(rl_array arr, rl_closure pred) {
     int64_t *elems = (int64_t *)arr.data;
     for (uint64_t i = 0; i < arr.len; i++) {
@@ -2255,6 +2482,7 @@ rl_result rl_arr_all_closure(rl_array arr, rl_closure pred) {
     return rl_ok_bool(true);
 }
 
+// True when `pred` holds for all / for at least one element.
 rl_result rl_arr_any_closure(rl_array arr, rl_closure pred) {
     int64_t *elems = (int64_t *)arr.data;
     for (uint64_t i = 0; i < arr.len; i++) {
@@ -2270,6 +2498,7 @@ rl_result rl_arr_any_closure(rl_array arr, rl_closure pred) {
     return rl_ok_bool(false);
 }
 
+// Run `fn` for side effects; returns the input length.
 rl_result rl_arr_for_each_closure(rl_array arr, rl_closure fn) {
     int64_t *elems = (int64_t *)arr.data;
     for (uint64_t i = 0; i < arr.len; i++) {
@@ -2279,6 +2508,7 @@ rl_result rl_arr_for_each_closure(rl_array arr, rl_closure fn) {
     return rl_ok_null();
 }
 
+// Map, then concatenate one level of the resulting arrays.
 rl_result rl_arr_flat_map_closure(rl_array arr, rl_closure fn) {
     uint64_t cap = 16;
     int64_t *buf = malloc(cap * sizeof(int64_t));
@@ -2299,6 +2529,7 @@ rl_result rl_arr_flat_map_closure(rl_array arr, rl_closure fn) {
     return rl_ok_arr(rl_arr_from_vals(buf, count, sizeof(int64_t)));
 }
 
+// Sort using `cmp(a, b)` returning negative / zero / positive.
 rl_result rl_arr_sort_by_closure(rl_array arr, rl_closure cmp) {
     // Copy the array data for sorting
     int64_t *elems = (int64_t *)arr.data;
@@ -2326,6 +2557,9 @@ rl_result rl_arr_sort_by_closure(rl_array arr, rl_closure cmp) {
     return rl_ok_arr(rl_arr_from_vals(buf, len, sizeof(int64_t)));
 }
 
+// ---- closure-consuming result functions ----
+// Apply closures to result payloads, passing the other case through.
+// Apply `fn` to the payload of an ok result (passes errors through).
 rl_result rl_result_map_closure(rl_result val, rl_closure fn) {
     if (!val.is_ok) return val;
     switch (val.tag) {
@@ -2356,6 +2590,7 @@ rl_result rl_result_map_closure(rl_result val, rl_closure fn) {
     }
 }
 
+// Apply `fn` to the code of an error result (passes ok values through).
 rl_result rl_result_map_err_closure(rl_result val, rl_closure fn) {
     if (val.is_ok) return val;
     switch (val.tag) {
@@ -2374,6 +2609,9 @@ rl_result rl_result_map_err_closure(rl_result val, rl_closure fn) {
     }
 }
 
+// ---- closure-consuming debug ----
+// Benchmark helper that times closure runs.
+// Run `fn` `iterations` times; returns elapsed milliseconds.
 rl_result rl_bench_closure(rl_closure fn, int64_t iterations) {
     struct timespec start, end;
     clock_gettime(CLOCK_MONOTONIC, &start);
@@ -2392,91 +2630,109 @@ rl_result rl_bench_closure(rl_closure fn, int64_t iterations) {
 #include <unistd.h>
 #include <stdio.h>
 
+// Switch to / back from the alternate screen buffer.
 rl_result rl_term_enter(void) {
     printf("\x1b[?1049h");
     return rl_ok_null();
 }
 
+// Switch to / back from the alternate screen buffer.
 rl_result rl_term_leave(void) {
     printf("\x1b[?1049l");
     return rl_ok_null();
 }
 
+// Clear the whole screen / the current line.
 rl_result rl_term_clear(void) {
     printf("\x1b[2J\x1b[H");
     return rl_ok_null();
 }
 
+// Clear the whole screen / the current line.
 rl_result rl_term_clear_line(void) {
     printf("\x1b[2K");
     return rl_ok_null();
 }
 
+// Move the cursor: absolute position, column only, row only, relative steps, or N lines down / up to column 0.
 rl_result rl_term_move(int64_t col, int64_t row) {
     printf("\x1b[%ld;%ldH", (long)row + 1, (long)col + 1);
     return rl_ok_null();
 }
 
+// Move the cursor: absolute position, column only, row only, relative steps, or N lines down / up to column 0.
 rl_result rl_term_move_to_col(int64_t col) {
     printf("\x1b[%ldG", (long)col + 1);
     return rl_ok_null();
 }
 
+// Move the cursor: absolute position, column only, row only, relative steps, or N lines down / up to column 0.
 rl_result rl_term_move_to_row(int64_t row) {
     printf("\x1b[%ld;d", (long)row + 1);
     return rl_ok_null();
 }
 
+// Move the cursor: absolute position, column only, row only, relative steps, or N lines down / up to column 0.
 rl_result rl_term_move_up(int64_t n) {
     printf("\x1b[%ldA", (long)n);
     return rl_ok_null();
 }
 
+// Move the cursor: absolute position, column only, row only, relative steps, or N lines down / up to column 0.
 rl_result rl_term_move_down(int64_t n) {
     printf("\x1b[%ldB", (long)n);
     return rl_ok_null();
 }
 
+// Move the cursor: absolute position, column only, row only, relative steps, or N lines down / up to column 0.
 rl_result rl_term_move_left(int64_t n) {
     printf("\x1b[%ldD", (long)n);
     return rl_ok_null();
 }
 
+// Move the cursor: absolute position, column only, row only, relative steps, or N lines down / up to column 0.
 rl_result rl_term_move_right(int64_t n) {
     printf("\x1b[%ldC", (long)n);
     return rl_ok_null();
 }
 
+// Move the cursor: absolute position, column only, row only, relative steps, or N lines down / up to column 0.
 rl_result rl_term_next_line(int64_t n) {
     printf("\x1b[%ldE", (long)n);
     return rl_ok_null();
 }
 
+// Move the cursor: absolute position, column only, row only, relative steps, or N lines down / up to column 0.
 rl_result rl_term_prev_line(int64_t n) {
     printf("\x1b[%ldF", (long)n);
     return rl_ok_null();
 }
 
+// Save / restore the cursor position; hide / show the cursor.
 rl_result rl_term_save_cursor(void) {
     printf("\x1b[s");
     return rl_ok_null();
 }
 
+// Save / restore the cursor position; hide / show the cursor.
 rl_result rl_term_restore_cursor(void) {
     printf("\x1b[u");
     return rl_ok_null();
 }
 
+// Save / restore the cursor position; hide / show the cursor.
 rl_result rl_term_hide_cursor(void) {
     printf("\x1b[?25l");
     return rl_ok_null();
 }
 
+// Save / restore the cursor position; hide / show the cursor.
 rl_result rl_term_show_cursor(void) {
     printf("\x1b[?25h");
     return rl_ok_null();
 }
 
+// Read the terminal size into `out_cols` / `out_rows`.
 rl_result rl_term_get_size(int64_t *out_cols, int64_t *out_rows) {
     struct winsize ws;
     if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0) {
@@ -2489,46 +2745,55 @@ rl_result rl_term_get_size(int64_t *out_cols, int64_t *out_rows) {
     return rl_ok_null();
 }
 
+// Request a terminal size (may be ignored by the emulator).
 rl_result rl_term_set_size(int64_t cols, int64_t rows) {
     printf("\x1b[8;%ld;%ldt", (long)rows, (long)cols);
     return rl_ok_null();
 }
 
+// Set the window title to the single char `ch`.
 rl_result rl_term_set_title(int64_t ch) {
     printf("\x1b]0;%c\x07", (char)(unsigned char)ch);
     return rl_ok_null();
 }
 
+// Scroll the viewport up / down by `n` lines.
 rl_result rl_term_scroll_up(int64_t n) {
     printf("\x1b[%ldS", (long)n);
     return rl_ok_null();
 }
 
+// Scroll the viewport up / down by `n` lines.
 rl_result rl_term_scroll_down(int64_t n) {
     printf("\x1b[%ldT", (long)n);
     return rl_ok_null();
 }
 
+// Flush pending output.
 rl_result rl_term_flush(void) {
     fflush(stdout);
     return rl_ok_null();
 }
 
+// Truecolor foreground / background, or reset to the default pair.
 rl_result rl_term_set_fg(int64_t r, int64_t g, int64_t b) {
     printf("\x1b[38;2;%ld;%ld;%ldm", (long)r, (long)g, (long)b);
     return rl_ok_null();
 }
 
+// Truecolor foreground / background, or reset to the default pair.
 rl_result rl_term_set_bg(int64_t r, int64_t g, int64_t b) {
     printf("\x1b[48;2;%ld;%ld;%ldm", (long)r, (long)g, (long)b);
     return rl_ok_null();
 }
 
+// Truecolor foreground / background, or reset to the default pair.
 rl_result rl_term_reset_color(void) {
     printf("\x1b[0m");
     return rl_ok_null();
 }
 
+// Map color name to ANSI code, or -1 when unknown.
 static int _term_named_color(rl_string name) {
     if (name.len == 3 && memcmp(name.data, "red", 3) == 0) return 31;
     if (name.len == 5 && memcmp(name.data, "green", 5) == 0) return 32;
@@ -2549,6 +2814,7 @@ static int _term_named_color(rl_string name) {
     return -1;
 }
 
+// Named-color ("red", "blue", ...) foreground / background.
 rl_result rl_term_fg(rl_string name) {
     int code = _term_named_color(name);
     if (code < 0) {
@@ -2558,6 +2824,7 @@ rl_result rl_term_fg(rl_string name) {
     return rl_ok_null();
 }
 
+// Named-color ("red", "blue", ...) foreground / background.
 rl_result rl_term_bg(rl_string name) {
     int code = _term_named_color(name);
     if (code < 0) {
@@ -2567,24 +2834,39 @@ rl_result rl_term_bg(rl_string name) {
     return rl_ok_null();
 }
 
+// Text attributes; `reset_attr` clears them all.
 rl_result rl_term_bold(void) { printf("\x1b[1m"); return rl_ok_null(); }
+// Text attributes; `reset_attr` clears them all.
 rl_result rl_term_dim(void) { printf("\x1b[2m"); return rl_ok_null(); }
+// Text attributes; `reset_attr` clears them all.
 rl_result rl_term_italic(void) { printf("\x1b[3m"); return rl_ok_null(); }
+// Text attributes; `reset_attr` clears them all.
 rl_result rl_term_underline(void) { printf("\x1b[4m"); return rl_ok_null(); }
+// Text attributes; `reset_attr` clears them all.
 rl_result rl_term_blink(void) { printf("\x1b[5m"); return rl_ok_null(); }
+// Text attributes; `reset_attr` clears them all.
 rl_result rl_term_reverse(void) { printf("\x1b[7m"); return rl_ok_null(); }
+// Text attributes; `reset_attr` clears them all.
 rl_result rl_term_crossed_out(void) { printf("\x1b[9m"); return rl_ok_null(); }
+// Text attributes; `reset_attr` clears them all.
 rl_result rl_term_reset_attr(void) { printf("\x1b[0m"); return rl_ok_null(); }
 
+// Line wrapping on / off.
 rl_result rl_term_enable_wrap(void) { printf("\x1b[?7h"); return rl_ok_null(); }
+// Line wrapping on / off.
 rl_result rl_term_disable_wrap(void) { printf("\x1b[?7l"); return rl_ok_null(); }
 
+// Synchronized-output markers to avoid flicker during redraws.
 rl_result rl_term_begin_sync(void) { printf("\x1b[?2026h"); return rl_ok_null(); }
+// Synchronized-output markers to avoid flicker during redraws.
 rl_result rl_term_end_sync(void) { printf("\x1b[?2026l"); return rl_ok_null(); }
 
+// Mouse-event reporting on / off.
 rl_result rl_term_enable_mouse(void) { printf("\x1b[?1003h\x1b[?1006h"); return rl_ok_null(); }
+// Mouse-event reporting on / off.
 rl_result rl_term_disable_mouse(void) { printf("\x1b[?1003l\x1b[?1006l"); return rl_ok_null(); }
 
+// Print a value without moving to a new line.
 void rl_term_print_inline(rl_result v) {
     switch (v.tag) {
         case RL_TAG_I64: printf("%ld", (long)v.data.i64); break;
@@ -2597,6 +2879,7 @@ void rl_term_print_inline(rl_result v) {
     }
 }
 
+// Read one key press as an array of key codes (blocks).
 rl_array rl_term_read_key(void) {
     char buf[32];
     uint64_t total = 0;
@@ -2633,6 +2916,7 @@ rl_array rl_term_read_key(void) {
     return arr;
 }
 
+// True when input arrives within `ms` milliseconds.
 bool rl_term_poll(int64_t ms) {
     fd_set fds;
     struct timeval tv = { .tv_sec = (long)(ms / 1000), .tv_usec = (long)((ms % 1000) * 1000) };
@@ -2643,6 +2927,8 @@ bool rl_term_poll(int64_t ms) {
 
 // ---- result unwrap (with error checking) ----
 
+// Checked unwrap used by RL `unwrap`: aborts with a message when `r`
+// is an error instead of silently reading a dead union member.
 int64_t rl_result_unwrap_i64(rl_result r) {
     if (!r.is_ok) {
         fprintf(stderr, "error: unwrap called on err value\n");
@@ -2651,6 +2937,8 @@ int64_t rl_result_unwrap_i64(rl_result r) {
     return r.data.i64;
 }
 
+// Checked unwrap used by RL `unwrap`: aborts with a message when `r`
+// is an error instead of silently reading a dead union member.
 double rl_result_unwrap_f64(rl_result r) {
     if (!r.is_ok) {
         fprintf(stderr, "error: unwrap called on err value\n");
@@ -2659,6 +2947,8 @@ double rl_result_unwrap_f64(rl_result r) {
     return r.data.f64;
 }
 
+// Checked unwrap used by RL `unwrap`: aborts with a message when `r`
+// is an error instead of silently reading a dead union member.
 bool rl_result_unwrap_bool(rl_result r) {
     if (!r.is_ok) {
         fprintf(stderr, "error: unwrap called on err value\n");
@@ -2667,6 +2957,8 @@ bool rl_result_unwrap_bool(rl_result r) {
     return r.data.boolean;
 }
 
+// Checked unwrap used by RL `unwrap`: aborts with a message when `r`
+// is an error instead of silently reading a dead union member.
 rl_string rl_result_unwrap_str(rl_result r) {
     if (!r.is_ok) {
         fprintf(stderr, "error: unwrap called on err value\n");
@@ -2677,6 +2969,7 @@ rl_string rl_result_unwrap_str(rl_result r) {
 
 // ---- math ----
 
+// Absolute value / power over int and float payloads; non-numeric input yields an RL error.
 rl_result rl_math_abs(rl_result x) {
     switch (x.tag) {
         case RL_TAG_F64: return rl_ok_f64(fabs(x.data.f64));
@@ -2684,6 +2977,7 @@ rl_result rl_math_abs(rl_result x) {
     }
 }
 
+// Absolute value / power over int and float payloads; non-numeric input yields an RL error.
 rl_result rl_math_pow(rl_result base, rl_result exp) {
     if (base.tag == RL_TAG_I64 && exp.tag == RL_TAG_I64) {
         int64_t b = base.data.i64;
@@ -2706,15 +3000,24 @@ rl_result rl_math_pow(rl_result base, rl_result exp) {
 
 // ---- type checks ----
 
+// Return ok bool true when payload tag is bool.
 rl_result rl_is_bool(rl_result x) { return rl_ok_bool(x.tag == RL_TAG_BOOL); }
+// Return ok bool true when payload tag is int.
 rl_result rl_is_int(rl_result x) { return rl_ok_bool(x.tag == RL_TAG_I64); }
+// Return ok bool true when payload tag is float.
 rl_result rl_is_float(rl_result x) { return rl_ok_bool(x.tag == RL_TAG_F64); }
+// Return ok bool true when payload tag is string.
 rl_result rl_is_string(rl_result x) { return rl_ok_bool(x.tag == RL_TAG_STR); }
+// Return ok bool true when payload tag is null.
 rl_result rl_is_null(rl_result x) { return rl_ok_bool(x.tag == RL_TAG_NULL); }
+// Return ok bool true when payload tag is char.
 rl_result rl_is_char(rl_result x) { return rl_ok_bool(x.tag == RL_TAG_CHAR); }
+// Return ok bool true when payload tag is int (byte).
 rl_result rl_is_byte(rl_result x) { return rl_ok_bool(x.tag == RL_TAG_I64); }
+// Return ok bool true when result is an error.
 rl_result rl_is_error(rl_result x) { return rl_ok_bool(!x.is_ok); }
 
+// Abort instead of returning (RL never type).
 rl_never rl_never_fn(void) {
     fprintf(stderr, "error: reached unreachable code\n");
     abort();
@@ -2727,6 +3030,7 @@ rl_never rl_never_fn(void) {
 static struct { void *handle; } rl_c_handles[RL_C_MAX_HANDLES];
 static int rl_c_handle_count = 0;
 
+// Allocate a handle id for a dlopen pointer.
 static rl_result rl_c_new_handle(void *h) {
     if (rl_c_handle_count >= RL_C_MAX_HANDLES) {
         return rl_err_msg(rl_str_literal("c: too many open handles", 24));
@@ -2736,6 +3040,7 @@ static rl_result rl_c_new_handle(void *h) {
     return rl_ok_i64(id);
 }
 
+// Look up dlopen pointer by handle id (NULL when unknown).
 static void *rl_c_get_handle(rl_result r) {
     if (r.tag != RL_TAG_I64) return NULL;
     int64_t id = r.data.i64;
@@ -2743,6 +3048,7 @@ static void *rl_c_get_handle(rl_result r) {
     return rl_c_handles[id].handle;
 }
 
+// Copy RL string into NUL-terminated C string (caller owns).
 static char *rl_string_to_cstr(rl_string s) {
     char *buf = (char *)malloc(s.len + 1);
     memcpy(buf, s.data, s.len);
@@ -2750,6 +3056,7 @@ static char *rl_string_to_cstr(rl_string s) {
     return buf;
 }
 
+// Compile C `source` to a cached shared object; result holds its path.
 rl_result rl_c_compile(rl_string source) {
     const char *tmpdir = getenv("TMPDIR");
     if (!tmpdir) tmpdir = "/tmp";
@@ -2787,6 +3094,7 @@ rl_result rl_c_compile(rl_string source) {
     return rl_c_new_handle(handle);
 }
 
+// Load a shared object; result holds its handle id.
 rl_result rl_c_load(rl_string path) {
     char *cpath = rl_string_to_cstr(path);
     void *handle = dlopen(cpath, RTLD_NOW);
@@ -2797,6 +3105,7 @@ rl_result rl_c_load(rl_string path) {
     return rl_c_new_handle(handle);
 }
 
+// True (as a result) when the handle exports `fn_name`.
 rl_result rl_c_has_symbol(int64_t handle_id, rl_string fn_name) {
     void *h = NULL;
     if (handle_id >= 0 && handle_id < rl_c_handle_count) {
@@ -2809,6 +3118,7 @@ rl_result rl_c_has_symbol(int64_t handle_id, rl_string fn_name) {
     return rl_ok_bool(sym != NULL);
 }
 
+// Unload the handle (no-op for unknown ids).
 rl_result rl_c_close(int64_t handle_id) {
     void *h = NULL;
     if (handle_id >= 0 && handle_id < rl_c_handle_count) {
@@ -2822,6 +3132,7 @@ rl_result rl_c_close(int64_t handle_id) {
     return rl_ok_null();
 }
 
+// Drop all cached compile artifacts.
 rl_result rl_c_clear_cache(void) {
     const char *tmpdir = getenv("TMPDIR");
     if (!tmpdir) tmpdir = "/tmp";
@@ -2837,6 +3148,8 @@ rl_result rl_c_clear_cache(void) {
 #include <ffi.h>
 #endif
 
+// Call `fn_name` with `argc` boxed args described by `arg_types` ("i64",
+// "f64", "str", ...), converting to `ret_type` on return.
 rl_result rl_c_call(int64_t handle_id, rl_string fn_name, int64_t argc, void **argv, const char **arg_types, rl_string ret_type) {
     void *h = NULL;
     if (handle_id >= 0 && handle_id < rl_c_handle_count) {
@@ -2958,6 +3271,7 @@ static struct {
 } rl_net_handles[RL_NET_MAX_HANDLES];
 static int rl_net_handle_count = 0;
 
+// Allocate a socket handle id for fd and kind.
 static rl_result rl_net_new_handle(int fd, enum rl_net_handle_kind kind) {
     if (rl_net_handle_count >= RL_NET_MAX_HANDLES) {
         return rl_err(-1);
@@ -2968,12 +3282,14 @@ static rl_result rl_net_new_handle(int fd, enum rl_net_handle_kind kind) {
     return rl_ok_i64(id);
 }
 
+// Look up fd by handle id, or -1 when kind mismatches.
 static int rl_net_get_fd(int64_t handle_id, enum rl_net_handle_kind expected) {
     if (handle_id < 0 || handle_id >= rl_net_handle_count) return -1;
     if (rl_net_handles[handle_id].kind != expected) return -1;
     return rl_net_handles[handle_id].fd;
 }
 
+// Parse ip:port text into sockaddr_in (0 on success).
 static int rl_net_resolve_addr(const char *addr_str, struct sockaddr_in *out) {
     struct addrinfo hints = {0}, *res;
     hints.ai_family = AF_INET;
@@ -2985,6 +3301,7 @@ static int rl_net_resolve_addr(const char *addr_str, struct sockaddr_in *out) {
     return 0;
 }
 
+// Bind and listen; result holds the listener handle id.
 rl_result rl_net_tcp_listen(rl_string address) {
     char addr_buf[256];
     int len = address.len < 255 ? (int)address.len : 255;
@@ -3023,6 +3340,7 @@ rl_result rl_net_tcp_listen(rl_string address) {
     return rl_net_new_handle(fd, RL_NET_TCP_LISTENER);
 }
 
+// Accept one client; result holds the connection handle id.
 rl_result rl_net_tcp_accept(int64_t handle_id) {
     int fd = rl_net_get_fd(handle_id, RL_NET_TCP_LISTENER);
     if (fd < 0) return rl_err(-1);
@@ -3033,6 +3351,7 @@ rl_result rl_net_tcp_accept(int64_t handle_id) {
     return rl_net_new_handle(client, RL_NET_TCP_STREAM);
 }
 
+// Connect; result holds the connection handle id.
 rl_result rl_net_tcp_connect(rl_string address) {
     char addr_buf[256];
     int len = address.len < 255 ? (int)address.len : 255;
@@ -3067,6 +3386,7 @@ rl_result rl_net_tcp_connect(rl_string address) {
     return rl_net_new_handle(fd, RL_NET_TCP_STREAM);
 }
 
+// Read up to `max_bytes`; result holds the bytes as a string.
 rl_result rl_net_tcp_read(int64_t handle_id, int64_t max_bytes) {
     int fd = rl_net_get_fd(handle_id, RL_NET_TCP_STREAM);
     if (fd < 0) return rl_err(-1);
@@ -3080,6 +3400,7 @@ rl_result rl_net_tcp_read(int64_t handle_id, int64_t max_bytes) {
     return rl_ok_str(rl_str_literal(buf, n));
 }
 
+// Write all of `data`; result holds the byte count.
 rl_result rl_net_tcp_write(int64_t handle_id, rl_string data) {
     int fd = rl_net_get_fd(handle_id, RL_NET_TCP_STREAM);
     if (fd < 0) return rl_err(-1);
@@ -3090,6 +3411,7 @@ rl_result rl_net_tcp_write(int64_t handle_id, rl_string data) {
     return rl_ok_i64(n);
 }
 
+// Remote / local `"ip:port"` of the connection.
 rl_result rl_net_tcp_peer_addr(int64_t handle_id) {
     int fd = rl_net_get_fd(handle_id, RL_NET_TCP_STREAM);
     if (fd < 0) return rl_err(-1);
@@ -3106,6 +3428,7 @@ rl_result rl_net_tcp_peer_addr(int64_t handle_id) {
     return rl_ok_str(rl_str_literal(dup, slen));
 }
 
+// Remote / local `"ip:port"` of the connection.
 rl_result rl_net_tcp_local_addr(int64_t handle_id) {
     int fd = rl_net_get_fd(handle_id, RL_NET_TCP_STREAM);
     if (fd < 0) return rl_err(-1);
@@ -3122,6 +3445,7 @@ rl_result rl_net_tcp_local_addr(int64_t handle_id) {
     return rl_ok_str(rl_str_literal(dup, slen));
 }
 
+// Read/write timeout in milliseconds (0 disables).
 rl_result rl_net_tcp_set_timeout(int64_t handle_id, int64_t millis) {
     int fd = rl_net_get_fd(handle_id, RL_NET_TCP_STREAM);
     if (fd < 0) return rl_err(-1);
@@ -3136,6 +3460,7 @@ rl_result rl_net_tcp_set_timeout(int64_t handle_id, int64_t millis) {
     return rl_ok_null();
 }
 
+// Toggle non-blocking mode.
 rl_result rl_net_tcp_set_nonblocking(int64_t handle_id, bool flag) {
     int fd = rl_net_get_fd(handle_id, RL_NET_TCP_STREAM);
     if (fd < 0) return rl_err(-1);
@@ -3151,6 +3476,7 @@ rl_result rl_net_tcp_set_nonblocking(int64_t handle_id, bool flag) {
     return rl_ok_null();
 }
 
+// Half-close the read side, write side, or both ("r" / "w" / "rw").
 rl_result rl_net_tcp_shutdown(int64_t handle_id, rl_string mode) {
     int fd = rl_net_get_fd(handle_id, RL_NET_TCP_STREAM);
     if (fd < 0) return rl_err(-1);
@@ -3166,6 +3492,7 @@ rl_result rl_net_tcp_shutdown(int64_t handle_id, rl_string mode) {
     return rl_ok_null();
 }
 
+// Close the socket.
 rl_result rl_net_tcp_close(int64_t handle_id) {
     if (handle_id < 0 || handle_id >= rl_net_handle_count) return rl_err(-1);
 
@@ -3178,6 +3505,7 @@ rl_result rl_net_tcp_close(int64_t handle_id) {
     return rl_ok_null();
 }
 
+// Bind a UDP socket; result holds its handle id.
 rl_result rl_net_udp_bind(rl_string address) {
     char addr_buf[256];
     int len = address.len < 255 ? (int)address.len : 255;
@@ -3205,6 +3533,7 @@ rl_result rl_net_udp_bind(rl_string address) {
     return rl_net_new_handle(fd, RL_NET_UDP_SOCKET);
 }
 
+// Fix a default peer for `send` (does not handshake).
 rl_result rl_net_udp_connect(int64_t handle_id, rl_string address) {
     int fd = rl_net_get_fd(handle_id, RL_NET_UDP_SOCKET);
     if (fd < 0) return rl_err(-1);
@@ -3229,6 +3558,7 @@ rl_result rl_net_udp_connect(int64_t handle_id, rl_string address) {
     return rl_ok_null();
 }
 
+// Send to the default peer / to an explicit address; result holds bytes sent.
 rl_result rl_net_udp_send(int64_t handle_id, rl_string data) {
     int fd = rl_net_get_fd(handle_id, RL_NET_UDP_SOCKET);
     if (fd < 0) return rl_err(-1);
@@ -3239,6 +3569,7 @@ rl_result rl_net_udp_send(int64_t handle_id, rl_string data) {
     return rl_ok_i64(n);
 }
 
+// Send to the default peer / to an explicit address; result holds bytes sent.
 rl_result rl_net_udp_send_to(int64_t handle_id, rl_string data, rl_string address) {
     int fd = rl_net_get_fd(handle_id, RL_NET_UDP_SOCKET);
     if (fd < 0) return rl_err(-1);
@@ -3264,6 +3595,7 @@ rl_result rl_net_udp_send_to(int64_t handle_id, rl_string data, rl_string addres
     return rl_ok_i64(n);
 }
 
+// Receive one datagram / datagram plus sender address as a two-map.
 rl_result rl_net_udp_recv(int64_t handle_id, int64_t max_bytes) {
     int fd = rl_net_get_fd(handle_id, RL_NET_UDP_SOCKET);
     if (fd < 0) return rl_err(-1);
@@ -3276,6 +3608,7 @@ rl_result rl_net_udp_recv(int64_t handle_id, int64_t max_bytes) {
     return rl_ok_str(rl_str_literal(buf, n));
 }
 
+// Receive one datagram / datagram plus sender address as a two-map.
 rl_result rl_net_udp_recv_from(int64_t handle_id, int64_t max_bytes) {
     int fd = rl_net_get_fd(handle_id, RL_NET_UDP_SOCKET);
     if (fd < 0) return rl_err(-1);
@@ -3308,6 +3641,7 @@ rl_result rl_net_udp_recv_from(int64_t handle_id, int64_t max_bytes) {
     return rl_ok_arr(result_arr);
 }
 
+// Close the socket.
 rl_result rl_net_udp_close(int64_t handle_id) {
     if (handle_id < 0 || handle_id >= rl_net_handle_count) return rl_err(-1);
     if (rl_net_handles[handle_id].kind != RL_NET_UDP_SOCKET) return rl_err(-1);
@@ -3318,6 +3652,7 @@ rl_result rl_net_udp_close(int64_t handle_id) {
     return rl_ok_null();
 }
 
+// DNS lookup of `"host:port"`; result holds an array of `"ip:port"` strings.
 rl_result rl_net_resolve(rl_string host_port) {
     char buf[256];
     int len = host_port.len < 255 ? (int)host_port.len : 255;
@@ -3387,6 +3722,7 @@ static struct {
 } rl_http_handles[RL_HTTP_MAX_HANDLES];
 static int rl_http_handle_count = 0;
 
+// Allocate an HTTP handle id for a table entry.
 static rl_result rl_http_new_handle(void *ptr, enum rl_http_handle_kind kind) {
     if (rl_http_handle_count >= RL_HTTP_MAX_HANDLES) return rl_err(-1);
     int id = rl_http_handle_count++;
@@ -3401,6 +3737,7 @@ static rl_result rl_http_new_handle(void *ptr, enum rl_http_handle_kind kind) {
 
 // minimal HTTP/1.1 server: bind, listen, accept, parse request, return handle
 
+// Start listening on addr; result holds the server id.
 rl_result rl_http_server_start(rl_string addr) {
     char buf[256];
     int len = addr.len < 255 ? (int)addr.len : 255;
@@ -3429,6 +3766,7 @@ rl_result rl_http_server_start(rl_string addr) {
     return rl_http_new_handle(&fd, RL_HTTP_SERVER);
 }
 
+// Read one CRLF-terminated line from fd.
 static int rl_http_read_line(int fd, char *buf, int max) {
     int n = 0;
     while (n < max - 1) {
@@ -3441,6 +3779,7 @@ static int rl_http_read_line(int fd, char *buf, int max) {
     return n;
 }
 
+// Block for the next request / poll without blocking (error when none); result holds the request id.
 rl_result rl_http_server_recv(int64_t handle_id) {
     if (handle_id < 0 || handle_id >= rl_http_handle_count) return rl_err(-1);
     if (rl_http_handles[handle_id].kind != RL_HTTP_SERVER) return rl_err(-1);
@@ -3513,6 +3852,7 @@ rl_result rl_http_server_recv(int64_t handle_id) {
     return rl_http_new_handle(req, RL_HTTP_REQUEST);
 }
 
+// Block for the next request / poll without blocking (error when none); result holds the request id.
 rl_result rl_http_server_try_recv(int64_t handle_id) {
     if (handle_id < 0 || handle_id >= rl_http_handle_count) return rl_err(-1);
     if (rl_http_handles[handle_id].kind != RL_HTTP_SERVER) return rl_err(-1);
@@ -3526,6 +3866,7 @@ rl_result rl_http_server_try_recv(int64_t handle_id) {
     return rl_http_server_recv(handle_id);
 }
 
+// Stop the server and drop pending requests.
 rl_result rl_http_server_stop(int64_t handle_id) {
     if (handle_id < 0 || handle_id >= rl_http_handle_count) return rl_err(-1);
     if (rl_http_handles[handle_id].kind != RL_HTTP_SERVER) return rl_err(-1);
@@ -3535,6 +3876,7 @@ rl_result rl_http_server_stop(int64_t handle_id) {
     return rl_ok_null();
 }
 
+// Method ("GET", ...) / path+query / one header / full body of a request.
 rl_result rl_http_request_method(int64_t handle_id) {
     if (handle_id < 0 || handle_id >= rl_http_handle_count) return rl_err(-1);
     if (rl_http_handles[handle_id].kind != RL_HTTP_REQUEST) return rl_err(-1);
@@ -3546,6 +3888,7 @@ rl_result rl_http_request_method(int64_t handle_id) {
     return rl_ok_str(rl_str_literal(dup, slen));
 }
 
+// Method ("GET", ...) / path+query / one header / full body of a request.
 rl_result rl_http_request_url(int64_t handle_id) {
     if (handle_id < 0 || handle_id >= rl_http_handle_count) return rl_err(-1);
     if (rl_http_handles[handle_id].kind != RL_HTTP_REQUEST) return rl_err(-1);
@@ -3557,6 +3900,7 @@ rl_result rl_http_request_url(int64_t handle_id) {
     return rl_ok_str(rl_str_literal(dup, slen));
 }
 
+// Method ("GET", ...) / path+query / one header / full body of a request.
 rl_result rl_http_request_header(int64_t handle_id, rl_string name) {
     if (handle_id < 0 || handle_id >= rl_http_handle_count) return rl_err(-1);
     if (rl_http_handles[handle_id].kind != RL_HTTP_REQUEST) return rl_err(-1);
@@ -3590,6 +3934,7 @@ rl_result rl_http_request_header(int64_t handle_id, rl_string name) {
     return rl_err(-1);
 }
 
+// Method ("GET", ...) / path+query / one header / full body of a request.
 rl_result rl_http_request_body(int64_t handle_id) {
     if (handle_id < 0 || handle_id >= rl_http_handle_count) return rl_err(-1);
     if (rl_http_handles[handle_id].kind != RL_HTTP_REQUEST) return rl_err(-1);
@@ -3602,6 +3947,7 @@ rl_result rl_http_request_body(int64_t handle_id) {
     return rl_ok_str(rl_str_literal(dup, slen));
 }
 
+// Answer a request and close it; pass `has_content_type` 0 to omit.
 rl_result rl_http_respond(int64_t handle_id, int64_t status, rl_string body, rl_string content_type, int has_content_type) {
     if (handle_id < 0 || handle_id >= rl_http_handle_count) return rl_err(-1);
     if (rl_http_handles[handle_id].kind != RL_HTTP_REQUEST) return rl_err(-1);
@@ -3658,6 +4004,7 @@ struct rl_http_curl_buf {
     size_t cap;
 };
 
+// Append curl response bytes to a growing buffer.
 static size_t rl_http_curl_write_cb(void *ptr, size_t size, size_t nmemb, void *userdata) {
     struct rl_http_curl_buf *buf = (struct rl_http_curl_buf *)userdata;
     size_t new_len = buf->len + size * nmemb;
@@ -3670,6 +4017,7 @@ static size_t rl_http_curl_write_cb(void *ptr, size_t size, size_t nmemb, void *
     return size * nmemb;
 }
 
+// Run a curl request and wrap the body or error as a result.
 static rl_result rl_http_curl_perform(CURL *curl) {
     struct rl_http_curl_buf resp = {0};
     resp.cap = 4096;
@@ -3715,6 +4063,7 @@ static rl_result rl_http_curl_perform(CURL *curl) {
     return rl_ok_arr(result_arr);
 }
 
+// GET / POST shorthand; result holds the response body as a string.
 rl_result rl_http_get(rl_string url) {
     char url_buf[2048];
     int ulen = url.len < 2047 ? (int)url.len : 2047;
@@ -3733,6 +4082,7 @@ rl_result rl_http_get(rl_string url) {
     return result;
 }
 
+// GET / POST shorthand; result holds the response body as a string.
 rl_result rl_http_post(rl_string url, rl_string body, rl_string content_type, int has_content_type) {
     char url_buf[2048];
     int ulen = url.len < 2047 ? (int)url.len : 2047;
@@ -3769,6 +4119,7 @@ rl_result rl_http_post(rl_string url, rl_string body, rl_string content_type, in
     return result;
 }
 
+// Pass `has_body` / `has_headers` 0 to skip those parts.
 rl_result rl_http_request(rl_string method, rl_string url, rl_string body, int has_body, rl_string headers_json, int has_headers) {
     char url_buf[2048];
     int ulen = url.len < 2047 ? (int)url.len : 2047;
@@ -3822,8 +4173,11 @@ rl_result rl_http_request(rl_string method, rl_string url, rl_string body, int h
 #else
 
 // stubs when libcurl is not available
+// Stub GET shorthand; returns an error when libcurl is unavailable.
 rl_result rl_http_get(rl_string url) { (void)url; return rl_err(-1); }
+// GET / POST shorthand; result holds the response body as a string.
 rl_result rl_http_post(rl_string url, rl_string body, rl_string ct, int h) { (void)url; (void)body; (void)ct; (void)h; return rl_err(-1); }
+// Pass `has_body` / `has_headers` 0 to skip those parts.
 rl_result rl_http_request(rl_string m, rl_string u, rl_string b, int hb, rl_string h, int hh) { (void)m; (void)u; (void)b; (void)hb; (void)h; (void)hh; return rl_err(-1); }
 
 #endif
