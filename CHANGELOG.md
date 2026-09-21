@@ -6,6 +6,9 @@ All notable changes to the rl-lang toolchain are documented here. The format is 
 
 ### Added
 
+- **Wildcard imports** - `get * from std::<module>` imports every public function from a stdlib module as a bare name. Works with the VM, CC transpiler, and type checker. Cannot be mixed with named imports in the same statement.
+- **Aliased imports** - `get <fn> as <alias> from std::<module>` renames an imported function locally. The alias is used for all subsequent calls. Supports mixing aliased and plain imports: `get sin as sine, cos from std::math`.
+- **`?` propagation constraint** - the type checker now rejects `?` outside functions that return `result[T]` or `cresult[T]`. Top-level `?` in script mode is allowed. This catches misuse at compile time instead of silently producing undefined behavior.
 - **`std::process::exec_fg` / `with_exec_fg`** - foreground process execution with inherited stdin/stdout/stderr. Unlike `exec` (which pipes stdout), `exec_fg` lets interactive programs (editors, TUIs, pagers) access the terminal directly. Returns the exit code as `int`. Intended pattern: call `term_leave()` before `exec_fg`, then `term_enter()` after to restore the TUI.
 - **Standalone binaries** - the rl-lang toolchain is now split into focused binaries:
   - `rl` - core CLI (run, check, new, dev, format, print, package, workflows, pm)
@@ -78,6 +81,7 @@ All notable changes to the rl-lang toolchain are documented here. The format is 
 
 ### Documentation
 
+- **Imports concept updated** - new documentation entries for wildcard imports (`get * from std::math`), aliased imports (`get sin as sine from std::math`), and mixed alias/plain imports. Added pitfall entry for wildcard+named import mixing restriction.
 - **Tooling concept updated** - reflects new binary separation (rl, rlc, rlt, rlrepl, rlsp, rldocs, rlm)
 - **Package manager concept** - full documentation for `rl pm` commands and rl.toml dependencies
 - **Toolchain manager concept** - full documentation for `rlm install`, `update`, `list`, `uninstall`
