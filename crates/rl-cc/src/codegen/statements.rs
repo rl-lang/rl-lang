@@ -570,20 +570,32 @@ impl<'a> CCodegen<'a> {
                     self.compile_statement(stmt)?;
                 }
             }
-            StatementKind::Import { names, path } => {
+            StatementKind::Import { names, wildcard, path } => {
                 if path.len() >= 2 && path[0] == "std" && path[1] == "c" {
-                    for name in names {
-                        self.std_c_imports.insert(name.clone());
+                    if *wildcard {
+                        self.std_c_imports.insert("*".to_string());
+                    } else {
+                        for (name, _alias) in names {
+                            self.std_c_imports.insert(name.clone());
+                        }
                     }
                 }
                 if path.len() >= 2 && path[0] == "std" && path[1] == "net" {
-                    for name in names {
-                        self.std_net_imports.insert(name.clone());
+                    if *wildcard {
+                        self.std_net_imports.insert("*".to_string());
+                    } else {
+                        for (name, _alias) in names {
+                            self.std_net_imports.insert(name.clone());
+                        }
                     }
                 }
                 if path.len() >= 2 && path[0] == "std" && path[1] == "http" {
-                    for name in names {
-                        self.std_http_imports.insert(name.clone());
+                    if *wildcard {
+                        self.std_http_imports.insert("*".to_string());
+                    } else {
+                        for (name, _alias) in names {
+                            self.std_http_imports.insert(name.clone());
+                        }
                     }
                 }
             }

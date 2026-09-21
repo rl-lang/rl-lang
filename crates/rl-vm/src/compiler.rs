@@ -659,7 +659,7 @@ impl<'a> Compiler<'a> {
                 Ok(())
             }
 
-            StatementKind::Import { names, path } => {
+            StatementKind::Import { names, wildcard, path } => {
                 let mut module = &self.stdlib;
                 for seg in path {
                     module = module.submodules.get(seg).ok_or_else(|| {
@@ -667,31 +667,42 @@ impl<'a> Compiler<'a> {
                     })?;
                 }
 
-                let fns: Vec<_> = names
-                    .iter()
-                    .map(|name| {
-                        module.functions.get(name).cloned().ok_or_else(|| {
-                            self.err(
-                                format!("'{}' is not defined in '{}'", name, path.join("::")),
-                                span,
-                            )
+                if *wildcard {
+                    let fns: Vec<_> = module.functions.iter().map(|(n, f)| (n.clone(), f.clone())).collect();
+                    for (name, f) in fns {
+                        self.stdlib.functions.insert(name.clone(), f.clone());
+                        let key_idx = self
+                            .chunk
+                            .add_constant(VmValue::Str(Rc::from(name.as_str())));
+                        let value_idx = self.chunk.add_constant(VmValue::Native(f));
+                        self.chunk.write_op(OpCode::RegisterStdlibMethod, span);
+                        self.chunk.write_u16(key_idx, span);
+                        self.chunk.write_u16(value_idx, span);
+                    }
+                } else {
+                    let fns: Vec<_> = names
+                        .iter()
+                        .map(|(name, _alias)| {
+                            module.functions.get(name).cloned().ok_or_else(|| {
+                                self.err(
+                                    format!("'{}' is not defined in '{}'", name, path.join("::")),
+                                    span,
+                                )
+                            })
                         })
-                    })
-                    .collect::<Result<_, CompileError>>()?;
+                        .collect::<Result<_, CompileError>>()?;
 
-                for (name, f) in names.iter().zip(fns) {
-                    self.stdlib.functions.insert(name.clone(), f.clone());
-                    // Register the import as a method-call fallback so
-                    // `value.name(...)` calls it with the receiver as its
-                    // first argument (mirrors the interpreter's `call_path`
-                    // stdlib step).
-                    let key_idx = self
-                        .chunk
-                        .add_constant(VmValue::Str(Rc::from(name.as_str())));
-                    let value_idx = self.chunk.add_constant(VmValue::Native(f));
-                    self.chunk.write_op(OpCode::RegisterStdlibMethod, span);
-                    self.chunk.write_u16(key_idx, span);
-                    self.chunk.write_u16(value_idx, span);
+                    for ((name, _alias), f) in names.iter().zip(fns) {
+                        let effective_name = _alias.as_deref().unwrap_or(name);
+                        self.stdlib.functions.insert(effective_name.to_string(), f.clone());
+                        let key_idx = self
+                            .chunk
+                            .add_constant(VmValue::Str(Rc::from(effective_name)));
+                        let value_idx = self.chunk.add_constant(VmValue::Native(f));
+                        self.chunk.write_op(OpCode::RegisterStdlibMethod, span);
+                        self.chunk.write_u16(key_idx, span);
+                        self.chunk.write_u16(value_idx, span);
+                    }
                 }
 
                 Ok(())
