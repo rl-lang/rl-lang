@@ -1,6 +1,6 @@
 //! Import statement parser (`get`).
 //!
-//! Handles all four import forms in rl-lang:
+//! Handles all import forms in rl-lang:
 //!
 //! ```text
 //! // 1. single file module
@@ -9,12 +9,18 @@
 //! // 2. file module with path
 //! get mymodule::utils
 //!
-//! // 3. stdlib function
+//! // 3. stdlib function (fully qualified)
 //! get std::math::sin
 //!
 //! // 4. named imports from a module or stdlib
 //! get sin, cos from std::math
 //! get add, sub from mymodule::utils
+//!
+//! // 5. aliased imports
+//! get sin as sine from std::math
+//!
+//! // 6. wildcard import (all functions from a module)
+//! get * from std::math
 //! ```
 //!
 //! The first token after `get` and whether `::` or `from` follows determines
@@ -27,6 +33,8 @@
 //! | `get std::ns::fn` | [`StatementKind::Import`] |
 //! | `get fn, fn from std::ns` | [`StatementKind::Import`] |
 //! | `get fn, fn from mod::sub` | [`StatementKind::ImportFileNamed`] |
+//! | `get * from std::ns` | [`StatementKind::Import`] (wildcard) |
+//! | `get fn as alias from std::ns` | [`StatementKind::Import`] (aliased) |
 
 use crate::parser_logic::Parser;
 use rl_ast::statements::{Statement, StatementKind};
@@ -103,10 +111,37 @@ impl Parser {
     ///   `std` -> [`StatementKind::Import`]`{ names, path }`. Otherwise ->
     ///   [`StatementKind::ImportFileNamed`]`{ path, names }`.
     ///
+    /// - **`get * from path`** - wildcard import. Imports all functions from the
+    ///   module.
+    ///
     /// # Errors
     /// Returns an error if an identifier is missing after `get`, `::`, `,`, or
     /// `from`, or if `from` itself is absent in the named-import form.
     pub fn parse_import(&mut self, start: Span) -> Result<Statement, Error> {
+        // Wildcard import: get * from std::math
+        if self.match_type(&[TokenType::Star]) {
+            if !self.match_type(&[TokenType::From]) {
+                return Err(self.err("expected 'from' after '*'", self.peek_span()));
+            }
+            let mut path = Vec::new();
+            while let TokenType::Identifier(segment) = self.peek() {
+                self.advance();
+                path.push(segment);
+                if !self.match_type(&[TokenType::ColonColon]) {
+                    break;
+                }
+            }
+            let span = start.join(self.previous_span());
+            return Ok(Statement::new(
+                StatementKind::Import {
+                    names: vec![],
+                    wildcard: true,
+                    path,
+                },
+                span,
+            ));
+        }
+
         let first = match self.peek() {
             TokenType::Identifier(name) => name,
             _ => return Err(self.err("expected identifier after 'get'", self.peek_span())),
@@ -137,7 +172,8 @@ impl Parser {
                     .ok_or_else(|| self.err("expected function name after '::'", start))?;
                 Ok(Statement::new(
                     StatementKind::Import {
-                        names: vec![name],
+                        names: vec![(name, None)],
+                        wildcard: false,
                         path: segments,
                     },
                     span,
@@ -152,22 +188,32 @@ impl Parser {
         }
 
         // single-segment file import: get mymodule
-        if !matches!(self.peek(), TokenType::Comma | TokenType::From) {
+        if !matches!(self.peek(), TokenType::Comma | TokenType::From | TokenType::As) {
             let span = start.join(self.previous_span());
             let path = vec![first];
             self.get_imported_type_names(&path, None);
             return Ok(Statement::new(StatementKind::ImportFile { path }, span));
         }
 
-        // named imports: get add, sub from …
-        let mut names = vec![first];
+        // named imports: get add, sub from …  (with optional `as alias`)
+        // `first` is already consumed as the first name.
+        let first_entry = self.parse_name_entry(first)?;
+        let mut names = vec![first_entry];
+
         if self.match_type(&[TokenType::Comma]) {
             loop {
                 self.match_type(&[TokenType::Newline]);
                 match self.peek() {
                     TokenType::Identifier(name) => {
                         self.advance();
-                        names.push(name);
+                        if name == "*" {
+                            return Err(self.err(
+                                "wildcard '*' cannot be mixed with named imports",
+                                self.peek_span(),
+                            ));
+                        }
+                        let entry = self.parse_name_entry(name)?;
+                        names.push(entry);
                     }
                     _ => return Err(self.err("expected identifier after ','", self.peek_span())),
                 }
@@ -207,13 +253,41 @@ impl Parser {
         let is_std = path.first().map(|s| s == "std").unwrap_or(false);
 
         if is_std {
-            Ok(Statement::new(StatementKind::Import { names, path }, span))
-        } else {
-            self.get_imported_type_names(&path, Some(&names));
             Ok(Statement::new(
-                StatementKind::ImportFileNamed { path, names },
+                StatementKind::Import {
+                    names,
+                    wildcard: false,
+                    path,
+                },
                 span,
             ))
+        } else {
+            let name_strs: Vec<String> = names.into_iter().map(|(n, _)| n).collect();
+            self.get_imported_type_names(&path, Some(&name_strs));
+            Ok(Statement::new(
+                StatementKind::ImportFileNamed {
+                    path,
+                    names: name_strs,
+                },
+                span,
+            ))
+        }
+    }
+
+    /// Parses a name entry, checking for `as alias`.
+    /// `name` is the already-consumed identifier token value.
+    fn parse_name_entry(&mut self, name: String) -> Result<(String, Option<String>), Error> {
+        if self.match_type(&[TokenType::As]) {
+            let alias = match self.peek() {
+                TokenType::Identifier(a) => {
+                    self.advance();
+                    a
+                }
+                _ => return Err(self.err("expected alias after 'as'", self.peek_span())),
+            };
+            Ok((name, Some(alias)))
+        } else {
+            Ok((name, None))
         }
     }
 }

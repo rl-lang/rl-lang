@@ -39,3 +39,18 @@ fn nested_module_import_passes() {
 fn fully_qualified_nested_path_passes() {
     assert_checker_clean("std::math::consts::is_inf(1.0)");
 }
+
+#[test]
+fn wildcard_import_passes() {
+    assert_checker_clean("get * from std::math\nabs(-5)");
+}
+
+#[test]
+fn aliased_import_passes() {
+    assert_checker_clean("get sin as sine from std::math\nsine(0.0)");
+}
+
+#[test]
+fn mixed_alias_and_plain_passes() {
+    assert_checker_clean("get sin as sine, cos from std::math\nsine(0.0)\ncos(0.0)");
+}

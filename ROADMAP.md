@@ -58,12 +58,15 @@ rl-lang
 +-- rl-parser         (source to AST)
 |   +-- [DONE] optional semicolons as statement terminators
 |   +-- [DONE] pipe operator `|>` desugaring (a |> f() -> a.f())
+|   +-- [DONE] wildcard imports (`get * from std::ns`)
+|   +-- [DONE] aliased imports (`get X as Y from std::ns`)
 |   +-- [TODO] #341 - parser tests
 |   +-- [TODO] parser internal unit tests (individual parse functions)
 +-- rl-resolver       (name resolution, imports)
 |   +-- [TODO] #342 - resolver tests
 |   +-- [TODO] shadowing, scoping, import resolution edge cases
 +-- rl-checker        (type checking)
+|   +-- [DONE] #471 - `?` propagation constraint (reject outside result/cresult functions)
 |   +-- [TODO] #348 - refinement and contracts
 +-- rl-vm             (bytecode VM)
 |   +-- [TODO] #345 - vm tests
@@ -99,7 +102,7 @@ rl-lang
 |   +-- [DONE] HandleKind::File - new handle variant in rl-ast with IoStore trait
 |   +-- [DONE] extended stdlib (72 new functions across 11 modules)
 |   +-- [DONE] 20 per-module feature flags (std-array, std-audio, std-bitwise, std-c, std-collections, std-debug, std-fs, std-gui, std-http, std-io, std-math, std-net, std-path, std-process, std-random, std-result, std-string, std-terminal, std-time, std-types) with `impls` meta-feature
-|   +-- [TODO] #431 - std functions aliasing
+|   +-- [DONE] #431 - std functions aliasing (wildcard imports + aliased imports)
 |   +-- [TODO] #338 - std functions tests
 |   +-- [TODO] std::test - test framework (14 fn: test_case, test_run_all, test_assert_eq, test_group, test_bench)
 |   +-- [TODO] std::serialize - JSON/CSV/TOML/INI/YAML (15 fn)
@@ -146,7 +149,7 @@ rl-lang
 |   +-- [DONE] build-variants.sh (7 binaries)
 |   +-- [DONE] install.sh / install.ps1 (7 binaries, interactive picker)
 +-- rl-tests          (integration tests)
-|   +-- [DONE] stdlib tests (733 tests across 11 modules)
+|   +-- [DONE] stdlib tests (745 tests across 11 modules)
 |   +-- [TODO] #333 - test units
 |   +-- [TODO] #337 - test edge cases coverage
 |   +-- [TODO] #344 - interpreter tests
@@ -253,7 +256,8 @@ Heavy deps that must stay but are properly feature-gated:
 | # | Title | Labels |
 |---|-------|--------|
 | 437 | refactor `term_set_title` | documentation, enhancement, stdlib, good first issue |
-| 431 | feat: std functions aliasing | enhancement, language |
+| 431 | feat: std functions aliasing | ~~enhancement, language~~ **DONE** |
+| 471 | `?` does not propagate properly | ~~bug, checker~~ **DONE** |
 | 429 | feat: add `type` aliasing | enhancement, language |
 | 427 | Allow more statements to have newlines | enhancement, good first issue |
 | 426 | Add support for more OS | enhancement, help wanted |
