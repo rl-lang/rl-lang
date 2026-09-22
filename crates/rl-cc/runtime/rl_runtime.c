@@ -2,6 +2,33 @@
 #define _POSIX_C_SOURCE 200809L
 #include "rl_runtime.h"
 
+// Invoke a boxed closure value: unboxes, aborts loudly when the value
+// is not a closure (e.g. calling a result that holds no closure).
+rl_result rl_closure_call_checked(rl_result callee, rl_result *args, uint64_t argc) {
+    if (!callee.is_ok || callee.tag != RL_TAG_CLOSURE || callee.data.closure == NULL) {
+        fprintf(stderr, "error: value is not callable\n");
+        abort();
+    }
+    return rl_closure_call(*callee.data.closure, args, argc);
+}
+
+// Build a closure value, heap-copying the captures so the closure
+// outlives its definition site (returned or stored closures).
+rl_closure rl_closure_new_heap(rl_closure_fn fn, rl_result *captures, uint64_t capture_count) {
+    rl_result *heap = NULL;
+    if (capture_count > 0) {
+        heap = malloc(capture_count * sizeof(rl_result));
+        memcpy(heap, captures, capture_count * sizeof(rl_result));
+    }
+    rl_closure c = { .fn = fn, .captures = heap, .capture_count = capture_count };
+    return c;
+}
+
+// Forward declarations for helpers used before their definitions.
+static const char *_rl_tag_name(enum rl_type_tag tag);
+static char *_rl_trim_copy(rl_string s, uint64_t *out_len);
+static bool _rl_utf8_decode(const char *s, uint64_t len, uint32_t *code, uint64_t *used);
+
 
 // ---- string ----
 // Borrowed string buffers and basic ops; concat allocates.
@@ -30,10 +57,32 @@ bool rl_str_eq(rl_string a, rl_string b) {
     return memcmp(a.data, b.data, a.len) == 0;
 }
 
-// Format result payload into a fresh string (caller owns via out).
-static void _rl_result_to_str(rl_result v, char **out, uint64_t *out_len) {
-    char buf[128];
+// Format one interpolation argument into a fresh string (caller owns via
+// out). `bare` marks plain values (render the payload, e.g. `5`); wrapped
+// results render with their `ok(...)` / `err(...)` decoration, mirroring
+// the VM's Display.
+static void _rl_fmt_arg_to_str(rl_fmt_arg arg, char **out, uint64_t *out_len) {
+    rl_result v = arg.v;
+    char buf[160];
     int n = 0;
+    if (!arg.bare) {
+        if (!v.is_ok) { n = snprintf(buf, sizeof(buf), "err(%d)", v.err_code); }
+        else switch (v.tag) {
+            case RL_TAG_NULL: n = snprintf(buf, sizeof(buf), "ok(null)"); break;
+            case RL_TAG_I64: n = snprintf(buf, sizeof(buf), "ok(%ld)", (long)v.data.i64); break;
+            case RL_TAG_F64: n = snprintf(buf, sizeof(buf), "ok(%g)", v.data.f64); break;
+            case RL_TAG_BOOL: n = snprintf(buf, sizeof(buf), "ok(%s)", v.data.boolean ? "true" : "false"); break;
+            case RL_TAG_CHAR: n = snprintf(buf, sizeof(buf), "ok(%c)", (char)(unsigned char)v.data.i64); break;
+            case RL_TAG_STR: n = snprintf(buf, sizeof(buf), "ok(%.*s)", (int)v.data.str.len, v.data.str.data); break;
+            case RL_TAG_CLOSURE: n = snprintf(buf, sizeof(buf), "ok(<fn>)"); break;
+            default: n = snprintf(buf, sizeof(buf), "ok(<value>)"); break;
+        }
+        char *dup = malloc(n + 1);
+        memcpy(dup, buf, n + 1);
+        *out = dup;
+        *out_len = n;
+        return;
+    }
     if (!v.is_ok) { n = snprintf(buf, sizeof(buf), "err(%d)", v.err_code); }
     else switch (v.tag) {
         case RL_TAG_NULL: n = snprintf(buf, sizeof(buf), "null"); break;
@@ -42,6 +91,7 @@ static void _rl_result_to_str(rl_result v, char **out, uint64_t *out_len) {
         case RL_TAG_BOOL: n = snprintf(buf, sizeof(buf), "%s", v.data.boolean ? "true" : "false"); break;
         case RL_TAG_CHAR: n = snprintf(buf, sizeof(buf), "%c", (char)(unsigned char)v.data.i64); break;
         case RL_TAG_STR: { char *d = malloc(v.data.str.len + 1); memcpy(d, v.data.str.data, v.data.str.len); d[v.data.str.len] = '\0'; *out = d; *out_len = v.data.str.len; return; }
+        case RL_TAG_CLOSURE: n = snprintf(buf, sizeof(buf), "<fn>"); break;
         default: n = snprintf(buf, sizeof(buf), "<value>"); break;
     }
     char *dup = malloc(n + 1);
@@ -50,13 +100,13 @@ static void _rl_result_to_str(rl_result v, char **out, uint64_t *out_len) {
     *out_len = n;
 }
 
-// Concatenate argc string results (used for `+` on strings).
-rl_string rl_str_concat_variadic(rl_result *args, uint64_t argc) {
+// Concatenate argc arguments (used by `concat`).
+rl_string rl_str_concat_variadic(rl_fmt_arg *args, uint64_t argc) {
     uint64_t total = 0;
     char **parts = malloc(argc * sizeof(char *));
     uint64_t *part_lens = malloc(argc * sizeof(uint64_t));
     for (uint64_t i = 0; i < argc; i++) {
-        _rl_result_to_str(args[i], &parts[i], &part_lens[i]);
+        _rl_fmt_arg_to_str(args[i], &parts[i], &part_lens[i]);
         total += part_lens[i];
     }
     char *buf = malloc(total + 1);
@@ -64,7 +114,7 @@ rl_string rl_str_concat_variadic(rl_result *args, uint64_t argc) {
     for (uint64_t i = 0; i < argc; i++) {
         memcpy(buf + pos, parts[i], part_lens[i]);
         pos += part_lens[i];
-        if (parts[i] != args[i].data.str.data) free(parts[i]);
+        free(parts[i]);
     }
     buf[total] = '\0';
     free(parts);
@@ -72,22 +122,27 @@ rl_string rl_str_concat_variadic(rl_result *args, uint64_t argc) {
     return (rl_string){ .data = buf, .len = total, .rc = 1 };
 }
 
-// Interpolate args into a `{}` template string (caller owns).
-rl_result rl_str_format(rl_string tmpl, rl_result *args, uint64_t argc) {
+// Interpolate args into a `{}` template string (caller owns). Returns a
+// bare string like the VM; arity mismatches abort like a VM error.
+rl_string rl_str_format(rl_string tmpl, rl_fmt_arg *args, uint64_t argc) {
     uint64_t total = 0;
-    char **parts = malloc((argc + 1) * sizeof(char *));
-    uint64_t *part_lens = malloc((argc + 1) * sizeof(uint64_t));
+    // Worst case alternates literal segments and placeholders: argc
+    // arguments plus argc + 1 literal runs.
+    uint64_t cap = 2 * argc + 1;
+    char **parts = malloc(cap * sizeof(char *));
+    uint64_t *part_lens = malloc(cap * sizeof(uint64_t));
     uint64_t part_count = 0;
     uint64_t arg_idx = 0;
     uint64_t i = 0;
     while (i < tmpl.len) {
         if (tmpl.data[i] == '{' && i + 1 < tmpl.len && tmpl.data[i + 1] == '}') {
             if (arg_idx >= argc) {
-                for (uint64_t j = 0; j < part_count; j++) if (parts[j] != tmpl.data + 0) free(parts[j]);
+                for (uint64_t j = 0; j < part_count; j++) free(parts[j]);
                 free(parts); free(part_lens);
-                return rl_err_msg(rl_str_literal("format: not enough arguments for placeholders", 47));
+                fprintf(stderr, "error: format() has placeholder(s) with no matching argument\n");
+                abort();
             }
-            _rl_result_to_str(args[arg_idx], &parts[part_count], &part_lens[part_count]);
+            _rl_fmt_arg_to_str(args[arg_idx], &parts[part_count], &part_lens[part_count]);
             total += part_lens[part_count];
             part_count++;
             arg_idx++;
@@ -105,9 +160,10 @@ rl_result rl_str_format(rl_string tmpl, rl_result *args, uint64_t argc) {
         }
     }
     if (arg_idx < argc) {
-        for (uint64_t j = 0; j < part_count; j++) if (parts[j] != tmpl.data + 0) free(parts[j]);
+        for (uint64_t j = 0; j < part_count; j++) free(parts[j]);
         free(parts); free(part_lens);
-        return rl_err_msg(rl_str_literal("format: too many arguments for placeholders", 42));
+        fprintf(stderr, "error: format() received more arguments than placeholders\n");
+        abort();
     }
     char *buf = malloc(total + 1);
     uint64_t pos = 0;
@@ -119,7 +175,7 @@ rl_result rl_str_format(rl_string tmpl, rl_result *args, uint64_t argc) {
     buf[total] = '\0';
     free(parts);
     free(part_lens);
-    return rl_ok_str((rl_string){ .data = buf, .len = total, .rc = 1 });
+    return (rl_string){ .data = buf, .len = total, .rc = 1 };
 }
 
 // Pairwise tuples up to the shorter length.
@@ -136,6 +192,29 @@ rl_result rl_arr_zip(rl_array a, rl_array b) {
         buf[count++] = b_elems[i];
     }
     return rl_ok_arr(rl_arr_from_vals(buf, count, sizeof(int64_t)));
+}
+
+// Pairwise tuples: element `i` of each side lands in `.field_0` /
+// `.field_1` of a tuple struct with total size `es_tuple` and second
+// field offset `off_b`. Sides copy `es_a` / `es_b` bytes each.
+rl_result rl_arr_zip_t(rl_array a, rl_array b, uint64_t es_tuple, uint64_t off_b, uint64_t es_a, uint64_t es_b) {
+    uint64_t min_len = a.len < b.len ? a.len : b.len;
+    uint64_t cap = min_len > 0 ? min_len : 1;
+    char *buf = malloc(cap * es_tuple);
+    for (uint64_t i = 0; i < min_len; i++) {
+        char *slot = buf + i * es_tuple;
+        memset(slot, 0, es_tuple);
+        if (a.data) memcpy(slot, (char *)a.data + i * es_a, es_a);
+        if (b.data) memcpy(slot + off_b, (char *)b.data + i * es_b, es_b);
+    }
+    rl_array out;
+    out.data = min_len > 0 ? buf : NULL;
+    if (min_len == 0) free(buf);
+    out.len = min_len;
+    out.cap = min_len;
+    out.elem_size = (int32_t)es_tuple;
+    out.type_tag = RL_TAG_I64;
+    return rl_ok_arr(out);
 }
 
 // ---- result type ----
@@ -166,6 +245,8 @@ rl_result rl_ok_bool(bool v) {
 
 // Wrap a string value in a successful result.
 rl_result rl_ok_str(rl_string v) {
+    // A null string wraps as null, so `is_null`/`type_of` see through it.
+    if (v.data == NULL) return rl_ok_null();
     rl_result r = { .is_ok = true, .tag = RL_TAG_STR, .data.str = v, .err_code = 0 };
     return r;
 }
@@ -234,6 +315,14 @@ rl_array rl_arr_from_vals(const void *vals, uint64_t count, int32_t elem_size) {
         arr.data = malloc(count * elem_size);
         memcpy(arr.data, vals, count * elem_size);
     }
+    return arr;
+}
+
+// Copy count elements with an explicit payload tag (literals record
+// their element kind so later ops dispatch correctly).
+rl_array rl_arr_from_vals_tag(const void *vals, uint64_t count, int32_t elem_size, int32_t tag) {
+    rl_array arr = rl_arr_from_vals(vals, count, elem_size);
+    arr.type_tag = tag;
     return arr;
 }
 
@@ -415,7 +504,10 @@ void rl_print_bool(bool v) { printf(v ? "true" : "false"); }
 // Print char value with no trailing newline.
 void rl_print_char(char v) { printf("%c", v); }
 // Print string bytes with no trailing newline.
-void rl_print_str(rl_string v) { printf("%.*s", (int)v.len, v.data); }
+void rl_print_str(rl_string v) {
+    if (v.data == NULL) { printf("null"); return; }
+    printf("%.*s", (int)v.len, v.data);
+}
 // Print pointer as <ptr:...> with no trailing newline.
 void rl_print_ptr(void *v) { printf("<ptr:%p>", v); }
 // Print null with no trailing newline.
@@ -430,7 +522,10 @@ void rl_println_bool(bool v) { printf("%s\n", v ? "true" : "false"); }
 // Print char value plus a trailing newline.
 void rl_println_char(char v) { printf("%c\n", v); }
 // Print string bytes plus a trailing newline.
-void rl_println_str(rl_string v) { printf("%.*s\n", (int)v.len, v.data); }
+void rl_println_str(rl_string v) {
+    if (v.data == NULL) { printf("null\n"); return; }
+    printf("%.*s\n", (int)v.len, v.data);
+}
 // Print pointer as <ptr:...> plus a trailing newline.
 void rl_println_ptr(void *v) { printf("<ptr:%p>\n", v); }
 // Print null plus a trailing newline.
@@ -1101,6 +1196,20 @@ rl_string rl_type_of(int64_t type_tag) {
         case 2: name = "float"; break;
         case 3: name = "bool"; break;
         case 4: name = "string"; break;
+        case 5: name = "null"; break;
+        case 6: name = "char"; break;
+        case 7: name = "byte"; break;
+        case 8: name = "arr"; break;
+        case 9: name = "map"; break;
+        case 10: name = "set"; break;
+        case 11: name = "tuple"; break;
+        case 12: name = "function"; break;
+        case 13: name = "closure"; break;
+        case 14: name = "record"; break;
+        case 15: name = "tag"; break;
+        case 16: name = "ok"; break;
+        case 17: name = "err"; break;
+        case 18: name = "error"; break;
         default: name = "unknown"; break;
     }
     uint64_t len = strlen(name);
@@ -1108,6 +1217,54 @@ rl_string rl_type_of(int64_t type_tag) {
     memcpy(buf, name, len + 1);
     rl_string result = { .data = buf, .len = len, .rc = 1 };
     return result;
+}
+
+// RL type name for a result value: ok/err plus payload kinds.
+rl_string rl_type_of_result(rl_result v) {
+    const char *name;
+    if (!v.is_ok) name = "err";
+    else switch (v.tag) {
+        case RL_TAG_NULL: name = "null"; break;
+        case RL_TAG_I64: name = "int"; break;
+        case RL_TAG_F64: name = "float"; break;
+        case RL_TAG_BOOL: name = "bool"; break;
+        case RL_TAG_CHAR: name = "char"; break;
+        case RL_TAG_STR: name = "string"; break;
+        case RL_TAG_ARR: name = "arr"; break;
+        case RL_TAG_MAP: name = "map"; break;
+        case RL_TAG_SET: name = "set"; break;
+        case RL_TAG_CLOSURE: name = "closure"; break;
+        default: name = "unknown"; break;
+    }
+    uint64_t len = strlen(name);
+    char *buf = malloc(len + 1);
+    memcpy(buf, name, len + 1);
+    rl_string result = { .data = buf, .len = len, .rc = 1 };
+    return result;
+}
+
+// Print a result to stderr in dbg format and return it unchanged.
+rl_result rl_dbg_value(rl_result v) {
+    fprintf(stderr, "[dbg] ");
+    if (v.is_ok) {
+        fprintf(stderr, "ok(");
+        switch (v.tag) {
+            case RL_TAG_NULL: fprintf(stderr, "null"); break;
+            case RL_TAG_I64: fprintf(stderr, "%ld", (long)v.data.i64); break;
+            case RL_TAG_F64: fprintf(stderr, "%g", v.data.f64); break;
+            case RL_TAG_BOOL: fprintf(stderr, "%s", v.data.boolean ? "true" : "false"); break;
+            case RL_TAG_CHAR: fprintf(stderr, "%c", (char)(unsigned char)v.data.i64); break;
+            case RL_TAG_STR: fprintf(stderr, "%.*s", (int)v.data.str.len, v.data.str.data); break;
+            case RL_TAG_ARR: fprintf(stderr, "<array>"); break;
+            case RL_TAG_MAP: fprintf(stderr, "<map>"); break;
+            case RL_TAG_SET: fprintf(stderr, "<set>"); break;
+            case RL_TAG_CLOSURE: fprintf(stderr, "<fn>"); break;
+        }
+        fprintf(stderr, ") (ok)\n");
+    } else {
+        fprintf(stderr, "err(%d) (err)\n", v.err_code);
+    }
+    return v;
 }
 
 // Print int64 value to stderr and return it unchanged (RL dbg).
@@ -1215,6 +1372,11 @@ rl_string rl_path_pop(rl_string path) {
 
 // Drop the last component; join/push append one (push mutates in spirit, both return a fresh string).
 rl_string rl_path_join(rl_string path, rl_string target) {
+    // A null input poisons the whole join (mirrors error propagation).
+    if (path.data == NULL || target.data == NULL) {
+        rl_string null_str = { .data = NULL, .len = 0, .rc = 0 };
+        return null_str;
+    }
     if (target.len == 0) {
         char *buf = malloc(path.len + 1);
         memcpy(buf, path.data, path.len);
@@ -1277,27 +1439,54 @@ bool rl_path_is_file(rl_string path) {
 // ---- fs ----
 
 // Size of the file at path.
-int64_t rl_fs_file_size(rl_string path) {
+// Size of the file at `path` in bytes, or an error.
+rl_result rl_fs_file_size(rl_string path) {
+    if (path.data == NULL) return rl_err(-1);
     char buf[path.len + 1];
     memcpy(buf, path.data, path.len);
     buf[path.len] = '\0';
     struct stat st;
-    if (stat(buf, &st) != 0) return -1;
-    return (int64_t)st.st_size;
+    if (stat(buf, &st) != 0) return rl_err(-1);
+    return rl_ok_i64((int64_t)st.st_size);
 }
 
-// Last-modified time of the file at `path`.
-int64_t rl_fs_file_modified(rl_string path) {
+// Last-modified time of the file at `path` (Unix seconds), or an error.
+rl_result rl_fs_file_modified(rl_string path) {
+    if (path.data == NULL) return rl_err(-1);
     char buf[path.len + 1];
     memcpy(buf, path.data, path.len);
     buf[path.len] = '\0';
     struct stat st;
-    if (stat(buf, &st) != 0) return -1;
-    return (int64_t)st.st_mtime;
+    if (stat(buf, &st) != 0) return rl_err(-1);
+    return rl_ok_i64((int64_t)st.st_mtime);
 }
 
-// Copy `src` to `dst`; 0 on success, -1 on failure.
-int64_t rl_fs_copy_file(rl_string src, rl_string dst) {
+// Creation time of the file at `path` (Unix seconds), or an error.
+rl_result rl_fs_file_created(rl_string path) {
+    if (path.data == NULL) return rl_err(-1);
+    char buf[path.len + 1];
+    memcpy(buf, path.data, path.len);
+    buf[path.len] = '\0';
+    struct stat st;
+    if (stat(buf, &st) != 0) return rl_err(-1);
+    return rl_ok_i64((int64_t)st.st_ctime);
+}
+
+// Create an empty file (or update its timestamps), or an error.
+rl_result rl_fs_touch(rl_string path) {
+    if (path.data == NULL) return rl_err(-1);
+    char buf[path.len + 1];
+    memcpy(buf, path.data, path.len);
+    buf[path.len] = '\0';
+    FILE *f = fopen(buf, "ab");
+    if (!f) return rl_err(-1);
+    fclose(f);
+    return rl_ok_null();
+}
+
+// Copy `src` to `dst`; the result holds 0 on success, or an error.
+rl_result rl_fs_copy_file(rl_string src, rl_string dst) {
+    if (src.data == NULL || dst.data == NULL) return rl_err(-1);
     char sbuf[src.len + 1];
     memcpy(sbuf, src.data, src.len);
     sbuf[src.len] = '\0';
@@ -1305,9 +1494,9 @@ int64_t rl_fs_copy_file(rl_string src, rl_string dst) {
     memcpy(dbuf, dst.data, dst.len);
     dbuf[dst.len] = '\0';
     FILE *fin = fopen(sbuf, "rb");
-    if (!fin) return -1;
+    if (!fin) return rl_err(-1);
     FILE *fout = fopen(dbuf, "wb");
-    if (!fout) { fclose(fin); return -1; }
+    if (!fout) { fclose(fin); return rl_err(-1); }
     char chunk[8192];
     size_t n;
     while ((n = fread(chunk, 1, sizeof(chunk), fin)) > 0) {
@@ -1315,11 +1504,12 @@ int64_t rl_fs_copy_file(rl_string src, rl_string dst) {
     }
     fclose(fin);
     fclose(fout);
-    return 0;
+    return rl_ok_i64(0);
 }
 
-// Create `path` plus missing parents; 0 on success, -1 on failure.
-int64_t rl_fs_mkdir_all(rl_string path) {
+// Create `path` plus missing parents; ok null on success, or an error.
+rl_result rl_fs_mkdir_all(rl_string path) {
+    if (path.data == NULL) return rl_err(-1);
     char buf[path.len + 1];
     memcpy(buf, path.data, path.len);
     buf[path.len] = '\0';
@@ -1330,27 +1520,51 @@ int64_t rl_fs_mkdir_all(rl_string path) {
             *p = '/';
         }
     }
-    return mkdir(buf, 0755);
+    if (mkdir(buf, 0755) != 0 && errno != EEXIST) return rl_err(-1);
+    return rl_ok_null();
 }
 
-// Delete the directory tree at `path`; 0 on success, -1 on failure.
-int64_t rl_fs_rmdir_all(rl_string path) {
+// Remove the directory at `path`; ok null on success, or an error.
+rl_result rl_fs_rmdir(rl_string path) {
+    if (path.data == NULL) return rl_err(-1);
     char buf[path.len + 1];
     memcpy(buf, path.data, path.len);
     buf[path.len] = '\0';
-    return rmdir(buf);
+    if (rmdir(buf) != 0) return rl_err(-1);
+    return rl_ok_null();
 }
 
-// Names (not full paths) of entries in the directory at `path`.
-rl_array rl_fs_list_dir(rl_string path) {
+// Move `src` to `dst` (same filesystem); ok null on success, or an error.
+rl_result rl_fs_move_file(rl_string src, rl_string dst) {
+    if (src.data == NULL || dst.data == NULL) return rl_err(-1);
+    char sbuf[src.len + 1];
+    memcpy(sbuf, src.data, src.len);
+    sbuf[src.len] = '\0';
+    char dbuf[dst.len + 1];
+    memcpy(dbuf, dst.data, dst.len);
+    dbuf[dst.len] = '\0';
+    if (rename(sbuf, dbuf) != 0) return rl_err(-1);
+    return rl_ok_null();
+}
+
+// Delete the directory tree at `path`; ok null on success, or an error.
+rl_result rl_fs_rmdir_all(rl_string path) {
+    if (path.data == NULL) return rl_err(-1);
+    char buf[path.len + 1];
+    memcpy(buf, path.data, path.len);
+    buf[path.len] = '\0';
+    if (rmdir(buf) != 0) return rl_err(-1);
+    return rl_ok_null();
+}
+
+// Full paths of entries in the directory at `path`, or an error.
+rl_result rl_fs_list_dir(rl_string path) {
+    if (path.data == NULL) return rl_err(-1);
     char buf[path.len + 1];
     memcpy(buf, path.data, path.len);
     buf[path.len] = '\0';
     DIR *d = opendir(buf);
-    if (!d) {
-        rl_array arr = { .data = NULL, .len = 0, .cap = 0, .elem_size = sizeof(rl_string), .type_tag = RL_TAG_STR };
-        return arr;
-    }
+    if (!d) return rl_err(-1);
     uint64_t cap = 16;
     rl_string *entries = malloc(cap * sizeof(rl_string));
     uint64_t count = 0;
@@ -1378,56 +1592,99 @@ rl_array rl_fs_list_dir(rl_string path) {
     arr.cap = cap;
     arr.elem_size = sizeof(rl_string);
     arr.type_tag = RL_TAG_STR;
-    return arr;
+    return rl_ok_arr(arr);
 }
 
-// Rename to `new_name` in the same directory; returns the new full path.
-rl_string rl_fs_rename_file(rl_string path, rl_string new_name) {
+// Rename to `new_name` in the same directory; ok with the new full path,
+// or an error.
+rl_result rl_fs_rename_file(rl_string path, rl_string new_name) {
+    if (path.data == NULL || new_name.data == NULL) return rl_err(-1);
     char pbuf[path.len + 1];
     memcpy(pbuf, path.data, path.len);
     pbuf[path.len] = '\0';
-    char nbuf[new_name.len + 1];
-    memcpy(nbuf, new_name.data, new_name.len);
-    nbuf[new_name.len] = '\0';
-    rename(pbuf, nbuf);
-    return new_name;
+    // Parent directory of `path` (empty means root or relative).
+    uint64_t dir_len = 0;
+    bool rooted = false;
+    for (uint64_t i = 0; i < path.len; i++) {
+        if (path.data[i] == '/') { dir_len = i; rooted = true; }
+    }
+    uint64_t full_len;
+    char *full;
+    if (!rooted) {
+        full_len = new_name.len;
+        full = malloc(full_len + 1);
+        memcpy(full, new_name.data, new_name.len);
+    } else if (dir_len == 0) {
+        full_len = 1 + new_name.len;
+        full = malloc(full_len + 1);
+        full[0] = '/';
+        memcpy(full + 1, new_name.data, new_name.len);
+    } else {
+        full_len = dir_len + 1 + new_name.len;
+        full = malloc(full_len + 1);
+        memcpy(full, path.data, dir_len);
+        full[dir_len] = '/';
+        memcpy(full + dir_len + 1, new_name.data, new_name.len);
+    }
+    full[full_len] = '\0';
+    if (rename(pbuf, full) != 0) { free(full); return rl_err(-1); }
+    rl_string result = { .data = full, .len = full_len, .rc = 1 };
+    return rl_ok_str(result);
 }
 
 // ---- process ----
 
 // Current working directory of the process.
-rl_string rl_process_cwd(void) {
-    char buf[4096];
-    if (getcwd(buf, sizeof(buf)) == NULL) {
-        rl_string result = { .data = "", .len = 0, .rc = 1 };
+// Value of the environment variable `key` (owned copy), or a null
+// string (data == NULL) when unset. Matches the VM: bare string or null.
+rl_string rl_process_env(rl_string key) {
+    char buf[key.len + 1];
+    memcpy(buf, key.data, key.len);
+    buf[key.len] = '\0';
+    const char *val = getenv(buf);
+    if (val == NULL) {
+        rl_string result = { .data = NULL, .len = 0, .rc = 0 };
         return result;
     }
-    uint64_t len = strlen(buf);
+    uint64_t len = strlen(val);
     char *out = malloc(len + 1);
-    memcpy(out, buf, len + 1);
+    memcpy(out, val, len + 1);
     rl_string result = { .data = out, .len = len, .rc = 1 };
     return result;
 }
 
-// Change directory; 0 on success, -1 on failure.
-int64_t rl_process_set_cwd(rl_string path) {
+// Current working directory, or an error.
+rl_result rl_process_cwd(void) {
+    char buf[4096];
+    if (getcwd(buf, sizeof(buf)) == NULL) return rl_err(-1);
+    uint64_t len = strlen(buf);
+    char *out = malloc(len + 1);
+    memcpy(out, buf, len + 1);
+    rl_string result = { .data = out, .len = len, .rc = 1 };
+    return rl_ok_str(result);
+}
+
+// Change directory; ok null on success, or an error.
+rl_result rl_process_set_cwd(rl_string path) {
+    if (path.data == NULL) return rl_err(-1);
     char buf[path.len + 1];
     memcpy(buf, path.data, path.len);
     buf[path.len] = '\0';
-    return chdir(buf);
+    if (chdir(buf) != 0) return rl_err(-1);
+    return rl_ok_null();
 }
 
 // Run `cmd` through the shell and capture stdout (variants return
 // the exit code or one array element per output line instead).
-rl_string rl_process_exec(rl_string cmd) {
+// Run `cmd` through the shell and capture stdout (trailing newlines
+// stripped); ok with the output, or an error when it cannot run.
+rl_result rl_process_exec(rl_string cmd) {
+    if (cmd.data == NULL) return rl_err(-1);
     char buf[cmd.len + 1];
     memcpy(buf, cmd.data, cmd.len);
     buf[cmd.len] = '\0';
     FILE *fp = popen(buf, "r");
-    if (!fp) {
-        rl_string result = { .data = "", .len = 0, .rc = 1 };
-        return result;
-    }
+    if (!fp) return rl_err(-1);
     uint64_t cap = 4096;
     char *out = malloc(cap);
     uint64_t len = 0;
@@ -1445,28 +1702,44 @@ rl_string rl_process_exec(rl_string cmd) {
         len--;
     }
     rl_string result = { .data = out, .len = len, .rc = 1 };
-    return result;
+    return rl_ok_str(result);
 }
 
-// Run `cmd` through the shell and capture stdout (variants return
-// the exit code or one array element per output line instead).
-int64_t rl_process_exec_code(rl_string cmd) {
+// Run `cmd` through the shell in the foreground; ok with the exit code,
+// or an error when it cannot run.
+rl_result rl_process_exec_fg(rl_string cmd) {
+    if (cmd.data == NULL) return rl_err(-1);
     char buf[cmd.len + 1];
     memcpy(buf, cmd.data, cmd.len);
     buf[cmd.len] = '\0';
-    return (int64_t)system(buf);
+    int code = system(buf);
+    if (code == -1) return rl_err(-1);
+    return rl_ok_i64((int64_t)WEXITSTATUS(code));
 }
 
-// Run `cmd` through the shell and capture stdout (variants return
-// the exit code or one array element per output line instead).
-rl_array rl_process_exec_lines(rl_string cmd) {
-    rl_string output = rl_process_exec(cmd);
+// Run `cmd` through the shell; ok with the exit code, or an error.
+rl_result rl_process_exec_code(rl_string cmd) {
+    if (cmd.data == NULL) return rl_err(-1);
+    char buf[cmd.len + 1];
+    memcpy(buf, cmd.data, cmd.len);
+    buf[cmd.len] = '\0';
+    int code = system(buf);
+    if (code == -1) return rl_err(-1);
+    return rl_ok_i64((int64_t)WEXITSTATUS(code));
+}
+
+// Run `cmd` through the shell; ok with one array element per output
+// line, or an error.
+rl_result rl_process_exec_lines(rl_string cmd) {
+    rl_result output = rl_process_exec(cmd);
+    if (!output.is_ok) return output;
     rl_string nl = { .data = "\n", .len = 1, .rc = 1 };
-    return rl_str_split(output, nl);
+    return rl_ok_arr(rl_str_split(output.data.str, nl));
 }
 
 // Same, but with `env` assignments (e.g. `"A=1 B=2"`) prepended.
-rl_string rl_process_with_exec(rl_string env, rl_string cmd) {
+rl_result rl_process_with_exec(rl_string env, rl_string cmd) {
+    if (env.data == NULL || cmd.data == NULL) return rl_err(-1);
     uint64_t total = env.len + 1 + cmd.len;
     char buf[total + 1];
     memcpy(buf, env.data, env.len);
@@ -1478,7 +1751,8 @@ rl_string rl_process_with_exec(rl_string env, rl_string cmd) {
 }
 
 // Same, but with `env` assignments (e.g. `"A=1 B=2"`) prepended.
-int64_t rl_process_with_exec_code(rl_string env, rl_string cmd) {
+rl_result rl_process_with_exec_code(rl_string env, rl_string cmd) {
+    if (env.data == NULL || cmd.data == NULL) return rl_err(-1);
     uint64_t total = env.len + 1 + cmd.len;
     char buf[total + 1];
     memcpy(buf, env.data, env.len);
@@ -1490,7 +1764,8 @@ int64_t rl_process_with_exec_code(rl_string env, rl_string cmd) {
 }
 
 // Same, but with `env` assignments (e.g. `"A=1 B=2"`) prepended.
-rl_array rl_process_with_exec_lines(rl_string env, rl_string cmd) {
+rl_result rl_process_with_exec_lines(rl_string env, rl_string cmd) {
+    if (env.data == NULL || cmd.data == NULL) return rl_err(-1);
     uint64_t total = env.len + 1 + cmd.len;
     char buf[total + 1];
     memcpy(buf, env.data, env.len);
@@ -1501,6 +1776,121 @@ rl_array rl_process_with_exec_lines(rl_string env, rl_string cmd) {
     return rl_process_exec_lines(combined);
 }
 
+// OS name like Rust's `std::env::consts::OS` (`linux`, `macos`, ...).
+rl_string rl_process_os_name(void) {
+#if defined(__linux__)
+    return rl_str_literal("linux", 5);
+#elif defined(__APPLE__)
+    return rl_str_literal("macos", 5);
+#elif defined(_WIN32)
+    return rl_str_literal("windows", 7);
+#else
+    return rl_str_literal("unknown", 7);
+#endif
+}
+
+// ---- background processes ----
+// PIDs spawned by `exec_background`, with cached exit statuses so a
+// reaped child still answers `wait_pid` like the VM's child table.
+#define _RL_MAX_BG 256
+static pid_t _rl_bg_pids[_RL_MAX_BG];
+static bool _rl_bg_done[_RL_MAX_BG];
+static int64_t _rl_bg_status[_RL_MAX_BG];
+static int _rl_bg_count = 0;
+
+static int _rl_bg_find(pid_t pid) {
+    for (int i = 0; i < _rl_bg_count; i++) {
+        if (_rl_bg_pids[i] == pid) return i;
+    }
+    return -1;
+}
+
+// Fork and run `cmd` through the shell; the child PID, or -1.
+static pid_t _rl_spawn_shell(const char *cmd) {
+    pid_t pid = fork();
+    if (pid < 0) return -1;
+    if (pid == 0) {
+        execl("/bin/sh", "sh", "-c", cmd, (char *)NULL);
+        _exit(127);
+    }
+    return pid;
+}
+
+// Spawn `cmd` in the background; ok with the child pid, or an error.
+rl_result rl_process_exec_background(rl_string cmd) {
+    if (cmd.data == NULL) return rl_err(-1);
+    if (_rl_bg_count >= _RL_MAX_BG) return rl_err(-1);
+    char buf[cmd.len + 1];
+    memcpy(buf, cmd.data, cmd.len);
+    buf[cmd.len] = '\0';
+    pid_t pid = _rl_spawn_shell(buf);
+    if (pid < 0) return rl_err(-1);
+    _rl_bg_pids[_rl_bg_count] = pid;
+    _rl_bg_done[_rl_bg_count] = false;
+    _rl_bg_status[_rl_bg_count] = 0;
+    _rl_bg_count++;
+    return rl_ok_i64((int64_t)pid);
+}
+
+// True while a spawned pid is still running (false for unknown pids,
+// mirroring the VM's child table).
+bool rl_process_running(int64_t pid) {
+    int idx = _rl_bg_find((pid_t)pid);
+    if (idx < 0 || _rl_bg_done[idx]) return false;
+    int status = 0;
+    pid_t r = waitpid((pid_t)pid, &status, WNOHANG);
+    if (r == 0) return true;
+    _rl_bg_done[idx] = true;
+    _rl_bg_status[idx] =
+        (r > 0 && WIFEXITED(status)) ? (int64_t)WEXITSTATUS(status) : -1;
+    return false;
+}
+
+// Reap a spawned pid; ok with its exit code (-1 when signaled), or an
+// error for untracked pids.
+rl_result rl_process_wait_pid(int64_t pid) {
+    int idx = _rl_bg_find((pid_t)pid);
+    if (idx < 0) {
+        char *msg = malloc(64);
+        int n = snprintf(msg, 64, "wait_pid: no tracked process with pid %ld", (long)pid);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    pid_t p = _rl_bg_pids[idx];
+    bool done = _rl_bg_done[idx];
+    int64_t status = _rl_bg_status[idx];
+    _rl_bg_pids[idx] = _rl_bg_pids[_rl_bg_count - 1];
+    _rl_bg_done[idx] = _rl_bg_done[_rl_bg_count - 1];
+    _rl_bg_status[idx] = _rl_bg_status[_rl_bg_count - 1];
+    _rl_bg_count--;
+    if (done) return rl_ok_i64(status);
+    int st = 0;
+    if (waitpid(p, &st, 0) < 0) {
+        char *msg = malloc(64);
+        int n = snprintf(msg, 64, "wait_pid: failed waiting for pid %ld", (long)pid);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    return rl_ok_i64(WIFEXITED(st) ? (int64_t)WEXITSTATUS(st) : -1);
+}
+
+// Send SIGTERM / SIGKILL; ok null on success, or an error.
+rl_result rl_process_term_pid(int64_t pid) {
+    if (kill((pid_t)pid, SIGTERM) != 0) {
+        char *msg = malloc(64);
+        int n = snprintf(msg, 64, "term_pid: failed to send SIGTERM to pid %ld", (long)pid);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    return rl_ok_null();
+}
+
+rl_result rl_process_kill_pid(int64_t pid) {
+    if (kill((pid_t)pid, SIGKILL) != 0) {
+        char *msg = malloc(64);
+        int n = snprintf(msg, 64, "kill_pid: failed to send SIGKILL to pid %ld", (long)pid);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    return rl_ok_null();
+}
+
 static int _rl_stored_argc = 0;
 static char **_rl_stored_argv = NULL;
 
@@ -1508,6 +1898,12 @@ static char **_rl_stored_argv = NULL;
 void rl_store_args(int argc, char **argv) {
     _rl_stored_argc = argc;
     _rl_stored_argv = argv;
+    // Unbuffered stdout on TTYs: crossterm flushes after every command,
+    // so frames, modals and help render immediately instead of stalling
+    // in the stdio buffer. Pipes and files stay buffered for speed.
+    if (isatty(STDOUT_FILENO)) {
+        setvbuf(stdout, NULL, _IONBF, 0);
+    }
 }
 
 // Command-line arguments (excluding argv[0]) as an array of strings.
@@ -1532,48 +1928,58 @@ rl_array rl_process_args(void) {
 // ---- time ----
 
 // Format a Unix timestamp with a strftime-style `pattern`.
-rl_string rl_time_format_time(int64_t timestamp, rl_string pattern) {
+// Format a Unix timestamp with a strftime-style pattern, or an error.
+rl_result rl_time_format_time(int64_t timestamp, rl_string pattern) {
+    if (pattern.data == NULL) return rl_err(-1);
     time_t t = (time_t)timestamp;
     struct tm *tm = gmtime(&t);
+    if (!tm) return rl_err(-1);
     char buf[256];
-    strftime(buf, sizeof(buf), pattern.data, tm);
+    char pat[pattern.len + 1];
+    memcpy(pat, pattern.data, pattern.len);
+    pat[pattern.len] = '\0';
+    if (strftime(buf, sizeof(buf), pat, tm) == 0) return rl_err(-1);
     uint64_t len = strlen(buf);
     char *out = malloc(len + 1);
     memcpy(out, buf, len + 1);
     rl_string result = { .data = out, .len = len, .rc = 1 };
-    return result;
+    return rl_ok_str(result);
 }
 
-// Format as `YYYY-MM-DD` / `HH:MM:SS` in local time.
-rl_string rl_time_format_date_str(int64_t timestamp) {
+// Format as `YYYY-MM-DD` in local time, or an error.
+rl_result rl_time_format_date_str(int64_t timestamp) {
     time_t t = (time_t)timestamp;
     struct tm *tm = gmtime(&t);
+    if (!tm) return rl_err(-1);
     char buf[64];
-    strftime(buf, sizeof(buf), "%Y-%m-%d", tm);
+    if (strftime(buf, sizeof(buf), "%Y-%m-%d", tm) == 0) return rl_err(-1);
     uint64_t len = strlen(buf);
     char *out = malloc(len + 1);
     memcpy(out, buf, len + 1);
     rl_string result = { .data = out, .len = len, .rc = 1 };
-    return result;
+    return rl_ok_str(result);
 }
 
-// Format as `YYYY-MM-DD` / `HH:MM:SS` in local time.
-rl_string rl_time_format_time_str(int64_t timestamp) {
+// Format as `HH:MM:SS` in local time, or an error.
+rl_result rl_time_format_time_str(int64_t timestamp) {
     time_t t = (time_t)timestamp;
     struct tm *tm = gmtime(&t);
+    if (!tm) return rl_err(-1);
     char buf[64];
-    strftime(buf, sizeof(buf), "%H:%M:%S", tm);
+    if (strftime(buf, sizeof(buf), "%H:%M:%S", tm) == 0) return rl_err(-1);
     uint64_t len = strlen(buf);
     char *out = malloc(len + 1);
     memcpy(out, buf, len + 1);
     rl_string result = { .data = out, .len = len, .rc = 1 };
-    return result;
+    return rl_ok_str(result);
 }
 
 // Split into `[year, month, day, hour, min, sec]` components.
-rl_array rl_time_parts(int64_t timestamp) {
+// Split into `[year, month, day, hour, min, sec]`, or an error.
+rl_result rl_time_parts(int64_t timestamp) {
     time_t t = (time_t)timestamp;
     struct tm *tm = gmtime(&t);
+    if (!tm) return rl_err(-1);
     int64_t parts[6] = {
         tm->tm_year + 1900,
         tm->tm_mon + 1,
@@ -1582,7 +1988,7 @@ rl_array rl_time_parts(int64_t timestamp) {
         tm->tm_min,
         tm->tm_sec
     };
-    return rl_arr_from_vals(parts, 6, sizeof(int64_t));
+    return rl_ok_arr(rl_arr_from_vals(parts, 6, sizeof(int64_t)));
 }
 
 // ---- io ----
@@ -1675,12 +2081,19 @@ rl_result rl_io_append_file(rl_string path, rl_string content) {
     return rl_ok_null();
 }
 
-// Delete the file at `path`; 0 on success, -1 on failure.
-int64_t rl_io_delete_file(rl_string path) {
+// Delete the file at `path`; ok null on success, or an error.
+rl_result rl_io_delete_file(rl_string path) {
+    if (path.data == NULL) return rl_err(-1);
     char buf[path.len + 1];
     memcpy(buf, path.data, path.len);
     buf[path.len] = '\0';
-    return remove(buf);
+    if (remove(buf) != 0) return rl_err(-1);
+    return rl_ok_null();
+}
+
+// True when stdin is a terminal (used for cursor hide/show only).
+bool rl_io_isatty(void) {
+    return isatty(STDIN_FILENO) != 0;
 }
 
 // Write to stderr without / with a trailing newline.
@@ -1723,54 +2136,158 @@ rl_result rl_io_read_bytes(rl_string path) {
 // ---- types ----
 
 // Format an int as decimal / binary (`0b...`) / hex (`0x...`) / octal.
-rl_string rl_types_to_string(int64_t v) {
+// `to_string` over a result payload: int/float/bool/char/string,
+// err otherwise.
+rl_result rl_types_to_string(rl_result x) {
+    if (!x.is_ok) return x;
     char buf[32];
-    int len = snprintf(buf, sizeof(buf), "%ld", (long)v);
+    int len = 0;
+    switch (x.tag) {
+        case RL_TAG_I64: len = snprintf(buf, sizeof(buf), "%ld", (long)x.data.i64); break;
+        case RL_TAG_F64: len = snprintf(buf, sizeof(buf), "%g", x.data.f64); break;
+        case RL_TAG_BOOL: len = snprintf(buf, sizeof(buf), "%s", x.data.boolean ? "true" : "false"); break;
+        case RL_TAG_CHAR: {
+            uint32_t code = (uint32_t)x.data.i64;
+            if (code < 0x80) { buf[0] = (char)code; buf[1] = '\0'; len = 1; }
+            else if (code < 0x800) {
+                buf[0] = (char)(0xC0 | (code >> 6)); buf[1] = (char)(0x80 | (code & 0x3F)); buf[2] = '\0'; len = 2;
+            } else if (code < 0x10000) {
+                buf[0] = (char)(0xE0 | (code >> 12)); buf[1] = (char)(0x80 | ((code >> 6) & 0x3F)); buf[2] = (char)(0x80 | (code & 0x3F)); buf[3] = '\0'; len = 3;
+            } else {
+                buf[0] = (char)(0xF0 | (code >> 18)); buf[1] = (char)(0x80 | ((code >> 12) & 0x3F)); buf[2] = (char)(0x80 | ((code >> 6) & 0x3F)); buf[3] = (char)(0x80 | (code & 0x3F)); buf[4] = '\0'; len = 4;
+            }
+            break;
+        }
+        case RL_TAG_STR: return rl_ok_str(x.data.str);
+        default: {
+            const char *name = _rl_tag_name(x.tag);
+            char *msg = malloc(48);
+            int n = snprintf(msg, 48, "cannot parse \"%s\" as string", name);
+            return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+        }
+    }
     char *out = malloc(len + 1);
     memcpy(out, buf, len + 1);
     rl_string result = { .data = out, .len = (uint64_t)len, .rc = 1 };
-    return result;
+    return rl_ok_str(result);
 }
 
-// Format an int as decimal / binary (`0b...`) / hex (`0x...`) / octal.
-rl_string rl_types_to_bin(int64_t v) {
-    if (v == 0) {
-        rl_string result = { .data = "0", .len = 1, .rc = 1 };
-        return result;
-    }
-    char buf[65];
-    int i = 64;
+// Render an unsigned value in base 2/8/16 (no prefix, `-` for negatives).
+static rl_string _rl_format_radix(uint64_t uv, bool negative, unsigned base) {
+    const char *digits = "0123456789abcdef";
+    char buf[66];
+    int i = 65;
     buf[i] = '\0';
-    uint64_t uv = (uint64_t)v;
-    while (uv > 0) {
-        buf[--i] = (uv & 1) ? '1' : '0';
-        uv >>= 1;
-    }
-    uint64_t len = 64 - (uint64_t)i;
+    if (uv == 0) buf[--i] = '0';
+    while (uv > 0) { buf[--i] = digits[uv % base]; uv /= base; }
+    if (negative) buf[--i] = '-';
+    uint64_t len = 65 - (uint64_t)i;
     char *out = malloc(len + 1);
     memcpy(out, buf + i, len + 1);
     rl_string result = { .data = out, .len = len, .rc = 1 };
     return result;
 }
 
-// Format an int as decimal / binary (`0b...`) / hex (`0x...`) / octal.
-rl_string rl_types_to_hex(int64_t v) {
-    char buf[32];
-    int len = snprintf(buf, sizeof(buf), "%lx", (unsigned long)v);
-    char *out = malloc(len + 1);
-    memcpy(out, buf, len + 1);
-    rl_string result = { .data = out, .len = (uint64_t)len, .rc = 1 };
-    return result;
+// `to_bin` over a result payload: int/byte/bool/char/string, err otherwise.
+rl_result rl_types_to_bin(rl_result x) {
+    if (!x.is_ok) return x;
+    switch (x.tag) {
+        case RL_TAG_I64: {
+            int64_t v = x.data.i64;
+            return rl_ok_str(_rl_format_radix(v < 0 ? (uint64_t)(-(v + 1)) + 1 : (uint64_t)v, v < 0, 2));
+        }
+        case RL_TAG_BOOL: return rl_ok_str(rl_str_literal(x.data.boolean ? "1" : "0", 1));
+        case RL_TAG_CHAR: return rl_ok_str(_rl_format_radix((uint64_t)(uint32_t)x.data.i64, false, 2));
+        case RL_TAG_STR: {
+            uint64_t total = 0;
+            for (uint64_t i = 0; i < x.data.str.len; i++) {
+                unsigned char b = (unsigned char)x.data.str.data[i];
+                total += b == 0 ? 1 : 8 - __builtin_clz((unsigned)b);
+            }
+            char *out = malloc(total + 1);
+            uint64_t pos = 0;
+            for (uint64_t i = 0; i < x.data.str.len; i++) {
+                unsigned char b = (unsigned char)x.data.str.data[i];
+                if (b == 0) { out[pos++] = '0'; continue; }
+                int bits = 8 - __builtin_clz((unsigned)b);
+                for (int k = bits - 1; k >= 0; k--) out[pos++] = ((b >> k) & 1) ? '1' : '0';
+            }
+            out[pos] = '\0';
+            return rl_ok_str((rl_string){ .data = out, .len = pos, .rc = 1 });
+        }
+        default: {
+            const char *name = _rl_tag_name(x.tag);
+            char *msg = malloc(48);
+            int n = snprintf(msg, 48, "cannot parse \"%s\" as binary", name);
+            return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+        }
+    }
+}
+
+// `to_hex` over a result payload: int/byte/char/string, err otherwise.
+rl_result rl_types_to_hex(rl_result x) {
+    if (!x.is_ok) return x;
+    switch (x.tag) {
+        case RL_TAG_I64: {
+            int64_t v = x.data.i64;
+            return rl_ok_str(_rl_format_radix(v < 0 ? (uint64_t)(-(v + 1)) + 1 : (uint64_t)v, v < 0, 16));
+        }
+        case RL_TAG_CHAR: return rl_ok_str(_rl_format_radix((uint64_t)(uint32_t)x.data.i64, false, 16));
+        case RL_TAG_STR: {
+            char *out = malloc(x.data.str.len * 2 + 1);
+            const char *digits = "0123456789abcdef";
+            for (uint64_t i = 0; i < x.data.str.len; i++) {
+                unsigned char b = (unsigned char)x.data.str.data[i];
+                out[2 * i] = digits[b >> 4];
+                out[2 * i + 1] = digits[b & 0xF];
+            }
+            out[x.data.str.len * 2] = '\0';
+            return rl_ok_str((rl_string){ .data = out, .len = x.data.str.len * 2, .rc = 1 });
+        }
+        default: {
+            const char *name = _rl_tag_name(x.tag);
+            char *msg = malloc(52);
+            int n = snprintf(msg, 52, "cannot parse \"%s\" as hexadecimal", name);
+            return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+        }
+    }
 }
 
 // Format an int as decimal / binary (`0b...`) / hex (`0x...`) / octal.
-rl_string rl_types_to_oct(int64_t v) {
-    char buf[32];
-    int len = snprintf(buf, sizeof(buf), "%lo", (unsigned long)v);
-    char *out = malloc(len + 1);
-    memcpy(out, buf, len + 1);
-    rl_string result = { .data = out, .len = (uint64_t)len, .rc = 1 };
-    return result;
+// `to_oct` over a result payload: int/byte/char/string, err otherwise.
+rl_result rl_types_to_oct(rl_result x) {
+    if (!x.is_ok) return x;
+    switch (x.tag) {
+        case RL_TAG_I64: {
+            int64_t v = x.data.i64;
+            return rl_ok_str(_rl_format_radix(v < 0 ? (uint64_t)(-(v + 1)) + 1 : (uint64_t)v, v < 0, 8));
+        }
+        case RL_TAG_CHAR: return rl_ok_str(_rl_format_radix((uint64_t)(uint32_t)x.data.i64, false, 8));
+        case RL_TAG_STR: {
+            uint64_t total = 0;
+            for (uint64_t i = 0; i < x.data.str.len; i++) {
+                unsigned char b = (unsigned char)x.data.str.data[i];
+                total += b < 8 ? 1 : (b < 64 ? 2 : 3);
+            }
+            char *out = malloc(total + 1);
+            uint64_t pos = 0;
+            for (uint64_t i = 0; i < x.data.str.len; i++) {
+                unsigned char b = (unsigned char)x.data.str.data[i];
+                char tmp[4];
+                int n = snprintf(tmp, sizeof(tmp), "%o", b);
+                memcpy(out + pos, tmp, n);
+                pos += n;
+            }
+            out[pos] = '\0';
+            return rl_ok_str((rl_string){ .data = out, .len = pos, .rc = 1 });
+        }
+        default: {
+            const char *name = _rl_tag_name(x.tag);
+            char *msg = malloc(48);
+            int n = snprintf(msg, 48, "cannot parse \"%s\" as octal", name);
+            return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+        }
+    }
 }
 
 // Turn an error result into a panic; wrap an int as a byte / char value.
@@ -1789,12 +2306,31 @@ rl_result rl_types_to_byte(rl_result x) {
         case RL_TAG_BOOL: return rl_ok_i64(x.data.boolean ? 1 : 0);
         case RL_TAG_CHAR: return rl_ok_i64((int64_t)(unsigned char)x.data.i64);
         case RL_TAG_STR: {
-            char buf[x.data.str.len + 1];
-            memcpy(buf, x.data.str.data, x.data.str.len);
-            buf[x.data.str.len] = '\0';
-            char *end;
-            long v = strtol(buf, &end, 0);
-            return rl_ok_i64((int64_t)(unsigned char)v);
+            uint64_t tlen = 0;
+            char *t = _rl_trim_copy(x.data.str, &tlen);
+            unsigned long v = 0;
+            bool ok = false;
+            if (tlen > 0 && (strncmp(t, "0x", 2) == 0 || strncmp(t, "0X", 2) == 0)) {
+                char *end = NULL;
+                errno = 0;
+                v = strtoul(t + 2, &end, 16);
+                ok = errno == 0 && end && *end == '\0' && end != t + 2 && v <= 0xFF;
+            } else if (tlen > 0) {
+                char *end = NULL;
+                errno = 0;
+                v = strtoul(t, &end, 10);
+                ok = errno == 0 && end && *end == '\0' && end != t && v <= 0xFF;
+            }
+            rl_result r;
+            if (ok) {
+                r = rl_ok_i64((int64_t)(unsigned char)v);
+            } else {
+                char *msg = malloc(tlen + 34);
+                int n = snprintf(msg, tlen + 34, "cannot parse \"%s\" as byte", t);
+                r = rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+            }
+            free(t);
+            return r;
         }
         default: return rl_err_msg(rl_str_literal("cannot convert to byte", 22));
     }
@@ -1802,16 +2338,205 @@ rl_result rl_types_to_byte(rl_result x) {
 
 // Turn an error result into a panic; wrap an int as a byte / char value.
 rl_result rl_types_to_char(rl_result x) {
+    if (!x.is_ok) return x;
     switch (x.tag) {
-        case RL_TAG_I64: return rl_ok_i64(x.data.i64);
+        case RL_TAG_CHAR: return x;
+        case RL_TAG_I64: {
+            uint32_t code = (uint32_t)x.data.i64;
+            if (code <= 0x10FFFF && !(code >= 0xD800 && code <= 0xDFFF)) {
+                rl_result r = { .is_ok = true, .tag = RL_TAG_CHAR, .err_code = 0 };
+                r.data.i64 = (int64_t)code;
+                return r;
+            }
+            char *msg = malloc(64);
+            int n = snprintf(msg, 64, "%ld is not a valid unicode codepoint", (long)x.data.i64);
+            return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+        }
+        case RL_TAG_STR: {
+            uint32_t code = 0;
+            uint64_t used = 0;
+            if (_rl_utf8_decode(x.data.str.data, x.data.str.len, &code, &used)
+                && used == x.data.str.len) {
+                rl_result r = { .is_ok = true, .tag = RL_TAG_CHAR, .err_code = 0 };
+                r.data.i64 = (int64_t)code;
+                return r;
+            }
+            return rl_err_msg(rl_str_literal("string must be exactly one character", 39));
+        }
+        default: {
+            const char *name = _rl_tag_name(x.tag);
+            char *msg = malloc(64);
+            int n = snprintf(msg, 64, "cannot parse \"%s\" as character", name);
+            return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+        }
+    }
+}
+
+// Tag name for conversion error messages.
+static const char *_rl_tag_name(enum rl_type_tag tag) {
+    switch (tag) {
+        case RL_TAG_NULL: return "null";
+        case RL_TAG_I64: return "int";
+        case RL_TAG_F64: return "float";
+        case RL_TAG_BOOL: return "bool";
+        case RL_TAG_CHAR: return "char";
+        case RL_TAG_STR: return "string";
+        case RL_TAG_ARR: return "array";
+        case RL_TAG_MAP: return "map";
+        case RL_TAG_SET: return "set";
+        case RL_TAG_CLOSURE: return "closure";
+        default: return "unknown";
+    }
+}
+
+// Trim ASCII whitespace; returns a fresh NUL-terminated copy with its
+// length (without the terminator).
+static char *_rl_trim_copy(rl_string s, uint64_t *out_len) {
+    uint64_t start = 0;
+    while (start < s.len && (s.data[start] == ' ' || s.data[start] == '\t'
+        || s.data[start] == '\n' || s.data[start] == '\r')) start++;
+    uint64_t end = s.len;
+    while (end > start && (s.data[end - 1] == ' ' || s.data[end - 1] == '\t'
+        || s.data[end - 1] == '\n' || s.data[end - 1] == '\r')) end--;
+    uint64_t len = end - start;
+    char *out = malloc(len + 1);
+    memcpy(out, s.data + start, len);
+    out[len] = '\0';
+    if (out_len) *out_len = len;
+    return out;
+}
+
+// Decode one UTF-8 sequence; writes the codepoint and bytes consumed,
+// false on invalid input.
+static bool _rl_utf8_decode(const char *s, uint64_t len, uint32_t *code, uint64_t *used) {
+    if (len == 0) return false;
+    unsigned char c = (unsigned char)s[0];
+    if (c < 0x80) { *code = c; *used = 1; return true; }
+    uint32_t cp;
+    uint64_t need;
+    if ((c & 0xE0) == 0xC0) { cp = c & 0x1F; need = 2; }
+    else if ((c & 0xF0) == 0xE0) { cp = c & 0x0F; need = 3; }
+    else if ((c & 0xF8) == 0xF0) { cp = c & 0x07; need = 4; }
+    else return false;
+    if (len < need) return false;
+    for (uint64_t i = 1; i < need; i++) {
+        unsigned char d = (unsigned char)s[i];
+        if ((d & 0xC0) != 0x80) return false;
+        cp = (cp << 6) | (d & 0x3F);
+    }
+    *code = cp;
+    *used = need;
+    return true;
+}
+
+// `to_int` over a result payload: int/float/bool/char/string, err otherwise.
+rl_result rl_to_int(rl_result x) {
+    if (!x.is_ok) return x;
+    switch (x.tag) {
+        case RL_TAG_I64: return x;
+        case RL_TAG_F64: return rl_ok_i64((int64_t)x.data.f64);
+        case RL_TAG_BOOL: return rl_ok_i64(x.data.boolean ? 1 : 0);
         case RL_TAG_CHAR: return rl_ok_i64(x.data.i64);
         case RL_TAG_STR: {
-            if (x.data.str.len > 0) {
-                return rl_ok_i64((int64_t)(unsigned char)x.data.str.data[0]);
+            uint64_t tlen = 0;
+            char *t = _rl_trim_copy(x.data.str, &tlen);
+            int64_t v = 0;
+            bool ok = false;
+            if (tlen > 0 && (strncmp(t, "0x", 2) == 0 || strncmp(t, "0X", 2) == 0)) {
+                char *end = NULL;
+                errno = 0;
+                long long parsed = strtoll(t + 2, &end, 16);
+                if (errno == 0 && end && *end == '\0' && end != t + 2
+                    && parsed >= INT64_MIN && parsed <= INT64_MAX) {
+                    v = (int64_t)parsed;
+                    ok = true;
+                }
+            } else if (tlen > 0) {
+                char *end = NULL;
+                errno = 0;
+                long long parsed = strtoll(t, &end, 10);
+                if (errno == 0 && end && *end == '\0' && end != t
+                    && parsed >= INT64_MIN && parsed <= INT64_MAX) {
+                    v = (int64_t)parsed;
+                    ok = true;
+                }
             }
-            return rl_err_msg(rl_str_literal("cannot convert empty string to char", 34));
+            rl_result r;
+            if (ok) {
+                r = rl_ok_i64(v);
+            } else {
+                char *msg = malloc(tlen + 32);
+                int n = snprintf(msg, tlen + 32, "cannot parse \"%s\" as int", t);
+                r = rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+            }
+            free(t);
+            return r;
         }
-        default: return rl_err_msg(rl_str_literal("cannot convert to char", 22));
+        default: {
+            const char *name = _rl_tag_name(x.tag);
+            char *msg = malloc(48);
+            int n = snprintf(msg, 48, "cannot parse \"%s\" as int", name);
+            return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+        }
+    }
+}
+
+// `to_float` over a result payload: float/int/bool/string, err otherwise.
+rl_result rl_to_float(rl_result x) {
+    if (!x.is_ok) return x;
+    switch (x.tag) {
+        case RL_TAG_F64: return x;
+        case RL_TAG_I64: return rl_ok_f64((double)x.data.i64);
+        case RL_TAG_BOOL: return rl_ok_f64(x.data.boolean ? 1.0 : 0.0);
+        case RL_TAG_STR: {
+            uint64_t tlen = 0;
+            char *t = _rl_trim_copy(x.data.str, &tlen);
+            rl_result r;
+            if (tlen > 0) {
+                char *end = NULL;
+                double parsed = strtod(t, &end);
+                if (end && *end == '\0' && end != t) {
+                    r = rl_ok_f64(parsed);
+                    free(t);
+                    return r;
+                }
+            }
+            char *msg = malloc(tlen + 34);
+            int n = snprintf(msg, tlen + 34, "cannot parse \"%s\" as float", t);
+            r = rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+            free(t);
+            return r;
+        }
+        default: {
+            const char *name = _rl_tag_name(x.tag);
+            char *msg = malloc(48);
+            int n = snprintf(msg, 48, "cannot parse \"%s\" as float", name);
+            return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+        }
+    }
+}
+
+// `to_bool` over a result payload: bool/int/float/null/string, err otherwise.
+rl_result rl_to_bool(rl_result x) {
+    if (!x.is_ok) return x;
+    switch (x.tag) {
+        case RL_TAG_BOOL: return x;
+        case RL_TAG_I64: return rl_ok_bool(x.data.i64 != 0);
+        case RL_TAG_F64: return rl_ok_bool(x.data.f64 != 0.0);
+        case RL_TAG_NULL: return rl_ok_bool(false);
+        case RL_TAG_STR: {
+            uint64_t tlen = 0;
+            char *t = _rl_trim_copy(x.data.str, &tlen);
+            bool v = !(tlen == 0 || strcmp(t, "false") == 0 || strcmp(t, "0") == 0);
+            free(t);
+            return rl_ok_bool(v);
+        }
+        default: {
+            const char *name = _rl_tag_name(x.tag);
+            char *msg = malloc(48);
+            int n = snprintf(msg, 48, "cannot parse \"%s\" as bool", name);
+            return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+        }
     }
 }
 
@@ -2143,13 +2868,204 @@ rl_result rl_arr_push(rl_array a, int64_t v) {
     return rl_ok_arr(rl_arr_from_vals(buf, new_len, sizeof(int64_t)));
 }
 
-// Append v / drop and return the last element.
+// Append a boxed value to an array of any element type; ok with the new
+// array, or an error when the value does not fit the element width.
+rl_result rl_arr_push_v(rl_array a, rl_value v) {
+    uint64_t es = a.elem_size ? (uint64_t)a.elem_size : sizeof(int64_t);
+    uint64_t new_len = a.len + 1;
+    char *buf = malloc(new_len * es);
+    if (a.data && a.len > 0) memcpy(buf, a.data, a.len * es);
+    char *slot = buf + a.len * es;
+    memset(slot, 0, es);
+    switch (v.tag) {
+        case RL_VTAG_I64:
+            if (es == 1 || es == 2 || es == 4 || es == 8) {
+                memcpy(slot, &v.data.i64, es);
+                break;
+            }
+            free(buf);
+            return rl_err(-1);
+        case RL_VTAG_F64:
+            if (es == sizeof(double)) { memcpy(slot, &v.data.f64, es); break; }
+            if (es == sizeof(float)) { float f = (float)v.data.f64; memcpy(slot, &f, es); break; }
+            free(buf);
+            return rl_err(-1);
+        case RL_VTAG_BOOL:
+            if (es == 1 || es == 2 || es == 4 || es == 8) {
+                uint64_t one = v.data.boolean ? 1 : 0;
+                memcpy(slot, &one, es);
+                break;
+            }
+            free(buf);
+            return rl_err(-1);
+        case RL_VTAG_STR:
+            if (es == sizeof(rl_string)) { memcpy(slot, &v.data.str, es); break; }
+            free(buf);
+            return rl_err(-1);
+        case RL_VTAG_CHAR:
+            if (es == 1 || es == 2 || es == 4 || es == 8) {
+                uint64_t code = (uint64_t)v.data.i64;
+                memcpy(slot, &code, es);
+                break;
+            }
+            free(buf);
+            return rl_err(-1);
+        default:
+            free(buf);
+            return rl_err(-1);
+    }
+    rl_array out;
+    out.data = buf;
+    out.len = new_len;
+    out.cap = new_len;
+    out.elem_size = (int32_t)es;
+    out.type_tag = a.type_tag;
+    return rl_ok_arr(out);
+}
+
+// Drop the last element; ok with the shortened array, or an error.
 rl_result rl_arr_pop(rl_array a) {
     if (a.len == 0) return rl_make_err(-1, "pop from empty array");
-    return rl_ok_i64(((int64_t *)a.data)[a.len - 1]);
+    uint64_t es = a.elem_size ? (uint64_t)a.elem_size : sizeof(int64_t);
+    uint64_t new_len = a.len - 1;
+    char *buf = NULL;
+    if (new_len > 0) {
+        buf = malloc(new_len * es);
+        memcpy(buf, a.data, new_len * es);
+    }
+    rl_array out;
+    out.data = buf;
+    out.len = new_len;
+    out.cap = new_len;
+    out.elem_size = (int32_t)es;
+    out.type_tag = a.type_tag;
+    return rl_ok_arr(out);
+}
+
+// Wrap the stored element at `idx` as a result payload by tag.
+static rl_result _rl_arr_elem_as_result(rl_array a, uint64_t idx, int32_t tag) {
+    char *slot = (char *)a.data + idx * (a.elem_size ? (uint64_t)a.elem_size : sizeof(int64_t));
+    switch (tag) {
+        case RL_TAG_F64: {
+            double v = 0;
+            memcpy(&v, slot, sizeof(double));
+            return rl_ok_f64(v);
+        }
+        case RL_TAG_BOOL: return rl_ok_bool(*(uint8_t *)slot != 0);
+        case RL_TAG_STR: {
+            rl_string v;
+            memcpy(&v, slot, sizeof(rl_string));
+            return rl_ok_str(v);
+        }
+        case RL_TAG_CHAR: {
+            rl_result r = { .is_ok = true, .tag = RL_TAG_CHAR, .err_code = 0 };
+            r.data.i64 = (int64_t)(*(uint8_t *)slot);
+            return r;
+        }
+        default: {
+            uint64_t es = a.elem_size ? (uint64_t)a.elem_size : sizeof(int64_t);
+            int64_t v = 0;
+            memcpy(&v, slot, es < sizeof(int64_t) ? es : sizeof(int64_t));
+            return rl_ok_i64(v);
+        }
+    }
+}
+
+// First element by tag, or an error when empty.
+rl_result rl_arr_first_t(rl_array a, int32_t tag) {
+    if (a.len == 0) return rl_make_err(-1, "first of empty array");
+    return _rl_arr_elem_as_result(a, 0, tag);
+}
+
+// Last element by tag, or an error when empty.
+rl_result rl_arr_last_t(rl_array a, int32_t tag) {
+    if (a.len == 0) return rl_make_err(-1, "last of empty array");
+    return _rl_arr_elem_as_result(a, a.len - 1, tag);
+}
+
+// Compare a stored element against a boxed value.
+static bool _rl_arr_elem_eq(rl_array a, uint64_t idx, rl_value v) {
+    uint64_t es = a.elem_size ? (uint64_t)a.elem_size : sizeof(int64_t);
+    char *slot = (char *)a.data + idx * es;
+    switch (v.tag) {
+        case RL_VTAG_I64: {
+            int64_t stored = 0;
+            memcpy(&stored, slot, es < sizeof(int64_t) ? es : sizeof(int64_t));
+            return stored == v.data.i64;
+        }
+        case RL_VTAG_F64: {
+            if (es != sizeof(double)) return false;
+            double stored = 0;
+            memcpy(&stored, slot, sizeof(double));
+            return stored == v.data.f64;
+        }
+        case RL_VTAG_BOOL:
+            return es == 1 && *(uint8_t *)slot == (v.data.boolean ? 1 : 0);
+        case RL_VTAG_CHAR:
+            return es == 1 && *(uint8_t *)slot == (uint8_t)v.data.i64;
+        case RL_VTAG_STR: {
+            if (es != sizeof(rl_string)) return false;
+            rl_string stored;
+            memcpy(&stored, slot, sizeof(rl_string));
+            return stored.len == v.data.str.len
+                && memcmp(stored.data, v.data.str.data, stored.len) == 0;
+        }
+        default: return false;
+    }
+}
+
+// Membership test over any element type.
+rl_result rl_arr_contains_v(rl_array a, rl_value v) {
+    for (uint64_t i = 0; i < a.len; i++) {
+        if (_rl_arr_elem_eq(a, i, v)) return rl_ok_bool(true);
+    }
+    return rl_ok_bool(false);
+}
+
+// First index over any element type, or -1 when absent.
+rl_result rl_arr_index_of_v(rl_array a, rl_value v) {
+    for (uint64_t i = 0; i < a.len; i++) {
+        if (_rl_arr_elem_eq(a, i, v)) return rl_ok_i64((int64_t)i);
+    }
+    return rl_ok_i64(-1);
 }
 
 // Insert `v` at `idx` / drop the element at `idx`.
+// Insert a boxed value at `idx` for arrays of any element type.
+rl_result rl_arr_insert_v(rl_array a, int64_t idx, rl_value v) {
+    uint64_t es = a.elem_size ? (uint64_t)a.elem_size : sizeof(int64_t);
+    if (idx < 0) idx = 0;
+    if ((uint64_t)idx > a.len) idx = (int64_t)a.len;
+    uint64_t new_len = a.len + 1;
+    char *buf = malloc(new_len * es);
+    char *src = (char *)a.data;
+    if (idx > 0 && src) memcpy(buf, src, (uint64_t)idx * es);
+    char *slot = buf + idx * es;
+    memset(slot, 0, es);
+    switch (v.tag) {
+        case RL_VTAG_I64: memcpy(slot, &v.data.i64, es < 8 ? es : 8); break;
+        case RL_VTAG_F64:
+            if (es == sizeof(double)) memcpy(slot, &v.data.f64, es);
+            else { int64_t i = (int64_t)v.data.f64; memcpy(slot, &i, es < 8 ? es : 8); }
+            break;
+        case RL_VTAG_BOOL: { uint64_t one = v.data.boolean ? 1 : 0; memcpy(slot, &one, es < 8 ? es : 8); break; }
+        case RL_VTAG_STR:
+            if (es == sizeof(rl_string)) memcpy(slot, &v.data.str, es);
+            else { free(buf); return rl_err(-1); }
+            break;
+        case RL_VTAG_CHAR: { uint64_t code = (uint64_t)v.data.i64; memcpy(slot, &code, es < 8 ? es : 8); break; }
+        default: free(buf); return rl_err(-1);
+    }
+    if (src && (uint64_t)idx < a.len) memcpy(buf + (idx + 1) * es, src + idx * es, (a.len - (uint64_t)idx) * es);
+    rl_array out;
+    out.data = buf;
+    out.len = new_len;
+    out.cap = new_len;
+    out.elem_size = (int32_t)es;
+    out.type_tag = a.type_tag;
+    return rl_ok_arr(out);
+}
+
 rl_result rl_arr_insert(rl_array a, int64_t idx, int64_t v) {
     if (idx < 0) idx = 0;
     if ((uint64_t)idx > a.len) idx = (int64_t)a.len;
@@ -2165,31 +3081,58 @@ rl_result rl_arr_insert(rl_array a, int64_t idx, int64_t v) {
 // Insert `v` at `idx` / drop the element at `idx`.
 rl_result rl_arr_remove(rl_array a, int64_t idx) {
     if (idx < 0 || (uint64_t)idx >= a.len) return rl_make_err(-1, "index out of bounds");
-    int64_t *src = (int64_t *)a.data;
+    uint64_t es = a.elem_size ? (uint64_t)a.elem_size : sizeof(int64_t);
+    char *src = (char *)a.data;
     uint64_t new_len = a.len - 1;
-    int64_t *buf = malloc(new_len * sizeof(int64_t));
-    if (idx > 0) memcpy(buf, src, (uint64_t)idx * sizeof(int64_t));
-    if ((uint64_t)idx < a.len - 1) memcpy(buf + idx, src + idx + 1, (a.len - (uint64_t)idx - 1) * sizeof(int64_t));
-    return rl_ok_arr(rl_arr_from_vals(buf, new_len, sizeof(int64_t)));
+    char *buf = malloc(new_len * es);
+    if (idx > 0) memcpy(buf, src, (uint64_t)idx * es);
+    if ((uint64_t)idx < a.len - 1) memcpy(buf + idx * es, src + (idx + 1) * es, (a.len - (uint64_t)idx - 1) * es);
+    rl_array out;
+    out.data = buf;
+    out.len = new_len;
+    out.cap = new_len;
+    out.elem_size = (int32_t)es;
+    out.type_tag = a.type_tag;
+    return rl_ok_arr(out);
 }
 
 // Reversed / concatenated copies (inputs unchanged).
 rl_array rl_arr_reverse(rl_array a) {
-    int64_t *src = (int64_t *)a.data;
-    int64_t *buf = malloc(a.len * sizeof(int64_t));
+    uint64_t es = a.elem_size ? (uint64_t)a.elem_size : sizeof(int64_t);
+    char *buf = malloc(a.len * es);
     for (uint64_t i = 0; i < a.len; i++) {
-        buf[i] = src[a.len - 1 - i];
+        memcpy(buf + i * es, (char *)a.data + (a.len - 1 - i) * es, es);
     }
-    return rl_arr_from_vals(buf, a.len, sizeof(int64_t));
+    rl_array out;
+    out.data = buf;
+    out.len = a.len;
+    out.cap = a.len;
+    out.elem_size = (int32_t)es;
+    out.type_tag = a.type_tag;
+    return out;
 }
 
 // Reversed / concatenated copies (inputs unchanged).
 rl_array rl_arr_concat(rl_array a, rl_array b) {
+    uint64_t es = a.elem_size ? (uint64_t)a.elem_size : sizeof(int64_t);
     uint64_t new_len = a.len + b.len;
-    int64_t *buf = malloc(new_len * sizeof(int64_t));
-    if (a.data) memcpy(buf, a.data, a.len * sizeof(int64_t));
-    if (b.data) memcpy(buf + a.len, b.data, b.len * sizeof(int64_t));
-    return rl_arr_from_vals(buf, new_len, sizeof(int64_t));
+    char *buf = malloc(new_len * es);
+    if (a.data) memcpy(buf, a.data, a.len * es);
+    if (b.data) {
+        uint64_t bes = b.elem_size ? (uint64_t)b.elem_size : sizeof(int64_t);
+        uint64_t copy_es = bes < es ? bes : es;
+        for (uint64_t i = 0; i < b.len; i++) {
+            memset(buf + (a.len + i) * es, 0, es);
+            memcpy(buf + (a.len + i) * es, (char *)b.data + i * bes, copy_es);
+        }
+    }
+    rl_array out;
+    out.data = buf;
+    out.len = new_len;
+    out.cap = new_len;
+    out.elem_size = (int32_t)es;
+    out.type_tag = a.type_tag;
+    return out;
 }
 
 // First / last element, or an error when empty.
@@ -2204,32 +3147,65 @@ rl_result rl_arr_last(rl_array a) {
     return rl_ok_i64(((int64_t *)a.data)[a.len - 1]);
 }
 
+// Element equality by tag: strings compare contents, everything else
+// compares raw bytes (ints, floats and bools have no padding).
+static bool _rl_arr_elems_eq(uint64_t es, int32_t tag, const char *x, const char *y) {
+    if (tag == RL_TAG_STR) {
+        rl_string a;
+        rl_string b;
+        memcpy(&a, x, sizeof(rl_string));
+        memcpy(&b, y, sizeof(rl_string));
+        return a.len == b.len && memcmp(a.data, b.data, a.len) == 0;
+    }
+    return memcmp(x, y, es) == 0;
+}
+
 // Copy with duplicates removed, keeping first-seen order.
-rl_array rl_arr_unique(rl_array a) {
-    int64_t *src = (int64_t *)a.data;
-    int64_t *buf = malloc(a.len * sizeof(int64_t));
+rl_array rl_arr_unique_t(rl_array a, int32_t tag) {
+    uint64_t es = a.elem_size ? (uint64_t)a.elem_size : sizeof(int64_t);
+    char *buf = malloc(a.len * es);
     uint64_t w = 0;
     for (uint64_t i = 0; i < a.len; i++) {
         bool found = false;
         for (uint64_t j = 0; j < w; j++) {
-            if (buf[j] == src[i]) { found = true; break; }
+            if (_rl_arr_elems_eq(es, tag, buf + j * es, (char *)a.data + i * es)) {
+                found = true;
+                break;
+            }
         }
-        if (!found) buf[w++] = src[i];
+        if (!found) {
+            memcpy(buf + w * es, (char *)a.data + i * es, es);
+            w++;
+        }
     }
-    return rl_arr_from_vals(buf, w, sizeof(int64_t));
+    rl_array out;
+    out.data = buf;
+    out.len = w;
+    out.cap = a.len;
+    out.elem_size = (int32_t)es;
+    out.type_tag = a.type_tag;
+    return out;
 }
 
 // Copy of `[start, end)` with clamping.
 rl_array rl_arr_slice(rl_array a, int64_t start, int64_t end) {
+    uint64_t es = a.elem_size ? (uint64_t)a.elem_size : sizeof(int64_t);
     if (start < 0) start = 0;
     if (end > (int64_t)a.len) end = (int64_t)a.len;
     if (start >= end) {
-        return rl_arr_from_vals(NULL, 0, sizeof(int64_t));
+        rl_array empty = { .data = NULL, .len = 0, .cap = 0, .elem_size = (int32_t)es, .type_tag = a.type_tag };
+        return empty;
     }
     uint64_t len = (uint64_t)(end - start);
-    int64_t *buf = malloc(len * sizeof(int64_t));
-    memcpy(buf, (int64_t *)a.data + start, len * sizeof(int64_t));
-    return rl_arr_from_vals(buf, len, sizeof(int64_t));
+    char *buf = malloc(len * es);
+    memcpy(buf, (char *)a.data + start * es, len * es);
+    rl_array out;
+    out.data = buf;
+    out.len = len;
+    out.cap = len;
+    out.elem_size = (int32_t)es;
+    out.type_tag = a.type_tag;
+    return out;
 }
 
 // Membership test / first index (or -1) wrapped as results.
@@ -2258,6 +3234,43 @@ rl_array rl_arr_fill(int64_t v, int64_t count) {
     return rl_arr_from_vals(buf, (uint64_t)count, sizeof(int64_t));
 }
 
+// Fresh array of `count` copies of a boxed value; element width follows
+// the value tag.
+rl_array rl_arr_fill_v(rl_value v, int64_t count) {
+    uint64_t es = sizeof(int64_t);
+    int32_t tag = RL_TAG_I64;
+    switch (v.tag) {
+        case RL_VTAG_F64: es = sizeof(double); tag = RL_TAG_F64; break;
+        case RL_VTAG_BOOL: es = sizeof(bool); tag = RL_TAG_BOOL; break;
+        case RL_VTAG_STR: es = sizeof(rl_string); tag = RL_TAG_STR; break;
+        case RL_VTAG_ARR: es = sizeof(rl_array); tag = RL_TAG_ARR; break;
+        default: break;
+    }
+    if (count <= 0) {
+        rl_array empty = { .data = NULL, .len = 0, .cap = 0, .elem_size = (int32_t)es, .type_tag = tag };
+        return empty;
+    }
+    char *buf = malloc((uint64_t)count * es);
+    for (int64_t i = 0; i < count; i++) {
+        char *slot = buf + i * es;
+        memset(slot, 0, es);
+        switch (v.tag) {
+            case RL_VTAG_F64: memcpy(slot, &v.data.f64, es); break;
+            case RL_VTAG_BOOL: *(uint8_t *)slot = v.data.boolean ? 1 : 0; break;
+            case RL_VTAG_STR: memcpy(slot, &v.data.str, es); break;
+            case RL_VTAG_ARR: memcpy(slot, &v.data.arr, es); break;
+            default: memcpy(slot, &v.data.i64, es < 8 ? es : 8); break;
+        }
+    }
+    rl_array out;
+    out.data = buf;
+    out.len = (uint64_t)count;
+    out.cap = (uint64_t)count;
+    out.elem_size = (int32_t)es;
+    out.type_tag = tag;
+    return out;
+}
+
 // Stepped integer sequence, or an error for a zero step.
 rl_result rl_arr_range(int64_t start, int64_t end, int64_t step) {
     if (step == 0) {
@@ -2284,39 +3297,79 @@ rl_result rl_arr_range(int64_t start, int64_t end, int64_t step) {
 }
 
 // Sum / product / max / min, erroring on empty input.
-rl_result rl_arr_sum(rl_array a) {
-    int64_t *src = (int64_t *)a.data;
+// Read one element as int64 (narrower widths widen).
+static int64_t _rl_arr_read_i64(rl_array a, uint64_t i) {
+    uint64_t es = a.elem_size ? (uint64_t)a.elem_size : sizeof(int64_t);
+    int64_t v = 0;
+    if (a.data) memcpy(&v, (char *)a.data + i * es, es < sizeof(int64_t) ? es : sizeof(int64_t));
+    return v;
+}
+
+// Read one element as float64.
+static double _rl_arr_read_f64(rl_array a, uint64_t i) {
+    uint64_t es = a.elem_size ? (uint64_t)a.elem_size : sizeof(int64_t);
+    double v = 0;
+    if (a.data) memcpy(&v, (char *)a.data + i * es, es < sizeof(double) ? es : sizeof(double));
+    return v;
+}
+
+rl_result rl_arr_sum_t(rl_array a, int32_t tag) {
+    if (tag == RL_TAG_F64) {
+        double sum = 0;
+        for (uint64_t i = 0; i < a.len; i++) sum += _rl_arr_read_f64(a, i);
+        return rl_ok_f64(sum);
+    }
     int64_t sum = 0;
-    for (uint64_t i = 0; i < a.len; i++) sum += src[i];
+    for (uint64_t i = 0; i < a.len; i++) sum += _rl_arr_read_i64(a, i);
     return rl_ok_i64(sum);
 }
 
 // Sum / product / max / min, erroring on empty input.
-rl_result rl_arr_product(rl_array a) {
-    int64_t *src = (int64_t *)a.data;
+rl_result rl_arr_product_t(rl_array a, int32_t tag) {
+    if (tag == RL_TAG_F64) {
+        double prod = 1;
+        for (uint64_t i = 0; i < a.len; i++) prod *= _rl_arr_read_f64(a, i);
+        return rl_ok_f64(prod);
+    }
     int64_t prod = 1;
-    for (uint64_t i = 0; i < a.len; i++) prod *= src[i];
+    for (uint64_t i = 0; i < a.len; i++) prod *= _rl_arr_read_i64(a, i);
     return rl_ok_i64(prod);
 }
 
 // Sum / product / max / min, erroring on empty input.
-rl_result rl_arr_max(rl_array a) {
+rl_result rl_arr_max_t(rl_array a, int32_t tag) {
     if (a.len == 0) return rl_make_err(-1, "max of empty array");
-    int64_t *src = (int64_t *)a.data;
-    int64_t max = src[0];
+    if (tag == RL_TAG_F64) {
+        double max = _rl_arr_read_f64(a, 0);
+        for (uint64_t i = 1; i < a.len; i++) {
+            double v = _rl_arr_read_f64(a, i);
+            if (v > max) max = v;
+        }
+        return rl_ok_f64(max);
+    }
+    int64_t max = _rl_arr_read_i64(a, 0);
     for (uint64_t i = 1; i < a.len; i++) {
-        if (src[i] > max) max = src[i];
+        int64_t v = _rl_arr_read_i64(a, i);
+        if (v > max) max = v;
     }
     return rl_ok_i64(max);
 }
 
 // Sum / product / max / min, erroring on empty input.
-rl_result rl_arr_min(rl_array a) {
+rl_result rl_arr_min_t(rl_array a, int32_t tag) {
     if (a.len == 0) return rl_make_err(-1, "min of empty array");
-    int64_t *src = (int64_t *)a.data;
-    int64_t min = src[0];
+    if (tag == RL_TAG_F64) {
+        double min = _rl_arr_read_f64(a, 0);
+        for (uint64_t i = 1; i < a.len; i++) {
+            double v = _rl_arr_read_f64(a, i);
+            if (v < min) min = v;
+        }
+        return rl_ok_f64(min);
+    }
+    int64_t min = _rl_arr_read_i64(a, 0);
     for (uint64_t i = 1; i < a.len; i++) {
-        if (src[i] < min) min = src[i];
+        int64_t v = _rl_arr_read_i64(a, i);
+        if (v < min) min = v;
     }
     return rl_ok_i64(min);
 }
@@ -2345,268 +3398,413 @@ static int rl_arr_cmp_str(const void *a, const void *b) {
     return (sa.len > sb.len) - (sa.len < sb.len);
 }
 
-// Sorted copy (input unchanged).
-rl_array rl_arr_sort(rl_array a) {
-    if (a.len == 0) return a;
-    switch (a.type_tag) {
-        case RL_TAG_F64: {
-            double *buf = malloc(a.len * sizeof(double));
-            if (a.data) memcpy(buf, a.data, a.len * sizeof(double));
-            qsort(buf, a.len, sizeof(double), rl_arr_cmp_f64);
-            rl_array result = { .data = buf, .len = a.len, .cap = a.len, .elem_size = sizeof(double), .type_tag = RL_TAG_F64 };
-            return result;
-        }
-        case RL_TAG_STR: {
-            rl_string *buf = malloc(a.len * sizeof(rl_string));
-            if (a.data) memcpy(buf, a.data, a.len * sizeof(rl_string));
-            qsort(buf, a.len, sizeof(rl_string), rl_arr_cmp_str);
-            rl_array result = { .data = buf, .len = a.len, .cap = a.len, .elem_size = sizeof(rl_string), .type_tag = RL_TAG_STR };
-            return result;
-        }
-        default: {
-            int64_t *buf = malloc(a.len * sizeof(int64_t));
-            if (a.data) memcpy(buf, a.data, a.len * sizeof(int64_t));
-            qsort(buf, a.len, sizeof(int64_t), rl_arr_cmp_i64);
-            return rl_arr_from_vals(buf, a.len, sizeof(int64_t));
-        }
+// Sorted copy (input unchanged); element kind by tag.
+rl_array rl_arr_sort_t(rl_array a, int32_t tag) {
+    uint64_t es = a.elem_size ? (uint64_t)a.elem_size : sizeof(int64_t);
+    if (a.len == 0) {
+        rl_array empty = { .data = NULL, .len = 0, .cap = 0, .elem_size = (int32_t)es, .type_tag = tag };
+        return empty;
     }
+    if (tag == RL_TAG_F64 && es == sizeof(double)) {
+        double *buf = malloc(a.len * sizeof(double));
+        if (a.data) memcpy(buf, a.data, a.len * sizeof(double));
+        qsort(buf, a.len, sizeof(double), rl_arr_cmp_f64);
+        rl_array result = { .data = buf, .len = a.len, .cap = a.len, .elem_size = sizeof(double), .type_tag = RL_TAG_F64 };
+        return result;
+    }
+    if (tag == RL_TAG_STR && es == sizeof(rl_string)) {
+        rl_string *buf = malloc(a.len * sizeof(rl_string));
+        if (a.data) memcpy(buf, a.data, a.len * sizeof(rl_string));
+        qsort(buf, a.len, sizeof(rl_string), rl_arr_cmp_str);
+        rl_array result = { .data = buf, .len = a.len, .cap = a.len, .elem_size = sizeof(rl_string), .type_tag = RL_TAG_STR };
+        return result;
+    }
+    int64_t *buf = malloc(a.len * sizeof(int64_t));
+    for (uint64_t i = 0; i < a.len; i++) buf[i] = _rl_arr_read_i64(a, i);
+    qsort(buf, a.len, sizeof(int64_t), rl_arr_cmp_i64);
+    return rl_arr_from_vals(buf, a.len, sizeof(int64_t));
 }
 
-// One-level flatten of nested arrays.
+// One-level flatten of nested arrays; element width follows the first
+// inner array.
 rl_array rl_arr_flatten(rl_array a) {
-    int64_t *buf = malloc(a.len * sizeof(int64_t));
-    if (a.data) memcpy(buf, a.data, a.len * sizeof(int64_t));
-    return rl_arr_from_vals(buf, a.len, sizeof(int64_t));
+    uint64_t outer_es = a.elem_size ? (uint64_t)a.elem_size : sizeof(rl_array);
+    uint64_t cap = 16;
+    uint64_t es = sizeof(int64_t);
+    int32_t tag = RL_TAG_I64;
+    // Size pass: find the inner width first.
+    for (uint64_t i = 0; i < a.len; i++) {
+        rl_array inner;
+        memset(&inner, 0, sizeof(inner));
+        memcpy(&inner, (char *)a.data + i * outer_es,
+            outer_es < sizeof(inner) ? outer_es : sizeof(inner));
+        if (inner.elem_size) {
+            es = (uint64_t)inner.elem_size;
+            tag = inner.type_tag;
+            break;
+        }
+    }
+    char *buf = malloc(cap * es);
+    uint64_t count = 0;
+    uint64_t total = 0;
+    for (uint64_t i = 0; i < a.len; i++) {
+        rl_array inner;
+        memset(&inner, 0, sizeof(inner));
+        memcpy(&inner, (char *)a.data + i * outer_es,
+            outer_es < sizeof(inner) ? outer_es : sizeof(inner));
+        total += inner.len;
+    }
+    if (total > cap) {
+        cap = total;
+        buf = realloc(buf, cap * es);
+    }
+    for (uint64_t i = 0; i < a.len; i++) {
+        rl_array inner;
+        memset(&inner, 0, sizeof(inner));
+        memcpy(&inner, (char *)a.data + i * outer_es,
+            outer_es < sizeof(inner) ? outer_es : sizeof(inner));
+        uint64_t inner_es = inner.elem_size ? (uint64_t)inner.elem_size : es;
+        if (inner_es != es) continue;
+        for (uint64_t j = 0; j < inner.len; j++) {
+            memcpy(buf + count * es, (char *)inner.data + j * inner_es, es);
+            count++;
+        }
+    }
+    rl_array out;
+    out.data = buf;
+    out.len = count;
+    out.cap = cap;
+    out.elem_size = (int32_t)es;
+    out.type_tag = tag;
+    return out;
 }
 
 // ---- closure-consuming array functions ----
 
-// Keep elements where pred returns true.
-rl_result rl_arr_filter_closure(rl_array arr, rl_closure pred) {
-    uint64_t cap = 16;
-    int64_t *buf = malloc(cap * sizeof(int64_t));
-    uint64_t count = 0;
-    int64_t *elems = (int64_t *)arr.data;
-    for (uint64_t i = 0; i < arr.len; i++) {
-        rl_result arg = rl_ok_i64(elems[i]);
-        rl_result keep = rl_closure_call(pred, &arg, 1);
-        bool truth = false;
-        if (keep.is_ok) {
-            if (keep.tag == RL_TAG_BOOL) truth = keep.data.boolean;
-            else if (keep.tag == RL_TAG_I64) truth = (keep.data.i64 != 0);
-            else if (keep.tag == RL_TAG_NULL) truth = false;
+// Box one array element as an `rl_result` argument by payload tag.
+// Unknown tags fall back to the legacy int64 read.
+static rl_result _rl_box_array_elem(rl_array arr, uint64_t i, int32_t tag) {
+    uint64_t es = arr.elem_size ? (uint64_t)arr.elem_size : sizeof(int64_t);
+    char *slot = arr.data ? (char *)arr.data + i * es : NULL;
+    switch (tag) {
+        case RL_TAG_F64: {
+            double v = 0;
+            if (slot) memcpy(&v, slot, es < sizeof(double) ? es : sizeof(double));
+            return rl_ok_f64(v);
         }
-        if (truth) {
-            if (count >= cap) { cap *= 2; buf = realloc(buf, cap * sizeof(int64_t)); }
-            buf[count++] = elems[i];
+        case RL_TAG_BOOL:
+            return rl_ok_bool(slot && *(uint8_t *)slot != 0);
+        case RL_TAG_STR: {
+            rl_string v = { .data = NULL, .len = 0, .rc = 0 };
+            if (slot) memcpy(&v, slot, sizeof(rl_string));
+            return rl_ok_str(v);
+        }
+        case RL_TAG_ARR: {
+            rl_array v = { .data = NULL, .len = 0, .cap = 0, .elem_size = 0, .type_tag = 0 };
+            if (slot) memcpy(&v, slot, sizeof(rl_array));
+            return rl_ok_arr(v);
+        }
+        case RL_TAG_MAP: {
+            rl_map v = { .entries = NULL, .len = 0, .cap = 0 };
+            if (slot) memcpy(&v, slot, sizeof(rl_map));
+            return rl_ok_map(v);
+        }
+        case RL_TAG_SET: {
+            rl_set v = { .data = NULL, .len = 0, .cap = 0 };
+            if (slot) memcpy(&v, slot, sizeof(rl_set));
+            return rl_ok_set(v);
+        }
+        case RL_TAG_CHAR: {
+            int64_t v = 0;
+            if (slot) memcpy(&v, slot, es < sizeof(int64_t) ? es : sizeof(int64_t));
+            rl_result r = { .is_ok = true, .tag = RL_TAG_CHAR, .err_code = 0 };
+            r.data.i64 = v;
+            return r;
+        }
+        case RL_TAG_CLOSURE: {
+            rl_closure v;
+            memset(&v, 0, sizeof(v));
+            if (slot) memcpy(&v, slot, sizeof(rl_closure));
+            return rl_ok_closure(v);
+        }
+        default: {
+            int64_t v = 0;
+            if (slot) memcpy(&v, slot, es < sizeof(int64_t) ? es : sizeof(int64_t));
+            return rl_ok_i64(v);
         }
     }
-    return rl_ok_arr(rl_arr_from_vals(buf, count, sizeof(int64_t)));
 }
 
-// Apply `fn` to every element, collecting the outputs.
-rl_result rl_arr_map_closure(rl_array arr, rl_closure fn) {
-    uint64_t cap = arr.len > 0 ? arr.len : 16;
-    int64_t *buf = malloc(cap * sizeof(int64_t));
+// Predicate truth: bool, nonzero int, or null-as-false like the VM's checks.
+static bool _rl_pred_truth(rl_result v) {
+    if (!v.is_ok) return false;
+    if (v.tag == RL_TAG_BOOL) return v.data.boolean;
+    if (v.tag == RL_TAG_I64) return v.data.i64 != 0;
+    if (v.tag == RL_TAG_NULL) return false;
+    return false;
+}
+
+// Keep elements where pred returns true; callback errors propagate.
+rl_result rl_arr_filter_closure(rl_array arr, rl_closure pred, int32_t tag) {
+    uint64_t es = arr.elem_size ? (uint64_t)arr.elem_size : sizeof(int64_t);
+    uint64_t cap = 16;
+    char *buf = malloc(cap * es);
     uint64_t count = 0;
-    int64_t *elems = (int64_t *)arr.data;
     for (uint64_t i = 0; i < arr.len; i++) {
-        rl_result arg = rl_ok_i64(elems[i]);
-        rl_result mapped = rl_closure_call(fn, &arg, 1);
-        if (count >= cap) { cap *= 2; buf = realloc(buf, cap * sizeof(int64_t)); }
-        if (mapped.is_ok) {
-            switch (mapped.tag) {
-                case RL_TAG_I64: buf[count++] = mapped.data.i64; break;
-                case RL_TAG_F64: { double d = mapped.data.f64; int64_t v; memcpy(&v, &d, sizeof(v)); buf[count++] = v; break; }
-                case RL_TAG_BOOL: buf[count++] = mapped.data.boolean ? 1 : 0; break;
-                case RL_TAG_CHAR: buf[count++] = mapped.data.i64; break;
-                default: buf[count++] = 0; break;
-            }
-        } else {
-            buf[count++] = 0;
+        rl_result arg = _rl_box_array_elem(arr, i, tag);
+        rl_result keep = rl_closure_call(pred, &arg, 1);
+        if (!keep.is_ok) { free(buf); return keep; }
+        if (_rl_pred_truth(keep)) {
+            if (count >= cap) { cap *= 2; buf = realloc(buf, cap * es); }
+            memcpy(buf + count * es, (char *)arr.data + i * es, es);
+            count++;
         }
     }
-    return rl_ok_arr(rl_arr_from_vals(buf, count, sizeof(int64_t)));
+    rl_array out;
+    out.data = buf;
+    out.len = count;
+    out.cap = cap;
+    out.elem_size = (int32_t)es;
+    out.type_tag = arr.type_tag;
+    return rl_ok_arr(out);
+}
+
+// Apply `fn` to every element, collecting the outputs. Outputs must be
+// homogeneous; callback errors and mixed outputs propagate as errors.
+rl_result rl_arr_map_closure(rl_array arr, rl_closure fn, int32_t tag) {
+    uint64_t cap = 16;
+    rl_result *outs = malloc(cap * sizeof(rl_result));
+    uint64_t count = 0;
+    for (uint64_t i = 0; i < arr.len; i++) {
+        rl_result arg = _rl_box_array_elem(arr, i, tag);
+        rl_result mapped = rl_closure_call(fn, &arg, 1);
+        if (!mapped.is_ok) {
+            free(outs);
+            return mapped;
+        }
+        if (count >= cap) { cap *= 2; outs = realloc(outs, cap * sizeof(rl_result)); }
+        outs[count++] = mapped;
+    }
+    if (count == 0) {
+        free(outs);
+        rl_array empty = { .data = NULL, .len = 0, .cap = 0, .elem_size = sizeof(int64_t), .type_tag = RL_TAG_I64 };
+        return rl_ok_arr(empty);
+    }
+    int32_t out_tag = outs[0].tag;
+    for (uint64_t i = 1; i < count; i++) {
+        if (outs[i].tag != out_tag) {
+            free(outs);
+            return rl_err(-1);
+        }
+    }
+    uint64_t es;
+    switch (out_tag) {
+        case RL_TAG_F64: es = sizeof(double); break;
+        case RL_TAG_BOOL: es = sizeof(bool); break;
+        case RL_TAG_STR: es = sizeof(rl_string); break;
+        case RL_TAG_ARR: es = sizeof(rl_array); break;
+        case RL_TAG_MAP: es = sizeof(rl_map); break;
+        case RL_TAG_SET: es = sizeof(rl_set); break;
+        case RL_TAG_CHAR: es = sizeof(int64_t); break;
+        default: es = sizeof(int64_t); break;
+    }
+    char *buf = malloc(count * es);
+    for (uint64_t i = 0; i < count; i++) {
+        char *slot = buf + i * es;
+        switch (out_tag) {
+            case RL_TAG_F64: memcpy(slot, &outs[i].data.f64, es); break;
+            case RL_TAG_BOOL: { uint8_t b = outs[i].data.boolean ? 1 : 0; memcpy(slot, &b, es); break; }
+            case RL_TAG_STR: memcpy(slot, &outs[i].data.str, es); break;
+            case RL_TAG_ARR: memcpy(slot, &outs[i].data.arr, es); break;
+            case RL_TAG_MAP: memcpy(slot, &outs[i].data.map, es); break;
+            case RL_TAG_SET: memcpy(slot, &outs[i].data.set, es); break;
+            case RL_TAG_CHAR: memcpy(slot, &outs[i].data.i64, es); break;
+            default: memcpy(slot, &outs[i].data.i64, es); break;
+        }
+    }
+    free(outs);
+    rl_array out;
+    out.data = buf;
+    out.len = count;
+    out.cap = count;
+    out.elem_size = (int32_t)es;
+    out.type_tag = out_tag;
+    return rl_ok_arr(out);
 }
 
 // First element where `pred` returns true (error when none matches).
-rl_result rl_arr_find_closure(rl_array arr, rl_closure pred) {
-    int64_t *elems = (int64_t *)arr.data;
+// First element where `pred` holds (null when none); errors propagate.
+rl_result rl_arr_find_closure(rl_array arr, rl_closure pred, int32_t tag) {
     for (uint64_t i = 0; i < arr.len; i++) {
-        rl_result arg = rl_ok_i64(elems[i]);
+        rl_result arg = _rl_box_array_elem(arr, i, tag);
         rl_result found = rl_closure_call(pred, &arg, 1);
-        if (found.is_ok && found.tag == RL_TAG_BOOL && found.data.boolean) {
-            return rl_ok_i64(elems[i]);
-        }
-    }
-    return rl_err_msg(rl_str_literal("not found", 9));
-}
-
-// Left fold starting from `init`.
-rl_result rl_arr_reduce_closure(rl_array arr, rl_closure fn, rl_result init) {
-    int64_t *elems = (int64_t *)arr.data;
-    rl_result acc = init;
-    for (uint64_t i = 0; i < arr.len; i++) {
-        rl_result args[2] = { acc, rl_ok_i64(elems[i]) };
-        acc = rl_closure_call(fn, args, 2);
-    }
-    return acc;
-}
-
-// Index of the first match (error when none matches).
-rl_result rl_arr_find_index_closure(rl_array arr, rl_closure pred) {
-    int64_t *elems = (int64_t *)arr.data;
-    for (uint64_t i = 0; i < arr.len; i++) {
-        rl_result arg = rl_ok_i64(elems[i]);
-        rl_result found = rl_closure_call(pred, &arg, 1);
-        if (found.is_ok && ((found.tag == RL_TAG_BOOL && found.data.boolean) || (found.tag == RL_TAG_I64 && found.data.i64 != 0))) {
-            return rl_ok_i64((int64_t)i);
-        }
-    }
-    return rl_ok_i64((int64_t)-1);
-}
-
-// True when `pred` holds for all / for at least one element.
-rl_result rl_arr_all_closure(rl_array arr, rl_closure pred) {
-    int64_t *elems = (int64_t *)arr.data;
-    for (uint64_t i = 0; i < arr.len; i++) {
-        rl_result arg = rl_ok_i64(elems[i]);
-        rl_result ok = rl_closure_call(pred, &arg, 1);
-        bool truth = false;
-        if (ok.is_ok) {
-            if (ok.tag == RL_TAG_BOOL) truth = ok.data.boolean;
-            else if (ok.tag == RL_TAG_I64) truth = (ok.data.i64 != 0);
-        }
-        if (!truth) return rl_ok_bool(false);
-    }
-    return rl_ok_bool(true);
-}
-
-// True when `pred` holds for all / for at least one element.
-rl_result rl_arr_any_closure(rl_array arr, rl_closure pred) {
-    int64_t *elems = (int64_t *)arr.data;
-    for (uint64_t i = 0; i < arr.len; i++) {
-        rl_result arg = rl_ok_i64(elems[i]);
-        rl_result ok = rl_closure_call(pred, &arg, 1);
-        bool truth = false;
-        if (ok.is_ok) {
-            if (ok.tag == RL_TAG_BOOL) truth = ok.data.boolean;
-            else if (ok.tag == RL_TAG_I64) truth = (ok.data.i64 != 0);
-        }
-        if (truth) return rl_ok_bool(true);
-    }
-    return rl_ok_bool(false);
-}
-
-// Run `fn` for side effects; returns the input length.
-rl_result rl_arr_for_each_closure(rl_array arr, rl_closure fn) {
-    int64_t *elems = (int64_t *)arr.data;
-    for (uint64_t i = 0; i < arr.len; i++) {
-        rl_result arg = rl_ok_i64(elems[i]);
-        rl_closure_call(fn, &arg, 1);
+        if (!found.is_ok) return found;
+        if (_rl_pred_truth(found)) return arg;
     }
     return rl_ok_null();
 }
 
-// Map, then concatenate one level of the resulting arrays.
-rl_result rl_arr_flat_map_closure(rl_array arr, rl_closure fn) {
-    uint64_t cap = 16;
-    int64_t *buf = malloc(cap * sizeof(int64_t));
-    uint64_t count = 0;
-    int64_t *elems = (int64_t *)arr.data;
+// Left fold starting from `init`; callback errors propagate.
+rl_result rl_arr_reduce_closure(rl_array arr, rl_closure fn, rl_result init, int32_t tag) {
+    rl_result acc = init;
     for (uint64_t i = 0; i < arr.len; i++) {
-        rl_result arg = rl_ok_i64(elems[i]);
+        rl_result args[2] = { acc, _rl_box_array_elem(arr, i, tag) };
+        acc = rl_closure_call(fn, args, 2);
+        if (!acc.is_ok) return acc;
+    }
+    return acc;
+}
+
+// Index of the first match, or -1 when absent; errors propagate.
+rl_result rl_arr_find_index_closure(rl_array arr, rl_closure pred, int32_t tag) {
+    for (uint64_t i = 0; i < arr.len; i++) {
+        rl_result arg = _rl_box_array_elem(arr, i, tag);
+        rl_result found = rl_closure_call(pred, &arg, 1);
+        if (!found.is_ok) return found;
+        if (_rl_pred_truth(found)) return rl_ok_i64((int64_t)i);
+    }
+    return rl_ok_i64((int64_t)-1);
+}
+
+// True when `pred` holds for all elements; errors propagate.
+rl_result rl_arr_all_closure(rl_array arr, rl_closure pred, int32_t tag) {
+    for (uint64_t i = 0; i < arr.len; i++) {
+        rl_result arg = _rl_box_array_elem(arr, i, tag);
+        rl_result ok = rl_closure_call(pred, &arg, 1);
+        if (!ok.is_ok) return ok;
+        if (!_rl_pred_truth(ok)) return rl_ok_bool(false);
+    }
+    return rl_ok_bool(true);
+}
+
+// True when `pred` holds for at least one element; errors propagate.
+rl_result rl_arr_any_closure(rl_array arr, rl_closure pred, int32_t tag) {
+    for (uint64_t i = 0; i < arr.len; i++) {
+        rl_result arg = _rl_box_array_elem(arr, i, tag);
+        rl_result ok = rl_closure_call(pred, &arg, 1);
+        if (!ok.is_ok) return ok;
+        if (_rl_pred_truth(ok)) return rl_ok_bool(true);
+    }
+    return rl_ok_bool(false);
+}
+
+// Run `fn` for side effects; ok null unless a call errors.
+rl_result rl_arr_for_each_closure(rl_array arr, rl_closure fn, int32_t tag) {
+    for (uint64_t i = 0; i < arr.len; i++) {
+        rl_result arg = _rl_box_array_elem(arr, i, tag);
+        rl_result r = rl_closure_call(fn, &arg, 1);
+        if (!r.is_ok) return r;
+    }
+    return rl_ok_null();
+}
+
+// Map, then concatenate one level of the resulting arrays. Inner arrays
+// must share one element width; callback errors propagate.
+rl_result rl_arr_flat_map_closure(rl_array arr, rl_closure fn, int32_t tag) {
+    uint64_t cap = 16;
+    uint64_t es = 0;
+    char *buf = malloc(cap * sizeof(int64_t));
+    uint64_t count = 0;
+    for (uint64_t i = 0; i < arr.len; i++) {
+        rl_result arg = _rl_box_array_elem(arr, i, tag);
         rl_result mapped = rl_closure_call(fn, &arg, 1);
-        if (mapped.is_ok && mapped.tag == RL_TAG_ARR) {
-            rl_array inner = mapped.data.arr;
-            int64_t *inner_elems = (int64_t *)inner.data;
-            for (uint64_t j = 0; j < inner.len; j++) {
-                if (count >= cap) { cap *= 2; buf = realloc(buf, cap * sizeof(int64_t)); }
-                buf[count++] = inner_elems[j];
-            }
+        if (!mapped.is_ok) { free(buf); return mapped; }
+        if (mapped.tag != RL_TAG_ARR) {
+            free(buf);
+            return rl_err(-1);
+        }
+        rl_array inner = mapped.data.arr;
+        uint64_t inner_es = inner.elem_size ? (uint64_t)inner.elem_size : sizeof(int64_t);
+        if (es == 0) {
+            es = inner_es;
+            free(buf);
+            cap = inner.len > 16 ? inner.len : 16;
+            buf = malloc(cap * es);
+        } else if (inner_es != es) {
+            free(buf);
+            return rl_err(-1);
+        }
+        for (uint64_t j = 0; j < inner.len; j++) {
+            if (count >= cap) { cap *= 2; buf = realloc(buf, cap * es); }
+            memcpy(buf + count * es, (char *)inner.data + j * inner_es, es);
+            count++;
         }
     }
-    return rl_ok_arr(rl_arr_from_vals(buf, count, sizeof(int64_t)));
+    if (es == 0) es = sizeof(int64_t);
+    rl_array out;
+    out.data = buf;
+    out.len = count;
+    out.cap = cap;
+    out.elem_size = (int32_t)es;
+    out.type_tag = arr.type_tag;
+    return rl_ok_arr(out);
 }
 
 // Sort using `cmp(a, b)` returning negative / zero / positive.
-rl_result rl_arr_sort_by_closure(rl_array arr, rl_closure cmp) {
-    // Copy the array data for sorting
-    int64_t *elems = (int64_t *)arr.data;
+// Element width is preserved; callback errors propagate.
+rl_result rl_arr_sort_by_closure(rl_array arr, rl_closure cmp, int32_t tag) {
+    uint64_t es = arr.elem_size ? (uint64_t)arr.elem_size : sizeof(int64_t);
     uint64_t len = arr.len;
-    int64_t *buf = malloc(len * sizeof(int64_t));
-    if (len > 0 && elems) memcpy(buf, elems, len * sizeof(int64_t));
+    char *buf = malloc(len * es);
+    if (len > 0 && arr.data) memcpy(buf, arr.data, len * es);
 
     // Simple insertion sort using the comparator closure
+    char *key = malloc(es);
     for (uint64_t i = 1; i < len; i++) {
-        int64_t key = buf[i];
+        memcpy(key, buf + i * es, es);
         int64_t j = (int64_t)i - 1;
         while (j >= 0) {
-            rl_result args[2] = { rl_ok_i64(buf[j]), rl_ok_i64(key) };
+            rl_result args[2] = {
+                _rl_box_array_elem((rl_array){ .data = buf + j * es, .len = 1, .cap = 1, .elem_size = (int32_t)es, .type_tag = arr.type_tag }, 0, tag),
+                _rl_box_array_elem((rl_array){ .data = key, .len = 1, .cap = 1, .elem_size = (int32_t)es, .type_tag = arr.type_tag }, 0, tag),
+            };
             rl_result cmp_result = rl_closure_call(cmp, args, 2);
+            if (!cmp_result.is_ok) { free(key); free(buf); return cmp_result; }
             // If cmp(a, b) > 0, swap (ascending order)
-            if (cmp_result.is_ok && cmp_result.tag == RL_TAG_I64 && cmp_result.data.i64 > 0) {
-                buf[j + 1] = buf[j];
+            if (cmp_result.tag == RL_TAG_I64 && cmp_result.data.i64 > 0) {
+                memcpy(buf + (j + 1) * es, buf + j * es, es);
                 j--;
             } else {
                 break;
             }
         }
-        buf[j + 1] = key;
+        memcpy(buf + (j + 1) * es, key, es);
     }
-    return rl_ok_arr(rl_arr_from_vals(buf, len, sizeof(int64_t)));
+    free(key);
+    rl_array out;
+    out.data = buf;
+    out.len = len;
+    out.cap = len;
+    out.elem_size = (int32_t)es;
+    out.type_tag = arr.type_tag;
+    return rl_ok_arr(out);
 }
 
 // ---- closure-consuming result functions ----
 // Apply closures to result payloads, passing the other case through.
-// Apply `fn` to the payload of an ok result (passes errors through).
+// Apply `fn` to an ok result (passes errors through as-is).
 rl_result rl_result_map_closure(rl_result val, rl_closure fn) {
     if (!val.is_ok) return val;
-    switch (val.tag) {
-        case RL_TAG_I64: {
-            rl_result arg = rl_ok_i64(val.data.i64);
-            return rl_closure_call(fn, &arg, 1);
-        }
-        case RL_TAG_F64: {
-            rl_result arg = rl_ok_f64(val.data.f64);
-            return rl_closure_call(fn, &arg, 1);
-        }
-        case RL_TAG_BOOL: {
-            rl_result arg = rl_ok_bool(val.data.boolean);
-            return rl_closure_call(fn, &arg, 1);
-        }
-        case RL_TAG_STR: {
-            rl_result arg = rl_ok_str(val.data.str);
-            return rl_closure_call(fn, &arg, 1);
-        }
-        case RL_TAG_ARR: {
-            rl_result arg = rl_ok_arr(val.data.arr);
-            return rl_closure_call(fn, &arg, 1);
-        }
-        default: {
-            rl_result arg = rl_ok_null();
-            return rl_closure_call(fn, &arg, 1);
-        }
-    }
+    return rl_closure_call(fn, &val, 1);
 }
 
-// Apply `fn` to the code of an error result (passes ok values through).
+// Apply `fn` to the payload of an error result, wrapping the return as
+// the new error (passes ok values through as-is).
 rl_result rl_result_map_err_closure(rl_result val, rl_closure fn) {
     if (val.is_ok) return val;
-    switch (val.tag) {
-        case RL_TAG_I64: {
-            rl_result arg = rl_ok_i64(val.data.i64);
-            return rl_err(rl_unwrap_i64(rl_closure_call(fn, &arg, 1)));
-        }
-        case RL_TAG_STR: {
-            rl_result arg = rl_ok_str(val.data.str);
-            return rl_closure_call(fn, &arg, 1);
-        }
-        default: {
-            rl_result arg = rl_ok_i64(val.err_code);
-            return rl_err(rl_unwrap_i64(rl_closure_call(fn, &arg, 1)));
-        }
+    rl_result arg;
+    if (val.tag == RL_TAG_STR) {
+        arg = rl_ok_str(val.data.str);
+    } else if (val.err_code != 0) {
+        arg = rl_ok_i64(val.err_code);
+    } else {
+        arg = rl_ok_i64(val.data.i64);
     }
+    rl_result mapped = rl_closure_call(fn, &arg, 1);
+    if (!mapped.is_ok) return mapped;
+    rl_result err = { .is_ok = false, .tag = mapped.tag, .err_code = 0 };
+    err.data = mapped.data;
+    return err;
 }
 
 // ---- closure-consuming debug ----
@@ -2630,21 +3828,45 @@ rl_result rl_bench_closure(rl_closure fn, int64_t iterations) {
 #include <unistd.h>
 #include <stdio.h>
 
-// Switch to / back from the alternate screen buffer.
+// Saved TTY settings while raw mode is active.
+static struct termios _rl_saved_termios;
+static bool _rl_term_raw = false;
+
+// Raw mode plus alternate screen, mirroring crossterm: errors when stdin
+// has no TTY settings to take over.
 rl_result rl_term_enter(void) {
+    if (tcgetattr(STDIN_FILENO, &_rl_saved_termios) != 0) return rl_err(-1);
+    struct termios raw = _rl_saved_termios;
+    raw.c_iflag &= (unsigned int)(~(BRKINT | ICRNL | INPCK | ISTRIP | IXON));
+    raw.c_oflag &= (unsigned int)(~OPOST);
+    raw.c_cflag |= (CS8);
+    raw.c_lflag &= (unsigned int)(~(ECHO | ICANON | IEXTEN | ISIG));
+    raw.c_cc[VMIN] = 1;
+    raw.c_cc[VTIME] = 0;
+    // NOW, not FLUSH: pending typeahead must survive the switch.
+    if (tcsetattr(STDIN_FILENO, TCSANOW, &raw) != 0) return rl_err(-1);
+    _rl_term_raw = true;
     printf("\x1b[?1049h");
     return rl_ok_null();
 }
 
-// Switch to / back from the alternate screen buffer.
+// Flush, restore cooked mode, show the cursor, leave the screen.
 rl_result rl_term_leave(void) {
-    printf("\x1b[?1049l");
+    fflush(stdout);
+    fflush(stderr);
+    if (_rl_term_raw) {
+        tcsetattr(STDIN_FILENO, TCSANOW, &_rl_saved_termios);
+        _rl_term_raw = false;
+    }
+    printf("\x1b[?25h\x1b[?1049l");
+    fflush(stdout);
     return rl_ok_null();
 }
 
 // Clear the whole screen / the current line.
 rl_result rl_term_clear(void) {
-    printf("\x1b[2J\x1b[H");
+    // Clear only: no cursor homing, matching crossterm Clear(All).
+    printf("\x1b[2J");
     return rl_ok_null();
 }
 
@@ -2655,55 +3877,69 @@ rl_result rl_term_clear_line(void) {
 }
 
 // Move the cursor: absolute position, column only, row only, relative steps, or N lines down / up to column 0.
+// Reject negative coordinates with the VM's error shape
+// (`<name> must be >= 0, got <v>`); use at the top of cursor/size fns.
+#define _RL_TERM_NONNEG(v, name) do { if ((v) < 0) { char *_m = malloc(64); int _n = snprintf(_m, 64, "%s must be >= 0, got %ld", name, (long)(v)); return rl_err_msg((rl_string){ .data = _m, .len = (uint64_t)_n, .rc = 1 }); } } while (0)
+
 rl_result rl_term_move(int64_t col, int64_t row) {
+    _RL_TERM_NONNEG(col, "x");
+    _RL_TERM_NONNEG(row, "y");
     printf("\x1b[%ld;%ldH", (long)row + 1, (long)col + 1);
     return rl_ok_null();
 }
 
 // Move the cursor: absolute position, column only, row only, relative steps, or N lines down / up to column 0.
 rl_result rl_term_move_to_col(int64_t col) {
+    _RL_TERM_NONNEG(col, "col");
     printf("\x1b[%ldG", (long)col + 1);
     return rl_ok_null();
 }
 
 // Move the cursor: absolute position, column only, row only, relative steps, or N lines down / up to column 0.
 rl_result rl_term_move_to_row(int64_t row) {
+    _RL_TERM_NONNEG(row, "row");
     printf("\x1b[%ld;d", (long)row + 1);
     return rl_ok_null();
 }
 
 // Move the cursor: absolute position, column only, row only, relative steps, or N lines down / up to column 0.
 rl_result rl_term_move_up(int64_t n) {
+    _RL_TERM_NONNEG(n, "n");
     printf("\x1b[%ldA", (long)n);
     return rl_ok_null();
 }
 
 // Move the cursor: absolute position, column only, row only, relative steps, or N lines down / up to column 0.
 rl_result rl_term_move_down(int64_t n) {
+    _RL_TERM_NONNEG(n, "n");
     printf("\x1b[%ldB", (long)n);
     return rl_ok_null();
 }
 
 // Move the cursor: absolute position, column only, row only, relative steps, or N lines down / up to column 0.
 rl_result rl_term_move_left(int64_t n) {
+    _RL_TERM_NONNEG(n, "n");
     printf("\x1b[%ldD", (long)n);
     return rl_ok_null();
 }
 
 // Move the cursor: absolute position, column only, row only, relative steps, or N lines down / up to column 0.
 rl_result rl_term_move_right(int64_t n) {
+    _RL_TERM_NONNEG(n, "n");
     printf("\x1b[%ldC", (long)n);
     return rl_ok_null();
 }
 
 // Move the cursor: absolute position, column only, row only, relative steps, or N lines down / up to column 0.
 rl_result rl_term_next_line(int64_t n) {
+    _RL_TERM_NONNEG(n, "n");
     printf("\x1b[%ldE", (long)n);
     return rl_ok_null();
 }
 
 // Move the cursor: absolute position, column only, row only, relative steps, or N lines down / up to column 0.
 rl_result rl_term_prev_line(int64_t n) {
+    _RL_TERM_NONNEG(n, "n");
     printf("\x1b[%ldF", (long)n);
     return rl_ok_null();
 }
@@ -2747,24 +3983,30 @@ rl_result rl_term_get_size(int64_t *out_cols, int64_t *out_rows) {
 
 // Request a terminal size (may be ignored by the emulator).
 rl_result rl_term_set_size(int64_t cols, int64_t rows) {
+    _RL_TERM_NONNEG(cols, "cols");
+    _RL_TERM_NONNEG(rows, "rows");
     printf("\x1b[8;%ld;%ldt", (long)rows, (long)cols);
     return rl_ok_null();
 }
 
 // Set the window title to the single char `ch`.
-rl_result rl_term_set_title(int64_t ch) {
-    printf("\x1b]0;%c\x07", (char)(unsigned char)ch);
+// Set the window title to `title`.
+rl_result rl_term_set_title(rl_string title) {
+    if (title.data == NULL) return rl_err(-1);
+    printf("\x1b]0;%.*s\x07", (int)title.len, title.data);
     return rl_ok_null();
 }
 
 // Scroll the viewport up / down by `n` lines.
 rl_result rl_term_scroll_up(int64_t n) {
+    _RL_TERM_NONNEG(n, "n");
     printf("\x1b[%ldS", (long)n);
     return rl_ok_null();
 }
 
 // Scroll the viewport up / down by `n` lines.
 rl_result rl_term_scroll_down(int64_t n) {
+    _RL_TERM_NONNEG(n, "n");
     printf("\x1b[%ldT", (long)n);
     return rl_ok_null();
 }
@@ -2866,63 +4108,267 @@ rl_result rl_term_enable_mouse(void) { printf("\x1b[?1003h\x1b[?1006h"); return 
 // Mouse-event reporting on / off.
 rl_result rl_term_disable_mouse(void) { printf("\x1b[?1003l\x1b[?1006l"); return rl_ok_null(); }
 
-// Print a value without moving to a new line.
-void rl_term_print_inline(rl_result v) {
-    switch (v.tag) {
-        case RL_TAG_I64: printf("%ld", (long)v.data.i64); break;
-        case RL_TAG_F64: printf("%g", v.data.f64); break;
-        case RL_TAG_BOOL: printf("%s", v.data.boolean ? "true" : "false"); break;
-        case RL_TAG_CHAR: printf("%c", (char)(unsigned char)v.data.i64); break;
-        case RL_TAG_STR: printf("%.*s", (int)v.data.str.len, v.data.str.data); break;
-        case RL_TAG_NULL: printf("null"); break;
-        default: printf("<value>"); break;
-    }
+// Print a value without moving to a new line (shared rendering with
+// `format`: bare values print raw, results print decorated).
+void rl_term_print_inline(rl_fmt_arg arg) {
+    char *s = NULL;
+    uint64_t n = 0;
+    _rl_fmt_arg_to_str(arg, &s, &n);
+    if (n > 0) fwrite(s, 1, n, stdout);
+    free(s);
 }
 
 // Read one key press as an array of key codes (blocks).
-rl_array rl_term_read_key(void) {
+// Non-blocking read of one byte into `out`; false on timeout / EOF.
+static bool _rl_term_try_read(uint8_t *out, long micros) {
+    fd_set fds;
+    struct timeval tv = { .tv_sec = micros / 1000000, .tv_usec = micros % 1000000 };
+    FD_ZERO(&fds);
+    FD_SET(STDIN_FILENO, &fds);
+    if (select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv) <= 0) return false;
+    return read(STDIN_FILENO, out, 1) == 1;
+}
+
+// Wrap a C string as an owned rl_string.
+static rl_string _rl_term_key_str(const char *s) {
+    uint64_t len = strlen(s);
+    char *heap = malloc(len + 1);
+    memcpy(heap, s, len + 1);
+    rl_string r = { .data = heap, .len = len, .rc = 1 };
+    return r;
+}
+
+// Single-element key array.
+static rl_result _rl_term_key_one(rl_string name) {
+    rl_string *sarr = malloc(sizeof(rl_string));
+    sarr[0] = name;
+    rl_array arr = { .data = sarr, .len = 1, .cap = 1, .elem_size = sizeof(rl_string), .type_tag = RL_TAG_STR };
+    return rl_ok_arr(arr);
+}
+
+// Read one key press as an array of key-code strings (blocks); ok with
+// the array, or an error on EOF. Names mirror crossterm: `Char:x`,
+// `Ctrl:x`, `Enter`, `Esc`, `Backspace`, arrows, `PageUp`, function keys.
+rl_result rl_term_read_key(void) {
+    // Flush pending output first so the frame being waited on is visible.
+    fflush(stdout);
     char buf[32];
     uint64_t total = 0;
     // blocking read of one byte
     uint8_t c;
-    if (read(STDIN_FILENO, &c, 1) != 1) {
-        rl_string empty = rl_str_literal("", 0);
-        rl_array arr = { .data = NULL, .len = 0, .cap = 0, .elem_size = sizeof(rl_string), .type_tag = RL_TAG_STR };
-        return arr;
-    }
-    buf[total++] = c;
-    // if escape, read more
-    if (c == 27) {
-        uint8_t next;
-        // read with timeout using select
-        fd_set fds;
-        struct timeval tv = { .tv_sec = 0, .tv_usec = 100000 };
-        FD_ZERO(&fds);
-        FD_SET(STDIN_FILENO, &fds);
-        while (select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv) > 0) {
-            if (read(STDIN_FILENO, &next, 1) != 1) break;
-            buf[total++] = next;
-            if (total >= sizeof(buf) - 1) break;
-            FD_ZERO(&fds);
-            FD_SET(STDIN_FILENO, &fds);
-            tv.tv_sec = 0;
-            tv.tv_usec = 10000;
+    if (read(STDIN_FILENO, &c, 1) != 1) return rl_err(-1);
+    // Single-byte keys and control codes.
+    if (c != 27) {
+        if (c == '\r' || c == '\n') return _rl_term_key_one(_rl_term_key_str("Enter"));
+        if (c == '\t') return _rl_term_key_one(_rl_term_key_str("Tab"));
+        if (c == 127) return _rl_term_key_one(_rl_term_key_str("Backspace"));
+        if (c == 0) return _rl_term_key_one(_rl_term_key_str("Null"));
+        if (c < 0x20) {
+            char name[8];
+            snprintf(name, sizeof(name), "Ctrl:%c", (char)('a' + c - 1));
+            return _rl_term_key_one(_rl_term_key_str(name));
         }
+        if (c < 0x80) {
+            char name[8];
+            snprintf(name, sizeof(name), "Char:%c", (char)c);
+            return _rl_term_key_one(_rl_term_key_str(name));
+        }
+        // UTF-8 sequence: read continuation bytes, decode the char.
+        buf[total++] = (char)c;
+        uint64_t need = 0;
+        if ((c & 0xE0) == 0xC0) need = 2;
+        else if ((c & 0xF0) == 0xE0) need = 3;
+        else if ((c & 0xF8) == 0xF0) need = 4;
+        else return _rl_term_key_one(_rl_term_key_str("Unknown"));
+        while (total < need) {
+            uint8_t next;
+            if (!_rl_term_try_read(&next, 100000)) break;
+            buf[total++] = (char)next;
+        }
+        uint32_t code = 0;
+        uint64_t used = 0;
+        if (_rl_utf8_decode(buf, total, &code, &used) && used == total) {
+            char tmp[8];
+            uint64_t tlen = 0;
+            if (code < 0x80) { tmp[0] = (char)code; tlen = 1; }
+            else if (code < 0x800) {
+                tmp[0] = (char)(0xC0 | (code >> 6)); tmp[1] = (char)(0x80 | (code & 0x3F)); tlen = 2;
+            } else if (code < 0x10000) {
+                tmp[0] = (char)(0xE0 | (code >> 12)); tmp[1] = (char)(0x80 | ((code >> 6) & 0x3F)); tmp[2] = (char)(0x80 | (code & 0x3F)); tlen = 3;
+            } else {
+                tmp[0] = (char)(0xF0 | (code >> 18)); tmp[1] = (char)(0x80 | ((code >> 12) & 0x3F)); tmp[2] = (char)(0x80 | ((code >> 6) & 0x3F)); tmp[3] = (char)(0x80 | (code & 0x3F)); tlen = 4;
+            }
+            char *name = malloc(5 + tlen + 1);
+            memcpy(name, "Char:", 5);
+            memcpy(name + 5, tmp, tlen);
+            name[5 + tlen] = '\0';
+            rl_string s = { .data = name, .len = 5 + tlen, .rc = 1 };
+            return _rl_term_key_one(s);
+        }
+        return _rl_term_key_one(_rl_term_key_str("Unknown"));
     }
-    rl_string s = rl_str_literal(buf, total);
-    rl_string *sarr = malloc(sizeof(rl_string));
-    sarr[0] = s;
-    rl_array arr = { .data = sarr, .len = 1, .cap = 1, .elem_size = sizeof(rl_string), .type_tag = RL_TAG_STR };
-    return arr;
+    // Escape: lone ESC, Alt+key, or a CSI/SS3 sequence.
+    uint8_t n1;
+    if (!_rl_term_try_read(&n1, 100000)) {
+        return _rl_term_key_one(_rl_term_key_str("Esc"));
+    }
+    if (n1 == '[') {
+        uint8_t n2;
+        if (!_rl_term_try_read(&n2, 50000)) {
+            return _rl_term_key_one(_rl_term_key_str("Esc"));
+        }
+        switch (n2) {
+            case 'A': return _rl_term_key_one(_rl_term_key_str("Up"));
+            case 'B': return _rl_term_key_one(_rl_term_key_str("Down"));
+            case 'C': return _rl_term_key_one(_rl_term_key_str("Right"));
+            case 'D': return _rl_term_key_one(_rl_term_key_str("Left"));
+            case 'H': return _rl_term_key_one(_rl_term_key_str("Home"));
+            case 'F': return _rl_term_key_one(_rl_term_key_str("End"));
+            case 'Z': return _rl_term_key_one(_rl_term_key_str("BackTab"));
+            case 'I': return _rl_term_key_one(_rl_term_key_str("FocusGained"));
+            case 'M': {
+                // Old X10 mouse report: ESC [ M Cb Cx Cy.
+                uint8_t cb = 0, cx = 0, cy = 0;
+                if (!_rl_term_try_read(&cb, 50000)) break;
+                if (!_rl_term_try_read(&cx, 50000)) break;
+                if (!_rl_term_try_read(&cy, 50000)) break;
+                const char *kind = "MouseUnknown";
+                if (cb == 32 + 0) kind = "MouseLeft";
+                else if (cb == 32 + 1) kind = "MouseMiddle";
+                else if (cb == 32 + 2) kind = "MouseRight";
+                else if ((cb & 64) != 0) kind = "MouseUp";
+                char col[16], row[16];
+                snprintf(col, sizeof(col), "%u", (unsigned)(cx - 32));
+                snprintf(row, sizeof(row), "%u", (unsigned)(cy - 32));
+                rl_string *sarr = malloc(3 * sizeof(rl_string));
+                sarr[0] = _rl_term_key_str(kind);
+                sarr[1] = _rl_term_key_str(col);
+                sarr[2] = _rl_term_key_str(row);
+                rl_array arr = { .data = sarr, .len = 3, .cap = 3, .elem_size = sizeof(rl_string), .type_tag = RL_TAG_STR };
+                return rl_ok_arr(arr);
+            }
+            default: break;
+        }
+        if (n2 == '<') {
+            // SGR mouse report: ESC [ < Cb ; Cx ; Cy M/m.
+            char params[64];
+            uint64_t plen = 0;
+            uint8_t ch = 0;
+            bool press = true;
+            while (plen < sizeof(params) - 1) {
+                if (!_rl_term_try_read(&ch, 50000)) break;
+                if (ch == 'M' || ch == 'm') { press = (ch == 'M'); break; }
+                params[plen++] = (char)ch;
+            }
+            params[plen] = '\0';
+            unsigned cb = 0, cx = 0, cy = 0;
+            sscanf(params, "%u;%u;%u", &cb, &cx, &cy);
+            const char *kind = "MouseUnknown";
+            if (!press) kind = "MouseUp";
+            else if (cb == 0) kind = "MouseLeft";
+            else if (cb == 1) kind = "MouseMiddle";
+            else if (cb == 2) kind = "MouseRight";
+            else if (cb == 64) kind = "ScrollUp";
+            else if (cb == 65) kind = "ScrollDown";
+            else if ((cb & 32) != 0) kind = "MouseDrag";
+            else if ((cb & 64) != 0) kind = "MouseMove";
+            char col[16], row[16];
+            snprintf(col, sizeof(col), "%u", cx);
+            snprintf(row, sizeof(row), "%u", cy);
+            rl_string *sarr = malloc(3 * sizeof(rl_string));
+            sarr[0] = _rl_term_key_str(kind);
+            sarr[1] = _rl_term_key_str(col);
+            sarr[2] = _rl_term_key_str(row);
+            rl_array arr = { .data = sarr, .len = 3, .cap = 3, .elem_size = sizeof(rl_string), .type_tag = RL_TAG_STR };
+            return rl_ok_arr(arr);
+        }
+        if ((n2 >= '0' && n2 <= '9')) {
+            // Numeric CSI: collect until the final byte.
+            char params[32];
+            uint64_t plen = 0;
+            params[plen++] = (char)n2;
+            uint8_t fin = 0;
+            while (plen < sizeof(params) - 1) {
+                if (!_rl_term_try_read(&fin, 50000)) break;
+                if ((fin >= '0' && fin <= '9') || fin == ';') { params[plen++] = (char)fin; continue; }
+                break;
+            }
+            params[plen] = '\0';
+            const char *kind = "Unknown";
+            if (fin == '~') {
+                unsigned code = 0;
+                sscanf(params, "%u", &code);
+                switch (code) {
+                    case 1: case 7: kind = "Home"; break;
+                    case 2: kind = "Insert"; break;
+                    case 3: kind = "Delete"; break;
+                    case 4: case 8: kind = "End"; break;
+                    case 5: kind = "PageUp"; break;
+                    case 6: kind = "PageDown"; break;
+                    case 11: kind = "F1"; break;
+                    case 12: kind = "F2"; break;
+                    case 13: kind = "F3"; break;
+                    case 14: kind = "F4"; break;
+                    case 15: kind = "F5"; break;
+                    case 17: kind = "F6"; break;
+                    case 18: kind = "F7"; break;
+                    case 19: kind = "F8"; break;
+                    case 20: kind = "F9"; break;
+                    case 21: kind = "F10"; break;
+                    case 23: kind = "F11"; break;
+                    case 24: kind = "F12"; break;
+                    default: break;
+                }
+            } else if (fin == 'R') {
+                // Cursor position report: ESC [ row ; col R (ignore).
+                return rl_term_read_key();
+            } else if (fin == 'M' || fin == 'm') {
+                kind = "MouseUnknown";
+            }
+            return _rl_term_key_one(_rl_term_key_str(kind));
+        }
+        return _rl_term_key_one(_rl_term_key_str("Unknown"));
+    }
+    if (n1 == 'O') {
+        uint8_t n2;
+        if (!_rl_term_try_read(&n2, 50000)) {
+            return _rl_term_key_one(_rl_term_key_str("FocusLost"));
+        }
+        switch (n2) {
+            case 'P': return _rl_term_key_one(_rl_term_key_str("F1"));
+            case 'Q': return _rl_term_key_one(_rl_term_key_str("F2"));
+            case 'R': return _rl_term_key_one(_rl_term_key_str("F3"));
+            case 'S': return _rl_term_key_one(_rl_term_key_str("F4"));
+            default: break;
+        }
+        return _rl_term_key_one(_rl_term_key_str("Unknown"));
+    }
+    // Alt+key: crossterm reports the plain char.
+    if (n1 >= 0x20 && n1 < 0x7F) {
+        char name[8];
+        snprintf(name, sizeof(name), "Char:%c", (char)n1);
+        return _rl_term_key_one(_rl_term_key_str(name));
+    }
+    return _rl_term_key_one(_rl_term_key_str("Unknown"));
+}
+
+// Ok with `[cols, rows]`, or an error when the size is unknown.
+rl_result rl_term_size(void) {
+    int64_t cols = 0, rows = 0;
+    rl_result r = rl_term_get_size(&cols, &rows);
+    if (!r.is_ok) return r;
+    int64_t vals[2] = { cols, rows };
+    return rl_ok_arr(rl_arr_from_vals(vals, 2, sizeof(int64_t)));
 }
 
 // True when input arrives within `ms` milliseconds.
-bool rl_term_poll(int64_t ms) {
+rl_result rl_term_poll(int64_t ms) {
+    fflush(stdout);
     fd_set fds;
     struct timeval tv = { .tv_sec = (long)(ms / 1000), .tv_usec = (long)((ms % 1000) * 1000) };
     FD_ZERO(&fds);
     FD_SET(STDIN_FILENO, &fds);
-    return select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv) > 0;
+    return rl_ok_bool(select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv) > 0);
 }
 
 // ---- result unwrap (with error checking) ----
@@ -2965,6 +4411,55 @@ rl_string rl_result_unwrap_str(rl_result r) {
         abort();
     }
     return r.data.str;
+}
+
+// Checked unwrap of an array payload; aborts on error like the rest.
+rl_array rl_result_unwrap_arr(rl_result r) {
+    if (!r.is_ok) {
+        fprintf(stderr, "error: unwrap called on err value\n");
+        abort();
+    }
+    return r.data.arr;
+}
+
+// Checked unwrap of a map payload; aborts on error like the rest.
+rl_map rl_result_unwrap_map(rl_result r) {
+    if (!r.is_ok) {
+        fprintf(stderr, "error: unwrap called on err value\n");
+        abort();
+    }
+    return r.data.map;
+}
+
+// Checked unwrap of a set payload; aborts on error like the rest.
+rl_set rl_result_unwrap_set(rl_result r) {
+    if (!r.is_ok) {
+        fprintf(stderr, "error: unwrap called on err value\n");
+        abort();
+    }
+    return r.data.set;
+}
+
+// Checked unwrap of a boxed closure payload; aborts on error like the rest.
+rl_closure rl_result_unwrap_closure(rl_result r) {
+    if (!r.is_ok) {
+        fprintf(stderr, "error: unwrap called on err value\n");
+        abort();
+    }
+    return *r.data.closure;
+}
+
+// Length of a string/array/map/set result payload, or an error for
+// anything else. Backs dynamically-typed `len` calls.
+rl_result rl_len_result(rl_result v) {
+    if (!v.is_ok) return v;
+    switch (v.tag) {
+        case RL_TAG_STR: return rl_ok_i64((int64_t)v.data.str.len);
+        case RL_TAG_ARR: return rl_ok_i64((int64_t)v.data.arr.len);
+        case RL_TAG_MAP: return rl_ok_i64((int64_t)rl_map_len(v.data.map));
+        case RL_TAG_SET: return rl_ok_i64((int64_t)rl_set_len(v.data.set));
+        default: return rl_err(-1);
+    }
 }
 
 // ---- math ----

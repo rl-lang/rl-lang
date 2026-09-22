@@ -22,6 +22,9 @@
 #endif
 #include <unistd.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
+#include <termios.h>
+#include <errno.h>
 #include <time.h>
 #include <ctype.h>
 #include <dlfcn.h>
@@ -154,10 +157,18 @@ rl_result rl_err(int64_t v);
 // Alias of `rl_err` kept for older generated code.
 rl_result rl_error(int64_t v);
 
-// Concatenate `argc` string results (used for `+` on strings).
-rl_string rl_str_concat_variadic(rl_result *args, uint64_t argc);
-// Interpolate `args` into a `"...{0}..."` template string.
-rl_result rl_str_format(rl_string tmpl, rl_result *args, uint64_t argc);
+// One interpolation argument: the value plus whether it was already a
+// plain value (`bare`) or a wrapped result (renders `ok(...)`/`err(...)`).
+typedef struct {
+    rl_result v;
+    bool bare;
+} rl_fmt_arg;
+
+// Concatenate `argc` arguments (used by `concat`).
+rl_string rl_str_concat_variadic(rl_fmt_arg *args, uint64_t argc);
+// Interpolate `args` into a `"...{}..."` template string; arity
+// mismatches abort like a VM error.
+rl_string rl_str_format(rl_string tmpl, rl_fmt_arg *args, uint64_t argc);
 
 // ---- closure type ----
 // RL lambdas compile to a static C function plus a captured environment.
@@ -180,6 +191,13 @@ static inline rl_closure rl_closure_new(rl_closure_fn fn, rl_result *captures, u
     rl_closure c = { .fn = fn, .captures = captures, .capture_count = capture_count };
     return c;
 }
+
+// Build a closure value, heap-copying the captures so the closure
+// outlives its definition site (returned or stored closures).
+rl_closure rl_closure_new_heap(rl_closure_fn fn, rl_result *captures, uint64_t capture_count);
+// Invoke a boxed closure value: unboxes, aborts loudly when the value
+// is not a closure (e.g. calling a result that holds no closure).
+rl_result rl_closure_call_checked(rl_result callee, rl_result *args, uint64_t argc);
 
 // Invoke a closure with `argc` already-wrapped arguments.
 static inline rl_result rl_closure_call(rl_closure c, rl_result *args, uint64_t argc) {
@@ -255,6 +273,7 @@ static inline int64_t _rl_unwrap_auto(rl_result v) { return v.data.i64; }
     rl_array:  rl_ok_arr, \
     rl_map:    rl_ok_map, \
     rl_set:    rl_ok_set, \
+    rl_closure: rl_ok_closure, \
     rl_result: _rl_identity_result, \
     void*:    _rl_ok_null \
 )(x)
@@ -278,6 +297,8 @@ static inline rl_result _rl_ok_char(char v) {
 
 // Copy `count` elements of `elem_size` bytes into a new array.
 rl_array rl_arr_from_vals(const void *vals, uint64_t count, int32_t elem_size);
+// Copy with an explicit payload tag (literals record their kind).
+rl_array rl_arr_from_vals_tag(const void *vals, uint64_t count, int32_t elem_size, int32_t tag);
 // Allocate an empty array for elements of `elem_size` bytes.
 rl_array rl_arr_new(int32_t elem_size);
 
@@ -491,50 +512,78 @@ bool rl_path_is_dir(rl_string path);
 bool rl_path_is_file(rl_string path);
 
 // ---- fs ----
-// File metadata and operations; sizes are bytes, times are Unix seconds,
-// and -1 signals a failure that generated code turns into an RL error.
-// Size of the file at `path`.
-int64_t rl_fs_file_size(rl_string path);
-// Last-modified time of the file at `path`.
-int64_t rl_fs_file_modified(rl_string path);
-// Copy `src` to `dst`; 0 on success, -1 on failure.
-int64_t rl_fs_copy_file(rl_string src, rl_string dst);
-// Create `path` plus missing parents; 0 on success, -1 on failure.
-int64_t rl_fs_mkdir_all(rl_string path);
-// Delete the directory tree at `path`; 0 on success, -1 on failure.
-int64_t rl_fs_rmdir_all(rl_string path);
-// Names (not full paths) of entries in the directory at `path`.
-rl_array rl_fs_list_dir(rl_string path);
-// Rename to `new_name` in the same directory; returns the new full path.
-rl_string rl_fs_rename_file(rl_string path, rl_string new_name);
+// File metadata and operations; sizes are bytes, times are Unix seconds.
+// Size of the file at `path`, or an error.
+rl_result rl_fs_file_size(rl_string path);
+// Last-modified time of the file at `path`, or an error.
+rl_result rl_fs_file_modified(rl_string path);
+// Creation time of the file at `path`, or an error.
+rl_result rl_fs_file_created(rl_string path);
+// Create an empty file (or update its timestamps), or an error.
+rl_result rl_fs_touch(rl_string path);
+// Copy `src` to `dst`; ok with 0 on success, or an error.
+rl_result rl_fs_copy_file(rl_string src, rl_string dst);
+// Create `path` plus missing parents; ok null on success, or an error.
+rl_result rl_fs_mkdir_all(rl_string path);
+// Remove the directory at `path`; ok null on success, or an error.
+rl_result rl_fs_rmdir(rl_string path);
+// Move `src` to `dst`; ok null on success, or an error.
+rl_result rl_fs_move_file(rl_string src, rl_string dst);
+// Delete the directory tree at `path`; ok null on success, or an error.
+rl_result rl_fs_rmdir_all(rl_string path);
+// Full paths of entries in the directory at `path`, or an error.
+rl_result rl_fs_list_dir(rl_string path);
+// Rename to `new_name` in the same directory; ok with the new full path,
+// or an error.
+rl_result rl_fs_rename_file(rl_string path, rl_string new_name);
 
 // ---- process ----
-// Current working directory of the process.
-rl_string rl_process_cwd(void);
-// Change directory; 0 on success, -1 on failure.
-int64_t rl_process_set_cwd(rl_string path);
-// Run `cmd` through the shell and capture stdout (variants return the
-// exit code or one array element per output line instead).
-rl_string rl_process_exec(rl_string cmd);
-int64_t rl_process_exec_code(rl_string cmd);
-rl_array rl_process_exec_lines(rl_string cmd);
+// Value of the environment variable `key` (owned copy), or a null
+// string (data == NULL) when unset.
+rl_string rl_process_env(rl_string key);
+// Current working directory of the process, or an error.
+rl_result rl_process_cwd(void);
+// Change directory; ok null on success, or an error.
+rl_result rl_process_set_cwd(rl_string path);
+// Run `cmd` through the shell and capture stdout (trailing newlines
+// stripped); ok with the output, or an error when it cannot run.
+rl_result rl_process_exec(rl_string cmd);
+// Run `cmd` in the foreground; ok with the exit code, or an error.
+rl_result rl_process_exec_fg(rl_string cmd);
+// OS name like Rust's `std::env::consts::OS` (`linux`, `macos`, ...).
+rl_string rl_process_os_name(void);
+// Spawn `cmd` in the background; ok with the child pid, or an error.
+rl_result rl_process_exec_background(rl_string cmd);
+// True while a spawned pid is still running (false for unknown pids).
+bool rl_process_running(int64_t pid);
+// Reap a spawned pid; ok with its exit code, or an error.
+rl_result rl_process_wait_pid(int64_t pid);
+// Send SIGTERM / SIGKILL; ok null on success, or an error.
+rl_result rl_process_term_pid(int64_t pid);
+rl_result rl_process_kill_pid(int64_t pid);
+// Run `cmd` through the shell; ok with the exit code, or an error.
+rl_result rl_process_exec_code(rl_string cmd);
+// Run `cmd` through the shell; ok with one element per output line,
+// or an error.
+rl_result rl_process_exec_lines(rl_string cmd);
 // Same, but with `env` assignments (e.g. `"A=1 B=2"`) prepended.
-rl_string rl_process_with_exec(rl_string env, rl_string cmd);
-int64_t rl_process_with_exec_code(rl_string env, rl_string cmd);
-rl_array rl_process_with_exec_lines(rl_string env, rl_string cmd);
+rl_result rl_process_with_exec(rl_string env, rl_string cmd);
+rl_result rl_process_with_exec_code(rl_string env, rl_string cmd);
+rl_result rl_process_with_exec_lines(rl_string env, rl_string cmd);
 // Command-line arguments (excluding argv[0]) as an array of strings.
 rl_array rl_process_args(void);
 // Snapshot argv at startup; generated `main` calls this first.
 void rl_store_args(int argc, char **argv);
 
 // ---- time ----
-// Format a Unix timestamp with a strftime-style `pattern`.
-rl_string rl_time_format_time(int64_t timestamp, rl_string pattern);
-// Format as `YYYY-MM-DD` / `HH:MM:SS` in local time.
-rl_string rl_time_format_date_str(int64_t timestamp);
-rl_string rl_time_format_time_str(int64_t timestamp);
-// Split into `[year, month, day, hour, min, sec]` components.
-rl_array rl_time_parts(int64_t timestamp);
+// Format a Unix timestamp with a strftime-style `pattern`, or an error.
+rl_result rl_time_format_time(int64_t timestamp, rl_string pattern);
+// Format as `YYYY-MM-DD` in local time, or an error.
+rl_result rl_time_format_date_str(int64_t timestamp);
+// Format as `HH:MM:SS` in local time, or an error.
+rl_result rl_time_format_time_str(int64_t timestamp);
+// Split into `[year, month, day, hour, min, sec]`, or an error.
+rl_result rl_time_parts(int64_t timestamp);
 
 // ---- io ----
 // Read the whole file as one string / one array element per line;
@@ -548,18 +597,30 @@ rl_result rl_io_append_file(rl_string path, rl_string content);
 rl_string rl_io_read(void);
 int64_t rl_io_read_int(void);
 double rl_io_read_float(void);
-// Delete the file at `path`; 0 on success, -1 on failure.
-int64_t rl_io_delete_file(rl_string path);
+// Delete the file at `path`; ok null on success, or an error.
+rl_result rl_io_delete_file(rl_string path);
+// True when stdin is a terminal (used for cursor hide/show only).
+bool rl_io_isatty(void);
 // Write to stderr without / with a trailing newline.
 void rl_io_eprint(rl_string msg);
 void rl_io_eprintln(rl_string msg);
 
 // ---- types ----
-// Format an int as decimal / binary (`0b...`) / hex (`0x...`) / octal.
-rl_string rl_types_to_string(int64_t v);
-rl_string rl_types_to_bin(int64_t v);
-rl_string rl_types_to_hex(int64_t v);
-rl_string rl_types_to_oct(int64_t v);
+// `to_string` over a result payload: int/float/bool/char/string,
+// err otherwise.
+rl_result rl_types_to_string(rl_result x);
+// `to_bin` over a result payload: int/byte/bool/char/string, err otherwise.
+rl_result rl_types_to_bin(rl_result x);
+// `to_hex` over a result payload: int/byte/char/string, err otherwise.
+rl_result rl_types_to_hex(rl_result x);
+// `to_oct` over a result payload: int/byte/char/string, err otherwise.
+rl_result rl_types_to_oct(rl_result x);
+// `to_int` over a result payload: int/float/bool/char/string, err otherwise.
+rl_result rl_to_int(rl_result x);
+// `to_float` over a result payload: float/int/bool/string, err otherwise.
+rl_result rl_to_float(rl_result x);
+// `to_bool` over a result payload: bool/int/float/null/string, err otherwise.
+rl_result rl_to_bool(rl_result x);
 
 // ---- random ----
 // Unseeded pseudo-random values from the C library RNG.
@@ -608,11 +669,22 @@ rl_array rl_map_to_array_s(rl_map m);
 // Elementwise array utilities backing the RL `arr_*` functions.
 // Mutating ops grow the buffer in place; out-of-range access returns
 // an RL error instead of trapping. Sorts are ascending numeric.
-// Append `v` / drop and return the last element.
+// Append `v` / drop the last element (ok with the new array), or an error.
 rl_result rl_arr_push(rl_array a, int64_t v);
+// First / last element by tag constant, or an error when empty.
+rl_result rl_arr_first_t(rl_array a, int32_t tag);
+rl_result rl_arr_last_t(rl_array a, int32_t tag);
+// Membership test / first index over any element type.
+rl_result rl_arr_contains_v(rl_array a, rl_value v);
+rl_result rl_arr_index_of_v(rl_array a, rl_value v);
+// Append a boxed value to an array of any element type; ok with the new
+// array, or an error when the value does not fit the element width.
+rl_result rl_arr_push_v(rl_array a, rl_value v);
 rl_result rl_arr_pop(rl_array a);
 // Insert `v` at `idx` / drop the element at `idx`.
 rl_result rl_arr_insert(rl_array a, int64_t idx, int64_t v);
+// Insert a boxed value at `idx` for any element type.
+rl_result rl_arr_insert_v(rl_array a, int64_t idx, rl_value v);
 rl_result rl_arr_remove(rl_array a, int64_t idx);
 // Reversed / concatenated copies (inputs unchanged).
 rl_array rl_arr_reverse(rl_array a);
@@ -620,8 +692,8 @@ rl_array rl_arr_concat(rl_array a, rl_array b);
 // First / last element, or an error when empty.
 rl_result rl_arr_first(rl_array a);
 rl_result rl_arr_last(rl_array a);
-// Copy with duplicates removed, keeping first-seen order.
-rl_array rl_arr_unique(rl_array a);
+// Copy with duplicates removed by tag equality, keeping first-seen order.
+rl_array rl_arr_unique_t(rl_array a, int32_t tag);
 // Copy of `[start, end)` with clamping.
 rl_array rl_arr_slice(rl_array a, int64_t start, int64_t end);
 // Membership test / first index (or -1) wrapped as results.
@@ -629,42 +701,47 @@ rl_result rl_arr_contains(rl_array a, int64_t v);
 rl_result rl_arr_index_of(rl_array a, int64_t v);
 // Fresh array of `count` copies of `v`.
 rl_array rl_arr_fill(int64_t v, int64_t count);
+// Fresh array of `count` copies of a boxed value.
+rl_array rl_arr_fill_v(rl_value v, int64_t count);
 // Stepped integer sequence, or an error for a zero step.
 rl_result rl_arr_range(int64_t start, int64_t end, int64_t step);
-// Sum / product / max / min, erroring on empty input.
-rl_result rl_arr_sum(rl_array a);
-rl_result rl_arr_product(rl_array a);
-rl_result rl_arr_max(rl_array a);
-rl_result rl_arr_min(rl_array a);
-// Sorted copy (input unchanged).
-rl_array rl_arr_sort(rl_array a);
+// Sum / product / max / min by tag (float or int), erroring on empty input.
+rl_result rl_arr_sum_t(rl_array a, int32_t tag);
+rl_result rl_arr_product_t(rl_array a, int32_t tag);
+rl_result rl_arr_max_t(rl_array a, int32_t tag);
+rl_result rl_arr_min_t(rl_array a, int32_t tag);
+// Sorted copy by tag (input unchanged).
+rl_array rl_arr_sort_t(rl_array a, int32_t tag);
 // One-level flatten of nested arrays.
 rl_array rl_arr_flatten(rl_array a);
 // Pairwise tuples up to the shorter length.
 rl_result rl_arr_zip(rl_array a, rl_array b);
+// Pairwise tuples into a struct layout (`es_tuple` bytes, second field
+// at `off_b`), copying `es_a` / `es_b` bytes per side.
+rl_result rl_arr_zip_t(rl_array a, rl_array b, uint64_t es_tuple, uint64_t off_b, uint64_t es_a, uint64_t es_b);
 
 // ---- closure-consuming array functions ----
-// Higher-order array ops: each element (wrapped as `rl_result`) is fed
-// to the RL lambda; a failing predicate aborts with that error.
+// Higher-order array ops: each element (boxed as `rl_result` by payload
+// `tag`) is fed to the RL lambda; callback errors propagate as errors.
 // Keep elements where `pred` returns true.
-rl_result rl_arr_filter_closure(rl_array arr, rl_closure pred);
-// Apply `fn` to every element, collecting the outputs.
-rl_result rl_arr_map_closure(rl_array arr, rl_closure fn);
-// First element where `pred` returns true (error when none matches).
-rl_result rl_arr_find_closure(rl_array arr, rl_closure pred);
+rl_result rl_arr_filter_closure(rl_array arr, rl_closure pred, int32_t tag);
+// Apply `fn` to every element, collecting the homogeneous outputs.
+rl_result rl_arr_map_closure(rl_array arr, rl_closure fn, int32_t tag);
+// First element where `pred` holds (null when none).
+rl_result rl_arr_find_closure(rl_array arr, rl_closure pred, int32_t tag);
 // Left fold starting from `init`.
-rl_result rl_arr_reduce_closure(rl_array arr, rl_closure fn, rl_result init);
-// Index of the first match (error when none matches).
-rl_result rl_arr_find_index_closure(rl_array arr, rl_closure pred);
+rl_result rl_arr_reduce_closure(rl_array arr, rl_closure fn, rl_result init, int32_t tag);
+// Index of the first match, or -1 when absent.
+rl_result rl_arr_find_index_closure(rl_array arr, rl_closure pred, int32_t tag);
 // True when `pred` holds for all / for at least one element.
-rl_result rl_arr_all_closure(rl_array arr, rl_closure pred);
-rl_result rl_arr_any_closure(rl_array arr, rl_closure pred);
-// Run `fn` for side effects; returns the input length.
-rl_result rl_arr_for_each_closure(rl_array arr, rl_closure fn);
+rl_result rl_arr_all_closure(rl_array arr, rl_closure pred, int32_t tag);
+rl_result rl_arr_any_closure(rl_array arr, rl_closure pred, int32_t tag);
+// Run `fn` for side effects; ok null unless a call errors.
+rl_result rl_arr_for_each_closure(rl_array arr, rl_closure fn, int32_t tag);
 // Map, then concatenate one level of the resulting arrays.
-rl_result rl_arr_flat_map_closure(rl_array arr, rl_closure fn);
+rl_result rl_arr_flat_map_closure(rl_array arr, rl_closure fn, int32_t tag);
 // Sort using `cmp(a, b)` returning negative / zero / positive.
-rl_result rl_arr_sort_by_closure(rl_array arr, rl_closure cmp);
+rl_result rl_arr_sort_by_closure(rl_array arr, rl_closure cmp, int32_t tag);
 
 // ---- closure-consuming result functions ----
 // Apply `fn` to the payload of an ok result (passes errors through).
@@ -704,10 +781,12 @@ rl_result rl_term_hide_cursor(void);
 rl_result rl_term_show_cursor(void);
 // Read the terminal size into `out_cols` / `out_rows`.
 rl_result rl_term_get_size(int64_t *out_cols, int64_t *out_rows);
+// Ok with `[cols, rows]`, or an error when the size is unknown.
+rl_result rl_term_size(void);
 // Request a terminal size (may be ignored by the emulator).
 rl_result rl_term_set_size(int64_t cols, int64_t rows);
-// Set the window title to the single char `ch`.
-rl_result rl_term_set_title(int64_t ch);
+// Set the window title to `title`.
+rl_result rl_term_set_title(rl_string title);
 // Scroll the viewport up / down by `n` lines.
 rl_result rl_term_scroll_up(int64_t n);
 rl_result rl_term_scroll_down(int64_t n);
@@ -738,12 +817,14 @@ rl_result rl_term_end_sync(void);
 // Mouse-event reporting on / off.
 rl_result rl_term_enable_mouse(void);
 rl_result rl_term_disable_mouse(void);
-// Print a value without moving to a new line.
-void rl_term_print_inline(rl_result v);
-// Read one key press as an array of key codes (blocks).
-rl_array rl_term_read_key(void);
-// True when input arrives within `ms` milliseconds.
-bool rl_term_poll(int64_t ms);
+// Print a value without moving to a new line (shared rendering with
+// `format`: bare values print raw, results print decorated).
+void rl_term_print_inline(rl_fmt_arg arg);
+// Read one key press as an array of key-code strings (blocks); ok with
+// the array, or an error on EOF.
+rl_result rl_term_read_key(void);
+// Ok with true when input arrives within `ms` milliseconds.
+rl_result rl_term_poll(int64_t ms);
 
 // ---- result unwrap (with error checking) ----
 // Checked unwrap used by RL `unwrap`: aborts with a message when `r`
@@ -752,8 +833,18 @@ int64_t rl_result_unwrap_i64(rl_result r);
 double rl_result_unwrap_f64(rl_result r);
 bool rl_result_unwrap_bool(rl_result r);
 rl_string rl_result_unwrap_str(rl_result r);
+// Checked unwrap of an array payload; aborts on error like the rest.
+rl_array rl_result_unwrap_arr(rl_result r);
+// Checked unwrap of a map payload; aborts on error like the rest.
+rl_map rl_result_unwrap_map(rl_result r);
+// Checked unwrap of a set payload; aborts on error like the rest.
+rl_set rl_result_unwrap_set(rl_result r);
+// Checked unwrap of a boxed closure payload; aborts on error like the rest.
+rl_closure rl_result_unwrap_closure(rl_result r);
 // Checked unwrap of the i64 payload (generic fallback used by codegen).
 rl_result rl_result_unwrap_auto(rl_result r);
+// Length of a string/array/map/set result payload, or an error.
+rl_result rl_len_result(rl_result v);
 
 // ---- math ----
 // Absolute value / power over int and float payloads; non-numeric
