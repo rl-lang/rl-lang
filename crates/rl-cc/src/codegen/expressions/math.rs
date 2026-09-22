@@ -218,6 +218,48 @@ pub(super) fn compile_bitwise(cc: &mut CCodegen, func_name: &str, args: &[ExprId
             if args.len() >= 2 { cc.compile_expr(args[1])?; }
             cc.writer.write(")");
         }
+        "rotate_left" => {
+            cc.writer.write("rl_bitwise_rotate_left(");
+            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            cc.writer.write(", ");
+            if args.len() >= 2 { cc.compile_expr(args[1])?; }
+            cc.writer.write(")");
+        }
+        "rotate_right" => {
+            cc.writer.write("rl_bitwise_rotate_right(");
+            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            cc.writer.write(", ");
+            if args.len() >= 2 { cc.compile_expr(args[1])?; }
+            cc.writer.write(")");
+        }
+        "bit_set" => {
+            cc.writer.write("rl_bitwise_bit_set(");
+            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            cc.writer.write(", ");
+            if args.len() >= 2 { cc.compile_expr(args[1])?; }
+            cc.writer.write(")");
+        }
+        "bit_clear" => {
+            cc.writer.write("rl_bitwise_bit_clear(");
+            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            cc.writer.write(", ");
+            if args.len() >= 2 { cc.compile_expr(args[1])?; }
+            cc.writer.write(")");
+        }
+        "bit_toggle" => {
+            cc.writer.write("rl_bitwise_bit_toggle(");
+            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            cc.writer.write(", ");
+            if args.len() >= 2 { cc.compile_expr(args[1])?; }
+            cc.writer.write(")");
+        }
+        "bit_is_set" => {
+            cc.writer.write("rl_bitwise_bit_is_set(");
+            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            cc.writer.write(", ");
+            if args.len() >= 2 { cc.compile_expr(args[1])?; }
+            cc.writer.write(")");
+        }
         _ => {}
     }
     Ok(())

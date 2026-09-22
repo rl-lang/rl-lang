@@ -62,3 +62,18 @@ pub(super) fn compile_todo(cc: &mut CCodegen) -> Result<(), Error> {
     cc.writer.write("rl_todo()");
     Ok(())
 }
+
+pub(super) fn compile_warn(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    // VM takes a string and returns bare null; the C helper prints to
+    // stderr and returns void, matching the statement use.
+    cc.writer.write("rl_debug_warn(");
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
+    cc.writer.write(")");
+    Ok(())
+}
+
+pub(super) fn compile_stack_trace(cc: &mut CCodegen) -> Result<(), Error> {
+    // VM returns a bare string with the captured backtrace.
+    cc.writer.write("rl_debug_stack_trace()");
+    Ok(())
+}

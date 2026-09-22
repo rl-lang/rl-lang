@@ -43,6 +43,15 @@ pub(super) fn compile_error_unwrap(cc: &mut CCodegen, args: &[ExprId]) -> Result
 }
 
 pub(super) fn compile_type_check(cc: &mut CCodegen, func_name: &str, args: &[ExprId]) -> Result<(), Error> {
+    // Statically known values fold to a bool literal, matching the VM
+    // exactly (results are never their payload, narrow ints keep their
+    // type, tuples and structs never need a runtime call). Dynamic
+    // values dispatch on the result tag; rl_ok passes results through
+    // and wraps bare values, then .data.boolean unwraps the ok bool.
+    if let Some(folded) = cc.static_is_truth(func_name, args[0]) {
+        cc.writer.write(if folded { "true" } else { "false" });
+        return Ok(());
+    }
     let c_func = match func_name {
         "is_bool" => "rl_is_bool(",
         "is_int" => "rl_is_int(",
@@ -52,11 +61,30 @@ pub(super) fn compile_type_check(cc: &mut CCodegen, func_name: &str, args: &[Exp
         "is_char" => "rl_is_char(",
         "is_byte" => "rl_is_byte(",
         "is_error" => "rl_is_error(",
+        "is_array" => "rl_is_array(",
+        "is_map" => "rl_is_map(",
+        "is_set" => "rl_is_set(",
+        "is_tuple" => "rl_is_tuple(",
+        "is_function" => "rl_is_function(",
+        "is_uint" => "rl_is_uint(",
+        "is_sbyte" => "rl_is_sbyte(",
+        "is_bsbyte" => "rl_is_bsbyte(",
+        "is_bbyte" => "rl_is_bbyte(",
+        "is_sint" => "rl_is_sint(",
+        "is_suint" => "rl_is_suint(",
+        "is_sfloat" => "rl_is_sfloat(",
+        "is_c_handle" => "rl_is_c_handle(",
+        "is_net_handle" => "rl_is_net_handle(",
+        "is_http_handle" => "rl_is_http_handle(",
+        "is_audio_handle" => "rl_is_audio_handle(",
+        "is_gui_handle" => "rl_is_gui_handle(",
+        "is_file_handle" => "rl_is_file_handle(",
         _ => unreachable!(),
     };
     cc.writer.write(c_func);
+    cc.writer.write("rl_ok(");
     cc.compile_expr(args[0])?;
-    cc.writer.write(")");
+    cc.writer.write(")).data.boolean");
     Ok(())
 }
 

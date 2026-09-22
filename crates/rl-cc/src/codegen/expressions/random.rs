@@ -136,3 +136,12 @@ pub(super) fn compile_rand_multi(
     }
     Ok(())
 }
+
+pub(super) fn compile_rand_seed(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    // VM reseeds its Xoshiro; the C backend reseeds its own RNG so the
+    // later sequence is deterministic for a given seed.
+    cc.writer.write("rl_rand_seed(");
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
+    cc.writer.write(")");
+    Ok(())
+}

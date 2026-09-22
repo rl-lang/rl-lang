@@ -207,3 +207,25 @@ pub(super) fn compile_eprintln(cc: &mut CCodegen, args: &[ExprId]) -> Result<(),
     cc.writer.write(")");
     Ok(())
 }
+
+pub(super) fn compile_read_all_stdin(cc: &mut CCodegen) -> Result<(), Error> {
+    // VM returns result[string]; the runtime builds ok or error.
+    cc.writer.write("rl_io_read_all_stdin()");
+    Ok(())
+}
+
+pub(super) fn compile_decode_utf8(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    // VM takes array[byte] and returns result[string].
+    cc.writer.write("rl_io_decode_utf8(");
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
+    cc.writer.write(")");
+    Ok(())
+}
+
+pub(super) fn compile_encode_utf8(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    // VM takes string and returns a bare array[byte].
+    cc.writer.write("rl_io_encode_utf8(");
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
+    cc.writer.write(")");
+    Ok(())
+}

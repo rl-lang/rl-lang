@@ -54,6 +54,13 @@ pub(super) fn compile_term_read_key(cc: &mut CCodegen) -> Result<(), Error> {
     Ok(())
 }
 
+pub(super) fn compile_term_get_cursor_pos(cc: &mut CCodegen) -> Result<(), Error> {
+    // VM returns ok([x, y]) or an error when unsupported; the runtime
+    // queries via DSR with a short timeout and never blocks on pipes.
+    cc.writer.write("rl_term_get_cursor_pos()");
+    Ok(())
+}
+
 pub(super) fn compile_term_str(cc: &mut CCodegen, func_name: &str, args: &[ExprId]) -> Result<(), Error> {
     match func_name {
         "term_set_title" => {

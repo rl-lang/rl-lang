@@ -166,10 +166,16 @@ pub(super) fn compile_char_at(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), 
 }
 
 pub(super) fn compile_join(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
-    cc.writer.write("rl_ok(rl_str_join(");
+    cc.writer.write("rl_ok(rl_str_join_t(");
     if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(", ");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
+    cc.writer.write(", ");
+    if !args.is_empty() {
+        cc.writer.write(cc.array_elem_tag(args[0]));
+    } else {
+        cc.writer.write("RL_TAG_I64");
+    }
     cc.writer.write("))");
     Ok(())
 }
@@ -213,5 +219,110 @@ pub(super) fn compile_is_empty(cc: &mut CCodegen, args: &[ExprId]) -> Result<(),
     cc.writer.write("(");
     if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(".len == 0)");
+    Ok(())
+}
+
+pub(super) fn compile_strip_prefix(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    cc.writer.write("rl_str_strip_prefix(");
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
+    cc.writer.write(", ");
+    if args.len() >= 2 { cc.compile_expr(args[1])?; }
+    cc.writer.write(")");
+    Ok(())
+}
+
+pub(super) fn compile_strip_suffix(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    cc.writer.write("rl_str_strip_suffix(");
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
+    cc.writer.write(", ");
+    if args.len() >= 2 { cc.compile_expr(args[1])?; }
+    cc.writer.write(")");
+    Ok(())
+}
+
+pub(super) fn compile_last_index_of(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    cc.writer.write("rl_str_last_index_of(");
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
+    cc.writer.write(", ");
+    if args.len() >= 2 { cc.compile_expr(args[1])?; }
+    cc.writer.write(")");
+    Ok(())
+}
+
+pub(super) fn compile_split_once(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    cc.writer.write("rl_str_split_once(");
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
+    cc.writer.write(", ");
+    if args.len() >= 2 { cc.compile_expr(args[1])?; }
+    cc.writer.write(")");
+    Ok(())
+}
+
+pub(super) fn compile_lines(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    cc.writer.write("rl_str_lines(");
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
+    cc.writer.write(")");
+    Ok(())
+}
+
+pub(super) fn compile_wrap(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    cc.writer.write("rl_str_wrap(");
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
+    cc.writer.write(", ");
+    if args.len() >= 2 { cc.compile_expr(args[1])?; }
+    cc.writer.write(")");
+    Ok(())
+}
+
+pub(super) fn compile_indent(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    cc.writer.write("rl_str_indent(");
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
+    cc.writer.write(", ");
+    if args.len() >= 2 { cc.compile_expr(args[1])?; }
+    cc.writer.write(")");
+    Ok(())
+}
+
+pub(super) fn compile_dedent(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    cc.writer.write("rl_str_dedent(");
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
+    cc.writer.write(")");
+    Ok(())
+}
+
+pub(super) fn compile_diff_lines(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    cc.writer.write("rl_str_diff_lines(");
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
+    cc.writer.write(", ");
+    if args.len() >= 2 { cc.compile_expr(args[1])?; }
+    cc.writer.write(")");
+    Ok(())
+}
+
+pub(super) fn compile_is_alpha(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    cc.writer.write("rl_str_is_alpha(");
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
+    cc.writer.write(")");
+    Ok(())
+}
+
+pub(super) fn compile_is_numeric(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    cc.writer.write("rl_str_is_numeric(");
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
+    cc.writer.write(")");
+    Ok(())
+}
+
+pub(super) fn compile_is_whitespace(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    cc.writer.write("rl_str_is_whitespace(");
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
+    cc.writer.write(")");
+    Ok(())
+}
+
+pub(super) fn compile_unicode_category(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    cc.writer.write("rl_str_unicode_category(");
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
+    cc.writer.write(")");
     Ok(())
 }
