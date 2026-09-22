@@ -59,6 +59,19 @@ All notable changes to the rl-lang toolchain are documented here. The format is 
   - `gui_get_window_size` (query window dimensions), `gui_get_window_pos` (query window position)
 - **`std::term` expansion** - 1 new function:
   - `term_get_cursor_pos` (get current cursor column and row)
+- **rl-cc VM parity: calls and program structure** - method-call dispatch against imported stdlib functions, user functions and record impls (mirroring the VM, including `x.std::ns::f()` paths and chaining); aliased imports resolve to canonical paths; `!#[entry]`, `main` fallback, `!#[test]`, `!#[init[=n]]`/`!#[final[=n]]` orchestration with VM priority ordering; top-level variables emit as C file-scope globals; unannotated declarations infer C types from initializers and stdlib signatures; silent catch-alls became compile errors.
+- **rl-cc VM parity: closures** - trailing-expression lambda bodies return the value; closures accepted as values, not just literals; full type mapping for params and captures; heap-allocated captures so closures escape safely; lambda bodies support the full statement set; factory functions tracked through calls; immediately-invoked lambdas; `result_unwrap_or_else` and `result_and_then`.
+- **rl-cc stdlib coverage** - newly supported in transpiled programs, all verified identical against the VM:
+  - Bitwise: `rotate_left`, `rotate_right`, `bit_set`, `bit_clear`, `bit_toggle`, `bit_is_set`
+  - Path: `path_is_absolute`, `path_is_relative`, `path_starts_with`, `path_ends_with`, `path_normalize`, `path_absolute`, `path_canonicalize`, `path_expand_home`, `path_split`, `path_split_extension`, `path_components`, `path_with_file_name`, `path_relative`, `path_join_many`
+  - String: `strip_prefix`, `strip_suffix`, `last_index_of`, `split_once`, `lines`, `wrap`, `indent`, `dedent`, `diff_lines`, `is_alpha`, `is_numeric`, `is_whitespace`, `unicode_category`
+  - IO/debug/types/random/time/term: `read_all_stdin`, `decode_utf8`, `encode_utf8`, `warn`, `stack_trace`, `is_array`, `is_map`, `is_set`, `is_tuple`, `is_function`, `is_uint`, `is_sbyte`, `is_bsbyte`, `is_bbyte`, `is_sint`, `is_suint`, `is_sfloat`, `rand_seed`, `monotonic_now`, `term_get_cursor_pos`
+  - Array: `arr_chunk`, `arr_windows`, `arr_swap`, `arr_partition`, `arr_max_by`, `arr_min_by`, `arr_zip_longest`, `arr_cycle_take`
+  - Collections: `set_union`, `set_intersection`, `set_difference`, `set_symmetric_difference`, `set_is_subset`, `set_is_superset`, `map_get_or`, `map_get_or_insert`, `heap_push`, `heap_pop`, `heap_peek`, `deque_push_front`, `deque_pop_front`, `bisect_left`, `bisect_right`, `sorted_insert`
+  - Process: `set_env`, `remove_env`, `env_keys`, `arch`, `num_cpus`, `parent_pid`, `process_exists`, `with_exec_fg`, `exec_with_stdin`, `with_exec_with_stdin`, `exec_with_env`, `with_exec_with_env`, `exec_with_cwd`, `with_exec_with_cwd`, `exec_with_timeout`, `with_exec_background`, `pipe`, `pipe_all`, plus `os_name`, `exec_fg`, `exec_background`, `process_running`, `wait_pid`, `term_pid`, `kill_pid`, `isatty`, `file_created`, `touch`
+  - FS: file-handle API (`open`, `close`, `read_handle`, `write_handle`, `seek`, `flush`, `read_all`, `readline`) with a handle table, plus `list_dir_names`, `file_accessed`, `file_permissions`, `set_permissions`, `temp_file`, `temp_file_in`, `truncate_file`, `glob`, `walk_dir`, `symlink`, `readlink`, `hardlink`, `realpath`, `lock_file`, `unlock_file`, `path_canonicalize`, `path_absolute`, `path_expand_home`, `path_relative`, `copy_dir`, `dir_size`, `is_symlink`, `rmdir`, `move_file`, `rename_file`
+  - Handles: `is_c_handle`, `is_net_handle`, `is_http_handle`, `is_file_handle` (`is_audio_handle`/`is_gui_handle` report false; no backends yet)
+- **rl-cc http/net return shapes** - `http_get`/`http_post`/`http_request` and `udp_recv_from` return real tuples; socket handles use tagged ids per module; `udp_bind` returns a handle.
 
 ### Changed
 
@@ -74,6 +87,7 @@ All notable changes to the rl-lang toolchain are documented here. The format is 
 ### Fixed
 
 - **`styled_text`/`paint_bg` gated** - now properly gated behind `#[cfg(feature = "impls")]` in gui.rs
+- **rl-cc correctness fixes** - `arr_insert` argument order was swapped; `==`/`!=` on strings now compares contents; comparisons yield RL bools printing `true`/`false`; `env` returns a bare string or null; `to_int`/`to_float`/`to_bool`/`to_string`/`to_bin`/`to_hex`/`to_oct` dispatch on payload tags with VM error messages; `format`/`concat` render `ok(...)` for wrapped arguments; `http`/`term`/`process`/`fs` functions return the shapes the VM returns (`result[...]` vs bare); terminal input uses crossterm-style key names with raw mode and coordinate validation; `term_get_size` returns an array and `term_set_title` takes a string; aborts flush stdout first; non-TTY stdout is line-buffered like Rust; array runtime is element-width generic (`push`, `contains`, `sort`, `reverse`, `zip` builds real tuples); tuple types buffer to file scope; non-ASCII identifiers hex-escape in name mangling; `print`/`println` are variadic; `std::gui::*` and `std::rl::eval`/`lex`/`check` fail at transpile time with clear errors.
 
 ### Removed
 
