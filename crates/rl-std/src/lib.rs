@@ -36,6 +36,8 @@ pub mod audio;
 pub mod bitwise;
 #[cfg(any(feature = "std-c", feature = "impls"))]
 pub mod c;
+#[cfg(any(feature = "std-cli", feature = "impls"))]
+pub mod cli;
 #[cfg(any(feature = "std-collections", feature = "impls"))]
 pub mod collections;
 #[cfg(any(feature = "std-debug", feature = "impls"))]
@@ -84,6 +86,8 @@ pub fn signatures() -> rl_std_core::ModuleNames {
     { m = m.with_module(bitwise::signatures()); }
     #[cfg(any(feature = "std-c", feature = "impls"))]
     { m = m.with_module(c::signatures()); }
+    #[cfg(any(feature = "std-cli", feature = "impls"))]
+    { m = m.with_module(cli::signatures()); }
     #[cfg(any(feature = "std-collections", feature = "impls"))]
     { m = m.with_module(collections::signatures()); }
     #[cfg(any(feature = "std-debug", feature = "impls"))]

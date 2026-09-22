@@ -527,12 +527,64 @@ impl<'a> CCodegen<'a> {
         }
     }
 
-    /// Effective storage annotation for a declaration: the annotation
-    /// itself, unless it is `Infer`/`Generic`, in which case the
-    /// initializer shape (and the checker's stdlib signatures) decide.
+    /// True for `result_unwrap(x)` (function or method form) where x's
+    /// payload type is unknown. Lets declarations unwrap by their storage
+    /// type instead of the i64 default (e.g. `dec bool b` over a map
+    /// lookup, whose value type is a free generic).
+    pub fn is_unwrap_of_dynamic(&self, id: ExprId) -> bool {
+        let expr = self.ast.exprs.get(id);
+        let inner = match &expr.kind {
+            ExpressionKind::Call { path, args } => {
+                if path.last().map(|s| s.as_str()) != Some("result_unwrap") {
+                    return false;
+                }
+                args.first().copied()
+            }
+            ExpressionKind::MethodCall { caller, method, .. } => {
+                if method.last().map(|s| s.as_str()) != Some("result_unwrap") {
+                    return false;
+                }
+                Some(*caller)
+            }
+            _ => None,
+        };
+        let Some(arg) = inner else {
+            return false;
+        };
+        match self.inferred_expr_type(arg) {
+            Some(TypeAnnotation::Result(payload)) | Some(TypeAnnotation::CResult(payload)) => {
+                Self::needs_inference(&payload)
+            }
+            _ => false,
+        }
+    }
     /// A bare `handle` (HandleInfer) refines to the initializer handle
     /// kind like the checker does. Falls back to `Result(Infer)` - most
     /// dynamic values in generated code are results.
+    /// The `x` inside `result_unwrap(x)` (function or method form),
+    /// so declarations that unwrap by storage type can compile the inner
+    /// call directly instead of double-unwrapping.
+    pub fn unwrap_inner_arg(&self, id: ExprId) -> Option<ExprId> {
+        let expr = self.ast.exprs.get(id);
+        match &expr.kind {
+            ExpressionKind::Call { path, args } => {
+                if path.last().map(|s| s.as_str()) != Some("result_unwrap") {
+                    return None;
+                }
+                args.first().copied()
+            }
+            ExpressionKind::MethodCall { caller, method, .. } => {
+                if method.last().map(|s| s.as_str()) != Some("result_unwrap") {
+                    return None;
+                }
+                Some(*caller)
+            }
+            _ => None,
+        }
+    }
+    /// Effective storage annotation for a declaration: the annotation
+    /// itself, unless it is `Infer`/`Generic`, in which case the
+    /// initializer shape (and the checker's stdlib signatures) decide.
     pub fn effective_decl_type(
         &self,
         annotation: &TypeAnnotation,

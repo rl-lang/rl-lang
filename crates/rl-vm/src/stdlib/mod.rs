@@ -30,6 +30,8 @@ pub fn root() -> Module {
 
     #[cfg(any(feature = "std-c", feature = "impls"))]
     { std = std.with_module(Module::from_std("c", rl_std::c::handles::<VmRuntime>())); }
+    #[cfg(any(feature = "std-cli", feature = "impls"))]
+    { std = std.with_module(Module::from_std("cli", rl_std::cli::handles::<VmRuntime>())); }
     #[cfg(any(feature = "std-audio", feature = "impls"))]
     { std = std.with_module(Module::from_std("audio", rl_std::audio::handles::<VmRuntime>())); }
     #[cfg(any(feature = "std-gui", feature = "impls"))]

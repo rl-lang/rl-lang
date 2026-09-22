@@ -14,6 +14,8 @@ use rl_utils::span::Span;
 
 impl<'a> CCodegen<'a> {
     pub fn compile_statement(&mut self, stmt: &Statement) -> Result<(), Error> {
+        // Hoisted literal temps never cross statement boundaries.
+        self.hoisted_tmps.clear();
         match &stmt.kind {
             StatementKind::ResolvedVariableDeclaration {
                 name,

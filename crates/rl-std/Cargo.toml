@@ -26,6 +26,8 @@ cpal = { workspace = true, optional = true }
 symphonia = { workspace = true, optional = true }
 eframe = { workspace = true, optional = true }
 shell-words = { workspace = true, optional = true }
+rpassword = { workspace = true, optional = true }
+rustyline = { workspace = true, optional = true }
 libc = { workspace = true, optional = true }
 tempfile = { workspace = true, optional = true }
 glob = { workspace = true, optional = true }
@@ -41,6 +43,7 @@ signatures = [
     "std-audio",
     "std-bitwise",
     "std-c",
+    "std-cli",
     "std-collections",
     "std-debug",
     "std-fs",
@@ -63,6 +66,7 @@ signatures = [
 impls = [
     "std-audio",
     "std-c",
+    "std-cli",
     "std-fs",
     "std-gui",
     "std-http",
@@ -80,6 +84,8 @@ impls = [
     "dep:symphonia",
     "dep:eframe",
     "dep:shell-words",
+    "dep:rpassword",
+    "dep:rustyline",
     "dep:libc",
     "dep:tempfile",
     "dep:glob",
@@ -91,6 +97,7 @@ std-array = []
 std-audio = ["dep:rodio", "dep:cpal", "dep:symphonia"]
 std-bitwise = []
 std-c = ["dep:libffi", "dep:libloading"]
+std-cli = ["dep:shell-words", "dep:rpassword", "dep:rustyline"]
 std-collections = []
 std-debug = []
 std-fs = ["dep:tempfile", "dep:glob"]

@@ -99,6 +99,7 @@ impl TypeChecker {
                 .chain(keywords::audio::KEYWORDS)
                 .chain(keywords::bitwise::KEYWORDS)
                 .chain(keywords::c::KEYWORDS)
+                .chain(keywords::cli::KEYWORDS)
                 .chain(keywords::collections::KEYWORDS)
                 .chain(keywords::debug::KEYWORDS)
                 .chain(keywords::fs::KEYWORDS)

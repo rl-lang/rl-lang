@@ -1,5 +1,23 @@
 //! Static name lists for every `std::*` stdlib module.
 
+pub mod cli {
+    pub const KEYWORDS: &[&str] = &[
+        "parse_args",
+        "parse_args_or_exit",
+        "usage_string",
+        "prompt",
+        "prompt_password",
+        "prompt_confirm",
+        "prompt_choice",
+        "shell_split",
+        "shell_join",
+        "read_line_editable",
+        "read_line_with_history",
+        "progress_bar",
+        "spinner_tick",
+    ];
+}
+
 pub mod audio {
     pub const KEYWORDS: &[&str] = &[
         "play_file",

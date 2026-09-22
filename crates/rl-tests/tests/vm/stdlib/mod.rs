@@ -1,5 +1,6 @@
 mod arr_zip;
 mod bitwise;
+mod cli;
 mod collections;
 mod fs;
 mod io;

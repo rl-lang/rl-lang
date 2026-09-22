@@ -82,6 +82,8 @@ cpal = "0.17"
 symphonia = { version = "0.5", features = ["all"] }
 eframe = { version = "0.35", features = ["android-game-activity"] }
 shell-words = "1.1"
+rpassword = "7"
+rustyline = "17"
 libc = "0.2"
 tempfile = "3.27.0"
 glob = "0.3"

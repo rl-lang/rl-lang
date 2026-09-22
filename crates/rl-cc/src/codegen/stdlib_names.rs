@@ -10,6 +10,22 @@
 /// `namespace` is the full path joined with "::" ("std::math::consts").
 pub fn namespace_provides(namespace: &str, name: &str) -> bool {
     match namespace {
+        "std::cli" => matches!(
+            name,
+            "parse_args"
+                | "parse_args_or_exit"
+                | "usage_string"
+                | "prompt"
+                | "prompt_password"
+                | "prompt_confirm"
+                | "prompt_choice"
+                | "shell_split"
+                | "shell_join"
+                | "read_line_editable"
+                | "read_line_with_history"
+                | "progress_bar"
+                | "spinner_tick"
+        ),
         "std::io" => matches!(
             name,
             "print"

@@ -1,6 +1,7 @@
 mod assert;
 mod audio;
 mod c_ffi;
+mod cli;
 mod closure;
 mod collections;
 mod http;
@@ -27,6 +28,12 @@ use rl_utils::span::Span;
 
 impl<'a> CCodegen<'a> {
     pub fn compile_expr(&mut self, id: ExprId) -> Result<(), Error> {
+        // A statement-shaped literal hoisted before this statement
+        // reuses its temp instead of emitting statements mid-expression.
+        if let Some(temp) = self.hoisted_tmps.get(&id).cloned() {
+            self.writer.write(&temp);
+            return Ok(());
+        }
         let kind = self.ast.exprs.get(id).kind.clone();
         match &kind {
             ExpressionKind::Integer(v) => {
@@ -356,62 +363,49 @@ impl<'a> CCodegen<'a> {
                     _ => type_to_c(&elem_ta),
                 };
                 let tag = Self::array_elem_tag_from_type(&elem_ta);
+                // Map/set elements are statement-shaped, which cannot sit
+                // inside the `&(...[]){...}` initializer below. Hoist each
+                // into a temp first (valid at statement level, where array
+                // literals overwhelmingly appear; nested-in-expression
+                // arrays of literals stay unsupported, as before).
+                let mut hoisted: Vec<Option<String>> = Vec::with_capacity(elems.len());
+                for elem in elems.iter() {
+                    // A declaration-level pre-pass may already have built
+                    // this element; otherwise hoist it now.
+                    if let Some(temp) = self.hoisted_tmps.get(elem).cloned() {
+                        hoisted.push(Some(temp));
+                        continue;
+                    }
+                    let kind = self.ast.exprs.get(*elem).kind.clone();
+                    match kind {
+                        ExpressionKind::MapLiteral(entries) => {
+                            hoisted.push(Some(self.emit_map_lit(&entries)?));
+                        }
+                        ExpressionKind::SetLiteral(items) => {
+                            hoisted.push(Some(self.emit_set_lit(&items)?));
+                        }
+                        _ => hoisted.push(None),
+                    }
+                }
                 self.writer.write(&format!("rl_arr_from_vals_tag(&({}[]){{", c_elem));
                 for (i, elem) in elems.iter().enumerate() {
                     if i > 0 {
                         self.writer.write(", ");
                     }
-                    self.compile_expr(*elem)?;
+                    if let Some(temp) = &hoisted[i] {
+                        self.writer.write(temp);
+                    } else {
+                        self.compile_expr(*elem)?;
+                    }
                 }
                 self.writer.write(&format!("}}, {}, (int32_t)sizeof({}), {})", elems.len(), c_elem, tag));
             }
             ExpressionKind::MapLiteral(entries) => {
-                let temp = self.temp_var();
-                self.writer.write_indent();
-                self.writer
-                    .write(&format!("rl_map {} = rl_map_new();\n", temp));
-                for (key_id, val_id) in entries {
-                    let key_expr = self.ast.exprs.get(*key_id);
-                    if let ExpressionKind::String(key_str) = &key_expr.kind {
-                        let val_expr = self.ast.exprs.get(*val_id);
-                        let val_type = match &val_expr.kind {
-                            ExpressionKind::Integer(_) => TypeAnnotation::Int,
-                            ExpressionKind::Float(_) => TypeAnnotation::Float,
-                            ExpressionKind::Bool(_) => TypeAnnotation::Bool,
-                            ExpressionKind::String(_) => TypeAnnotation::String,
-                            ExpressionKind::ArrayLiteral(e) if !e.is_empty() => TypeAnnotation::Array(Box::new(TypeAnnotation::Infer)),
-                            _ => TypeAnnotation::Int,
-                        };
-                        self.writer.write_indent();
-                        self.writer.write(&format!(
-                            "rl_map_set(&{}, \"{}\", ",
-                            temp, key_str
-                        ));
-                        self.emit_value_wrapping(&val_type, *val_id)?;
-                        self.writer.write(");\n");
-                    }
-                }
+                let temp = self.emit_map_lit(&entries)?;
                 self.writer.write(&temp);
             }
             ExpressionKind::SetLiteral(items) => {
-                let temp = self.temp_var();
-                self.writer.write_indent();
-                self.writer
-                    .write(&format!("rl_set {} = rl_set_new();\n", temp));
-                for item_id in items {
-                    let val_expr = self.ast.exprs.get(*item_id);
-                    let val_type = match &val_expr.kind {
-                        ExpressionKind::Integer(_) => TypeAnnotation::Int,
-                        ExpressionKind::Float(_) => TypeAnnotation::Float,
-                        ExpressionKind::Bool(_) => TypeAnnotation::Bool,
-                        ExpressionKind::String(_) => TypeAnnotation::String,
-                        _ => TypeAnnotation::Int,
-                    };
-                    self.writer.write_indent();
-                    self.writer.write(&format!("rl_set_add(&{}, ", temp));
-                    self.emit_value_wrapping(&val_type, *item_id)?;
-                    self.writer.write(");\n");
-                }
+                let temp = self.emit_set_lit(&items)?;
                 self.writer.write(&temp);
             }
             ExpressionKind::TupleLiteral(elems) => {
@@ -817,6 +811,19 @@ impl<'a> CCodegen<'a> {
             "with_exec_with_cwd" => return self::process::compile_with_exec_with_cwd(self, args),
             "exec_with_timeout" => return self::process::compile_exec_with_timeout(self, args),
             "with_exec_background" => return self::process::compile_with_exec_background(self, args),
+            "parse_args" => return self::cli::compile_parse_args(self, args),
+            "parse_args_or_exit" => return self::cli::compile_parse_args_or_exit(self, args),
+            "usage_string" => return self::cli::compile_usage_string(self, args),
+            "prompt" => return self::cli::compile_prompt(self, args),
+            "prompt_password" => return self::cli::compile_prompt_password(self, args),
+            "prompt_confirm" => return self::cli::compile_prompt_confirm(self, args),
+            "prompt_choice" => return self::cli::compile_prompt_choice(self, args),
+            "shell_split" => return self::cli::compile_shell_split(self, args),
+            "shell_join" => return self::cli::compile_shell_join(self, args),
+            "read_line_editable" => return self::cli::compile_read_line_editable(self, args),
+            "read_line_with_history" => return self::cli::compile_read_line_with_history(self, args),
+            "progress_bar" => return self::cli::compile_progress_bar(self, args),
+            "spinner_tick" => return self::cli::compile_spinner_tick(self, args),
             "pipe" => return self::process::compile_pipe(self, args),
             "pipe_all" => return self::process::compile_pipe_all(self, args),
             "args" => return self::process::compile_args(self),
@@ -1712,5 +1719,119 @@ impl<'a> CCodegen<'a> {
             }
             _ => TypeAnnotation::Int,
         }
+    }
+
+    // Builds a map literal into a fresh temp, returning the temp name.
+    // Statement-shaped by nature: valid wherever statements are, including
+    // hoisted array elements and declaration initializers, but NOT nested
+    // inside other expressions.
+    pub(crate) fn emit_map_lit(
+        &mut self,
+        entries: &[(ExprId, ExprId)],
+    ) -> Result<String, Error> {
+        let temp = self.temp_var();
+        self.writer.write_indent();
+        self.writer
+            .write(&format!("rl_map {} = rl_map_new();\n", temp));
+        for (key_id, val_id) in entries {
+            let key_expr = self.ast.exprs.get(*key_id);
+            if let ExpressionKind::String(key_str) = &key_expr.kind {
+                let val_expr = self.ast.exprs.get(*val_id);
+                let val_type = match &val_expr.kind {
+                    ExpressionKind::Integer(_) => TypeAnnotation::Int,
+                    ExpressionKind::Float(_) => TypeAnnotation::Float,
+                    ExpressionKind::Bool(_) => TypeAnnotation::Bool,
+                    ExpressionKind::String(_) => TypeAnnotation::String,
+                    ExpressionKind::ArrayLiteral(e) if !e.is_empty() => TypeAnnotation::Array(Box::new(TypeAnnotation::Infer)),
+                    _ => TypeAnnotation::Int,
+                };
+                self.writer.write_indent();
+                self.writer.write(&format!(
+                    "rl_map_set(&{}, \"{}\", ",
+                    temp, key_str
+                ));
+                self.emit_value_wrapping(&val_type, *val_id)?;
+                self.writer.write(");\n");
+            }
+        }
+        Ok(temp)
+    }
+
+    // Same statement-shaped contract as `emit_map_lit`, for set literals.
+    pub(crate) fn emit_set_lit(&mut self, items: &[ExprId]) -> Result<String, Error> {
+        let temp = self.temp_var();
+        self.writer.write_indent();
+        self.writer
+            .write(&format!("rl_set {} = rl_set_new();\n", temp));
+        for item_id in items {
+            let val_expr = self.ast.exprs.get(*item_id);
+            let val_type = match &val_expr.kind {
+                ExpressionKind::Integer(_) => TypeAnnotation::Int,
+                ExpressionKind::Float(_) => TypeAnnotation::Float,
+                ExpressionKind::Bool(_) => TypeAnnotation::Bool,
+                ExpressionKind::String(_) => TypeAnnotation::String,
+                _ => TypeAnnotation::Int,
+            };
+            self.writer.write_indent();
+            self.writer.write(&format!("rl_set_add(&{}, ", temp));
+            self.emit_value_wrapping(&val_type, *item_id)?;
+            self.writer.write(");\n");
+        }
+        Ok(temp)
+    }
+
+    // Pre-statement hoist for statement-shaped literals. The root value
+    // itself (a bare map/set literal) and direct elements of array
+    // literals are built into temps BEFORE the statement writes anything
+    // (e.g. the `name = ` prefix), so later emission just names temps.
+    // Anything nested deeper (call args, map values, ...) is left alone:
+    // still unsupported, exactly as before.
+    pub(crate) fn hoist_stmt_literals(&mut self, id: ExprId) -> Result<(), Error> {
+        let kind = self.ast.exprs.get(id).kind.clone();
+        match kind {
+            ExpressionKind::MapLiteral(entries) => {
+                if !self.hoisted_tmps.contains_key(&id) {
+                    let temp = self.emit_map_lit(&entries)?;
+                    self.hoisted_tmps.insert(id, temp);
+                }
+            }
+            ExpressionKind::SetLiteral(items) => {
+                if !self.hoisted_tmps.contains_key(&id) {
+                    let temp = self.emit_set_lit(&items)?;
+                    self.hoisted_tmps.insert(id, temp);
+                }
+            }
+            ExpressionKind::ArrayLiteral(elems) => {
+                for elem in elems {
+                    self.hoist_array_elem(elem)?;
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn hoist_array_elem(&mut self, id: ExprId) -> Result<(), Error> {
+        if self.hoisted_tmps.contains_key(&id) {
+            return Ok(());
+        }
+        let kind = self.ast.exprs.get(id).kind.clone();
+        match kind {
+            ExpressionKind::MapLiteral(entries) => {
+                let temp = self.emit_map_lit(&entries)?;
+                self.hoisted_tmps.insert(id, temp);
+            }
+            ExpressionKind::SetLiteral(items) => {
+                let temp = self.emit_set_lit(&items)?;
+                self.hoisted_tmps.insert(id, temp);
+            }
+            ExpressionKind::ArrayLiteral(elems) => {
+                for elem in elems {
+                    self.hoist_array_elem(elem)?;
+                }
+            }
+            _ => {}
+        }
+        Ok(())
     }
 }

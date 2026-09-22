@@ -85,6 +85,10 @@ pub struct CCodegen<'a> {
     pub globals_code: String,
     /// File-scope tuple typedefs, emitted before globals.
     pub tuple_defs: String,
+    /// Statement-shaped literal temps hoisted before the current
+    /// statement (`dec m = {...}`, arrays holding map/set literals).
+    /// `compile_expr` emits the recorded temp instead of rebuilding.
+    pub hoisted_tmps: HashMap<rl_ast::ExprId, String>,
 }
 
 impl<'a> CCodegen<'a> {
@@ -121,6 +125,7 @@ impl<'a> CCodegen<'a> {
             std_net_imports: HashSet::new(),
             std_http_imports: HashSet::new(),
             std_fs_imports: HashSet::new(),
+            hoisted_tmps: HashMap::new(),
         }
     }
 

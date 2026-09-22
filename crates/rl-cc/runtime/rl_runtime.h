@@ -742,6 +742,25 @@ rl_array rl_process_args(void);
 // Snapshot argv at startup; generated `main` calls this first.
 void rl_store_args(int argc, char **argv);
 
+// ---- cli ----
+// Mirrors `std::cli`. The arg parser drops everything through the first
+// `--`, reads spec maps with string values, and returns string/bool/array
+// values plus a `"_"` positional array. Editable input is plain line reads
+// with history threading (no arrow-key editing).
+rl_result rl_cli_parse_args(rl_array spec);
+rl_result rl_cli_parse_args_or_exit(rl_array spec);
+rl_result rl_cli_usage(rl_array spec);
+rl_string rl_cli_prompt(rl_string msg);
+rl_string rl_cli_prompt_password(rl_string msg);
+bool rl_cli_prompt_confirm(rl_string msg);
+rl_string rl_cli_prompt_choice(rl_string msg, rl_array options);
+rl_result rl_cli_shell_split(rl_string s);
+rl_string rl_cli_shell_join(rl_array parts);
+rl_string rl_cli_read_line_editable(rl_string msg);
+rl_result rl_cli_read_line_with_history(rl_string msg, rl_array history);
+rl_result rl_cli_progress_bar(int64_t current, int64_t total, rl_string label);
+rl_result rl_cli_spinner_tick(int64_t frame);
+
 // ---- time ----
 // Format a Unix timestamp with a strftime-style `pattern`, or an error.
 rl_result rl_time_format_time(int64_t timestamp, rl_string pattern);

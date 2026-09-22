@@ -13,6 +13,7 @@ pub fn stdlib_entries() -> Vec<&'static StdEntry> {
         &stdlib::audio::AUDIO,
         &stdlib::bitwise::BITWISE,
         &stdlib::c::C,
+        &stdlib::cli::CLI,
         &stdlib::collections::COLLECTIONS,
         &stdlib::debug::DEBUG,
         &stdlib::fs::FS,

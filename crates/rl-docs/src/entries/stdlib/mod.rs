@@ -3,6 +3,7 @@ pub mod array;
 pub mod audio;
 pub mod bitwise;
 pub mod c;
+pub mod cli;
 pub mod collections;
 pub mod debug;
 pub mod fs;

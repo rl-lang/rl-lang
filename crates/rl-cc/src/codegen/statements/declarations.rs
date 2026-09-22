@@ -6,7 +6,8 @@ use crate::types::type_to_c;
 use rl_ast::nodes::ExpressionKind;
 use rl_ast::statements::TypeAnnotation;
 use rl_ast::ExprId;
-use rl_utils::errors::Error;
+use rl_utils::errors::{Error, Reason};
+use rl_utils::span::Span;
 
 /// File-scope storage for one global plus scope registration. The
 /// initializer runs later inside `main` (see the `in_global_init` paths
@@ -146,7 +147,21 @@ pub(super) fn compile_var_decl(
     type_annotation: &TypeAnnotation,
     value: ExprId,
 ) -> Result<(), Error> {
+    // Statement-shaped literals build their temps before anything else
+    // (notably the `name = ` prefix) is written.
+    cc.hoist_stmt_literals(value)?;
     let effective = cc.effective_decl_type(type_annotation, value);
+    // A bare unwrap of a dynamically-typed value (generic map lookup,
+    // untyped call) has no static payload: without an explicit storage
+    // type there is nothing sound to emit, so fail loudly instead of
+    // generating a mistyped assignment.
+    if cc.is_unwrap_of_dynamic(value) && CCodegen::needs_inference(&effective) {
+        return Err(Error::at(
+            Reason::Compile,
+            "dec needs an explicit type for dynamically-typed unwrap (e.g. dec arr[string] rest = ...)",
+            Span::dummy(),
+        ));
+    }
     let c_type = type_to_c(&effective);
     let c_name = emission_name(cc, name);
     let expr = cc.ast.exprs.get(value);
@@ -188,8 +203,13 @@ pub(super) fn compile_var_decl(
             TypeAnnotation::Fn | TypeAnnotation::Callback(_, _)
         );
         // Concrete scalar storage over a dynamically-typed closure call
-        // (`dec int z = add7(1)`): unwrap by the storage type.
-        let dyn_unwrap = if !unbox && cc.is_dynamic_closure_call(value) {
+        // (`dec int z = add7(1)`): unwrap by the storage type. The same
+        // applies to a bare `result_unwrap(x)` whose payload is unknown
+        // (`dec bool b = map_get(m, k).result_unwrap()` over a generic
+        // map): storage type beats the i64 default.
+        let dyn_unwrap = if !unbox
+            && (cc.is_dynamic_closure_call(value) || cc.is_unwrap_of_dynamic(value))
+        {
             match &effective {
                 TypeAnnotation::Float | TypeAnnotation::CFloat => {
                     Some("rl_result_unwrap_f64")
@@ -231,7 +251,12 @@ pub(super) fn compile_var_decl(
             cc.writer.write("))");
         } else if let Some(unwrap_fn) = dyn_unwrap {
             cc.writer.write(&format!("{unwrap_fn}("));
-            cc.compile_expr(value)?;
+            // A bare `result_unwrap(x)` compiles its inner call directly:
+            // the storage-type unwrap here IS the unwrap, not a second one.
+            match cc.unwrap_inner_arg(value) {
+                Some(inner) => cc.compile_expr(inner)?,
+                None => cc.compile_expr(value)?,
+            }
             cc.writer.write(")");
         } else {
             cc.compile_expr(value)?;
@@ -251,6 +276,7 @@ pub(super) fn compile_const_decl(
     type_annotation: &TypeAnnotation,
     value: ExprId,
 ) -> Result<(), Error> {
+    cc.hoist_stmt_literals(value)?;
     let effective = cc.effective_decl_type(type_annotation, value);
     let c_type = type_to_c(&effective);
     let c_name = emission_name(cc, name);

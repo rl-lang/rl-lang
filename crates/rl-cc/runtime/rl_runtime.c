@@ -5224,6 +5224,727 @@ rl_array rl_process_args(void) {
     return arr;
 }
 
+// ---- cli ----
+// Mirrors `std::cli` in rl-std (hand-rolled arg parser, prompts, progress).
+// The parser shares the VM's semantics exactly: spec is an array of maps
+// with string values (`flag` is the string "true"/"false" because RL maps
+// are homogeneous), `--name value` / `--name=value` / `-s value` forms,
+// everything through the first `--` is dropped (runner preamble on the VM,
+// explicit separator for compiled binaries), leftovers land in `"_"`.
+
+// Owned copy of an rl_string as a NUL-terminated C string.
+static char *_rl_cli_cstr(rl_string s) {
+    char *out = malloc(s.len + 1);
+    if (s.len > 0 && s.data != NULL) memcpy(out, s.data, s.len);
+    out[s.len] = '\0';
+    return out;
+}
+
+static rl_string _rl_cli_str_owned(const char *s, uint64_t n) {
+    char *dup = malloc(n + 1);
+    memcpy(dup, s, n);
+    dup[n] = '\0';
+    rl_string out = { .data = dup, .len = n };
+    return out;
+}
+
+static rl_result _rl_cli_err(const char *msg) {
+    return rl_err_msg(rl_str_literal(msg, strlen(msg)));
+}
+
+// Fetches a string field from a spec map. Missing key -> NULL (caller
+// decides); present but non-string -> error message in *err_out.
+static char *_rl_cli_spec_str(rl_map m, const char *key, const char **err_out) {
+    char *out = NULL;
+    *err_out = NULL;
+    rl_string k = rl_str_literal(key, strlen(key));
+    rl_result got = rl_map_get_s(m, k);
+    if (!got.is_ok) return NULL;
+    if (got.tag != RL_TAG_STR) {
+        *err_out = "spec value must be a string";
+        return NULL;
+    }
+    rl_string s = got.data.str;
+    out = malloc(s.len + 1);
+    if (s.len > 0 && s.data != NULL) memcpy(out, s.data, s.len);
+    out[s.len] = '\0';
+    return out;
+}
+
+typedef struct { char *name; char short_c; int has_short; int is_flag; char *def; char *help; } _rl_cli_opt;
+
+static void _rl_cli_opts_free(_rl_cli_opt *opts, uint64_t n) {
+    for (uint64_t i = 0; i < n; i++) {
+        free(opts[i].name);
+        free(opts[i].def);
+        free(opts[i].help);
+    }
+    free(opts);
+}
+
+// Parses the spec array into options. Returns NULL on success, else a
+// static error message (usage text is built separately).
+static const char *_rl_cli_read_spec(rl_array spec, _rl_cli_opt **out_opts, uint64_t *out_n) {
+    _rl_cli_opt *opts = NULL;
+    uint64_t n = 0;
+    rl_map *maps = (rl_map *)spec.data;
+    for (uint64_t i = 0; i < spec.len; i++) {
+        _rl_cli_opt o;
+        memset(&o, 0, sizeof(o));
+        const char *err = NULL;
+        o.name = _rl_cli_spec_str(maps[i], "name", &err);
+        if (err != NULL) { _rl_cli_opts_free(opts, n); return err; }
+        if (o.name == NULL) { _rl_cli_opts_free(opts, n); return "spec entry is missing \"name\""; }
+        if (o.name[0] == '\0' || o.name[0] == '-') { _rl_cli_opts_free(opts, n); free(o.name); return "bad option name"; }
+        char *flag_w = _rl_cli_spec_str(maps[i], "flag", &err);
+        if (err != NULL) { _rl_cli_opts_free(opts, n); free(o.name); return err; }
+        if (flag_w != NULL) {
+            if (!strcmp(flag_w, "true") || !strcmp(flag_w, "1") || !strcmp(flag_w, "yes") || !strcmp(flag_w, "y")) {
+                o.is_flag = 1;
+            } else if (!strcmp(flag_w, "false") || !strcmp(flag_w, "0") || !strcmp(flag_w, "no") || !strcmp(flag_w, "n")) {
+                o.is_flag = 0;
+            } else {
+                _rl_cli_opts_free(opts, n);
+                free(o.name);
+                free(flag_w);
+                return "flag must be \"true\" or \"false\"";
+            }
+            free(flag_w);
+        }
+        char *short_w = _rl_cli_spec_str(maps[i], "short", &err);
+        if (err != NULL) { _rl_cli_opts_free(opts, n); free(o.name); return err; }
+        if (short_w != NULL) {
+            if (short_w[0] == '\0' || short_w[1] != '\0') {
+                _rl_cli_opts_free(opts, n);
+                free(o.name);
+                free(short_w);
+                return "short must be one character";
+            }
+            o.short_c = short_w[0];
+            o.has_short = 1;
+            free(short_w);
+        }
+        o.def = _rl_cli_spec_str(maps[i], "default", &err);
+        if (err != NULL) { _rl_cli_opts_free(opts, n); free(o.name); return err; }
+        o.help = _rl_cli_spec_str(maps[i], "help", &err);
+        if (err != NULL) { _rl_cli_opts_free(opts, n); free(o.name); free(o.def); return err; }
+        if (o.is_flag && o.def != NULL) {
+            _rl_cli_opts_free(opts, n);
+            free(o.name);
+            free(o.def);
+            free(o.help);
+            return "flag cannot have a default";
+        }
+        _rl_cli_opt *grown = realloc(opts, (n + 1) * sizeof(_rl_cli_opt));
+        if (grown == NULL) { _rl_cli_opts_free(opts, n); free(o.name); free(o.def); free(o.help); return "out of memory"; }
+        opts = grown;
+        opts[n++] = o;
+    }
+    *out_opts = opts;
+    *out_n = n;
+    return NULL;
+}
+
+// Appends `text` to a heap usage buffer (realloc-growing).
+static void _rl_cli_usage_add(char **buf, uint64_t *len, uint64_t *cap, const char *text) {
+    uint64_t tlen = strlen(text);
+    if (*len + tlen + 1 > *cap) {
+        uint64_t ncap = (*cap == 0 ? 256 : *cap * 2) + tlen;
+        char *nbuf = realloc(*buf, ncap);
+        if (nbuf == NULL) return;
+        *buf = nbuf;
+        *cap = ncap;
+    }
+    memcpy(*buf + *len, text, tlen);
+    *len += tlen;
+    (*buf)[*len] = '\0';
+}
+
+static char *_rl_cli_usage(_rl_cli_opt *opts, uint64_t n, const char *err) {
+    char *buf = NULL;
+    uint64_t len = 0, cap = 0;
+    if (err != NULL) {
+        _rl_cli_usage_add(&buf, &len, &cap, err);
+        _rl_cli_usage_add(&buf, &len, &cap, "\n\n");
+    }
+    _rl_cli_usage_add(&buf, &len, &cap, "usage: program [options] [--] [args...]\n\noptions:\n");
+    for (uint64_t i = 0; i < n; i++) {
+        char line[512];
+        int at = snprintf(line, sizeof(line), "  --%s", opts[i].name);
+        if (opts[i].has_short) at += snprintf(line + at, sizeof(line) - (uint64_t)at, ", -%c", opts[i].short_c);
+        if (opts[i].is_flag) at += snprintf(line + at, sizeof(line) - (uint64_t)at, "  (flag)");
+        if (opts[i].def != NULL) at += snprintf(line + at, sizeof(line) - (uint64_t)at, "  (default: %s)", opts[i].def);
+        if (opts[i].help != NULL) at += snprintf(line + at, sizeof(line) - (uint64_t)at, "  %s", opts[i].help);
+        (void)at;
+        _rl_cli_usage_add(&buf, &len, &cap, line);
+        _rl_cli_usage_add(&buf, &len, &cap, "\n");
+    }
+    if (buf == NULL) {
+        buf = malloc(1);
+        if (buf != NULL) buf[0] = '\0';
+    }
+    return buf;
+}
+
+// Stores (name, value) pairs; later entries win like the VM's set_value.
+typedef struct { char *name; rl_value val; } _rl_cli_kv;
+
+static void _rl_cli_kv_set(_rl_cli_kv **kvs, uint64_t *n, uint64_t *cap, const char *name, rl_value val) {
+    for (uint64_t i = 0; i < *n; i++) {
+        if (!strcmp((*kvs)[i].name, name)) {
+            (*kvs)[i].val = val;
+            return;
+        }
+    }
+    if (*n == *cap) {
+        uint64_t ncap = (*cap == 0 ? 8 : *cap * 2);
+        _rl_cli_kv *grown = realloc(*kvs, ncap * sizeof(_rl_cli_kv));
+        if (grown == NULL) return;
+        *kvs = grown;
+        *cap = ncap;
+    }
+    (*kvs)[*n].name = malloc(strlen(name) + 1);
+    if ((*kvs)[*n].name == NULL) return;
+    memcpy((*kvs)[*n].name, name, strlen(name) + 1);
+    (*kvs)[*n].val = val;
+    (*n)++;
+}
+
+// Parses argv against opts. Returns NULL + sets *err_msg on failure
+// (caller frees neither; messages are static or usage-owned).
+static rl_map _rl_cli_parse_argv(_rl_cli_opt *opts, uint64_t nopts, const char **err_msg) {
+    rl_map out = rl_map_new();
+    int argc = _rl_stored_argc;
+    char **argv = _rl_stored_argv;
+    // Drop argv[0] plus everything through the first `--`.
+    int start = 1;
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "--")) { start = i + 1; break; }
+    }
+    _rl_cli_kv *kvs = NULL;
+    uint64_t nkvs = 0, capkvs = 0;
+    int only_positional = 0;
+    rl_string *pos = NULL;
+    uint64_t npos = 0, cappos = 0;
+    *err_msg = NULL;
+    for (int i = start; i < argc; i++) {
+        const char *arg = argv[i];
+        if (only_positional || arg[0] != '-' || arg[1] == '\0' || !strcmp(arg, "-") || !strcmp(arg, "--")) {
+            if (!strcmp(arg, "--") && !only_positional) { only_positional = 1; continue; }
+            if (npos == cappos) {
+                uint64_t ncap = (cappos == 0 ? 8 : cappos * 2);
+                rl_string *grown = realloc(pos, ncap * sizeof(rl_string));
+                if (grown == NULL) { *err_msg = "out of memory"; goto done; }
+                pos = grown;
+                cappos = ncap;
+            }
+            pos[npos++] = _rl_cli_str_owned(arg, strlen(arg));
+            continue;
+        }
+        int is_long = (arg[0] == '-' && arg[1] == '-');
+        const char *body = is_long ? arg + 2 : arg + 1;
+        char key[256];
+        const char *inline_val = NULL;
+        if (is_long) {
+            const char *eq = strchr(body, '=');
+            if (eq != NULL) {
+                uint64_t klen = (uint64_t)(eq - body);
+                if (klen >= sizeof(key)) klen = sizeof(key) - 1;
+                memcpy(key, body, klen);
+                key[klen] = '\0';
+                inline_val = eq + 1;
+            } else {
+                snprintf(key, sizeof(key), "%s", body);
+            }
+        } else {
+            snprintf(key, sizeof(key), "%s", body);
+        }
+        _rl_cli_opt *opt = NULL;
+        for (uint64_t k = 0; k < nopts; k++) {
+            if (!strcmp(opts[k].name, key)) { opt = &opts[k]; break; }
+            if (!is_long && opts[k].has_short && key[0] == opts[k].short_c && key[1] == '\0') {
+                opt = &opts[k];
+                break;
+            }
+        }
+        if (opt == NULL) {
+            char *use = _rl_cli_usage(opts, nopts, NULL);
+            static char unknown_buf[1024];
+            snprintf(unknown_buf, sizeof(unknown_buf), "unknown argument: %s\n\n%s", arg, use);
+            free(use);
+            *err_msg = unknown_buf;
+            goto done;
+        }
+        if (opt->is_flag) {
+            int val = 1;
+            if (inline_val != NULL) {
+                if (!strcmp(inline_val, "true") || !strcmp(inline_val, "1") || !strcmp(inline_val, "yes") || !strcmp(inline_val, "y")) {
+                    val = 1;
+                } else if (!strcmp(inline_val, "false") || !strcmp(inline_val, "0") || !strcmp(inline_val, "no") || !strcmp(inline_val, "n")) {
+                    val = 0;
+                } else {
+                    static char flag_buf[256];
+                    snprintf(flag_buf, sizeof(flag_buf), "flag --%s expects true/false, got \"%s\"", opt->name, inline_val);
+                    *err_msg = flag_buf;
+                    goto done;
+                }
+            }
+            rl_value v;
+            v.tag = RL_VTAG_BOOL;
+            v.data.boolean = val;
+            _rl_cli_kv_set(&kvs, &nkvs, &capkvs, opt->name, v);
+            continue;
+        }
+        const char *val = inline_val;
+        if (val == NULL) {
+            i++;
+            if (i >= argc) {
+                static char need_buf[256];
+                snprintf(need_buf, sizeof(need_buf), "option --%s expects a value", opt->name);
+                *err_msg = need_buf;
+                goto done;
+            }
+            val = argv[i];
+        }
+        rl_value v;
+        v.tag = RL_VTAG_STR;
+        v.data.str = _rl_cli_str_owned(val, strlen(val));
+        _rl_cli_kv_set(&kvs, &nkvs, &capkvs, opt->name, v);
+    }
+    for (uint64_t k = 0; k < nopts; k++) {
+        int seen = 0;
+        for (uint64_t j = 0; j < nkvs; j++) {
+            if (!strcmp(kvs[j].name, opts[k].name)) { seen = 1; break; }
+        }
+        if (seen) continue;
+        if (opts[k].is_flag) {
+            rl_value v;
+            v.tag = RL_VTAG_BOOL;
+            v.data.boolean = 0;
+            _rl_cli_kv_set(&kvs, &nkvs, &capkvs, opts[k].name, v);
+        } else if (opts[k].def != NULL) {
+            rl_value v;
+            v.tag = RL_VTAG_STR;
+            v.data.str = _rl_cli_str_owned(opts[k].def, strlen(opts[k].def));
+            _rl_cli_kv_set(&kvs, &nkvs, &capkvs, opts[k].name, v);
+        } else {
+            static char missing_buf[256];
+            snprintf(missing_buf, sizeof(missing_buf), "missing required option: --%s", opts[k].name);
+            *err_msg = missing_buf;
+            goto done;
+        }
+    }
+done:;
+    rl_value parr;
+    parr.tag = RL_VTAG_ARR;
+    rl_string *pbuf = malloc((npos > 0 ? npos : 1) * sizeof(rl_string));
+    for (uint64_t j = 0; j < npos; j++) pbuf[j] = pos[j];
+    free(pos);
+    rl_array pa = { .data = pbuf, .len = npos, .cap = npos, .elem_size = (int32_t)sizeof(rl_string), .type_tag = RL_TAG_STR };
+    parr.data.arr = pa;
+    _rl_cli_kv_set(&kvs, &nkvs, &capkvs, "_", parr);
+    for (uint64_t j = 0; j < nkvs; j++) {
+        rl_map_set(&out, kvs[j].name, kvs[j].val);
+        free(kvs[j].name);
+    }
+    free(kvs);
+    return out;
+}
+
+rl_result rl_cli_parse_args(rl_array spec) {
+    _rl_cli_opt *opts = NULL;
+    uint64_t nopts = 0;
+    const char *spec_err = _rl_cli_read_spec(spec, &opts, &nopts);
+    if (spec_err != NULL) return _rl_cli_err(spec_err);
+    const char *err_msg = NULL;
+    rl_map out = _rl_cli_parse_argv(opts, nopts, &err_msg);
+    _rl_cli_opts_free(opts, nopts);
+    if (err_msg != NULL) return _rl_cli_err(err_msg);
+    return rl_ok_map(out);
+}
+
+rl_result rl_cli_parse_args_or_exit(rl_array spec) {
+    _rl_cli_opt *opts = NULL;
+    uint64_t nopts = 0;
+    const char *spec_err = _rl_cli_read_spec(spec, &opts, &nopts);
+    if (spec_err != NULL) {
+        fprintf(stderr, "%s\n", spec_err);
+        exit(2);
+    }
+    const char *err_msg = NULL;
+    rl_map out = _rl_cli_parse_argv(opts, nopts, &err_msg);
+    if (err_msg != NULL) {
+        fprintf(stderr, "%s\n", err_msg);
+        _rl_cli_opts_free(opts, nopts);
+        exit(2);
+    }
+    _rl_cli_opts_free(opts, nopts);
+    return rl_ok_map(out);
+}
+
+rl_result rl_cli_usage(rl_array spec) {
+    _rl_cli_opt *opts = NULL;
+    uint64_t nopts = 0;
+    const char *spec_err = _rl_cli_read_spec(spec, &opts, &nopts);
+    if (spec_err != NULL) return _rl_cli_err(spec_err);
+    char *text = _rl_cli_usage(opts, nopts, NULL);
+    _rl_cli_opts_free(opts, nopts);
+    rl_string s = _rl_cli_str_owned(text, strlen(text));
+    free(text);
+    return rl_ok_str(s);
+}
+
+// ---- cli prompts ----
+
+static char *_rl_cli_read_line(FILE *in, FILE *out, const char *prompt_text) {
+    if (prompt_text != NULL) {
+        fputs(prompt_text, out);
+        fflush(out);
+    }
+    char *line = NULL;
+    size_t cap = 0;
+    ssize_t n = getline(&line, &cap, in);
+    if (n < 0) {
+        free(line);
+        line = malloc(1);
+        if (line != NULL) line[0] = '\0';
+        return line;
+    }
+    while (n > 0 && (line[n - 1] == '\n' || line[n - 1] == '\r')) line[--n] = '\0';
+    return line;
+}
+
+rl_string rl_cli_prompt(rl_string msg) {
+    char *m = _rl_cli_cstr(msg);
+    char *line = _rl_cli_read_line(stdin, stdout, m);
+    free(m);
+    rl_string s = _rl_cli_str_owned(line, strlen(line));
+    free(line);
+    return s;
+}
+
+rl_string rl_cli_prompt_password(rl_string msg) {
+    // No-echo read, mirroring rpassword: /dev/tty only. Without a
+    // controlling terminal there is no prompt and no read (rpassword
+    // surfaces this as an error, which the VM maps to "").
+    FILE *tty = fopen("/dev/tty", "r+");
+    if (tty == NULL) return _rl_cli_str_owned("", 0);
+    char *m = _rl_cli_cstr(msg);
+    fputs(m, tty);
+    fflush(tty);
+    free(m);
+    struct termios oldt, newt;
+    int echoed = 0;
+    int fd = fileno(tty);
+    if (tcgetattr(fd, &oldt) == 0) {
+        newt = oldt;
+        newt.c_lflag &= (tcflag_t)~ECHO;
+        if (tcsetattr(fd, TCSANOW, &newt) == 0) echoed = 1;
+    }
+    char *line = _rl_cli_read_line(tty, tty, NULL);
+    if (echoed) {
+        tcsetattr(fd, TCSANOW, &oldt);
+        fputc('\n', tty);
+        fflush(tty);
+    }
+    fclose(tty);
+    rl_string s = _rl_cli_str_owned(line, strlen(line));
+    free(line);
+    return s;
+}
+
+bool rl_cli_prompt_confirm(rl_string msg) {
+    char *m = _rl_cli_cstr(msg);
+    char full[1024];
+    snprintf(full, sizeof(full), "%s [y/n] ", m);
+    free(m);
+    char *line = _rl_cli_read_line(stdin, stdout, full);
+    for (char *p = line; *p != '\0'; p++) {
+        if (*p >= 'A' && *p <= 'Z') *p = (char)(*p + ('a' - 'A'));
+    }
+    int yes = (!strcmp(line, "y") || !strcmp(line, "yes"));
+    free(line);
+    return yes;
+}
+
+rl_string rl_cli_prompt_choice(rl_string msg, rl_array options) {
+    if (options.len == 0) return _rl_cli_str_owned("", 0);
+    rl_string *items = (rl_string *)options.data;
+    char *m = _rl_cli_cstr(msg);
+    for (;;) {
+        printf("%s\n", m);
+        for (uint64_t i = 0; i < options.len; i++) {
+            char *text = _rl_cli_cstr(items[i]);
+            printf("  %llu. %s\n", (unsigned long long)(i + 1), text);
+            free(text);
+        }
+        fflush(stdout);
+        char *line = _rl_cli_read_line(stdin, stdout, NULL);
+        if (line[0] == '\0' && feof(stdin)) {
+            free(line);
+            free(m);
+            return _rl_cli_str_owned("", 0);
+        }
+        char *end = NULL;
+        unsigned long pick = strtoul(line, &end, 10);
+        if (end != line && *end == '\0' && pick >= 1 && pick <= options.len) {
+            free(line);
+            free(m);
+            rl_string s = items[pick - 1];
+            return _rl_cli_str_owned(s.data, s.len);
+        }
+        int exact = 0;
+        for (uint64_t i = 0; i < options.len; i++) {
+            char *text = _rl_cli_cstr(items[i]);
+            if (!strcmp(text, line)) exact = 1;
+            free(text);
+            if (exact) break;
+        }
+        if (exact) {
+            rl_string s = _rl_cli_str_owned(line, strlen(line));
+            free(line);
+            free(m);
+            return s;
+        }
+        free(line);
+        printf("pick 1-%llu or one of the listed values\n", (unsigned long long)options.len);
+    }
+}
+
+// ---- cli shell words ----
+// Mirrors shell-words: SQL-style single quotes (literal), double quotes
+// (backslash escapes $, `, ", \ and newline), backslash escapes any char
+// outside quotes, whitespace separates. Unterminated quotes are errors.
+
+static int _rl_cli_shell_push(char **buf, uint64_t *len, uint64_t *cap, char c) {
+    if (*len + 1 >= *cap) {
+        uint64_t ncap = (*cap == 0 ? 32 : *cap * 2);
+        char *grown = realloc(*buf, ncap);
+        if (grown == NULL) return -1;
+        *buf = grown;
+        *cap = ncap;
+    }
+    (*buf)[(*len)++] = c;
+    return 0;
+}
+
+rl_result rl_cli_shell_split(rl_string s) {
+    const char *p = (s.data != NULL) ? s.data : "";
+    const char *end = p + s.len;
+    rl_string *parts = NULL;
+    uint64_t nparts = 0, capparts = 0;
+    while (p < end) {
+        while (p < end && (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')) p++;
+        if (p >= end) break;
+        char *word = NULL;
+        uint64_t wlen = 0, wcap = 0;
+        int closed = 1;
+        while (p < end && *p != ' ' && *p != '\t' && *p != '\n' && *p != '\r') {
+            if (*p == '\'') {
+                closed = 0;
+                p++;
+                while (p < end && *p != '\'') {
+                    if (_rl_cli_shell_push(&word, &wlen, &wcap, *p)) goto oom;
+                    p++;
+                }
+                if (p >= end) goto unterminated;
+                closed = 1;
+                p++;
+            } else if (*p == '"') {
+                closed = 0;
+                p++;
+                while (p < end && *p != '"') {
+                    if (*p == '\\' && p + 1 < end
+                        && (p[1] == '$' || p[1] == '`' || p[1] == '"' || p[1] == '\\' || p[1] == '\n')) {
+                        p++;
+                        if (_rl_cli_shell_push(&word, &wlen, &wcap, *p)) goto oom;
+                        p++;
+                    } else {
+                        if (_rl_cli_shell_push(&word, &wlen, &wcap, *p)) goto oom;
+                        p++;
+                    }
+                }
+                if (p >= end) goto unterminated;
+                closed = 1;
+                p++;
+            } else if (*p == '\\' && p + 1 < end) {
+                p++;
+                if (_rl_cli_shell_push(&word, &wlen, &wcap, *p)) goto oom;
+                p++;
+            } else {
+                if (_rl_cli_shell_push(&word, &wlen, &wcap, *p)) goto oom;
+                p++;
+            }
+        }
+        (void)closed;
+        if (nparts == capparts) {
+            uint64_t ncap = (capparts == 0 ? 8 : capparts * 2);
+            rl_string *grown = realloc(parts, ncap * sizeof(rl_string));
+            if (grown == NULL) goto oom;
+            parts = grown;
+            capparts = ncap;
+        }
+        char *wdup = malloc(wlen + 1);
+        if (wdup == NULL) goto oom;
+        if (wlen > 0) memcpy(wdup, word, wlen);
+        wdup[wlen] = '\0';
+        free(word);
+        word = NULL;
+        parts[nparts++] = (rl_string){ .data = wdup, .len = wlen };
+        continue;
+    oom:
+        free(word);
+        for (uint64_t i = 0; i < nparts; i++) free((void *)parts[i].data);
+        free(parts);
+        return _rl_cli_err("shell_split: out of memory");
+    unterminated:
+        free(word);
+        for (uint64_t i = 0; i < nparts; i++) free((void *)parts[i].data);
+        free(parts);
+        return _rl_cli_err("shell_split: unterminated quote");
+    }
+    rl_array arr = { .data = parts, .len = nparts, .cap = capparts,
+        .elem_size = (int32_t)sizeof(rl_string), .type_tag = RL_TAG_STR };
+    return rl_ok_arr(arr);
+}
+
+static int _rl_cli_needs_quote(const char *s, uint64_t n) {
+    if (n == 0) return 1;
+    for (uint64_t i = 0; i < n; i++) {
+        char c = s[i];
+        if (c == ' ' || c == '\t' || c == '\n' || c == '\'' || c == '"' || c == '\\'
+            || c == '$' || c == '`' || c == '!' || c == '(' || c == ')' || c == '&'
+            || c == '|' || c == ';' || c == '<' || c == '>' || c == '*' || c == '?'
+            || c == '#' || c == '~') {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+rl_string rl_cli_shell_join(rl_array parts) {
+    rl_string *items = (rl_string *)parts.data;
+    char *out = NULL;
+    uint64_t len = 0, cap = 0;
+    for (uint64_t i = 0; i < parts.len; i++) {
+        if (i > 0) {
+            if (_rl_cli_shell_push(&out, &len, &cap, ' ')) break;
+        }
+        const char *s = (items[i].data != NULL) ? items[i].data : "";
+        uint64_t n = items[i].len;
+        if (!_rl_cli_needs_quote(s, n)) {
+            for (uint64_t k = 0; k < n; k++) {
+                if (_rl_cli_shell_push(&out, &len, &cap, s[k])) break;
+            }
+        } else {
+            if (_rl_cli_shell_push(&out, &len, &cap, '\'')) break;
+            for (uint64_t k = 0; k < n; k++) {
+                if (s[k] == '\'') {
+                    const char *esc = "'\\''";
+                    for (int e = 0; e < 4; e++) {
+                        if (_rl_cli_shell_push(&out, &len, &cap, esc[e])) break;
+                    }
+                } else {
+                    if (_rl_cli_shell_push(&out, &len, &cap, s[k])) break;
+                }
+            }
+            _rl_cli_shell_push(&out, &len, &cap, '\'');
+        }
+    }
+    if (out == NULL) {
+        out = malloc(1);
+        if (out != NULL) out[0] = '\0';
+    } else {
+        if (_rl_cli_shell_push(&out, &len, &cap, '\0')) {
+            out[len] = '\0';
+        }
+        len = strlen(out);
+    }
+    rl_string r = { .data = out, .len = len };
+    return r;
+}
+
+// ---- cli editable input ----
+// Reduced scope (documented): plain line reads with history threading,
+// no arrow-key editing. A vendored line editor (linenoise-style) is the
+// follow-up for full rustyline parity.
+
+typedef struct { rl_string field_0; rl_array field_1; } _rl_tuple_sarr;
+
+static rl_result _rl_ok_tuple_sarr(rl_string line, rl_array hist) {
+    _rl_tuple_sarr *slot = malloc(sizeof(_rl_tuple_sarr));
+    slot->field_0 = line;
+    slot->field_1 = hist;
+    rl_array out;
+    out.data = slot;
+    out.len = 1;
+    out.cap = 1;
+    out.elem_size = (int32_t)sizeof(_rl_tuple_sarr);
+    out.type_tag = RL_TAG_I64;
+    return rl_ok_arr(out);
+}
+
+rl_string rl_cli_read_line_editable(rl_string msg) {
+    // rustyline prints no prompt on non-tty stdin; mirror that.
+    char *m = isatty(STDIN_FILENO) ? _rl_cli_cstr(msg) : NULL;
+    char *line = _rl_cli_read_line(stdin, stdout, m);
+    free(m);
+    rl_string s = _rl_cli_str_owned(line, strlen(line));
+    free(line);
+    return s;
+}
+
+rl_result rl_cli_read_line_with_history(rl_string msg, rl_array history) {
+    char *m = isatty(STDIN_FILENO) ? _rl_cli_cstr(msg) : NULL;
+    char *line = _rl_cli_read_line(stdin, stdout, m);
+    free(m);
+    uint64_t hlen = strlen(line) > 0 ? history.len + 1 : history.len;
+    rl_string *buf = malloc((hlen > 0 ? hlen : 1) * sizeof(rl_string));
+    rl_string *items = (rl_string *)history.data;
+    for (uint64_t i = 0; i < history.len; i++) {
+        buf[i] = _rl_cli_str_owned(items[i].data, items[i].len);
+    }
+    if (strlen(line) > 0) {
+        buf[history.len] = _rl_cli_str_owned(line, strlen(line));
+    }
+    rl_string ls = _rl_cli_str_owned(line, strlen(line));
+    free(line);
+    rl_array hist = { .data = buf, .len = hlen, .cap = hlen,
+        .elem_size = (int32_t)sizeof(rl_string), .type_tag = RL_TAG_STR };
+    return _rl_ok_tuple_sarr(ls, hist);
+}
+
+// ---- cli progress ----
+// Byte-identical format to the VM: \r{label} [{#24}] {pct:3}%, \n at 100%.
+
+rl_result rl_cli_progress_bar(int64_t current, int64_t total, rl_string label) {
+    double frac = 0.0;
+    if (total > 0) {
+        frac = (double)(current < 0 ? 0 : current) / (double)total;
+        if (frac < 0.0) frac = 0.0;
+        if (frac > 1.0) frac = 1.0;
+    }
+    int filled = (int)(frac * 24.0 + 0.5);
+    char bar[25];
+    for (int i = 0; i < 24; i++) bar[i] = (i < filled) ? '#' : '-';
+    bar[24] = '\0';
+    char *lname = _rl_cli_cstr(label);
+    fprintf(stderr, "\r%s [%s] %3lld%%", lname, bar, (long long)(frac * 100.0 + 0.5));
+    if (frac >= 1.0) fprintf(stderr, "\n");
+    fflush(stderr);
+    free(lname);
+    return rl_ok_null();
+}
+
+rl_result rl_cli_spinner_tick(int64_t frame) {
+    static const char frames[4] = { '|', '/', '-', '\\' };
+    long long idx = frame % 4;
+    if (idx < 0) idx += 4;
+    fprintf(stderr, "\r%c", frames[idx]);
+    fflush(stderr);
+    return rl_ok_null();
+}
+
 // ---- time ----
 
 // Format a Unix timestamp with a strftime-style `pattern`.
