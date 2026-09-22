@@ -34,6 +34,10 @@ pub struct TypeChecker {
     pub imported_std_fns: HashMap<String, rl_commons::StdFn>,
     /// Stdlib function deprecation map: full path -> deprecation message.
     pub deprecated_stdlib: HashMap<Vec<String>, String>,
+    /// Canonical stdlib path per visible imported name (aliases resolve to
+    /// their original path, wildcards to their namespace). Used to warn on
+    /// deprecated functions called by bare name.
+    pub imported_std_paths: HashMap<String, Vec<String>>,
     /// `(span, markdown)` pairs collected at every declaration and usage site,
     /// consumed by the LSP hover provider.
     pub hovers: Vec<(Span, String)>,

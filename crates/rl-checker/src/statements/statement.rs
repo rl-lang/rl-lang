@@ -719,19 +719,30 @@ impl TypeChecker {
                 if *wildcard {
                     for (name, f) in &module.functions {
                         self.imported_std_fns.insert(name.clone(), f.clone());
+                        let mut canonical = path.clone();
+                        canonical.push(name.clone());
+                        self.imported_std_paths.insert(name.clone(), canonical);
                     }
                 } else {
                     let mut imported = Vec::new();
                     let mut missing = Vec::new();
                     for (name, alias) in names {
                         match module.functions.get(name) {
-                            Some(f) => imported.push((alias.as_deref().unwrap_or(name), f.clone())),
+                            Some(f) => imported.push((
+                                alias.as_deref().unwrap_or(name),
+                                name.clone(),
+                                f.clone(),
+                            )),
                             None => missing.push(name),
                         }
                     }
 
-                    for (name, f) in imported {
-                        self.imported_std_fns.insert(name.to_string(), f);
+                    for (visible, original, f) in imported {
+                        self.imported_std_fns.insert(visible.to_string(), f);
+                        let mut canonical = path.clone();
+                        canonical.push(original.clone());
+                        self.imported_std_paths
+                            .insert(visible.to_string(), canonical);
                     }
                     for name in missing {
                         self.error(
