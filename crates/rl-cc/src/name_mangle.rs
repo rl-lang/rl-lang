@@ -5,14 +5,30 @@ const C_KEYWORDS: &[&str] = &[
     "union", "unsigned", "void", "volatile", "while",
 ];
 
+/// libc/POSIX identifiers a file-scope RL global or function would collide
+/// with (e.g. `dec clock = [...]` vs `clock()` from time.h). Locals shadow
+/// safely, but globals and functions share the C top-level namespace.
+const C_LIBC_RESERVED: &[&str] = &[
+    "abort", "abs", "access", "alarm", "assert", "atexit", "atoi", "calloc", "chdir", "chmod",
+    "clock", "close", "closedir", "creat", "ctime", "difftime", "div", "dup", "environ", "errno",
+    "exit", "fclose", "fcntl", "fflush", "fgets", "fopen", "fork", "free", "fstat", "getenv",
+    "getpid", "getcwd", "gmtime", "isatty", "kill", "labs", "lseek", "main", "malloc", "memcpy",
+    "memmove", "memset", "mkdir", "mktime", "mmap", "open", "opendir", "perror", "pipe", "poll",
+    "printf", "puts", "qsort", "raise", "rand", "read", "realloc", "readdir", "rename", "rmdir",
+    "scanf", "setenv", "signal", "sleep", "snprintf", "socket", "sprintf", "srand", "stat",
+    "strcat", "strcpy", "strlen", "system", "time", "tmpfile", "unlink", "wait", "write",
+];
+
 pub fn mangle(name: &str) -> String {
-    if C_KEYWORDS.contains(&name) {
+    if C_KEYWORDS.contains(&name) || C_LIBC_RESERVED.contains(&name) {
         return format!("rl_{}", name);
     }
 
     let mut result = String::new();
     for (i, ch) in name.chars().enumerate() {
         match ch {
+            // The escape marker itself doubles so `U` stays injective.
+            'U' => result.push_str("UU"),
             'a'..='z' | 'A'..='Z' | '_' => result.push(ch),
             '0'..='9' if i > 0 => result.push(ch),
             '0'..='9' => {
@@ -20,7 +36,9 @@ pub fn mangle(name: &str) -> String {
                 result.push(ch);
             }
             '-' | '.' | ':' => result.push('_'),
-            _ => result.push('_'),
+            // Non-ASCII identifiers (Arabic, CJK, emoji, ...): hex-escape
+            // each char so distinct names stay distinct in C.
+            _ => result.push_str(&format!("U{:x}", ch as u32)),
         }
     }
 
