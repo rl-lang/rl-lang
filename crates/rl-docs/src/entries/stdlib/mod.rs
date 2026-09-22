@@ -20,6 +20,7 @@ pub mod process;
 pub mod random;
 pub mod result;
 pub mod rl;
+pub mod serialize;
 pub mod str;
 pub mod term;
 pub mod time;

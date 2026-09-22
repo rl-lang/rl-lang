@@ -531,6 +531,9 @@ impl<'a> CCodegen<'a> {
     /// payload type is unknown. Lets declarations unwrap by their storage
     /// type instead of the i64 default (e.g. `dec bool b` over a map
     /// lookup, whose value type is a free generic).
+    /// A fully unknown payload (no checker signature, e.g. bare-path
+    /// stdlib calls) also counts: storage type is the best available
+    /// guess, strictly better than the blind i64 default.
     pub fn is_unwrap_of_dynamic(&self, id: ExprId) -> bool {
         let expr = self.ast.exprs.get(id);
         let inner = match &expr.kind {
@@ -555,7 +558,8 @@ impl<'a> CCodegen<'a> {
             Some(TypeAnnotation::Result(payload)) | Some(TypeAnnotation::CResult(payload)) => {
                 Self::needs_inference(&payload)
             }
-            _ => false,
+            // No static payload at all: dynamic by definition.
+            Some(_) | None => true,
         }
     }
     /// A bare `handle` (HandleInfer) refines to the initializer handle

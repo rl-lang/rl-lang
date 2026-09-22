@@ -819,6 +819,9 @@ impl<'a> CCodegen<'a> {
                 self.compile_expr(expr_id)?;
                 self.writer.write(" }");
             }
+            TypeAnnotation::Null => {
+                self.writer.write("(rl_value){ .tag = RL_VTAG_NULL, .data.i64 = 0 }");
+            }
             _ => {
                 self.writer.write("(rl_value){ .tag = RL_VTAG_I64, .data.i64 = (int64_t)");
                 self.compile_expr(expr_id)?;

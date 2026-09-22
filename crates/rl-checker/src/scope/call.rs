@@ -114,6 +114,7 @@ impl TypeChecker {
                 .chain(keywords::process::KEYWORDS)
                 .chain(keywords::random::KEYWORDS)
                 .chain(keywords::result::KEYWORDS)
+                .chain(keywords::serialize::KEYWORDS)
                 .chain(keywords::rl::KEYWORDS)
                 .chain(keywords::string::KEYWORDS)
                 .chain(keywords::terminal::KEYWORDS)

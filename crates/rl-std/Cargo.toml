@@ -39,6 +39,11 @@ hex = { workspace = true, optional = true }
 getrandom = { workspace = true, optional = true }
 uuid = { workspace = true, optional = true }
 argon2 = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+csv = { workspace = true, optional = true }
+toml = { workspace = true, optional = true }
+rust-ini = { workspace = true, optional = true }
+serde_yaml = { workspace = true, optional = true }
 libc = { workspace = true, optional = true }
 tempfile = { workspace = true, optional = true }
 glob = { workspace = true, optional = true }
@@ -68,6 +73,7 @@ signatures = [
     "std-process",
     "std-random",
     "std-result",
+    "std-serialize",
     "std-string",
     "std-terminal",
     "std-time",
@@ -80,6 +86,7 @@ impls = [
     "std-c",
     "std-cli",
     "std-crypto",
+    "std-serialize",
     "std-fs",
     "std-gui",
     "std-http",
@@ -110,6 +117,11 @@ impls = [
     "dep:getrandom",
     "dep:uuid",
     "dep:argon2",
+    "dep:serde_json",
+    "dep:csv",
+    "dep:toml",
+    "dep:rust-ini",
+    "dep:serde_yaml",
     "dep:libc",
     "dep:tempfile",
     "dep:glob",
@@ -135,6 +147,7 @@ std-path = []
 std-process = ["dep:shell-words"]
 std-random = []
 std-result = []
+std-serialize = ["dep:serde_json", "dep:csv", "dep:toml", "dep:rust-ini", "dep:serde_yaml"]
 std-string = []
 std-terminal = ["dep:crossterm"]
 std-time = []

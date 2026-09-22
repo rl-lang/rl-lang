@@ -18,7 +18,7 @@ pub static CLI: StdEntry = StdEntry {
     name: "cli",
     description: "functions for building command-line interfaces: arg parsing, prompts, editable input, progress bars",
     functions: FUNCTIONS,
-    since: Some("v2.3.0"),
+    since: Some("v2.2.0"),
     unstable: false,
 };
 

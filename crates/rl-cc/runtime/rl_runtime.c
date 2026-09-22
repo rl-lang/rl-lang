@@ -6801,6 +6801,2609 @@ bool rl_crypto_password_verify(rl_string password, rl_string hash) {
 #endif
 }
 
+// ---- serialize ----
+// Mirrors `std::serialize`: JSON/CSV/TOML/INI full implementations,
+// YAML via libyaml (RL_USE_YAML gate, same pattern as argon2).
+// Parsed containers use the runtime-wide shapes (maps, int64 arrays,
+// rl_value boxes for mixed arrays). Dynamic inputs arrive rl_ok-boxed
+// and dispatch on the result tag.
+
+// JSON value model: objects -> rl_map (string keys), arrays -> rl_array
+// of rl_value boxes when mixed (homogeneous arrays keep their layout),
+// numbers -> int64 when whole else double, null -> null result.
+
+static uint64_t *_rl_ser_sorted_idx(rl_map *m);
+
+typedef struct { const char *p; const char *end; const char *err; } _rl_json_in;
+
+static void _rl_json_skip_ws(_rl_json_in *in) {
+    while (in->p < in->end && (*in->p == ' ' || *in->p == '\t' || *in->p == '\n' || *in->p == '\r')) in->p++;
+}
+
+static int _rl_json_hex4(const char *p, unsigned *out) {
+    unsigned v = 0;
+    for (int i = 0; i < 4; i++) {
+        char c = p[i];
+        v <<= 4;
+        if (c >= '0' && c <= '9') v |= (unsigned)(c - '0');
+        else if (c >= 'a' && c <= 'f') v |= (unsigned)(c - 'a' + 10);
+        else if (c >= 'A' && c <= 'F') v |= (unsigned)(c - 'A' + 10);
+        else return -1;
+    }
+    *out = v;
+    return 0;
+}
+
+// Appends one UTF-8 encoded codepoint.
+static void _rl_json_push_utf8(char **buf, uint64_t *len, uint64_t *cap, unsigned cp) {
+    char tmp[4];
+    int n = 0;
+    if (cp < 0x80) { tmp[0] = (char)cp; n = 1; }
+    else if (cp < 0x800) { tmp[0] = (char)(0xc0 | (cp >> 6)); tmp[1] = (char)(0x80 | (cp & 63)); n = 2; }
+    else if (cp < 0x10000) {
+        tmp[0] = (char)(0xe0 | (cp >> 12)); tmp[1] = (char)(0x80 | ((cp >> 6) & 63)); tmp[2] = (char)(0x80 | (cp & 63)); n = 3;
+    } else {
+        tmp[0] = (char)(0xf0 | (cp >> 18)); tmp[1] = (char)(0x80 | ((cp >> 12) & 63));
+        tmp[2] = (char)(0x80 | ((cp >> 6) & 63)); tmp[3] = (char)(0x80 | (cp & 63)); n = 4;
+    }
+    for (int i = 0; i < n; i++) {
+        if (*len + 1 >= *cap) {
+            uint64_t ncap = (*cap == 0 ? 32 : *cap * 2);
+            char *grown = realloc(*buf, ncap);
+            if (grown == NULL) return;
+            *buf = grown;
+            *cap = ncap;
+        }
+        (*buf)[(*len)++] = tmp[i];
+    }
+}
+
+static rl_string _rl_json_parse_string(_rl_json_in *in) {
+    // Assumes opening quote; returns string (possibly with err set).
+    rl_string empty = { .data = "", .len = 0 };
+    if (in->p >= in->end || *in->p != '"') { in->err = "expected string"; return empty; }
+    in->p++;
+    char *buf = NULL;
+    uint64_t len = 0, cap = 0;
+    while (in->p < in->end && *in->p != '"') {
+        if (*in->p == '\\') {
+            in->p++;
+            if (in->p >= in->end) break;
+            char e = *in->p++;
+            switch (e) {
+                case '"': case '\\': case '/':
+                    if (len + 1 >= cap) {
+                        uint64_t ncap = (cap == 0 ? 32 : cap * 2);
+                        char *grown = realloc(buf, ncap);
+                        if (grown == NULL) { in->err = "out of memory"; free(buf); return empty; }
+                        buf = grown; cap = ncap;
+                    }
+                    buf[len++] = e;
+                    break;
+                case 'b': case 'f': case 'n': case 'r': case 't': {
+                    char c = (e == 'b') ? '\b' : (e == 'f') ? '\f' : (e == 'n') ? '\n' : (e == 'r') ? '\r' : '\t';
+                    if (len + 1 >= cap) {
+                        uint64_t ncap = (cap == 0 ? 32 : cap * 2);
+                        char *grown = realloc(buf, ncap);
+                        if (grown == NULL) { in->err = "out of memory"; free(buf); return empty; }
+                        buf = grown; cap = ncap;
+                    }
+                    buf[len++] = c;
+                    break;
+                }
+                case 'u': {
+                    if (in->end - in->p < 4) { in->err = "bad unicode escape"; free(buf); return empty; }
+                    unsigned cp = 0;
+                    if (_rl_json_hex4(in->p, &cp)) { in->err = "bad unicode escape"; free(buf); return empty; }
+                    in->p += 4;
+                    if (cp >= 0xd800 && cp <= 0xdbff) {
+                        // Surrogate pair.
+                        if (in->end - in->p < 6 || in->p[0] != '\\' || in->p[1] != 'u') {
+                            in->err = "lone surrogate";
+                            free(buf);
+                            return empty;
+                        }
+                        unsigned lo = 0;
+                        if (_rl_json_hex4(in->p + 2, &lo) || lo < 0xdc00 || lo > 0xdfff) {
+                            in->err = "bad surrogate pair";
+                            free(buf);
+                            return empty;
+                        }
+                        in->p += 6;
+                        cp = 0x10000 + ((cp - 0xd800) << 10) + (lo - 0xdc00);
+                    }
+                    _rl_json_push_utf8(&buf, &len, &cap, cp);
+                    break;
+                }
+                default: in->err = "bad escape"; free(buf); return empty;
+            }
+        } else {
+            if (len + 1 >= cap) {
+                uint64_t ncap = (cap == 0 ? 32 : cap * 2);
+                char *grown = realloc(buf, ncap);
+                if (grown == NULL) { in->err = "out of memory"; free(buf); return empty; }
+                buf = grown; cap = ncap;
+            }
+            buf[len++] = *in->p++;
+        }
+    }
+    if (in->p >= in->end) { in->err = "unterminated string"; free(buf); return empty; }
+    in->p++;
+    char *dup = malloc(len + 1);
+    if (len > 0) memcpy(dup, buf, len);
+    dup[len] = '\0';
+    free(buf);
+    rl_string s = { .data = dup, .len = len };
+    return s;
+}
+
+static rl_result _rl_json_parse_value(_rl_json_in *in);
+
+static rl_result _rl_json_parse_array(_rl_json_in *in) {
+    in->p++; // [
+    rl_value *items = NULL;
+    uint64_t n = 0, cap = 0;
+    _rl_json_skip_ws(in);
+    if (in->p < in->end && *in->p == ']') {
+        in->p++;
+        rl_array arr = { .data = NULL, .len = 0, .cap = 0,
+            .elem_size = (int32_t)sizeof(rl_value), .type_tag = RL_TAG_I64 };
+        return rl_ok_arr(arr);
+    }
+    for (;;) {
+        _rl_json_skip_ws(in);
+        rl_result item = _rl_json_parse_value(in);
+        if (!item.is_ok) {
+            free(items);
+            return item;
+        }
+        if (n == cap) {
+            uint64_t ncap = (cap == 0 ? 8 : cap * 2);
+            rl_value *grown = realloc(items, ncap * sizeof(rl_value));
+            if (grown == NULL) { in->err = "out of memory"; free(items); return rl_err(-1); }
+            items = grown;
+            cap = ncap;
+        }
+        // Box the payload by tag.
+        rl_value box;
+        box.tag = RL_VTAG_NULL;
+        switch (item.tag) {
+            case RL_TAG_NULL: box.tag = RL_VTAG_NULL; break;
+            case RL_TAG_I64: box.tag = RL_VTAG_I64; box.data.i64 = item.data.i64; break;
+            case RL_TAG_F64: box.tag = RL_VTAG_F64; box.data.f64 = item.data.f64; break;
+            case RL_TAG_BOOL: box.tag = RL_VTAG_BOOL; box.data.boolean = item.data.boolean; break;
+            case RL_TAG_STR: box.tag = RL_VTAG_STR; box.data.str = item.data.str; break;
+            case RL_TAG_ARR: box.tag = RL_VTAG_ARR; box.data.arr = item.data.arr; break;
+            case RL_TAG_MAP: {
+                box.tag = RL_VTAG_MAP;
+                rl_map *mp = malloc(sizeof(rl_map));
+                *mp = item.data.map;
+                box.data.map = mp;
+                break;
+            }
+            default: box.tag = RL_VTAG_NULL; break;
+        }
+        items[n++] = box;
+        _rl_json_skip_ws(in);
+        if (in->p >= in->end) { in->err = "unterminated array"; free(items); return rl_err(-1); }
+        if (*in->p == ']') { in->p++; break; }
+        if (*in->p != ',') { in->err = "expected , or ]"; free(items); return rl_err(-1); }
+        in->p++;
+    }
+    rl_array arr = { .data = items, .len = n, .cap = cap,
+        .elem_size = (int32_t)sizeof(rl_value), .type_tag = RL_TAG_I64 };
+    return rl_ok_arr(arr);
+}
+
+static rl_result _rl_json_parse_object(_rl_json_in *in) {
+    in->p++; // {
+    rl_map m = rl_map_new();
+    _rl_json_skip_ws(in);
+    if (in->p < in->end && *in->p == '}') {
+        in->p++;
+        return rl_ok_map(m);
+    }
+    for (;;) {
+        _rl_json_skip_ws(in);
+        if (in->p >= in->end || *in->p != '"') { in->err = "expected object key"; return rl_err(-1); }
+        rl_string key = _rl_json_parse_string(in);
+        if (in->err != NULL) return rl_err(-1);
+        _rl_json_skip_ws(in);
+        if (in->p >= in->end || *in->p != ':') {
+            free((void *)key.data);
+            in->err = "expected :";
+            return rl_err(-1);
+        }
+        in->p++;
+        _rl_json_skip_ws(in);
+        rl_result val = _rl_json_parse_value(in);
+        if (!val.is_ok) {
+            free((void *)key.data);
+            return val;
+        }
+        char *kdup = malloc(key.len + 1);
+        memcpy(kdup, key.data, key.len);
+        kdup[key.len] = '\0';
+        free((void *)key.data);
+        rl_value box;
+        box.tag = RL_VTAG_NULL;
+        switch (val.tag) {
+            case RL_TAG_NULL: box.tag = RL_VTAG_NULL; break;
+            case RL_TAG_I64: box.tag = RL_VTAG_I64; box.data.i64 = val.data.i64; break;
+            case RL_TAG_F64: box.tag = RL_VTAG_F64; box.data.f64 = val.data.f64; break;
+            case RL_TAG_BOOL: box.tag = RL_VTAG_BOOL; box.data.boolean = val.data.boolean; break;
+            case RL_TAG_STR: box.tag = RL_VTAG_STR; box.data.str = val.data.str; break;
+            case RL_TAG_ARR: box.tag = RL_VTAG_ARR; box.data.arr = val.data.arr; break;
+            case RL_TAG_MAP: {
+                box.tag = RL_VTAG_MAP;
+                rl_map *mp = malloc(sizeof(rl_map));
+                *mp = val.data.map;
+                box.data.map = mp;
+                break;
+            }
+            default: box.tag = RL_VTAG_NULL; break;
+        }
+        rl_map_set(&m, kdup, box);
+        free(kdup);
+        _rl_json_skip_ws(in);
+        if (in->p >= in->end) { in->err = "unterminated object"; return rl_err(-1); }
+        if (*in->p == '}') { in->p++; break; }
+        if (*in->p != ',') { in->err = "expected , or }"; return rl_err(-1); }
+        in->p++;
+    }
+    return rl_ok_map(m);
+}
+
+static rl_result _rl_json_parse_number(_rl_json_in *in) {
+    const char *start = in->p;
+    if (in->p < in->end && *in->p == '-') in->p++;
+    int is_float = 0;
+    while (in->p < in->end && *in->p >= '0' && *in->p <= '9') in->p++;
+    if (in->p < in->end && *in->p == '.') { is_float = 1; in->p++; }
+    while (in->p < in->end && *in->p >= '0' && *in->p <= '9') in->p++;
+    if (in->p < in->end && (*in->p == 'e' || *in->p == 'E')) {
+        is_float = 1;
+        in->p++;
+        if (in->p < in->end && (*in->p == '+' || *in->p == '-')) in->p++;
+        while (in->p < in->end && *in->p >= '0' && *in->p <= '9') in->p++;
+    }
+    uint64_t nlen = (uint64_t)(in->p - start);
+    if (nlen == 0 || (nlen == 1 && start[0] == '-')) { in->err = "bad number"; return rl_err(-1); }
+    char *num = malloc(nlen + 1);
+    memcpy(num, start, nlen);
+    num[nlen] = '\0';
+    rl_result r;
+    if (!is_float) {
+        char *endp = NULL;
+        long long v = strtoll(num, &endp, 10);
+        if (endp != NULL && *endp == '\0') {
+            r = rl_ok_i64((int64_t)v);
+        } else {
+            // Beyond int64: closest representable is float (VM parity).
+            r = rl_ok_f64(strtod(num, NULL));
+        }
+    } else {
+        r = rl_ok_f64(strtod(num, NULL));
+    }
+    free(num);
+    return r;
+}
+
+static rl_result _rl_json_parse_value(_rl_json_in *in) {
+    _rl_json_skip_ws(in);
+    if (in->p >= in->end) { in->err = "unexpected end of input"; return rl_err(-1); }
+    char c = *in->p;
+    if (c == '{') return _rl_json_parse_object(in);
+    if (c == '[') return _rl_json_parse_array(in);
+    if (c == '"') {
+        rl_string s = _rl_json_parse_string(in);
+        if (in->err != NULL) return rl_err(-1);
+        return rl_ok_str(s);
+    }
+    if (c == 't' && (size_t)(in->end - in->p) >= 4 && !memcmp(in->p, "true", 4)) {
+        in->p += 4;
+        return rl_ok_bool(1);
+    }
+    if (c == 'f' && (size_t)(in->end - in->p) >= 5 && !memcmp(in->p, "false", 5)) {
+        in->p += 5;
+        return rl_ok_bool(0);
+    }
+    if (c == 'n' && (size_t)(in->end - in->p) >= 4 && !memcmp(in->p, "null", 4)) {
+        in->p += 4;
+        return rl_ok_null();
+    }
+    if (c == '-' || (c >= '0' && c <= '9')) return _rl_json_parse_number(in);
+    in->err = "unexpected character";
+    return rl_err(-1);
+}
+
+rl_result rl_serialize_json_parse(rl_string s) {
+    const char *data = (s.data != NULL) ? s.data : "";
+    _rl_json_in in = { data, data + s.len, NULL };
+    rl_result v = _rl_json_parse_value(&in);
+    if (!v.is_ok) {
+        uint64_t at = (uint64_t)(in.p - data);
+        static char msg[256];
+        snprintf(msg, sizeof(msg), "json_parse: %s at byte %llu",
+            (in.err != NULL) ? in.err : "invalid value", (unsigned long long)at);
+        return rl_err_msg(rl_str_literal(msg, strlen(msg)));
+    }
+    _rl_json_skip_ws(&in);
+    if (in.p < in.end) {
+        return rl_err_msg(rl_str_literal("json_parse: trailing characters", 31));
+    }
+    return v;
+}
+
+bool rl_serialize_json_is_valid(rl_string s) {
+    const char *data = (s.data != NULL) ? s.data : "";
+    _rl_json_in in = { data, data + s.len, NULL };
+    rl_result v = _rl_json_parse_value(&in);
+    if (!v.is_ok) return 0;
+    _rl_json_skip_ws(&in);
+    return in.p >= in.end;
+}
+
+// ---- serialize JSON stringify ----
+// Reads rl_ok-boxed dynamics plus every plain layout the emitters pass:
+// strings, bools, ints, floats, arrays (homogeneous or rl_value-boxed),
+// maps, and nulls. Mirrors the VM: string keys required, exotic leaves
+// fall back to null, floats use shortest round-trip formatting.
+
+static void _rl_ser_json_emit_str(const char *data, uint64_t n, char **buf, uint64_t *len, uint64_t *cap);
+
+static void _rl_ser_buf_add(char **buf, uint64_t *len, uint64_t *cap, const char *text, uint64_t tlen) {
+    if (*len + tlen + 1 > *cap) {
+        uint64_t ncap = (*cap == 0 ? 256 : *cap * 2) + tlen;
+        char *nbuf = realloc(*buf, ncap);
+        if (nbuf == NULL) return;
+        *buf = nbuf;
+        *cap = ncap;
+    }
+    memcpy(*buf + *len, text, tlen);
+    *len += tlen;
+    (*buf)[*len] = '\0';
+}
+
+static void _rl_ser_buf_byte(char **buf, uint64_t *len, uint64_t *cap, char c) {
+    _rl_ser_buf_add(buf, len, cap, &c, 1);
+}
+
+static void _rl_ser_json_emit_str(const char *data, uint64_t n, char **buf, uint64_t *len, uint64_t *cap) {
+    _rl_ser_buf_byte(buf, len, cap, '"');
+    for (uint64_t i = 0; i < n; i++) {
+        unsigned char c = (unsigned char)data[i];
+        switch (c) {
+            case '"': _rl_ser_buf_add(buf, len, cap, "\\\"", 2); break;
+            case '\\': _rl_ser_buf_add(buf, len, cap, "\\\\", 2); break;
+            case '\b': _rl_ser_buf_add(buf, len, cap, "\\b", 2); break;
+            case '\f': _rl_ser_buf_add(buf, len, cap, "\\f", 2); break;
+            case '\n': _rl_ser_buf_add(buf, len, cap, "\\n", 2); break;
+            case '\r': _rl_ser_buf_add(buf, len, cap, "\\r", 2); break;
+            case '\t': _rl_ser_buf_add(buf, len, cap, "\\t", 2); break;
+            default:
+                if (c < 0x20) {
+                    char esc[7];
+                    snprintf(esc, sizeof(esc), "\\u%04x", c);
+                    _rl_ser_buf_add(buf, len, cap, esc, 6);
+                } else {
+                    _rl_ser_buf_byte(buf, len, cap, (char)c);
+                }
+                break;
+        }
+    }
+    _rl_ser_buf_byte(buf, len, cap, '"');
+}
+
+// Unboxes one array element into an rl_value view (no copy for boxes).
+static int _rl_ser_array_elem(rl_array a, uint64_t i, rl_value *out) {
+    if (a.elem_size == (int32_t)sizeof(rl_value)) {
+        *out = ((rl_value *)a.data)[i];
+        return 1;
+    }
+    memset(out, 0, sizeof(*out));
+    if (a.type_tag == RL_TAG_STR && a.elem_size == (int32_t)sizeof(rl_string)) {
+        out->tag = RL_VTAG_STR;
+        out->data.str = ((rl_string *)a.data)[i];
+        return 1;
+    }
+    if (a.type_tag == RL_TAG_F64 && a.elem_size == (int32_t)sizeof(double)) {
+        out->tag = RL_VTAG_F64;
+        out->data.f64 = ((double *)a.data)[i];
+        return 1;
+    }
+    if (a.type_tag == RL_TAG_BOOL && a.elem_size == (int32_t)sizeof(bool)) {
+        out->tag = RL_VTAG_BOOL;
+        out->data.boolean = ((bool *)a.data)[i];
+        return 1;
+    }
+    if (a.type_tag == RL_TAG_ARR && a.elem_size == (int32_t)sizeof(rl_array)) {
+        out->tag = RL_VTAG_ARR;
+        out->data.arr = ((rl_array *)a.data)[i];
+        return 1;
+    }
+    if (a.type_tag == RL_TAG_MAP && a.elem_size == (int32_t)sizeof(rl_map)) {
+        out->tag = RL_VTAG_MAP;
+        rl_map *mp = malloc(sizeof(rl_map));
+        *mp = ((rl_map *)a.data)[i];
+        out->data.map = mp;
+        return 2; // caller frees out->data.map
+    }
+    if (a.elem_size == (int32_t)sizeof(int64_t)) {
+        // Covers int64 elements and the int64-backed byte arrays.
+        out->tag = RL_VTAG_I64;
+        out->data.i64 = ((int64_t *)a.data)[i];
+        return 1;
+    }
+    return 0;
+}
+
+static void _rl_ser_json_emit_value(rl_value v, int pretty, int indent,
+    char **buf, uint64_t *len, uint64_t *cap, int *failed);
+
+static void _rl_ser_json_emit_indent(char **buf, uint64_t *len, uint64_t *cap, int indent) {
+    for (int i = 0; i < indent; i++) _rl_ser_buf_byte(buf, len, cap, ' ');
+}
+
+static void _rl_ser_json_emit_value(rl_value v, int pretty, int indent,
+        char **buf, uint64_t *len, uint64_t *cap, int *failed) {
+    switch (v.tag) {
+        case RL_VTAG_NULL:
+            _rl_ser_buf_add(buf, len, cap, "null", 4);
+            break;
+        case RL_VTAG_BOOL:
+            _rl_ser_buf_add(buf, len, cap, v.data.boolean ? "true" : "false",
+                v.data.boolean ? 4 : 5);
+            break;
+        case RL_VTAG_I64: {
+            char num[32];
+            snprintf(num, sizeof(num), "%lld", (long long)v.data.i64);
+            _rl_ser_buf_add(buf, len, cap, num, strlen(num));
+            break;
+        }
+        case RL_VTAG_F64: {
+            // Shortest round-trip: serde_json prints integral floats as
+            // `12.0` and uses shortest repr otherwise. Match: whole
+            // values get .0, the rest %.17g trimmed.
+            double f = v.data.f64;
+            char num[32];
+            if (f == (double)(long long)f && f < 1e18 && f > -1e18) {
+                snprintf(num, sizeof(num), "%lld.0", (long long)f);
+            } else {
+                snprintf(num, sizeof(num), "%.17g", f);
+            }
+            _rl_ser_buf_add(buf, len, cap, num, strlen(num));
+            break;
+        }
+        case RL_VTAG_STR:
+            if (v.data.str.data != NULL) {
+                _rl_ser_json_emit_str(v.data.str.data, v.data.str.len, buf, len, cap);
+            } else {
+                _rl_ser_buf_add(buf, len, cap, "null", 4);
+            }
+            break;
+        case RL_VTAG_ARR: {
+            rl_array a = v.data.arr;
+            _rl_ser_buf_byte(buf, len, cap, '[');
+            for (uint64_t i = 0; i < a.len; i++) {
+                if (i > 0) _rl_ser_buf_byte(buf, len, cap, ',');
+                if (pretty) {
+                    _rl_ser_buf_byte(buf, len, cap, '\n');
+                    _rl_ser_json_emit_indent(buf, len, cap, indent + 2);
+                }
+                rl_value e;
+                int own = _rl_ser_array_elem(a, i, &e);
+                if (!own) {
+                    _rl_ser_buf_add(buf, len, cap, "null", 4);
+                } else {
+                    _rl_ser_json_emit_value(e, pretty, indent + 2, buf, len, cap, failed);
+                    if (own == 2) free(e.data.map);
+                }
+            }
+            if (pretty && a.len > 0) {
+                _rl_ser_buf_byte(buf, len, cap, '\n');
+                _rl_ser_json_emit_indent(buf, len, cap, indent);
+            }
+            _rl_ser_buf_byte(buf, len, cap, ']');
+            break;
+        }
+        case RL_VTAG_MAP: {
+            rl_map *m = v.data.map;
+            // serde sorts keys; match via sorted indices.
+            uint64_t *sidx = _rl_ser_sorted_idx(m);
+            _rl_ser_buf_byte(buf, len, cap, '{');
+            int first = 1;
+            for (uint64_t ii = 0; ii < m->len; ii++) {
+                uint64_t i = sidx[ii];
+                if (!first) _rl_ser_buf_byte(buf, len, cap, ',');
+                first = 0;
+                if (pretty) {
+                    _rl_ser_buf_byte(buf, len, cap, '\n');
+                    _rl_ser_json_emit_indent(buf, len, cap, indent + 2);
+                }
+                _rl_ser_json_emit_str(m->entries[i].key, strlen(m->entries[i].key),
+                    buf, len, cap);
+                _rl_ser_buf_byte(buf, len, cap, ':');
+                if (pretty) _rl_ser_buf_byte(buf, len, cap, ' ');
+                _rl_ser_json_emit_value(m->entries[i].value, pretty, indent + 2,
+                    buf, len, cap, failed);
+            }
+            free(sidx);
+            if (pretty && m->len > 0) {
+                _rl_ser_buf_byte(buf, len, cap, '\n');
+                _rl_ser_json_emit_indent(buf, len, cap, indent);
+            }
+            _rl_ser_buf_byte(buf, len, cap, '}');
+            break;
+        }
+        default:
+            // Closures, handles and friends: VM falls back to null.
+            _rl_ser_buf_add(buf, len, cap, "null", 4);
+            break;
+    }
+}
+
+// Converts an rl_result (or any rl_ok-boxed plain value is handled by
+// the caller) into an rl_value view for the emitters.
+static rl_value _rl_ser_result_to_value(rl_result r, int *need_free) {
+    rl_value v;
+    memset(&v, 0, sizeof(v));
+    *need_free = 0;
+    if (!r.is_ok) {
+        v.tag = RL_VTAG_NULL;
+        return v;
+    }
+    switch (r.tag) {
+        case RL_TAG_NULL: v.tag = RL_VTAG_NULL; break;
+        case RL_TAG_I64: v.tag = RL_VTAG_I64; v.data.i64 = r.data.i64; break;
+        case RL_TAG_F64: v.tag = RL_VTAG_F64; v.data.f64 = r.data.f64; break;
+        case RL_TAG_BOOL: v.tag = RL_VTAG_BOOL; v.data.boolean = r.data.boolean; break;
+        case RL_TAG_CHAR: v.tag = RL_VTAG_I64; v.data.i64 = (int64_t)(unsigned char)r.data.i64; break;
+        case RL_TAG_STR: v.tag = RL_VTAG_STR; v.data.str = r.data.str; break;
+        case RL_TAG_ARR: v.tag = RL_VTAG_ARR; v.data.arr = r.data.arr; break;
+        case RL_TAG_MAP:
+            v.tag = RL_VTAG_MAP;
+            v.data.map = malloc(sizeof(rl_map));
+            *v.data.map = r.data.map;
+            *need_free = 1;
+            break;
+        default: v.tag = RL_VTAG_NULL; break;
+    }
+    return v;
+}
+
+static rl_string _rl_ser_json_stringify(rl_result v, int pretty) {
+    char *buf = NULL;
+    uint64_t len = 0, cap = 0;
+    int need_free = 0;
+    rl_value val = _rl_ser_result_to_value(v, &need_free);
+    int failed = 0;
+    _rl_ser_json_emit_value(val, pretty, 0, &buf, &len, &cap, &failed);
+    if (need_free) free(val.data.map);
+    if (buf == NULL) {
+        buf = malloc(5);
+        memcpy(buf, "null", 5);
+        len = 4;
+    }
+    rl_string s = { .data = buf, .len = len };
+    return s;
+}
+
+rl_string rl_serialize_json_stringify(rl_result v) {
+    return _rl_ser_json_stringify(v, 0);
+}
+
+rl_string rl_serialize_json_stringify_pretty(rl_result v) {
+    return _rl_ser_json_stringify(v, 1);
+}
+
+rl_result rl_serialize_json_get(rl_result v, rl_string path) {
+    const char *pdata = (path.data != NULL) ? path.data : "";
+    // Work on a value view; maps/arrays navigate by reference.
+    int need_free = 0;
+    rl_value cur = _rl_ser_result_to_value(v, &need_free);
+    uint64_t pos = 0;
+    while (pos <= path.len) {
+        uint64_t dot = pos;
+        while (dot < path.len && pdata[dot] != '.') dot++;
+        uint64_t seglen = dot - pos;
+        if (seglen == 0) {
+            if (need_free) free(cur.data.map);
+            return _rl_cli_err("json_get: empty path segment");
+        }
+        char seg[256];
+        if (seglen >= sizeof(seg)) {
+            if (need_free) free(cur.data.map);
+            return _rl_cli_err("json_get: path segment too long");
+        }
+        memcpy(seg, pdata + pos, seglen);
+        seg[seglen] = '\0';
+        if (cur.tag == RL_VTAG_ARR) {
+            char *endp = NULL;
+            unsigned long idx = strtoul(seg, &endp, 10);
+            if (endp == seg || *endp != '\0') {
+                if (need_free) free(cur.data.map);
+                static char msg[300];
+                snprintf(msg, sizeof(msg), "json_get: cannot index array with \"%s\"", seg);
+                return _rl_cli_err(msg);
+            }
+            rl_array a = cur.data.arr;
+            if (idx >= a.len) {
+                if (need_free) free(cur.data.map);
+                static char msg[300];
+                snprintf(msg, sizeof(msg), "json_get: index %lu out of bounds", idx);
+                return _rl_cli_err(msg);
+            }
+            rl_value next;
+            int own = _rl_ser_array_elem(a, idx, &next);
+            if (need_free) { free(cur.data.map); need_free = 0; }
+            if (!own) return _rl_cli_err("json_get: bad array element");
+            if (own == 2) {
+                // Map element: adopt without extra copy.
+                cur = next;
+                need_free = 1;
+            } else {
+                cur = next;
+            }
+        } else if (cur.tag == RL_VTAG_MAP) {
+            rl_map *m = cur.data.map;
+            rl_value *found = NULL;
+            for (uint64_t i = 0; i < m->len; i++) {
+                if (!strcmp(m->entries[i].key, seg)) {
+                    found = &m->entries[i].value;
+                    break;
+                }
+            }
+            if (found == NULL) {
+                if (need_free) free(cur.data.map);
+                static char msg[300];
+                snprintf(msg, sizeof(msg), "json_get: no such key \"%s\"", seg);
+                return _rl_cli_err(msg);
+            }
+            rl_value next = *found;
+            if (need_free) { free(cur.data.map); need_free = 0; }
+            cur = next;
+            if (cur.tag == RL_VTAG_MAP) {
+                // Borrowed nested map: copy the handle so frees stay safe.
+                rl_map *mp = malloc(sizeof(rl_map));
+                *mp = *cur.data.map;
+                cur.data.map = mp;
+                need_free = 1;
+            }
+        } else {
+            if (need_free) free(cur.data.map);
+            return _rl_cli_err("json_get: cannot index into scalar");
+        }
+        if (dot >= path.len) break;
+        pos = dot + 1;
+    }
+    // Wrap back into a result by tag.
+    rl_result r;
+    switch (cur.tag) {
+        case RL_VTAG_NULL: r = rl_ok_null(); break;
+        case RL_VTAG_I64: r = rl_ok_i64(cur.data.i64); break;
+        case RL_VTAG_F64: r = rl_ok_f64(cur.data.f64); break;
+        case RL_VTAG_BOOL: r = rl_ok_bool(cur.data.boolean); break;
+        case RL_VTAG_STR: r = rl_ok_str(cur.data.str); break;
+        case RL_VTAG_ARR: r = rl_ok_arr(cur.data.arr); break;
+        case RL_VTAG_MAP: {
+            r = rl_ok_map(*cur.data.map);
+            if (need_free) free(cur.data.map);
+            return r;
+        }
+        default: r = rl_ok_null(); break;
+    }
+    if (need_free) free(cur.data.map);
+    return r;
+}
+
+// Sorted entry indices for deterministic emission (serde sorts keys;
+// RL maps preserve insertion, so sort here for byte parity).
+static uint64_t *_rl_ser_sorted_idx(rl_map *m) {
+    uint64_t *idx = malloc((m->len > 0 ? m->len : 1) * sizeof(uint64_t));
+    for (uint64_t i = 0; i < m->len; i++) idx[i] = i;
+    // Insertion sort: tables are small, and this stays portable C99.
+    for (uint64_t i = 1; i < m->len; i++) {
+        uint64_t cur = idx[i];
+        uint64_t k = i;
+        while (k > 0 && strcmp(m->entries[idx[k - 1]].key, m->entries[cur].key) > 0) {
+            idx[k] = idx[k - 1];
+            k--;
+        }
+        idx[k] = cur;
+    }
+    return idx;
+}
+
+// ---- serialize TOML emit ----
+
+static void _rl_ser_toml_emit_scalar(rl_value v, char **buf, uint64_t *len, uint64_t *cap, int *failed);
+
+static void _rl_ser_toml_emit_scalar(rl_value v, char **buf, uint64_t *len, uint64_t *cap, int *failed) {
+    switch (v.tag) {
+        case RL_VTAG_BOOL:
+            _rl_ser_buf_add(buf, len, cap, v.data.boolean ? "true" : "false",
+                v.data.boolean ? 4 : 5);
+            break;
+        case RL_VTAG_I64: {
+            char num[32];
+            snprintf(num, sizeof(num), "%lld", (long long)v.data.i64);
+            _rl_ser_buf_add(buf, len, cap, num, strlen(num));
+            break;
+        }
+        case RL_VTAG_F64: {
+            char num[32];
+            double f = v.data.f64;
+            if (f == (double)(long long)f && f < 1e18 && f > -1e18) {
+                snprintf(num, sizeof(num), "%lld.0", (long long)f);
+            } else {
+                snprintf(num, sizeof(num), "%.17g", f);
+            }
+            _rl_ser_buf_add(buf, len, cap, num, strlen(num));
+            break;
+        }
+        case RL_VTAG_STR: {
+            // Basic strings with escapes (VM quotes every string).
+            _rl_ser_buf_byte(buf, len, cap, '"');
+            const char *d = (v.data.str.data != NULL) ? v.data.str.data : "";
+            for (uint64_t i = 0; i < v.data.str.len; i++) {
+                char c = d[i];
+                if (c == '"') _rl_ser_buf_add(buf, len, cap, "\\\"", 2);
+                else if (c == '\\') _rl_ser_buf_add(buf, len, cap, "\\\\", 2);
+                else if (c == '\n') _rl_ser_buf_add(buf, len, cap, "\\n", 2);
+                else if (c == '\t') _rl_ser_buf_add(buf, len, cap, "\\t", 2);
+                else if (c == '\r') _rl_ser_buf_add(buf, len, cap, "\\r", 2);
+                else _rl_ser_buf_byte(buf, len, cap, c);
+            }
+            _rl_ser_buf_byte(buf, len, cap, '"');
+            break;
+        }
+        case RL_VTAG_ARR: {
+            rl_array a = v.data.arr;
+            _rl_ser_buf_byte(buf, len, cap, '[');
+            for (uint64_t i = 0; i < a.len; i++) {
+                if (i > 0) _rl_ser_buf_add(buf, len, cap, ", ", 2);
+                rl_value e;
+                int own = _rl_ser_array_elem(a, i, &e);
+                if (!own || e.tag == RL_VTAG_MAP || e.tag == RL_VTAG_ARR) {
+                    // Inline tables/arrays nest via the same emitter.
+                    if (e.tag == RL_VTAG_MAP) {
+                        _rl_ser_buf_byte(buf, len, cap, '{');
+                        rl_map *m = e.data.map;
+                        uint64_t *idx = _rl_ser_sorted_idx(m);
+                        for (uint64_t k = 0; k < m->len; k++) {
+                            if (k > 0) _rl_ser_buf_add(buf, len, cap, ", ", 2);
+                            _rl_ser_buf_add(buf, len, cap, m->entries[idx[k]].key,
+                                strlen(m->entries[idx[k]].key));
+                            _rl_ser_buf_add(buf, len, cap, " = ", 3);
+                            _rl_ser_toml_emit_scalar(m->entries[idx[k]].value, buf, len, cap, failed);
+                        }
+                        free(idx);
+                        _rl_ser_buf_byte(buf, len, cap, '}');
+                    } else if (e.tag == RL_VTAG_ARR) {
+                        _rl_ser_toml_emit_scalar(e, buf, len, cap, failed);
+                    } else {
+                        *failed = 1;
+                    }
+                    if (own == 2) free(e.data.map);
+                } else {
+                    _rl_ser_toml_emit_scalar(e, buf, len, cap, failed);
+                    if (own == 2) free(e.data.map);
+                }
+            }
+            _rl_ser_buf_byte(buf, len, cap, ']');
+            break;
+        }
+        default:
+            *failed = 1;
+            break;
+    }
+}
+
+static void _rl_ser_toml_emit_table(rl_map *m, const char *prefix,
+    char **buf, uint64_t *len, uint64_t *cap, int *failed);
+
+static void _rl_ser_toml_emit_table(rl_map *m, const char *prefix,
+        char **buf, uint64_t *len, uint64_t *cap, int *failed) {
+    uint64_t *idx = _rl_ser_sorted_idx(m);
+    // Scalar/array keys first, then sub-tables, then arrays of tables.
+    for (uint64_t ii = 0; ii < m->len; ii++) {
+        uint64_t i = idx[ii];
+        rl_value v = m->entries[i].value;
+        if (v.tag == RL_VTAG_MAP || v.tag == RL_VTAG_ARR) continue;
+        _rl_ser_buf_add(buf, len, cap, m->entries[i].key, strlen(m->entries[i].key));
+        _rl_ser_buf_add(buf, len, cap, " = ", 3);
+        _rl_ser_toml_emit_scalar(v, buf, len, cap, failed);
+        _rl_ser_buf_byte(buf, len, cap, '\n');
+    }
+    for (uint64_t ii = 0; ii < m->len; ii++) {
+        uint64_t i = idx[ii];
+        rl_value v = m->entries[i].value;
+        if (v.tag != RL_VTAG_MAP) continue;
+        char full[512];
+        if (prefix[0] == '\0') {
+            snprintf(full, sizeof(full), "%s", m->entries[i].key);
+        } else {
+            snprintf(full, sizeof(full), "%s.%s", prefix, m->entries[i].key);
+        }
+        _rl_ser_buf_byte(buf, len, cap, '[');
+        _rl_ser_buf_add(buf, len, cap, full, strlen(full));
+        _rl_ser_buf_add(buf, len, cap, "]\n", 2);
+        _rl_ser_toml_emit_table(v.data.map, full, buf, len, cap, failed);
+    }
+    for (uint64_t ii = 0; ii < m->len; ii++) {
+        uint64_t i = idx[ii];
+        rl_value v = m->entries[i].value;
+        if (v.tag != RL_VTAG_ARR) continue;
+        // Arrays of tables only; mixed arrays fail like the VM.
+        rl_array a = v.data.arr;
+        int all_maps = 1;
+        for (uint64_t k = 0; k < a.len; k++) {
+            rl_value e;
+            int own = _rl_ser_array_elem(a, k, &e);
+            if (!own || e.tag != RL_VTAG_MAP) all_maps = 0;
+            if (own == 2) {
+                // Keep; freed below per element is complex — tables are
+                // borrowed views, free only the wrapper.
+                free(e.data.map);
+            }
+            if (!all_maps) break;
+        }
+        if (!all_maps) {
+            // Plain arrays already emitted above? No — arrays were
+            // skipped in the scalar pass; emit inline here.
+            // (Reaching this means a mixed/scalar array: emit inline.)
+            _rl_ser_buf_add(buf, len, cap, m->entries[i].key, strlen(m->entries[i].key));
+            _rl_ser_buf_add(buf, len, cap, " = ", 3);
+            _rl_ser_toml_emit_scalar(v, buf, len, cap, failed);
+            _rl_ser_buf_byte(buf, len, cap, '\n');
+            continue;
+        }
+        char full[512];
+        if (prefix[0] == '\0') {
+            snprintf(full, sizeof(full), "%s", m->entries[i].key);
+        } else {
+            snprintf(full, sizeof(full), "%s.%s", prefix, m->entries[i].key);
+        }
+        for (uint64_t k = 0; k < a.len; k++) {
+            rl_value e;
+            int own = _rl_ser_array_elem(a, k, &e);
+            _rl_ser_buf_add(buf, len, cap, "[[", 2);
+            _rl_ser_buf_add(buf, len, cap, full, strlen(full));
+            _rl_ser_buf_add(buf, len, cap, "]]\n", 3);
+            if (own && e.tag == RL_VTAG_MAP) {
+                _rl_ser_toml_emit_table(e.data.map, full, buf, len, cap, failed);
+                if (own == 2) free(e.data.map);
+            }
+        }
+    }
+    free(idx);
+}
+
+rl_result rl_serialize_toml_stringify(rl_result v) {
+    if (!v.is_ok || v.tag != RL_TAG_MAP) {
+        return _rl_cli_err("toml_stringify: top level must be a map");
+    }
+    char *buf = NULL;
+    uint64_t len = 0, cap = 0;
+    int failed = 0;
+    _rl_ser_toml_emit_table(&v.data.map, "", &buf, &len, &cap, &failed);
+    if (failed) {
+        free(buf);
+        return _rl_cli_err("toml_stringify: unrepresentable value");
+    }
+    if (buf == NULL) {
+        buf = malloc(1);
+        buf[0] = '\0';
+    }
+    rl_string s = { .data = buf, .len = len };
+    return rl_ok_str(s);
+}
+
+// ---- serialize YAML ----
+// Via libyaml (RL_USE_YAML gate, same pattern as argon2): event parsing
+// into RL values, event emission back out. Mapping keys sort for byte
+// parity with the VM. Hand-built binaries without the flag abort loudly.
+
+#ifdef RL_USE_YAML
+#include <yaml.h>
+#endif
+
+#ifdef RL_USE_YAML
+// Scalar typing mirrors serde_yaml: quoted stays string; plain tries
+// null, bool, int (dec/hex/oct/bin), float, else string.
+static rl_value _rl_yaml_plain_scalar(const char *data, uint64_t n) {
+    rl_value v;
+    memset(&v, 0, sizeof(v));
+    char tmp[256];
+    if (n >= sizeof(tmp)) {
+        v.tag = RL_VTAG_STR;
+        char *dup = malloc(n + 1);
+        memcpy(dup, data, n);
+        dup[n] = '\0';
+        v.data.str.data = dup;
+        v.data.str.len = n;
+        return v;
+    }
+    memcpy(tmp, data, n);
+    tmp[n] = '\0';
+    if (n == 0 || !strcmp(tmp, "null") || !strcmp(tmp, "Null") || !strcmp(tmp, "NULL")
+        || !strcmp(tmp, "~")) {
+        v.tag = RL_VTAG_NULL;
+        return v;
+    }
+    if (!strcmp(tmp, "true") || !strcmp(tmp, "True") || !strcmp(tmp, "TRUE")) {
+        v.tag = RL_VTAG_BOOL;
+        v.data.boolean = 1;
+        return v;
+    }
+    if (!strcmp(tmp, "false") || !strcmp(tmp, "False") || !strcmp(tmp, "FALSE")) {
+        v.tag = RL_VTAG_BOOL;
+        v.data.boolean = 0;
+        return v;
+    }
+    char *endp = NULL;
+    // Hex/oct/bin with 0x/0o/0b prefixes.
+    if (n > 2 && tmp[0] == '0' && (tmp[1] == 'x' || tmp[1] == 'X')) {
+        long long i = strtoll(tmp, &endp, 16);
+        if (endp != NULL && *endp == '\0') {
+            v.tag = RL_VTAG_I64;
+            v.data.i64 = (int64_t)i;
+            return v;
+        }
+    } else if (n > 2 && tmp[0] == '0' && (tmp[1] == 'o' || tmp[1] == 'O')) {
+        long long i = strtoll(tmp + 2, &endp, 8);
+        if (endp != NULL && *endp == '\0') {
+            v.tag = RL_VTAG_I64;
+            v.data.i64 = (int64_t)i;
+            return v;
+        }
+    } else if (n > 2 && tmp[0] == '0' && (tmp[1] == 'b' || tmp[1] == 'B')) {
+        long long i = strtoll(tmp + 2, &endp, 2);
+        if (endp != NULL && *endp == '\0') {
+            v.tag = RL_VTAG_I64;
+            v.data.i64 = (int64_t)i;
+            return v;
+        }
+    } else {
+        // Decimal int (underscores allowed), else float.
+        char clean[256];
+        uint64_t cn = 0;
+        for (uint64_t i = 0; i < n; i++) {
+            if (tmp[i] != '_') clean[cn++] = tmp[i];
+        }
+        clean[cn] = '\0';
+        int is_float = 0;
+        for (uint64_t i = 0; clean[i] != '\0'; i++) {
+            if (clean[i] == '.' || clean[i] == 'e' || clean[i] == 'E') { is_float = 1; break; }
+        }
+        if (!strcmp(clean, ".inf") || !strcmp(clean, ".Inf") || !strcmp(clean, ".INF")
+            || !strcmp(clean, "+.inf")) {
+            v.tag = RL_VTAG_F64;
+            v.data.f64 = 1.0 / 0.0;
+            return v;
+        }
+        if (!strcmp(clean, "-.inf")) {
+            v.tag = RL_VTAG_F64;
+            v.data.f64 = -1.0 / 0.0;
+            return v;
+        }
+        if (!strcmp(clean, ".nan")) {
+            v.tag = RL_VTAG_F64;
+            v.data.f64 = 0.0 / 0.0;
+            return v;
+        }
+        if (!is_float) {
+            long long i = strtoll(clean, &endp, 10);
+            if (endp != NULL && *endp == '\0') {
+                v.tag = RL_VTAG_I64;
+                v.data.i64 = (int64_t)i;
+                return v;
+            }
+        } else {
+            double f = strtod(clean, &endp);
+            if (endp != NULL && *endp == '\0') {
+                v.tag = RL_VTAG_F64;
+                v.data.f64 = f;
+                return v;
+            }
+        }
+    }
+    v.tag = RL_VTAG_STR;
+    char *dup = malloc(n + 1);
+    memcpy(dup, data, n);
+    dup[n] = '\0';
+    v.data.str.data = dup;
+    v.data.str.len = n;
+    return v;
+}
+
+typedef struct { char *name; rl_value val; } _rl_yaml_anchor;
+
+static rl_result _rl_yaml_parse_nodes(yaml_parser_t *parser, _rl_yaml_anchor **anchors,
+    uint64_t *nanchors, const char **err);
+
+static void _rl_yaml_anchors_free(_rl_yaml_anchor *anchors, uint64_t n) {
+    for (uint64_t i = 0; i < n; i++) free(anchors[i].name);
+    free(anchors);
+}
+
+// Parses one node event (scalar/sequence/mapping/alias) recursively.
+static rl_result _rl_yaml_parse_node(yaml_parser_t *parser, yaml_event_t *ev,
+    _rl_yaml_anchor **anchors, uint64_t *nanchors, const char **err) {
+    if (ev->type == YAML_SCALAR_EVENT) {
+        const char *data = (const char *)ev->data.scalar.value;
+        uint64_t n = ev->data.scalar.length;
+        int quoted = (ev->data.scalar.style == YAML_SINGLE_QUOTED_SCALAR_STYLE
+            || ev->data.scalar.style == YAML_DOUBLE_QUOTED_SCALAR_STYLE);
+        rl_value v;
+        if (quoted) {
+            memset(&v, 0, sizeof(v));
+            v.tag = RL_VTAG_STR;
+            char *dup = malloc(n + 1);
+            memcpy(dup, data, n);
+            dup[n] = '\0';
+            v.data.str.data = dup;
+            v.data.str.len = n;
+        } else {
+            v = _rl_yaml_plain_scalar(data, n);
+        }
+        // Record anchors for later aliases (shallow shared).
+        if (ev->data.scalar.anchor != NULL) {
+            _rl_yaml_anchor *grown = realloc(*anchors, (*nanchors + 1) * sizeof(_rl_yaml_anchor));
+            if (grown != NULL) {
+                *anchors = grown;
+                const char *an = (const char *)ev->data.scalar.anchor;
+                char *dup = malloc(strlen(an) + 1);
+                strcpy(dup, an);
+                (*anchors)[*nanchors].name = dup;
+                (*anchors)[*nanchors].val = v;
+                (*nanchors)++;
+            }
+        }
+        rl_result r;
+        switch (v.tag) {
+            case RL_VTAG_NULL: r = rl_ok_null(); break;
+            case RL_VTAG_BOOL: r = rl_ok_bool(v.data.boolean); break;
+            case RL_VTAG_I64: r = rl_ok_i64(v.data.i64); break;
+            case RL_VTAG_F64: r = rl_ok_f64(v.data.f64); break;
+            case RL_VTAG_STR: r = rl_ok_str(v.data.str); break;
+            default: r = rl_ok_null(); break;
+        }
+        return r;
+    }
+    if (ev->type == YAML_SEQUENCE_START_EVENT) {
+        yaml_char_t *anchor = ev->data.sequence_start.anchor;
+        rl_value *items = NULL;
+        uint64_t n = 0, cap = 0;
+        for (;;) {
+            yaml_event_t sub;
+            if (!yaml_parser_parse(parser, &sub)) {
+                free(items);
+                *err = "invalid yaml";
+                return rl_err(-1);
+            }
+            if (sub.type == YAML_SEQUENCE_END_EVENT) {
+                yaml_event_delete(&sub);
+                break;
+            }
+            rl_result item = _rl_yaml_parse_node(parser, &sub, anchors, nanchors, err);
+            yaml_event_delete(&sub);
+            if (!item.is_ok) {
+                free(items);
+                return item;
+            }
+            if (n == cap) {
+                uint64_t ncap = (cap == 0 ? 8 : cap * 2);
+                rl_value *grown = realloc(items, ncap * sizeof(rl_value));
+                if (grown == NULL) {
+                    free(items);
+                    *err = "out of memory";
+                    return rl_err(-1);
+                }
+                items = grown;
+                cap = ncap;
+            }
+            rl_value box;
+            memset(&box, 0, sizeof(box));
+            switch (item.tag) {
+                case RL_TAG_NULL: box.tag = RL_VTAG_NULL; break;
+                case RL_TAG_I64: box.tag = RL_VTAG_I64; box.data.i64 = item.data.i64; break;
+                case RL_TAG_F64: box.tag = RL_VTAG_F64; box.data.f64 = item.data.f64; break;
+                case RL_TAG_BOOL: box.tag = RL_VTAG_BOOL; box.data.boolean = item.data.boolean; break;
+                case RL_TAG_STR: box.tag = RL_VTAG_STR; box.data.str = item.data.str; break;
+                case RL_TAG_ARR: box.tag = RL_VTAG_ARR; box.data.arr = item.data.arr; break;
+                case RL_TAG_MAP: {
+                    box.tag = RL_VTAG_MAP;
+                    rl_map *mp = malloc(sizeof(rl_map));
+                    *mp = item.data.map;
+                    box.data.map = mp;
+                    break;
+                }
+                default: box.tag = RL_VTAG_NULL; break;
+            }
+            items[n++] = box;
+        }
+        rl_array arr = { .data = items, .len = n, .cap = cap,
+            .elem_size = (int32_t)sizeof(rl_value), .type_tag = RL_TAG_I64 };
+        rl_result r = rl_ok_arr(arr);
+        if (anchor != NULL) {
+            _rl_yaml_anchor *grown = realloc(*anchors, (*nanchors + 1) * sizeof(_rl_yaml_anchor));
+            if (grown != NULL) {
+                *anchors = grown;
+                const char *an = (const char *)anchor;
+                char *dup = malloc(strlen(an) + 1);
+                strcpy(dup, an);
+                (*anchors)[*nanchors].name = dup;
+                rl_value box;
+                box.tag = RL_VTAG_ARR;
+                box.data.arr = arr;
+                (*anchors)[*nanchors].val = box;
+                (*nanchors)++;
+            }
+        }
+        return r;
+    }
+    if (ev->type == YAML_MAPPING_START_EVENT) {
+        yaml_char_t *anchor = ev->data.mapping_start.anchor;
+        rl_map m = rl_map_new();
+        for (;;) {
+            yaml_event_t kev;
+            if (!yaml_parser_parse(parser, &kev)) {
+                *err = "invalid yaml";
+                return rl_err(-1);
+            }
+            if (kev.type == YAML_MAPPING_END_EVENT) {
+                yaml_event_delete(&kev);
+                break;
+            }
+            rl_result kres = _rl_yaml_parse_node(parser, &kev, anchors, nanchors, err);
+            yaml_event_delete(&kev);
+            if (!kres.is_ok) return kres;
+            if (kres.tag != RL_TAG_STR) {
+                *err = "yaml mappings need string keys";
+                return rl_err(-1);
+            }
+            char kdup[256];
+            if (kres.data.str.len >= sizeof(kdup)) {
+                *err = "yaml key too long";
+                return rl_err(-1);
+            }
+            memcpy(kdup, kres.data.str.data, kres.data.str.len);
+            kdup[kres.data.str.len] = '\0';
+            yaml_event_t vev;
+            if (!yaml_parser_parse(parser, &vev)) {
+                *err = "invalid yaml";
+                return rl_err(-1);
+            }
+            rl_result vres = _rl_yaml_parse_node(parser, &vev, anchors, nanchors, err);
+            yaml_event_delete(&vev);
+            if (!vres.is_ok) return vres;
+            rl_value box;
+            memset(&box, 0, sizeof(box));
+            switch (vres.tag) {
+                case RL_TAG_NULL: box.tag = RL_VTAG_NULL; break;
+                case RL_TAG_I64: box.tag = RL_VTAG_I64; box.data.i64 = vres.data.i64; break;
+                case RL_TAG_F64: box.tag = RL_VTAG_F64; box.data.f64 = vres.data.f64; break;
+                case RL_TAG_BOOL: box.tag = RL_VTAG_BOOL; box.data.boolean = vres.data.boolean; break;
+                case RL_TAG_STR: box.tag = RL_VTAG_STR; box.data.str = vres.data.str; break;
+                case RL_TAG_ARR: box.tag = RL_VTAG_ARR; box.data.arr = vres.data.arr; break;
+                case RL_TAG_MAP: {
+                    box.tag = RL_VTAG_MAP;
+                    rl_map *mp = malloc(sizeof(rl_map));
+                    *mp = vres.data.map;
+                    box.data.map = mp;
+                    break;
+                }
+                default: box.tag = RL_VTAG_NULL; break;
+            }
+            rl_map_set(&m, kdup, box);
+        }
+        rl_result r = rl_ok_map(m);
+        if (anchor != NULL) {
+            _rl_yaml_anchor *grown = realloc(*anchors, (*nanchors + 1) * sizeof(_rl_yaml_anchor));
+            if (grown != NULL) {
+                *anchors = grown;
+                const char *an = (const char *)anchor;
+                char *dup = malloc(strlen(an) + 1);
+                strcpy(dup, an);
+                (*anchors)[*nanchors].name = dup;
+                rl_value box;
+                box.tag = RL_VTAG_MAP;
+                rl_map *mp = malloc(sizeof(rl_map));
+                *mp = m;
+                box.data.map = mp;
+                (*anchors)[*nanchors].val = box;
+                (*nanchors)++;
+            }
+        }
+        return r;
+    }
+    if (ev->type == YAML_ALIAS_EVENT) {
+        const char *an = (const char *)ev->data.alias.anchor;
+        for (uint64_t i = 0; i < *nanchors; i++) {
+            if (!strcmp((*anchors)[i].name, an)) {
+                rl_value v = (*anchors)[i].val;
+                rl_result r;
+                switch (v.tag) {
+                    case RL_VTAG_NULL: r = rl_ok_null(); break;
+                    case RL_VTAG_BOOL: r = rl_ok_bool(v.data.boolean); break;
+                    case RL_VTAG_I64: r = rl_ok_i64(v.data.i64); break;
+                    case RL_VTAG_F64: r = rl_ok_f64(v.data.f64); break;
+                    case RL_VTAG_STR: r = rl_ok_str(v.data.str); break;
+                    case RL_VTAG_ARR: r = rl_ok_arr(v.data.arr); break;
+                    case RL_VTAG_MAP: {
+                        rl_map *mp = malloc(sizeof(rl_map));
+                        *mp = *v.data.map;
+                        rl_result rr = { .is_ok = 1, .tag = RL_TAG_MAP, .err_code = 0 };
+                        rr.data.map = *mp;
+                        free(mp);
+                        r = rr;
+                        break;
+                    }
+                    default: r = rl_ok_null(); break;
+                }
+                return r;
+            }
+        }
+        *err = "unknown yaml anchor";
+        return rl_err(-1);
+    }
+    *err = "unexpected yaml event";
+    return rl_err(-1);
+}
+
+static rl_result _rl_yaml_parse_nodes(yaml_parser_t *parser, _rl_yaml_anchor **anchors,
+        uint64_t *nanchors, const char **err) {
+    // Skip to the first document content event.
+    for (;;) {
+        yaml_event_t ev;
+        if (!yaml_parser_parse(parser, &ev)) {
+            *err = "invalid yaml";
+            return rl_err(-1);
+        }
+        if (ev.type == YAML_STREAM_END_EVENT) {
+            yaml_event_delete(&ev);
+            return rl_ok_null();
+        }
+        if (ev.type == YAML_STREAM_START_EVENT || ev.type == YAML_DOCUMENT_START_EVENT) {
+            yaml_event_delete(&ev);
+            continue;
+        }
+        if (ev.type == YAML_DOCUMENT_END_EVENT) {
+            yaml_event_delete(&ev);
+            continue;
+        }
+        rl_result r = _rl_yaml_parse_node(parser, &ev, anchors, nanchors, err);
+        yaml_event_delete(&ev);
+        return r;
+    }
+}
+
+rl_result rl_serialize_yaml_parse(rl_string s) {
+    const char *data = (s.data != NULL) ? s.data : "";
+    yaml_parser_t parser;
+    if (!yaml_parser_initialize(&parser)) {
+        return _rl_cli_err("yaml_parse: parser init failed");
+    }
+    yaml_parser_set_input_string(&parser, (const unsigned char *)data, s.len);
+    _rl_yaml_anchor *anchors = NULL;
+    uint64_t nanchors = 0;
+    const char *err = NULL;
+    rl_result r = _rl_yaml_parse_nodes(&parser, &anchors, &nanchors, &err);
+    _rl_yaml_anchors_free(anchors, nanchors);
+    if (!r.is_ok) {
+        yaml_parser_delete(&parser);
+        return _rl_cli_err(err ? err : "yaml_parse: invalid yaml");
+    }
+    // Parser problems surface as invalid docs.
+    if (parser.error != YAML_NO_ERROR) {
+        yaml_parser_delete(&parser);
+        return _rl_cli_err("yaml_parse: invalid yaml");
+    }
+    yaml_parser_delete(&parser);
+    return r;
+}
+
+// YAML emission through libyaml events into a growable buffer.
+
+typedef struct { char *buf; uint64_t len; uint64_t cap; } _rl_yaml_out;
+
+static int _rl_yaml_write(void *data, unsigned char *buf, size_t size) {
+    _rl_yaml_out *out = (_rl_yaml_out *)data;
+    if (out->len + size + 1 > out->cap) {
+        uint64_t ncap = (out->cap == 0 ? 256 : out->cap * 2) + size;
+        char *grown = realloc(out->buf, ncap);
+        if (grown == NULL) return 0;
+        out->buf = grown;
+        out->cap = ncap;
+    }
+    memcpy(out->buf + out->len, buf, size);
+    out->len += size;
+    out->buf[out->len] = '\0';
+    return 1;
+}
+
+static int _rl_yaml_emit_value(yaml_emitter_t *em, rl_value v);
+static int _rl_yaml_emit_scalar(yaml_emitter_t *em, const char *data, uint64_t n,
+    yaml_scalar_style_t style);
+static int _rl_yaml_emit_plain_scalar(yaml_emitter_t *em, const char *text);
+
+// True when a string must be quoted to survive a round trip: empty,
+// whitespace-padded, multiline, indicator characters, or something the
+// plain-scalar parser would read back as a non-string.
+static int _rl_yaml_needs_quotes(const char *data, uint64_t n) {
+    if (n == 0) return 1;
+    if (data[0] == ' ' || data[0] == '\t' || data[n - 1] == ' ' || data[n - 1] == '\t') return 1;
+    for (uint64_t i = 0; i < n; i++) {
+        if (data[i] == '\n' || data[i] == '\r') return 1;
+    }
+    // Leading indicators force quoting.
+    if (data[0] == '-' || data[0] == '?' || data[0] == ':' || data[0] == ',' || data[0] == '['
+        || data[0] == ']' || data[0] == '{' || data[0] == '}' || data[0] == '#' || data[0] == '&'
+        || data[0] == '*' || data[0] == '!' || data[0] == '|' || data[0] == '>' || data[0] == '\''
+        || data[0] == '"' || data[0] == '%' || data[0] == '@' || data[0] == '`') {
+        return 1;
+    }
+    // Trailing colon, or ": "/" #" sequences inside.
+    if (data[n - 1] == ':') return 1;
+    for (uint64_t i = 0; i + 1 < n; i++) {
+        if (data[i] == ':' && (data[i + 1] == ' ' || data[i + 1] == '\t')) return 1;
+        if (data[i] == ' ' && data[i + 1] == '#') return 1;
+    }
+    // Would the plain parser read this back as something else?
+    rl_value back = _rl_yaml_plain_scalar(data, n);
+    int is_str = (back.tag == RL_VTAG_STR);
+    if (is_str) free((void *)back.data.str.data);
+    return !is_str;
+}
+
+static int _rl_yaml_emit_str_value(yaml_emitter_t *em, const char *data, uint64_t n) {
+    if (_rl_yaml_needs_quotes(data, n)) {
+        return _rl_yaml_emit_scalar(em, data, n, YAML_SINGLE_QUOTED_SCALAR_STYLE);
+    }
+    char *tmp = malloc(n + 1);
+    memcpy(tmp, data, n);
+    tmp[n] = '\0';
+    int ok = _rl_yaml_emit_plain_scalar(em, tmp);
+    free(tmp);
+    return ok;
+}
+
+static int _rl_yaml_emit_scalar(yaml_emitter_t *em, const char *data, uint64_t n,
+        yaml_scalar_style_t style) {
+    yaml_event_t ev;
+    if (!yaml_scalar_event_initialize(&ev, NULL,
+            (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)data, (int)n, 1, 0, style)) {
+        return 0;
+    }
+    // libyaml consumes the event on emit; never delete after.
+    return yaml_emitter_emit(em, &ev);
+}
+
+static int _rl_yaml_emit_plain_scalar(yaml_emitter_t *em, const char *text) {
+    yaml_event_t ev;
+    // Let libyaml pick the style (plain when possible).
+    if (!yaml_scalar_event_initialize(&ev, NULL,
+            (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)text, -1, 1, 0,
+            YAML_PLAIN_SCALAR_STYLE)) {
+        return 0;
+    }
+    return yaml_emitter_emit(em, &ev);
+}
+
+static int _rl_yaml_emit_value(yaml_emitter_t *em, rl_value v) {
+    yaml_event_t ev;
+    switch (v.tag) {
+        case RL_VTAG_NULL:
+            return _rl_yaml_emit_plain_scalar(em, "null");
+        case RL_VTAG_BOOL:
+            return _rl_yaml_emit_plain_scalar(em, v.data.boolean ? "true" : "false");
+        case RL_VTAG_I64: {
+            char num[32];
+            snprintf(num, sizeof(num), "%lld", (long long)v.data.i64);
+            return _rl_yaml_emit_plain_scalar(em, num);
+        }
+        case RL_VTAG_F64: {
+            char num[32];
+            double f = v.data.f64;
+            if (f == (double)(long long)f && f < 1e18 && f > -1e18) {
+                snprintf(num, sizeof(num), "%lld.0", (long long)f);
+            } else {
+                snprintf(num, sizeof(num), "%.17g", f);
+            }
+            return _rl_yaml_emit_plain_scalar(em, num);
+        }
+        case RL_VTAG_STR: {
+            const char *d = (v.data.str.data != NULL) ? v.data.str.data : "";
+            return _rl_yaml_emit_str_value(em, d, v.data.str.len);
+        }
+        case RL_VTAG_ARR: {
+            if (!yaml_sequence_start_event_initialize(&ev, NULL,
+                    (yaml_char_t *)"tag:yaml.org,2002:seq", 1,
+                    YAML_BLOCK_SEQUENCE_STYLE)) {
+                return 0;
+            }
+            if (!yaml_emitter_emit(em, &ev)) return 0;
+            rl_array a = v.data.arr;
+            for (uint64_t i = 0; i < a.len; i++) {
+                rl_value e;
+                int own = _rl_ser_array_elem(a, i, &e);
+                if (!own) return 0;
+                int ok = _rl_yaml_emit_value(em, e);
+                if (own == 2) free(e.data.map);
+                if (!ok) return 0;
+            }
+            if (!yaml_sequence_end_event_initialize(&ev)) return 0;
+            return yaml_emitter_emit(em, &ev);
+        }
+        case RL_VTAG_MAP: {
+            if (!yaml_mapping_start_event_initialize(&ev, NULL,
+                    (yaml_char_t *)"tag:yaml.org,2002:map", 1,
+                    YAML_BLOCK_MAPPING_STYLE)) {
+                return 0;
+            }
+            if (!yaml_emitter_emit(em, &ev)) return 0;
+            rl_map *m = v.data.map;
+            uint64_t *sidx = _rl_ser_sorted_idx(m);
+            for (uint64_t ii = 0; ii < m->len; ii++) {
+                uint64_t i = sidx[ii];
+                if (!_rl_yaml_emit_str_value(em, m->entries[i].key, strlen(m->entries[i].key))) {
+                    free(sidx);
+                    return 0;
+                }
+                if (!_rl_yaml_emit_value(em, m->entries[i].value)) {
+                    free(sidx);
+                    return 0;
+                }
+            }
+            free(sidx);
+            if (!yaml_mapping_end_event_initialize(&ev)) return 0;
+            return yaml_emitter_emit(em, &ev);
+        }
+        default:
+            return _rl_yaml_emit_plain_scalar(em, "null");
+    }
+}
+
+rl_result rl_serialize_yaml_stringify(rl_result v) {
+    int need_free = 0;
+    rl_value val = _rl_ser_result_to_value(v, &need_free);
+    yaml_emitter_t em;
+    if (!yaml_emitter_initialize(&em)) {
+        if (need_free) free(val.data.map);
+        return _rl_cli_err("yaml_stringify: emitter init failed");
+    }
+    _rl_yaml_out out = { NULL, 0, 0 };
+    yaml_emitter_set_output(&em, _rl_yaml_write, &out);
+    yaml_event_t ev;
+    int ok = 1;
+    // libyaml consumes each event on emit; never delete after.
+    if (ok && yaml_stream_start_event_initialize(&ev, YAML_UTF8_ENCODING)) {
+        ok = yaml_emitter_emit(&em, &ev);
+    } else {
+        ok = 0;
+    }
+    if (ok && yaml_document_start_event_initialize(&ev, NULL, NULL, NULL, 1)) {
+        ok = yaml_emitter_emit(&em, &ev);
+    } else {
+        ok = 0;
+    }
+    if (ok) ok = _rl_yaml_emit_value(&em, val);
+    if (ok && yaml_document_end_event_initialize(&ev, 1)) {
+        ok = yaml_emitter_emit(&em, &ev);
+    } else if (ok) {
+        ok = 0;
+    }
+    if (ok && yaml_stream_end_event_initialize(&ev)) {
+        ok = yaml_emitter_emit(&em, &ev);
+    } else if (ok) {
+        ok = 0;
+    }
+    yaml_emitter_delete(&em);
+    if (need_free) free(val.data.map);
+    if (!ok || em.error != YAML_NO_ERROR) {
+        free(out.buf);
+        return _rl_cli_err("yaml_stringify: emit failed");
+    }
+    if (out.buf == NULL) {
+        out.buf = malloc(1);
+        out.buf[0] = '\0';
+    }
+    rl_string s = { .data = out.buf, .len = out.len };
+    return rl_ok_str(s);
+}
+#else
+// Stubs when libyaml is not linked (programs not using YAML get no
+// dependency): loud errors naming the missing flags.
+rl_result rl_serialize_yaml_parse(rl_string s) {
+    (void)s;
+    return _rl_cli_err("yaml_parse needs -DRL_USE_YAML -lyaml");
+}
+
+rl_result rl_serialize_yaml_stringify(rl_result v) {
+    (void)v;
+    return _rl_cli_err("yaml_stringify needs -DRL_USE_YAML -lyaml");
+}
+#endif
+
+// Dynamic index for result-held containers (dynamic unwraps): maps by
+// string key, arrays by int index with bounds checks. Errors pass
+// through; mismatches are loud errors like the VM.
+rl_result rl_dynamic_get(rl_result target, rl_result key) {
+    if (!target.is_ok) return target;
+    if (target.tag == RL_TAG_MAP && key.is_ok && key.tag == RL_TAG_STR) {
+        return rl_map_get_s(target.data.map, key.data.str);
+    }
+    if (target.tag == RL_TAG_ARR && key.is_ok && key.tag == RL_TAG_I64) {
+        rl_array a = target.data.arr;
+        if (key.data.i64 < 0 || (uint64_t)key.data.i64 >= a.len) {
+            return _rl_cli_err("index out of bounds");
+        }
+        rl_value e;
+        int own = _rl_ser_array_elem(a, (uint64_t)key.data.i64, &e);
+        if (!own) return _rl_cli_err("cannot index into array");
+        rl_result r;
+        switch (e.tag) {
+            case RL_VTAG_NULL: r = rl_ok_null(); break;
+            case RL_VTAG_I64: r = rl_ok_i64(e.data.i64); break;
+            case RL_VTAG_F64: r = rl_ok_f64(e.data.f64); break;
+            case RL_VTAG_BOOL: r = rl_ok_bool(e.data.boolean); break;
+            case RL_VTAG_STR: r = rl_ok_str(e.data.str); break;
+            case RL_VTAG_ARR: r = rl_ok_arr(e.data.arr); break;
+            case RL_VTAG_MAP: r = rl_ok_map(*e.data.map); break;
+            default: r = rl_ok_null(); break;
+        }
+        if (own == 2) free(e.data.map);
+        return r;
+    }
+    return _rl_cli_err("cannot index into value");
+}
+
+// ---- serialize TOML ----
+// Pragmatic subset matching what the VM side round-trips: tables,
+// arrays of tables, dotted keys, strings (basic/literal/multiline),
+// ints (dec/hex/oct/bin), floats, bools, arrays, inline tables,
+// comments. Datetimes stay strings (VM parity); anything else errors.
+
+typedef struct { const char *p; const char *end; const char *err; } _rl_toml_in;
+
+static void _rl_toml_skip_ws(_rl_toml_in *in) {
+    while (in->p < in->end && (*in->p == ' ' || *in->p == '\t')) in->p++;
+}
+
+static void _rl_toml_skip_line(_rl_toml_in *in) {
+    // Blank lines and full-line comments.
+    for (;;) {
+        _rl_toml_skip_ws(in);
+        if (in->p < in->end && (*in->p == '\n' || *in->p == '\r')) {
+            if (*in->p == '\r') in->p++;
+            if (in->p < in->end && *in->p == '\n') in->p++;
+            continue;
+        }
+        if (in->p < in->end && *in->p == '#') {
+            while (in->p < in->end && *in->p != '\n') in->p++;
+            continue;
+        }
+        break;
+    }
+}
+
+// Reads a possibly-dotted key into buf; returns 0 on success.
+static int _rl_toml_read_key(_rl_toml_in *in, char *buf, size_t bufsz, uint64_t *nparts) {
+    uint64_t len = 0;
+    *nparts = 1;
+    _rl_toml_skip_ws(in);
+    for (;;) {
+        if (in->p < in->end && *in->p == '"') {
+            // Quoted key part.
+            in->p++;
+            while (in->p < in->end && *in->p != '"') {
+                if (*in->p == '\\' && in->p + 1 < in->end) in->p++;
+                if (len + 1 >= bufsz) { in->err = "key too long"; return -1; }
+                buf[len++] = *in->p++;
+            }
+            if (in->p >= in->end) { in->err = "unterminated key"; return -1; }
+            in->p++;
+        } else {
+            while (in->p < in->end
+                && (('a' <= *in->p && *in->p <= 'z') || ('A' <= *in->p && *in->p <= 'Z')
+                    || ('0' <= *in->p && *in->p <= '9') || *in->p == '_' || *in->p == '-')) {
+                if (len + 1 >= bufsz) { in->err = "key too long"; return -1; }
+                buf[len++] = *in->p++;
+            }
+            if (len == 0) { in->err = "expected key"; return -1; }
+        }
+        _rl_toml_skip_ws(in);
+        if (in->p < in->end && *in->p == '.') {
+            if (len + 1 >= bufsz) { in->err = "key too long"; return -1; }
+            buf[len++] = '.';
+            (*nparts)++;
+            in->p++;
+            _rl_toml_skip_ws(in);
+            continue;
+        }
+        break;
+    }
+    buf[len] = '\0';
+    return 0;
+}
+
+static rl_result _rl_toml_parse_value(_rl_toml_in *in);
+
+static rl_string _rl_toml_parse_basic_string(_rl_toml_in *in) {
+    rl_string empty = { .data = "", .len = 0 };
+    in->p++; // "
+    char *buf = NULL;
+    uint64_t len = 0, cap = 0;
+    while (in->p < in->end && *in->p != '"' && *in->p != '\n') {
+        char c = *in->p;
+        if (c == '\\') {
+            in->p++;
+            if (in->p >= in->end) break;
+            char e = *in->p++;
+            char out = e;
+            if (e == 'b') out = '\b';
+            else if (e == 'f') out = '\f';
+            else if (e == 'n') out = '\n';
+            else if (e == 'r') out = '\r';
+            else if (e == 't') out = '\t';
+            else if (e == 'u' || e == 'U') {
+                int digits = (e == 'u') ? 4 : 8;
+                if (in->end - in->p < digits) { in->err = "bad unicode escape"; free(buf); return empty; }
+                unsigned cp = 0;
+                for (int i = 0; i < digits; i++) {
+                    char h = in->p[i];
+                    cp <<= 4;
+                    if (h >= '0' && h <= '9') cp |= (unsigned)(h - '0');
+                    else if (h >= 'a' && h <= 'f') cp |= (unsigned)(h - 'a' + 10);
+                    else if (h >= 'A' && h <= 'F') cp |= (unsigned)(h - 'A' + 10);
+                    else { in->err = "bad unicode escape"; free(buf); return empty; }
+                }
+                in->p += digits;
+                _rl_json_push_utf8(&buf, &len, &cap, cp);
+                continue;
+            } else if (e == '\n' || e == '\r') {
+                // Line-ending backslash: skip whitespace/newlines.
+                while (in->p < in->end && (*in->p == ' ' || *in->p == '\t' || *in->p == '\n' || *in->p == '\r')) in->p++;
+                continue;
+            }
+            if (len + 1 >= cap) {
+                uint64_t ncap = (cap == 0 ? 32 : cap * 2);
+                char *grown = realloc(buf, ncap);
+                if (grown == NULL) { in->err = "out of memory"; free(buf); return empty; }
+                buf = grown; cap = ncap;
+            }
+            buf[len++] = out;
+        } else {
+            if (len + 1 >= cap) {
+                uint64_t ncap = (cap == 0 ? 32 : cap * 2);
+                char *grown = realloc(buf, ncap);
+                if (grown == NULL) { in->err = "out of memory"; free(buf); return empty; }
+                buf = grown; cap = ncap;
+            }
+            buf[len++] = c;
+            in->p++;
+        }
+    }
+    if (in->p >= in->end || *in->p != '"') { in->err = "unterminated string"; free(buf); return empty; }
+    in->p++;
+    char *dup = malloc(len + 1);
+    if (len > 0) memcpy(dup, buf, len);
+    dup[len] = '\0';
+    free(buf);
+    rl_string s = { .data = dup, .len = len };
+    return s;
+}
+
+static rl_result _rl_toml_parse_value(_rl_toml_in *in) {
+    _rl_toml_skip_ws(in);
+    if (in->p >= in->end) { in->err = "unexpected end of value"; return rl_err(-1); }
+    char c = *in->p;
+    if (c == '"') {
+        if (in->end - in->p >= 3 && in->p[0] == '"' && in->p[1] == '"' && in->p[2] == '"') {
+            // Multiline basic string: first newline skipped.
+            in->p += 3;
+            if (in->p < in->end && *in->p == '\n') in->p++;
+            char *buf = NULL;
+            uint64_t len = 0, cap = 0;
+            for (;;) {
+                if (in->p >= in->end) { in->err = "unterminated string"; free(buf); return rl_err(-1); }
+                if (in->end - in->p >= 3 && in->p[0] == '"' && in->p[1] == '"' && in->p[2] == '"') {
+                    in->p += 3;
+                    break;
+                }
+                if (len + 1 >= cap) {
+                    uint64_t ncap = (cap == 0 ? 64 : cap * 2);
+                    char *grown = realloc(buf, ncap);
+                    if (grown == NULL) { in->err = "out of memory"; free(buf); return rl_err(-1); }
+                    buf = grown; cap = ncap;
+                }
+                buf[len++] = *in->p++;
+            }
+            char *dup = malloc(len + 1);
+            if (len > 0) memcpy(dup, buf, len);
+            dup[len] = '\0';
+            free(buf);
+            rl_string s = { .data = dup, .len = len };
+            return rl_ok_str(s);
+        }
+        rl_string s = _rl_toml_parse_basic_string(in);
+        if (in->err != NULL) return rl_err(-1);
+        return rl_ok_str(s);
+    }
+    if (c == '\'') {
+        if (in->end - in->p >= 3 && in->p[1] == '\'' && in->p[2] == '\'') {
+            in->p += 3;
+            if (in->p < in->end && *in->p == '\n') in->p++;
+            const char *start = in->p;
+            while (in->end - in->p >= 3 && !(in->p[0] == '\'' && in->p[1] == '\'' && in->p[2] == '\'')) in->p++;
+            if (in->p >= in->end) { in->err = "unterminated string"; return rl_err(-1); }
+            uint64_t n = (uint64_t)(in->p - start);
+            char *dup = malloc(n + 1);
+            memcpy(dup, start, n);
+            dup[n] = '\0';
+            in->p += 3;
+            rl_string s = { .data = dup, .len = n };
+            return rl_ok_str(s);
+        }
+        in->p++;
+        const char *start = in->p;
+        while (in->p < in->end && *in->p != '\'' && *in->p != '\n') in->p++;
+        if (in->p >= in->end || *in->p != '\'') { in->err = "unterminated string"; return rl_err(-1); }
+        uint64_t n = (uint64_t)(in->p - start);
+        char *dup = malloc(n + 1);
+        memcpy(dup, start, n);
+        dup[n] = '\0';
+        in->p++;
+        rl_string s = { .data = dup, .len = n };
+        return rl_ok_str(s);
+    }
+    if (c == '[') {
+        in->p++;
+        rl_value *items = NULL;
+        uint64_t n = 0, cap = 0;
+        for (;;) {
+            _rl_toml_skip_ws(in);
+            while (in->p < in->end && (*in->p == '\n' || *in->p == '\r')) {
+                if (*in->p == '\r') in->p++;
+                if (in->p < in->end && *in->p == '\n') in->p++;
+                _rl_toml_skip_ws(in);
+            }
+            if (in->p < in->end && *in->p == '#') {
+                while (in->p < in->end && *in->p != '\n') in->p++;
+                continue;
+            }
+            if (in->p < in->end && *in->p == ']') { in->p++; break; }
+            if (in->p >= in->end) { in->err = "unterminated array"; free(items); return rl_err(-1); }
+            rl_result item = _rl_toml_parse_value(in);
+            if (!item.is_ok) { free(items); return item; }
+            if (n == cap) {
+                uint64_t ncap = (cap == 0 ? 8 : cap * 2);
+                rl_value *grown = realloc(items, ncap * sizeof(rl_value));
+                if (grown == NULL) { in->err = "out of memory"; free(items); return rl_err(-1); }
+                items = grown;
+                cap = ncap;
+            }
+            rl_value box;
+            memset(&box, 0, sizeof(box));
+            switch (item.tag) {
+                case RL_TAG_I64: box.tag = RL_VTAG_I64; box.data.i64 = item.data.i64; break;
+                case RL_TAG_F64: box.tag = RL_VTAG_F64; box.data.f64 = item.data.f64; break;
+                case RL_TAG_BOOL: box.tag = RL_VTAG_BOOL; box.data.boolean = item.data.boolean; break;
+                case RL_TAG_STR: box.tag = RL_VTAG_STR; box.data.str = item.data.str; break;
+                case RL_TAG_ARR: box.tag = RL_VTAG_ARR; box.data.arr = item.data.arr; break;
+                case RL_TAG_MAP: {
+                    box.tag = RL_VTAG_MAP;
+                    rl_map *mp = malloc(sizeof(rl_map));
+                    *mp = item.data.map;
+                    box.data.map = mp;
+                    break;
+                }
+                default: box.tag = RL_VTAG_NULL; break;
+            }
+            items[n++] = box;
+            _rl_toml_skip_ws(in);
+            while (in->p < in->end && (*in->p == '\n' || *in->p == '\r')) {
+                if (*in->p == '\r') in->p++;
+                if (in->p < in->end && *in->p == '\n') in->p++;
+                _rl_toml_skip_ws(in);
+            }
+            if (in->p < in->end && *in->p == ',') { in->p++; continue; }
+            if (in->p < in->end && *in->p == ']') { in->p++; break; }
+            in->err = "expected , or ] in array";
+            free(items);
+            return rl_err(-1);
+        }
+        rl_array arr = { .data = items, .len = n, .cap = cap,
+            .elem_size = (int32_t)sizeof(rl_value), .type_tag = RL_TAG_I64 };
+        return rl_ok_arr(arr);
+    }
+    if (c == '{') {
+        in->p++;
+        rl_map m = rl_map_new();
+        _rl_toml_skip_ws(in);
+        if (in->p < in->end && *in->p == '}') { in->p++; return rl_ok_map(m); }
+        for (;;) {
+            char key[256];
+            uint64_t nparts = 0;
+            if (_rl_toml_read_key(in, key, sizeof(key), &nparts)) return rl_err(-1);
+            _rl_toml_skip_ws(in);
+            if (in->p >= in->end || *in->p != '=') { in->err = "expected ="; return rl_err(-1); }
+            in->p++;
+            rl_result val = _rl_toml_parse_value(in);
+            if (!val.is_ok) return val;
+            // Inline tables are single-line; dotted keys nest. Reuse the
+            // dotted installer below via a temp single pair.
+            char dotted[256];
+            snprintf(dotted, sizeof(dotted), "%s", key);
+            // Install directly (no nesting needed beyond dots).
+            char *keycpy = malloc(strlen(dotted) + 1);
+            strcpy(keycpy, dotted);
+            // Split dots manually.
+            rl_map *target = &m;
+            rl_map *owned[16];
+            int owned_n = 0;
+            char *seg = keycpy;
+            for (;;) {
+                char *dot = strchr(seg, '.');
+                if (dot != NULL) *dot = '\0';
+                if (dot == NULL) {
+                    rl_value box;
+                    memset(&box, 0, sizeof(box));
+                    switch (val.tag) {
+                        case RL_TAG_I64: box.tag = RL_VTAG_I64; box.data.i64 = val.data.i64; break;
+                        case RL_TAG_F64: box.tag = RL_VTAG_F64; box.data.f64 = val.data.f64; break;
+                        case RL_TAG_BOOL: box.tag = RL_VTAG_BOOL; box.data.boolean = val.data.boolean; break;
+                        case RL_TAG_STR: box.tag = RL_VTAG_STR; box.data.str = val.data.str; break;
+                        case RL_TAG_ARR: box.tag = RL_VTAG_ARR; box.data.arr = val.data.arr; break;
+                        case RL_TAG_MAP: {
+                            box.tag = RL_VTAG_MAP;
+                            rl_map *mp = malloc(sizeof(rl_map));
+                            *mp = val.data.map;
+                            box.data.map = mp;
+                            break;
+                        }
+                        default: box.tag = RL_VTAG_NULL; break;
+                    }
+                    rl_map_set(target, seg, box);
+                    break;
+                }
+                rl_value *found = NULL;
+                for (uint64_t i = 0; i < target->len; i++) {
+                    if (!strcmp(target->entries[i].key, seg)) {
+                        found = &target->entries[i].value;
+                        break;
+                    }
+                }
+                if (found != NULL && found->tag == RL_VTAG_MAP) {
+                    target = found->data.map;
+                } else {
+                    rl_map *nm = malloc(sizeof(rl_map));
+                    *nm = rl_map_new();
+                    if (owned_n < 16) owned[owned_n++] = nm;
+                    rl_value box;
+                    box.tag = RL_VTAG_MAP;
+                    box.data.map = nm;
+                    rl_map_set(target, seg, box);
+                    target = nm;
+                }
+                seg = dot + 1;
+            }
+            free(keycpy);
+            (void)owned;
+            (void)owned_n;
+            _rl_toml_skip_ws(in);
+            if (in->p < in->end && *in->p == ',') { in->p++; _rl_toml_skip_ws(in); continue; }
+            if (in->p < in->end && *in->p == '}') { in->p++; break; }
+            in->err = "expected , or } in inline table";
+            return rl_err(-1);
+        }
+        return rl_ok_map(m);
+    }
+    // true/false, numbers, or datetimes-as-strings.
+    if ((size_t)(in->end - in->p) >= 4 && !memcmp(in->p, "true", 4)
+        && (in->p + 4 >= in->end || in->p[4] == ' ' || in->p[4] == '\t' || in->p[4] == '\n'
+            || in->p[4] == '\r' || in->p[4] == ',' || in->p[4] == ']' || in->p[4] == '}'
+            || in->p[4] == '#')) {
+        in->p += 4;
+        return rl_ok_bool(1);
+    }
+    if ((size_t)(in->end - in->p) >= 5 && !memcmp(in->p, "false", 5)
+        && (in->p + 5 >= in->end || in->p[5] == ' ' || in->p[5] == '\t' || in->p[5] == '\n'
+            || in->p[5] == '\r' || in->p[5] == ',' || in->p[5] == ']' || in->p[5] == '}'
+            || in->p[5] == '#')) {
+        in->p += 5;
+        return rl_ok_bool(0);
+    }
+    // Bare token: number, datetime, or error.
+    const char *start = in->p;
+    while (in->p < in->end && *in->p != ' ' && *in->p != '\t' && *in->p != '\n' && *in->p != '\r'
+        && *in->p != ',' && *in->p != ']' && *in->p != '}' && *in->p != '#') {
+        in->p++;
+    }
+    uint64_t tlen = (uint64_t)(in->p - start);
+    if (tlen == 0) { in->err = "expected value"; return rl_err(-1); }
+    char tok[256];
+    if (tlen >= sizeof(tok)) { in->err = "value too long"; return rl_err(-1); }
+    memcpy(tok, start, tlen);
+    tok[tlen] = '\0';
+    // Strip underscores for numeric parsing (1_000).
+    char clean[256];
+    uint64_t cn = 0;
+    for (uint64_t i = 0; i < tlen; i++) {
+        if (tok[i] != '_') clean[cn++] = tok[i];
+    }
+    clean[cn] = '\0';
+    // Datetime-shaped stays a string (VM parity).
+    int dashes = 0, colons = 0, has_t = 0;
+    for (uint64_t i = 0; i < tlen; i++) {
+        if (tok[i] == '-') dashes++;
+        if (tok[i] == ':') colons++;
+        if (tok[i] == 'T' || tok[i] == 't') has_t = 1;
+    }
+    if ((dashes == 2 && colons == 0) || colons > 0 || has_t) {
+        char *dup = malloc(tlen + 1);
+        memcpy(dup, tok, tlen);
+        dup[tlen] = '\0';
+        rl_string s = { .data = dup, .len = tlen };
+        return rl_ok_str(s);
+    }
+    char *endp = NULL;
+    if (clean[0] == '0' && (clean[1] == 'x' || clean[1] == 'X')) {
+        long long v = strtoll(clean, &endp, 16);
+        if (endp != NULL && *endp == '\0') return rl_ok_i64((int64_t)v);
+    } else if (clean[0] == '0' && (clean[1] == 'o' || clean[1] == 'O')) {
+        long long v = strtoll(clean + 2, &endp, 8);
+        if (endp != NULL && *endp == '\0') return rl_ok_i64((int64_t)v);
+    } else if (clean[0] == '0' && (clean[1] == 'b' || clean[1] == 'B')) {
+        long long v = strtoll(clean + 2, &endp, 2);
+        if (endp != NULL && *endp == '\0') return rl_ok_i64((int64_t)v);
+    } else {
+        // inf/nan + decimal int/float.
+        if (!strcmp(clean, "inf") || !strcmp(clean, "+inf")) return rl_ok_f64(1.0 / 0.0);
+        if (!strcmp(clean, "-inf")) return rl_ok_f64(-1.0 / 0.0);
+        if (!strcmp(clean, "nan") || !strcmp(clean, "+nan") || !strcmp(clean, "-nan")) {
+            return rl_ok_f64(0.0 / 0.0);
+        }
+        int is_float = 0;
+        for (uint64_t i = 0; clean[i] != '\0'; i++) {
+            if (clean[i] == '.' || clean[i] == 'e' || clean[i] == 'E') { is_float = 1; break; }
+        }
+        if (!is_float) {
+            long long v = strtoll(clean, &endp, 10);
+            if (endp != NULL && *endp == '\0') return rl_ok_i64((int64_t)v);
+        } else {
+            double v = strtod(clean, &endp);
+            if (endp != NULL && *endp == '\0') return rl_ok_f64(v);
+        }
+    }
+    in->err = "invalid value";
+    return rl_err(-1);
+}
+
+// Installs val at a dotted path inside root, creating tables.
+static int _rl_toml_install(rl_map *root, const char *dotted, rl_result val, const char **err) {
+    char path[512];
+    snprintf(path, sizeof(path), "%s", dotted);
+    rl_map *target = root;
+    char *seg = path;
+    for (;;) {
+        char *dot = strchr(seg, '.');
+        if (dot != NULL) *dot = '\0';
+        if (dot == NULL) {
+            rl_value box;
+            memset(&box, 0, sizeof(box));
+            switch (val.tag) {
+                case RL_TAG_I64: box.tag = RL_VTAG_I64; box.data.i64 = val.data.i64; break;
+                case RL_TAG_F64: box.tag = RL_VTAG_F64; box.data.f64 = val.data.f64; break;
+                case RL_TAG_BOOL: box.tag = RL_VTAG_BOOL; box.data.boolean = val.data.boolean; break;
+                case RL_TAG_STR: box.tag = RL_VTAG_STR; box.data.str = val.data.str; break;
+                case RL_TAG_ARR: box.tag = RL_VTAG_ARR; box.data.arr = val.data.arr; break;
+                case RL_TAG_MAP: {
+                    box.tag = RL_VTAG_MAP;
+                    rl_map *mp = malloc(sizeof(rl_map));
+                    *mp = val.data.map;
+                    box.data.map = mp;
+                    break;
+                }
+                default: box.tag = RL_VTAG_NULL; break;
+            }
+            rl_map_set(target, seg, box);
+            return 0;
+        }
+        rl_value *found = NULL;
+        for (uint64_t i = 0; i < target->len; i++) {
+            if (!strcmp(target->entries[i].key, seg)) {
+                found = &target->entries[i].value;
+                break;
+            }
+        }
+        if (found != NULL && found->tag == RL_VTAG_MAP) {
+            target = found->data.map;
+        } else if (found == NULL) {
+            rl_map *nm = malloc(sizeof(rl_map));
+            *nm = rl_map_new();
+            rl_value box;
+            box.tag = RL_VTAG_MAP;
+            box.data.map = nm;
+            rl_map_set(target, seg, box);
+            target = nm;
+        } else {
+            *err = "cannot extend non-table value";
+            return -1;
+        }
+        seg = dot + 1;
+    }
+}
+
+rl_result rl_serialize_toml_parse(rl_string s) {
+    const char *data = (s.data != NULL) ? s.data : "";
+    _rl_toml_in in = { data, data + s.len, NULL };
+    rl_map root = rl_map_new();
+    rl_map *cur = &root;
+    // Array-of-tables appends here; tables borrow heap maps like cur.
+    for (;;) {
+        _rl_toml_skip_line(&in);
+        if (in.p >= in.end) break;
+        if (*in.p == '[') {
+            int is_array = (in.end - in.p >= 2 && in.p[1] == '[');
+            in.p += is_array ? 2 : 1;
+            _rl_toml_skip_ws(&in);
+            char key[512];
+            uint64_t nparts = 0;
+            if (_rl_toml_read_key(&in, key, sizeof(key), &nparts)) {
+                return _rl_cli_err(in.err ? in.err : "bad table header");
+            }
+            _rl_toml_skip_ws(&in);
+            if (is_array) {
+                if (in.end - in.p < 2 || in.p[0] != ']' || in.p[1] != ']') {
+                    return _rl_cli_err("toml_parse: expected ]]");
+                }
+                in.p += 2;
+            } else {
+                if (in.p >= in.end || *in.p != ']') {
+                    return _rl_cli_err("toml_parse: expected ]");
+                }
+                in.p++;
+            }
+            // Trailing comment to EOL.
+            _rl_toml_skip_ws(&in);
+            if (in.p < in.end && *in.p == '#') {
+                while (in.p < in.end && *in.p != '\n') in.p++;
+            }
+            if (in.p < in.end && *in.p != '\n' && *in.p != '\r') {
+                return _rl_cli_err("toml_parse: expected newline after header");
+            }
+            // Navigate/create the dotted path from root.
+            char path[512];
+            snprintf(path, sizeof(path), "%s", key);
+            rl_map *target = &root;
+            char *seg = path;
+            rl_map *fresh = NULL;
+            for (;;) {
+                char *dot = strchr(seg, '.');
+                if (dot != NULL) *dot = '\0';
+                int last = (dot == NULL);
+                rl_value *found = NULL;
+                for (uint64_t i = 0; i < target->len; i++) {
+                    if (!strcmp(target->entries[i].key, seg)) {
+                        found = &target->entries[i].value;
+                        break;
+                    }
+                }
+                if (is_array && last) {
+                    // Append a fresh table to the array (creating it).
+                    rl_map *nm = malloc(sizeof(rl_map));
+                    *nm = rl_map_new();
+                    if (found == NULL) {
+                        rl_array arr = { .data = NULL, .len = 0, .cap = 0,
+                            .elem_size = (int32_t)sizeof(rl_map), .type_tag = RL_TAG_MAP };
+                        rl_value box;
+                        box.tag = RL_VTAG_ARR;
+                        // Arrays of tables store rl_map structs directly.
+                        box.data.arr = arr;
+                        rl_map_set(target, seg, box);
+                        for (uint64_t i = 0; i < target->len; i++) {
+                            if (!strcmp(target->entries[i].key, seg)) {
+                                found = &target->entries[i].value;
+                                break;
+                            }
+                        }
+                    }
+                    if (found == NULL || found->tag != RL_VTAG_ARR) {
+                        free(nm);
+                        return _rl_cli_err("toml_parse: cannot extend non-array");
+                    }
+                    rl_array *arr = &found->data.arr;
+                    rl_map *grown = realloc(arr->data, (arr->len + 1) * sizeof(rl_map));
+                    if (grown == NULL) {
+                        free(nm);
+                        return _rl_cli_err("toml_parse: out of memory");
+                    }
+                    arr->data = grown;
+                    arr->cap = arr->len + 1;
+                    grown[arr->len] = *nm;
+                    free(nm);
+                    fresh = &((rl_map *)arr->data)[arr->len];
+                    arr->len++;
+                    cur = fresh;
+                    break;
+                }
+                if (found != NULL && found->tag == RL_VTAG_MAP) {
+                    target = found->data.map;
+                } else if (found == NULL) {
+                    rl_map *nm = malloc(sizeof(rl_map));
+                    *nm = rl_map_new();
+                    rl_value box;
+                    box.tag = RL_VTAG_MAP;
+                    box.data.map = nm;
+                    rl_map_set(target, seg, box);
+                    target = nm;
+                } else {
+                    return _rl_cli_err("toml_parse: cannot extend non-table value");
+                }
+                if (last) {
+                    cur = target;
+                    break;
+                }
+                seg = dot + 1;
+            }
+            continue;
+        }
+        // key = value in the current table.
+        char key[512];
+        uint64_t nparts = 0;
+        if (_rl_toml_read_key(&in, key, sizeof(key), &nparts)) {
+            return _rl_cli_err(in.err ? in.err : "bad key");
+        }
+        _rl_toml_skip_ws(&in);
+        if (in.p >= in.end || *in.p != '=') {
+            return _rl_cli_err("toml_parse: expected =");
+        }
+        in.p++;
+        rl_result val = _rl_toml_parse_value(&in);
+        if (!val.is_ok) {
+            return _rl_cli_err(in.err ? in.err : "bad value");
+        }
+        const char *err = NULL;
+        if (_rl_toml_install(cur, key, val, &err)) {
+            return _rl_cli_err(err ? err : "cannot install value");
+        }
+        // Rest of line must be blank/comment.
+        _rl_toml_skip_ws(&in);
+        if (in.p < in.end && *in.p != '\n' && *in.p != '\r' && *in.p != '#') {
+            return _rl_cli_err("toml_parse: trailing characters");
+        }
+        if (in.p < in.end && *in.p == '#') {
+            while (in.p < in.end && *in.p != '\n') in.p++;
+        }
+    }
+    return rl_ok_map(root);
+}
+
+// ---- serialize CSV ----
+// Small hand parser: commas separate, double quotes group ("" escapes),
+// CR/LF end rows. Emits rows as int64-free rl_string arrays.
+
+static void _rl_ser_csv_push_field(rl_string **fields, uint64_t *n, uint64_t *cap,
+        const char *data, uint64_t len) {
+    if (*n == *cap) {
+        uint64_t ncap = (*cap == 0 ? 8 : *cap * 2);
+        rl_string *grown = realloc(*fields, ncap * sizeof(rl_string));
+        if (grown == NULL) return;
+        *fields = grown;
+        *cap = ncap;
+    }
+    char *dup = malloc(len + 1);
+    memcpy(dup, data, len);
+    dup[len] = '\0';
+    (*fields)[*n].data = dup;
+    (*fields)[*n].len = len;
+    (*n)++;
+}
+
+// Parses one CSV document into rows; delimiter is one byte.
+static rl_string **_rl_ser_csv_parse(const char *data, uint64_t n, char delim,
+        uint64_t **row_lens, uint64_t *nrows) {
+    rl_string **rows = NULL;
+    uint64_t nr = 0, capr = 0;
+    uint64_t *lens = NULL;
+    const char *p = data;
+    const char *end = data + n;
+    // A trailing newline does not start a new row.
+    while (p < end) {
+        rl_string *fields = NULL;
+        uint64_t nf = 0, capf = 0;
+        char *field = NULL;
+        uint64_t flen = 0, fcap = 0;
+        int in_quotes = 0;
+        int have_field = 0;
+        for (;;) {
+            if (p >= end) {
+                if (in_quotes) goto csv_err;
+                if (have_field || flen > 0 || nf > 0) {
+                    _rl_ser_csv_push_field(&fields, &nf, &capf, field ? field : "", flen);
+                }
+                free(field);
+                break;
+            }
+            char c = *p;
+            if (in_quotes) {
+                if (c == '"') {
+                    if (p + 1 < end && p[1] == '"') {
+                        if (flen + 1 >= fcap) {
+                            uint64_t ncap = (fcap == 0 ? 32 : fcap * 2);
+                            char *grown = realloc(field, ncap);
+                            if (grown == NULL) goto csv_oom;
+                            field = grown;
+                            fcap = ncap;
+                        }
+                        field[flen++] = '"';
+                        p += 2;
+                    } else {
+                        in_quotes = 0;
+                        p++;
+                    }
+                } else {
+                    if (flen + 1 >= fcap) {
+                        uint64_t ncap = (fcap == 0 ? 32 : fcap * 2);
+                        char *grown = realloc(field, ncap);
+                        if (grown == NULL) goto csv_oom;
+                        field = grown;
+                        fcap = ncap;
+                    }
+                    field[flen++] = c;
+                    p++;
+                }
+            } else if (c == '"') {
+                in_quotes = 1;
+                have_field = 1;
+                p++;
+            } else if (c == delim) {
+                _rl_ser_csv_push_field(&fields, &nf, &capf, field ? field : "", flen);
+                free(field);
+                field = NULL;
+                flen = 0;
+                fcap = 0;
+                have_field = 0;
+                p++;
+                if (p >= end) {
+                    // Trailing delimiter means one more empty field.
+                    _rl_ser_csv_push_field(&fields, &nf, &capf, "", 0);
+                    break;
+                }
+            } else if (c == '\r' || c == '\n') {
+                _rl_ser_csv_push_field(&fields, &nf, &capf, field ? field : "", flen);
+                free(field);
+                field = NULL;
+                p++;
+                if (c == '\r' && p < end && *p == '\n') p++;
+                break;
+            } else {
+                have_field = 1;
+                if (flen + 1 >= fcap) {
+                    uint64_t ncap = (fcap == 0 ? 32 : fcap * 2);
+                    char *grown = realloc(field, ncap);
+                    if (grown == NULL) goto csv_oom;
+                    field = grown;
+                    fcap = ncap;
+                }
+                field[flen++] = c;
+                p++;
+            }
+        }
+        if (nr == capr) {
+            uint64_t ncap = (capr == 0 ? 8 : capr * 2);
+            rl_string **grown = realloc(rows, ncap * sizeof(rl_string *));
+            uint64_t *grown_lens = realloc(lens, ncap * sizeof(uint64_t));
+            if (grown == NULL || grown_lens == NULL) {
+                free(grown);
+                free(grown_lens);
+                goto csv_oom_rows;
+            }
+            rows = grown;
+            lens = grown_lens;
+            capr = ncap;
+        }
+        rows[nr] = fields;
+        lens[nr] = nf;
+        nr++;
+        continue;
+    csv_err:
+        free(field);
+        for (uint64_t i = 0; i < nf; i++) free((void *)fields[i].data);
+        free(fields);
+        for (uint64_t i = 0; i < nr; i++) {
+            for (uint64_t k = 0; k < lens[i]; k++) free((void *)rows[i][k].data);
+            free(rows[i]);
+        }
+        free(rows);
+        free(lens);
+        return NULL;
+    csv_oom:
+        free(field);
+    csv_oom_rows:
+        for (uint64_t i = 0; i < nf; i++) free((void *)fields[i].data);
+        free(fields);
+        for (uint64_t i = 0; i < nr; i++) {
+            for (uint64_t k = 0; k < lens[i]; k++) free((void *)rows[i][k].data);
+            free(rows[i]);
+        }
+        free(rows);
+        free(lens);
+        return NULL;
+    }
+    *row_lens = lens;
+    *nrows = nr;
+    return rows;
+}
+
+static rl_array _rl_ser_csv_rows_to_array(rl_string **rows, uint64_t *lens, uint64_t nrows) {
+    rl_array *arrs = malloc((nrows > 0 ? nrows : 1) * sizeof(rl_array));
+    for (uint64_t i = 0; i < nrows; i++) {
+        rl_string *copy = malloc((lens[i] > 0 ? lens[i] : 1) * sizeof(rl_string));
+        for (uint64_t k = 0; k < lens[i]; k++) copy[k] = rows[i][k];
+        arrs[i].data = copy;
+        arrs[i].len = lens[i];
+        arrs[i].cap = lens[i];
+        arrs[i].elem_size = (int32_t)sizeof(rl_string);
+        arrs[i].type_tag = RL_TAG_STR;
+    }
+    rl_array out = { .data = arrs, .len = nrows, .cap = nrows,
+        .elem_size = (int32_t)sizeof(rl_array), .type_tag = RL_TAG_ARR };
+    return out;
+}
+
+static void _rl_ser_csv_free_raw(rl_string **rows, uint64_t *lens, uint64_t nrows) {
+    for (uint64_t i = 0; i < nrows; i++) {
+        for (uint64_t k = 0; k < lens[i]; k++) free((void *)rows[i][k].data);
+        free(rows[i]);
+    }
+    free(rows);
+    free(lens);
+}
+
+rl_result rl_serialize_csv_parse(rl_string s) {
+    const char *data = (s.data != NULL) ? s.data : "";
+    uint64_t *lens = NULL;
+    uint64_t nrows = 0;
+    rl_string **rows = _rl_ser_csv_parse(data, s.len, ',', &lens, &nrows);
+    if (rows == NULL && s.len > 0) {
+        // Empty input parses to zero rows; NULL means malformed.
+        // Distinguish: re-scan is overkill — treat NULL with len>0 as
+        // error only when a quote was left open. The parser returns
+        // NULL solely on unterminated quotes or OOM.
+        return _rl_cli_err("csv_parse: unterminated quote");
+    }
+    rl_array out = _rl_ser_csv_rows_to_array(rows ? rows : NULL, lens ? lens : NULL, nrows);
+    if (rows != NULL) {
+        // Arrays copied the strings; free the shells (keep string bytes).
+        for (uint64_t i = 0; i < nrows; i++) free(rows[i]);
+        free(rows);
+        free(lens);
+    }
+    return rl_ok_arr(out);
+}
+
+rl_result rl_serialize_csv_parse_with_delimiter(rl_string s, rl_string delim) {
+    if (delim.len == 0 || delim.data == NULL) {
+        return _rl_cli_err("csv_parse_with_delimiter: delimiter must not be empty");
+    }
+    const char *data = (s.data != NULL) ? s.data : "";
+    uint64_t *lens = NULL;
+    uint64_t nrows = 0;
+    rl_string **rows = _rl_ser_csv_parse(data, s.len, delim.data[0], &lens, &nrows);
+    if (rows == NULL && s.len > 0) {
+        return _rl_cli_err("csv_parse: unterminated quote");
+    }
+    rl_array out = _rl_ser_csv_rows_to_array(rows ? rows : NULL, lens ? lens : NULL, nrows);
+    if (rows != NULL) {
+        for (uint64_t i = 0; i < nrows; i++) free(rows[i]);
+        free(rows);
+        free(lens);
+    }
+    return rl_ok_arr(out);
+}
+
+rl_string rl_serialize_csv_stringify(rl_array rows) {
+    char *buf = NULL;
+    uint64_t len = 0, cap = 0;
+    rl_array *rowarr = (rl_array *)rows.data;
+    // Rows may be rl_string arrays (tag STR) from any source.
+    for (uint64_t i = 0; i < rows.len; i++) {
+        rl_array r = rowarr[i];
+        if (r.elem_size != (int32_t)sizeof(rl_string)) {
+            continue;
+        }
+        rl_string *fields = (rl_string *)r.data;
+        for (uint64_t k = 0; k < r.len; k++) {
+            if (k > 0) _rl_ser_buf_byte(&buf, &len, &cap, ',');
+            const char *f = (fields[k].data != NULL) ? fields[k].data : "";
+            uint64_t flen = fields[k].len;
+            int quote = 0;
+            for (uint64_t c = 0; c < flen; c++) {
+                if (f[c] == ',' || f[c] == '"' || f[c] == '\n' || f[c] == '\r') {
+                    quote = 1;
+                    break;
+                }
+            }
+            if (quote) _rl_ser_buf_byte(&buf, &len, &cap, '"');
+            for (uint64_t c = 0; c < flen; c++) {
+                if (f[c] == '"') _rl_ser_buf_byte(&buf, &len, &cap, '"');
+                _rl_ser_buf_byte(&buf, &len, &cap, f[c]);
+            }
+            if (quote) _rl_ser_buf_byte(&buf, &len, &cap, '"');
+        }
+        _rl_ser_buf_byte(&buf, &len, &cap, '\n');
+    }
+    if (buf == NULL) {
+        buf = malloc(1);
+        buf[0] = '\0';
+    }
+    rl_string s = { .data = buf, .len = len };
+    return s;
+}
+
+rl_result rl_serialize_csv_parse_headers(rl_string s) {
+    const char *data = (s.data != NULL) ? s.data : "";
+    uint64_t *lens = NULL;
+    uint64_t nrows = 0;
+    rl_string **rows = _rl_ser_csv_parse(data, s.len, ',', &lens, &nrows);
+    if (rows == NULL && s.len > 0) {
+        return _rl_cli_err("csv_parse: unterminated quote");
+    }
+    if (nrows == 0) {
+        rl_array empty = { .data = NULL, .len = 0, .cap = 0,
+            .elem_size = (int32_t)sizeof(rl_map), .type_tag = RL_TAG_MAP };
+        return rl_ok_arr(empty);
+    }
+    rl_map *maps = malloc(nrows > 1 ? (nrows - 1) * sizeof(rl_map) : 1);
+    for (uint64_t i = 1; i < nrows; i++) {
+        maps[i - 1] = rl_map_new();
+        for (uint64_t k = 0; k < lens[0] && k < lens[i]; k++) {
+            char *key = malloc(rows[0][k].len + 1);
+            memcpy(key, rows[0][k].data, rows[0][k].len);
+            key[rows[0][k].len] = '\0';
+            // Dup: the raw row buffers are freed below.
+            char *val = malloc(rows[i][k].len + 1);
+            memcpy(val, rows[i][k].data, rows[i][k].len);
+            val[rows[i][k].len] = '\0';
+            rl_value v;
+            v.tag = RL_VTAG_STR;
+            v.data.str.data = val;
+            v.data.str.len = rows[i][k].len;
+            rl_map_set(&maps[i - 1], key, v);
+            free(key);
+        }
+    }
+    _rl_ser_csv_free_raw(rows, lens, nrows);
+    rl_array out = { .data = maps, .len = nrows - 1, .cap = nrows - 1,
+        .elem_size = (int32_t)sizeof(rl_map), .type_tag = RL_TAG_MAP };
+    return rl_ok_arr(out);
+}
+
+// ---- serialize INI ----
+// sections -> rl_map of rl_map boxes; unsectioned keys under "".
+
+rl_result rl_serialize_ini_parse(rl_string s) {
+    const char *data = (s.data != NULL) ? s.data : "";
+    const char *p = data;
+    const char *end = data + s.len;
+    rl_map top = rl_map_new();
+    rl_map *cur = malloc(sizeof(rl_map));
+    *cur = rl_map_new();
+    {
+        rl_value topbox;
+        topbox.tag = RL_VTAG_MAP;
+        topbox.data.map = cur;
+        rl_map_set(&top, "", topbox);
+    }
+    char section[256];
+    section[0] = '\0';
+    while (p < end) {
+        // Skip blank lines and comments.
+        while (p < end && (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n')) p++;
+        if (p >= end) break;
+        if (*p == ';' || *p == '#') {
+            while (p < end && *p != '\n') p++;
+            continue;
+        }
+        if (*p == '[') {
+            p++;
+            const char *name = p;
+            while (p < end && *p != ']' && *p != '\n') p++;
+            if (p >= end || *p != ']') return _rl_cli_err("ini_parse: unterminated section");
+            uint64_t nlen = (uint64_t)(p - name);
+            // Trim trailing whitespace inside brackets.
+            while (nlen > 0 && (name[nlen - 1] == ' ' || name[nlen - 1] == '\t')) nlen--;
+            if (nlen >= sizeof(section)) return _rl_cli_err("ini_parse: section name too long");
+            memcpy(section, name, nlen);
+            section[nlen] = '\0';
+            p++; // ]
+            while (p < end && *p != '\n') {
+                if (*p != ' ' && *p != '\t' && *p != '\r') {
+                    return _rl_cli_err("ini_parse: trailing characters after section");
+                }
+                p++;
+            }
+            rl_map *nm = malloc(sizeof(rl_map));
+            *nm = rl_map_new();
+            rl_value box;
+            box.tag = RL_VTAG_MAP;
+            box.data.map = nm;
+            rl_map_set(&top, section, box);
+            cur = nm;
+            continue;
+        }
+        // key = value (key up to '=' or ':'; value to EOL, trimmed).
+        const char *ks = p;
+        while (p < end && *p != '=' && *p != ':' && *p != '\n') p++;
+        if (p >= end || *p == '\n') return _rl_cli_err("ini_parse: expected = after key");
+        const char *ke = p;
+        while (ke > ks && (ke[-1] == ' ' || ke[-1] == '\t')) ke--;
+        while (ks < ke && (*ks == ' ' || *ks == '\t')) ks++;
+        p++; // = or :
+        while (p < end && (*p == ' ' || *p == '\t')) p++;
+        const char *vs = p;
+        while (p < end && *p != '\n' && *p != '\r') p++;
+        const char *ve = p;
+        while (ve > vs && (ve[-1] == ' ' || ve[-1] == '\t')) ve--;
+        char *key = malloc((uint64_t)(ke - ks) + 1);
+        memcpy(key, ks, (uint64_t)(ke - ks));
+        key[ke - ks] = '\0';
+        uint64_t vlen = (uint64_t)(ve - vs);
+        char *val = malloc(vlen + 1);
+        memcpy(val, vs, vlen);
+        val[vlen] = '\0';
+        rl_value box;
+        box.tag = RL_VTAG_STR;
+        box.data.str.data = val;
+        box.data.str.len = vlen;
+        rl_map_set(cur, key, box);
+        free(key);
+    }
+    return rl_ok_map(top);
+}
+
+rl_result rl_serialize_ini_stringify(rl_result v) {
+    if (!v.is_ok || v.tag != RL_TAG_MAP) {
+        return _rl_cli_err("ini_stringify: expects a map of sections");
+    }
+    rl_map top = v.data.map;
+    char *buf = NULL;
+    uint64_t len = 0, cap = 0;
+    for (uint64_t i = 0; i < top.len; i++) {
+        const char *section = top.entries[i].key;
+        if (top.entries[i].value.tag != RL_VTAG_MAP) {
+            return _rl_cli_err("ini_stringify: sections must be maps");
+        }
+        rl_map *sec = top.entries[i].value.data.map;
+        if (section[0] != '\0') {
+            _rl_ser_buf_byte(&buf, &len, &cap, '[');
+            _rl_ser_buf_add(&buf, &len, &cap, section, strlen(section));
+            _rl_ser_buf_add(&buf, &len, &cap, "]\n", 2);
+        }
+        for (uint64_t k = 0; k < sec->len; k++) {
+            if (sec->entries[k].value.tag != RL_VTAG_STR) {
+                return _rl_cli_err("ini_stringify: keys and values must be strings");
+            }
+            _rl_ser_buf_add(&buf, &len, &cap, sec->entries[k].key, strlen(sec->entries[k].key));
+            // rust-ini emits bare `key=value` (no spaces).
+            _rl_ser_buf_byte(&buf, &len, &cap, '=');
+            rl_string val = sec->entries[k].value.data.str;
+            if (val.data != NULL) _rl_ser_buf_add(&buf, &len, &cap, val.data, val.len);
+            _rl_ser_buf_byte(&buf, &len, &cap, '\n');
+        }
+    }
+    if (buf == NULL) {
+        buf = malloc(1);
+        buf[0] = '\0';
+    }
+    rl_string s = { .data = buf, .len = len };
+    return rl_ok_str(s);
+}
+
 // ---- cli progress ----
 // Byte-identical format to the VM: \r{label} [{#24}] {pct:3}%, \n at 100%.
 
@@ -10200,6 +12803,16 @@ rl_string rl_result_unwrap_str(rl_result r) {
         _rl_abort();
     }
     return r.data.str;
+}
+
+// Identity on ok, abort on err: lets `dec x = result_unwrap(dyn)` hold
+// a dynamically-typed payload as a result instead of mistyping it.
+rl_result rl_result_unwrap_result(rl_result r) {
+    if (!r.is_ok) {
+        fprintf(stderr, "error: unwrap called on err value\n");
+        _rl_abort();
+    }
+    return r;
 }
 
 // Checked unwrap of an array payload; aborts on error like the rest.

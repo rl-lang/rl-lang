@@ -15,6 +15,7 @@ pub(super) fn compile_expr_stmt(cc: &mut CCodegen, expr_id: ExprId) -> Result<()
         let temp = emit_propagate_assign(cc, *inner)?;
         emit_propagate_guard(cc, &temp, true)?;
     } else {
+        cc.hoist_stmt_literals(expr_id)?;
         cc.writer.write_indent();
         cc.compile_expr(expr_id)?;
         cc.writer.write(";\n");
@@ -46,11 +47,13 @@ pub(super) fn compile_return(cc: &mut CCodegen, ret: Option<ExprId>) -> Result<(
                     ));
                 }
             } else if cc.in_lambda_body {
+                cc.hoist_stmt_literals(expr_id)?;
                 cc.writer.write_indent();
                 cc.writer.write("return rl_ok(");
                 cc.compile_expr(expr_id)?;
                 cc.writer.write(");\n");
             } else {
+                cc.hoist_stmt_literals(expr_id)?;
                 cc.writer.write_indent();
                 cc.writer.write("return ");
                 cc.compile_expr(expr_id)?;

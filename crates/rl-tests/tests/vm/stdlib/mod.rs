@@ -8,5 +8,6 @@ mod io;
 mod math;
 mod random;
 mod result;
+mod serialize;
 mod string;
 mod types;

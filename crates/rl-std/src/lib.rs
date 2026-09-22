@@ -64,6 +64,8 @@ pub mod process;
 pub mod random;
 #[cfg(any(feature = "std-result", feature = "impls"))]
 pub mod result;
+#[cfg(any(feature = "std-serialize", feature = "impls"))]
+pub mod serialize;
 #[cfg(any(feature = "std-string", feature = "impls"))]
 pub mod string;
 #[cfg(any(feature = "std-terminal", feature = "impls"))]
@@ -116,6 +118,8 @@ pub fn signatures() -> rl_std_core::ModuleNames {
     { m = m.with_module(random::signatures()); }
     #[cfg(any(feature = "std-result", feature = "impls"))]
     { m = m.with_module(result::signatures()); }
+    #[cfg(any(feature = "std-serialize", feature = "impls"))]
+    { m = m.with_module(serialize::signatures()); }
     #[cfg(any(feature = "std-string", feature = "impls"))]
     { m = m.with_module(string::signatures()); }
     #[cfg(any(feature = "std-terminal", feature = "impls"))]

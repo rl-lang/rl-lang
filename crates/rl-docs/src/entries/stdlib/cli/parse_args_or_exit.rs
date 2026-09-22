@@ -12,7 +12,7 @@ dec args = parse_args_or_exit([
     returns: "map",
     errors: None,
     see_also: &["parse_args", "usage_string"],
-    since: Some("v2.3.0"),
+    since: Some("v2.2.0"),
     deprecated: None,
-    updated: Some("v2.3.0"),
+    updated: Some("v2.2.0"),
 };

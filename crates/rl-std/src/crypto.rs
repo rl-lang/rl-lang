@@ -15,8 +15,6 @@
 
 #[cfg(feature = "impls")]
 use rl_std_core::Runtime;
-#[cfg(feature = "impls")]
-use rl_std_core::Bytes;
 use rl_std_macros::native_fn;
 #[cfg(feature = "impls")]
 use digest::Digest;
@@ -26,52 +24,52 @@ use rl_ast::statements::TypeAnnotation;
 // ---- hashes ---------------------------------------------------------------
 
 #[native_fn(module = "crypto")]
-pub fn sha256(data: Bytes) -> Bytes {
-    Bytes(sha2::Sha256::digest(&data.0).to_vec())
+pub fn sha256(data: rl_std_core::Bytes) -> rl_std_core::Bytes {
+    rl_std_core::Bytes(sha2::Sha256::digest(&data.0).to_vec())
 }
 
 #[native_fn(module = "crypto")]
-pub fn sha512(data: Bytes) -> Bytes {
-    Bytes(sha2::Sha512::digest(&data.0).to_vec())
+pub fn sha512(data: rl_std_core::Bytes) -> rl_std_core::Bytes {
+    rl_std_core::Bytes(sha2::Sha512::digest(&data.0).to_vec())
 }
 
 #[native_fn(module = "crypto")]
-pub fn sha1(data: Bytes) -> Bytes {
+pub fn sha1(data: rl_std_core::Bytes) -> rl_std_core::Bytes {
     // Leading `::`: the function name shadows the crate in paths.
-    Bytes(::sha1::Sha1::digest(&data.0).to_vec())
+    rl_std_core::Bytes(::sha1::Sha1::digest(&data.0).to_vec())
 }
 
 #[native_fn(module = "crypto")]
-pub fn md5(data: Bytes) -> Bytes {
-    Bytes(::md5::Md5::digest(&data.0).to_vec())
+pub fn md5(data: rl_std_core::Bytes) -> rl_std_core::Bytes {
+    rl_std_core::Bytes(::md5::Md5::digest(&data.0).to_vec())
 }
 
 // ---- hmac -----------------------------------------------------------------
 
 #[native_fn(module = "crypto")]
-pub fn hmac_sha256(key: Bytes, data: Bytes) -> Bytes {
+pub fn hmac_sha256(key: rl_std_core::Bytes, data: rl_std_core::Bytes) -> rl_std_core::Bytes {
     use digest::Mac;
     // HMAC accepts any key length (long keys hash down), so this only
     // fails on a broken build; abort loudly instead of forging a MAC.
     let mut mac = hmac::Hmac::<sha2::Sha256>::new_from_slice(&key.0)
         .expect("hmac_sha256: invalid key");
     mac.update(&data.0);
-    Bytes(mac.finalize().into_bytes().to_vec())
+    rl_std_core::Bytes(mac.finalize().into_bytes().to_vec())
 }
 
 #[native_fn(module = "crypto")]
-pub fn hmac_sha512(key: Bytes, data: Bytes) -> Bytes {
+pub fn hmac_sha512(key: rl_std_core::Bytes, data: rl_std_core::Bytes) -> rl_std_core::Bytes {
     use digest::Mac;
     let mut mac = hmac::Hmac::<sha2::Sha512>::new_from_slice(&key.0)
         .expect("hmac_sha512: invalid key");
     mac.update(&data.0);
-    Bytes(mac.finalize().into_bytes().to_vec())
+    rl_std_core::Bytes(mac.finalize().into_bytes().to_vec())
 }
 
 // ---- constant-time compare ------------------------------------------------
 
 #[native_fn(module = "crypto")]
-pub fn constant_time_eq(a: Bytes, b: Bytes) -> bool {
+pub fn constant_time_eq(a: rl_std_core::Bytes, b: rl_std_core::Bytes) -> bool {
     use subtle::ConstantTimeEq;
     // Slice ct_eq is safe on differing lengths (returns false).
     a.0.as_slice().ct_eq(b.0.as_slice()).into()
@@ -92,13 +90,13 @@ fn random_bytes(count: i64) -> Vec<u8> {
 }
 
 #[native_fn(module = "crypto")]
-pub fn secure_random_bytes(count: i64) -> Bytes {
-    Bytes(random_bytes(count))
+pub fn secure_random_bytes(count: i64) -> rl_std_core::Bytes {
+    rl_std_core::Bytes(random_bytes(count))
 }
 
 #[native_fn(module = "crypto")]
-pub fn secure_token(count: i64) -> Bytes {
-    Bytes(random_bytes(count))
+pub fn secure_token(count: i64) -> rl_std_core::Bytes {
+    rl_std_core::Bytes(random_bytes(count))
 }
 
 #[native_fn(module = "crypto")]
@@ -115,7 +113,7 @@ pub fn secure_token_urlsafe(count: i64) -> String {
 // ---- base64 / hex -----------------------------------------------------------
 
 #[native_fn(module = "crypto")]
-pub fn base64_encode(data: Bytes) -> String {
+pub fn base64_encode(data: rl_std_core::Bytes) -> String {
     use base64::Engine;
     base64::engine::general_purpose::STANDARD.encode(&data.0)
 }
@@ -138,7 +136,7 @@ pub fn base64_decode<R: Runtime>(s: String) -> R::Value {
 }
 
 #[native_fn(module = "crypto")]
-pub fn base64_url_encode(data: Bytes) -> String {
+pub fn base64_url_encode(data: rl_std_core::Bytes) -> String {
     use base64::Engine;
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&data.0)
 }
@@ -153,7 +151,7 @@ pub fn base64_url_decode<R: Runtime>(s: String) -> R::Value {
 }
 
 #[native_fn(module = "crypto")]
-pub fn hex_encode(data: Bytes) -> String {
+pub fn hex_encode(data: rl_std_core::Bytes) -> String {
     hex::encode(&data.0)
 }
 

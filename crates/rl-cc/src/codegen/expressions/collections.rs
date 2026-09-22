@@ -144,11 +144,64 @@ pub(super) fn compile_map_ops(cc: &mut CCodegen, func_name: &str, args: &[ExprId
             cc.writer.write("))");
         }
         "map_get" => {
-            cc.writer.write("rl_ok(rl_map_get_s(");
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
-            cc.writer.write(", ");
-            if args.len() >= 2 { cc.compile_expr(args[1])?; }
-            cc.writer.write("))");
+            // Known value types unwrap statically (fast path); unknown
+            // ones (generics, dynamic maps) dispatch at runtime so the
+            // result stays well-typed. Result-held maps unbox first.
+            let target_kind = if args.is_empty() {
+                None
+            } else {
+                cc.inferred_expr_type(args[0])
+            };
+            let dynamic = match target_kind.as_ref() {
+                Some(rl_ast::statements::TypeAnnotation::Result(_))
+                | Some(rl_ast::statements::TypeAnnotation::CResult(_)) => true,
+                Some(rl_ast::statements::TypeAnnotation::Map(_, vt))
+                | Some(rl_ast::statements::TypeAnnotation::CMap(_, vt)) => {
+                    !matches!(
+                        vt.as_ref(),
+                        rl_ast::statements::TypeAnnotation::String
+                            | rl_ast::statements::TypeAnnotation::CString
+                            | rl_ast::statements::TypeAnnotation::Float
+                            | rl_ast::statements::TypeAnnotation::CFloat
+                            | rl_ast::statements::TypeAnnotation::Bool
+                            | rl_ast::statements::TypeAnnotation::CBool
+                            | rl_ast::statements::TypeAnnotation::Int
+                            | rl_ast::statements::TypeAnnotation::CInt
+                            | rl_ast::statements::TypeAnnotation::Array(_)
+                            | rl_ast::statements::TypeAnnotation::CArray(_)
+                            | rl_ast::statements::TypeAnnotation::Map(_, _)
+                            | rl_ast::statements::TypeAnnotation::CMap(_, _)
+                            | rl_ast::statements::TypeAnnotation::Set(_)
+                            | rl_ast::statements::TypeAnnotation::CSet(_)
+                    )
+                }
+                // Unknown target entirely: runtime dispatch is the only
+                // sound choice (previously the blind i64 default).
+                _ => true,
+            };
+            if dynamic {
+                cc.writer.write("rl_dynamic_get(rl_ok(");
+                if !args.is_empty() {
+                    cc.compile_expr(args[0])?;
+                } else {
+                    cc.writer.write("rl_ok_null()");
+                }
+                cc.writer.write("), rl_ok(");
+                if args.len() >= 2 {
+                    cc.compile_expr(args[1])?;
+                }
+                cc.writer.write("))");
+            } else {
+                cc.writer.write("rl_ok(rl_map_get_s(");
+                if args.len() >= 1 {
+                    cc.compile_expr(args[0])?;
+                }
+                cc.writer.write(", ");
+                if args.len() >= 2 {
+                    cc.compile_expr(args[1])?;
+                }
+                cc.writer.write("))");
+            }
         }
         _ => {}
     }

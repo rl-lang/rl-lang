@@ -12,6 +12,7 @@ mod network;
 mod process;
 mod random;
 mod result;
+mod serialize;
 mod string;
 mod terminal;
 mod types;
@@ -36,6 +37,23 @@ impl<'a> CCodegen<'a> {
             return Ok(());
         }
         let kind = self.ast.exprs.get(id).kind.clone();
+        // Statement-shaped call arguments hoist before the call writes
+        // anything (`f({...})`). Nested-in-expression calls stay
+        // unsupported, exactly as before.
+        match &kind {
+            ExpressionKind::Call { args, .. } | ExpressionKind::CallExpr { args, .. } => {
+                for arg in args {
+                    self.hoist_stmt_literals(*arg)?;
+                }
+            }
+            ExpressionKind::MethodCall { caller, args, .. } => {
+                self.hoist_stmt_literals(*caller)?;
+                for arg in args {
+                    self.hoist_stmt_literals(*arg)?;
+                }
+            }
+            _ => {}
+        }
         match &kind {
             ExpressionKind::Integer(v) => {
                 self.writer.write(&format!("(int64_t){}", v));
@@ -522,6 +540,19 @@ impl<'a> CCodegen<'a> {
                 // type; tuples use `.field_N` for literal indexes; maps
                 // look up string keys. Anything else is a compile error
                 // instead of an invalid C subscript.
+                // Result-held containers (dynamic unwraps) dispatch at
+                // runtime for maps and arrays alike.
+                if matches!(
+                    self.inferred_expr_type(*target).as_ref(),
+                    Some(TypeAnnotation::Result(_)) | Some(TypeAnnotation::CResult(_))
+                ) {
+                    self.writer.write("rl_dynamic_get(");
+                    self.compile_expr(*target)?;
+                    self.writer.write(", rl_ok(");
+                    self.compile_expr(*index)?;
+                    self.writer.write("))");
+                    return Ok(());
+                }
                 match self.inferred_expr_type(*target).as_ref() {
                     Some(TypeAnnotation::Array(inner))
                     | Some(TypeAnnotation::CArray(inner)) => {
@@ -847,6 +878,25 @@ impl<'a> CCodegen<'a> {
             "uuid_parse" => return self::crypto::compile_uuid_parse(self, args),
             "password_hash" => return self::crypto::compile_password_hash(self, args),
             "password_verify" => return self::crypto::compile_password_verify(self, args),
+            "json_parse" => return self::serialize::compile_json_parse(self, args),
+            "json_stringify" => return self::serialize::compile_json_stringify(self, args),
+            "json_stringify_pretty" => {
+                return self::serialize::compile_json_stringify_pretty(self, args);
+            }
+            "json_is_valid" => return self::serialize::compile_json_is_valid(self, args),
+            "json_get" => return self::serialize::compile_json_get(self, args),
+            "csv_parse" => return self::serialize::compile_csv_parse(self, args),
+            "csv_parse_with_delimiter" => {
+                return self::serialize::compile_csv_parse_with_delimiter(self, args);
+            }
+            "csv_stringify" => return self::serialize::compile_csv_stringify(self, args),
+            "csv_parse_headers" => return self::serialize::compile_csv_parse_headers(self, args),
+            "toml_parse" => return self::serialize::compile_toml_parse(self, args),
+            "toml_stringify" => return self::serialize::compile_toml_stringify(self, args),
+            "ini_parse" => return self::serialize::compile_ini_parse(self, args),
+            "ini_stringify" => return self::serialize::compile_ini_stringify(self, args),
+            "yaml_parse" => return self::serialize::compile_yaml_parse(self, args),
+            "yaml_stringify" => return self::serialize::compile_yaml_stringify(self, args),
             "pipe" => return self::process::compile_pipe(self, args),
             "pipe_all" => return self::process::compile_pipe_all(self, args),
             "args" => return self::process::compile_args(self),
@@ -1765,6 +1815,7 @@ impl<'a> CCodegen<'a> {
                     ExpressionKind::Float(_) => TypeAnnotation::Float,
                     ExpressionKind::Bool(_) => TypeAnnotation::Bool,
                     ExpressionKind::String(_) => TypeAnnotation::String,
+                    ExpressionKind::Null => TypeAnnotation::Null,
                     ExpressionKind::ArrayLiteral(e) if !e.is_empty() => TypeAnnotation::Array(Box::new(TypeAnnotation::Infer)),
                     _ => TypeAnnotation::Int,
                 };
@@ -1803,55 +1854,49 @@ impl<'a> CCodegen<'a> {
         Ok(temp)
     }
 
-    // Pre-statement hoist for statement-shaped literals. The root value
-    // itself (a bare map/set literal) and direct elements of array
-    // literals are built into temps BEFORE the statement writes anything
-    // (e.g. the `name = ` prefix), so later emission just names temps.
-    // Anything nested deeper (call args, map values, ...) is left alone:
-    // still unsupported, exactly as before.
+    // Pre-statement hoist for statement-shaped literals. Walks down
+    // through calls, arrays and map/set values (but never into lambda
+    // bodies, which compile out-of-line and walk themselves), building
+    // temps BEFORE the statement writes anything. Later emission reuses
+    // temps via the compile_expr check above.
     pub(crate) fn hoist_stmt_literals(&mut self, id: ExprId) -> Result<(), Error> {
-        let kind = self.ast.exprs.get(id).kind.clone();
-        match kind {
-            ExpressionKind::MapLiteral(entries) => {
-                if !self.hoisted_tmps.contains_key(&id) {
-                    let temp = self.emit_map_lit(&entries)?;
-                    self.hoisted_tmps.insert(id, temp);
-                }
-            }
-            ExpressionKind::SetLiteral(items) => {
-                if !self.hoisted_tmps.contains_key(&id) {
-                    let temp = self.emit_set_lit(&items)?;
-                    self.hoisted_tmps.insert(id, temp);
-                }
-            }
-            ExpressionKind::ArrayLiteral(elems) => {
-                for elem in elems {
-                    self.hoist_array_elem(elem)?;
-                }
-            }
-            _ => {}
-        }
-        Ok(())
-    }
-
-    fn hoist_array_elem(&mut self, id: ExprId) -> Result<(), Error> {
         if self.hoisted_tmps.contains_key(&id) {
             return Ok(());
         }
         let kind = self.ast.exprs.get(id).kind.clone();
         match kind {
             ExpressionKind::MapLiteral(entries) => {
+                for (_, v) in &entries {
+                    self.hoist_stmt_literals(*v)?;
+                }
                 let temp = self.emit_map_lit(&entries)?;
                 self.hoisted_tmps.insert(id, temp);
             }
             ExpressionKind::SetLiteral(items) => {
+                for item in &items {
+                    self.hoist_stmt_literals(*item)?;
+                }
                 let temp = self.emit_set_lit(&items)?;
                 self.hoisted_tmps.insert(id, temp);
             }
             ExpressionKind::ArrayLiteral(elems) => {
                 for elem in elems {
-                    self.hoist_array_elem(elem)?;
+                    self.hoist_stmt_literals(elem)?;
                 }
+            }
+            ExpressionKind::Call { args, .. } | ExpressionKind::CallExpr { args, .. } => {
+                for arg in args {
+                    self.hoist_stmt_literals(arg)?;
+                }
+            }
+            ExpressionKind::MethodCall { caller, args, .. } => {
+                self.hoist_stmt_literals(caller)?;
+                for arg in args {
+                    self.hoist_stmt_literals(arg)?;
+                }
+            }
+            ExpressionKind::ResolvedLambda { .. } | ExpressionKind::Lambda { .. } => {
+                // Out-of-line bodies walk themselves per inner statement.
             }
             _ => {}
         }

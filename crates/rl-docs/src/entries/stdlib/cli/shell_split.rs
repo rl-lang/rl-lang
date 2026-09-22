@@ -11,7 +11,7 @@ dec parts = result_unwrap(shell_split("rl run demo.rl -- -o \\"my file.txt\\""))
     returns: "result[array[string]]",
     errors: Some("unterminated quote or escape"),
     see_also: &["shell_join"],
-    since: Some("v2.3.0"),
+    since: Some("v2.2.0"),
     deprecated: None,
-    updated: Some("v2.3.0"),
+    updated: Some("v2.2.0"),
 };

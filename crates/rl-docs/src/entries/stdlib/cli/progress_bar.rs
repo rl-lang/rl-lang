@@ -14,7 +14,7 @@ while i <= 10 {
     returns: "null",
     errors: None,
     see_also: &["spinner_tick"],
-    since: Some("v2.3.0"),
+    since: Some("v2.2.0"),
     deprecated: None,
-    updated: Some("v2.3.0"),
+    updated: Some("v2.2.0"),
 };

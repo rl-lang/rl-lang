@@ -27,7 +27,7 @@ pub static CRYPTO: StdEntry = StdEntry {
     name: "crypto",
     description: "functions for hashing, keyed MACs, random tokens and password hashing",
     functions: FUNCTIONS,
-    since: Some("v2.3.0"),
+    since: Some("v2.2.0"),
     unstable: false,
 };
 

@@ -51,6 +51,24 @@ pub fn namespace_provides(namespace: &str, name: &str) -> bool {
                 | "password_hash"
                 | "password_verify"
         ),
+        "std::serialize" => matches!(
+            name,
+            "json_parse"
+                | "json_stringify"
+                | "json_stringify_pretty"
+                | "json_is_valid"
+                | "json_get"
+                | "csv_parse"
+                | "csv_parse_with_delimiter"
+                | "csv_stringify"
+                | "csv_parse_headers"
+                | "toml_parse"
+                | "toml_stringify"
+                | "ini_parse"
+                | "ini_stringify"
+                | "yaml_parse"
+                | "yaml_stringify"
+        ),
         "std::io" => matches!(
             name,
             "print"

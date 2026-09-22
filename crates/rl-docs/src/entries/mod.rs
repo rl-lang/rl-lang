@@ -30,6 +30,7 @@ pub fn stdlib_entries() -> Vec<&'static StdEntry> {
         &stdlib::random::RANDOM,
         &stdlib::result::RES,
         &stdlib::rl::RL,
+        &stdlib::serialize::SERIALIZE,
         &stdlib::str::STR,
         &stdlib::term::TERM,
         &stdlib::time::TIME,

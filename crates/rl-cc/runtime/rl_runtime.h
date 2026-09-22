@@ -789,6 +789,29 @@ rl_result rl_crypto_uuid_parse(rl_string s);
 rl_string rl_crypto_password_hash(rl_string password);
 bool rl_crypto_password_verify(rl_string password, rl_string hash);
 
+// ---- serialize ----
+// Mirrors `std::serialize`. YAML needs libyaml (rlt links it when
+// generated code mentions rl_serialize_yaml).
+rl_result rl_serialize_json_parse(rl_string s);
+rl_string rl_serialize_json_stringify(rl_result v);
+rl_string rl_serialize_json_stringify_pretty(rl_result v);
+bool rl_serialize_json_is_valid(rl_string s);
+rl_result rl_serialize_json_get(rl_result v, rl_string path);
+rl_result rl_serialize_csv_parse(rl_string s);
+rl_result rl_serialize_csv_parse_with_delimiter(rl_string s, rl_string delim);
+rl_string rl_serialize_csv_stringify(rl_array rows);
+rl_result rl_serialize_csv_parse_headers(rl_string s);
+rl_result rl_serialize_toml_parse(rl_string s);
+rl_result rl_serialize_toml_stringify(rl_result v);
+rl_result rl_serialize_ini_parse(rl_string s);
+rl_result rl_serialize_ini_stringify(rl_result v);
+rl_result rl_serialize_yaml_parse(rl_string s);
+rl_result rl_serialize_yaml_stringify(rl_result v);
+
+// Dynamic index for result-held containers (dynamic unwraps): maps by
+// string key, arrays by int index. Errors pass through.
+rl_result rl_dynamic_get(rl_result target, rl_result key);
+
 // ---- time ----
 // Format a Unix timestamp with a strftime-style `pattern`, or an error.
 rl_result rl_time_format_time(int64_t timestamp, rl_string pattern);
@@ -1102,6 +1125,9 @@ rl_result rl_term_poll(int64_t ms);
 // ---- result unwrap (with error checking) ----
 // Checked unwrap used by RL `unwrap`: aborts with a message when `r`
 // is an error instead of silently reading a dead union member.
+// Identity on ok (payload untouched); lets declarations hold dynamic
+// unwraps as results without mistyping the storage.
+rl_result rl_result_unwrap_result(rl_result r);
 int64_t rl_result_unwrap_i64(rl_result r);
 double rl_result_unwrap_f64(rl_result r);
 bool rl_result_unwrap_bool(rl_result r);

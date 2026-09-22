@@ -12,7 +12,7 @@ if prompt_confirm("delete all files?") {
     returns: "bool",
     errors: None,
     see_also: &["prompt", "prompt_password", "prompt_choice"],
-    since: Some("v2.3.0"),
+    since: Some("v2.2.0"),
     deprecated: None,
-    updated: Some("v2.3.0"),
+    updated: Some("v2.2.0"),
 };

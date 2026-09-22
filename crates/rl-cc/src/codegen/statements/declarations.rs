@@ -229,6 +229,15 @@ pub(super) fn compile_var_decl(
                 TypeAnnotation::Set(_) | TypeAnnotation::CSet(_) => {
                     Some("rl_result_unwrap_set")
                 }
+                // Dynamic payload held as a result (`dec data` over an
+                // unknown unwrap): assert ok and keep the result, so
+                // downstream uses see the payload through result-aware
+                // paths instead of a mistyped scalar.
+                TypeAnnotation::Result(inner) | TypeAnnotation::CResult(inner)
+                    if CCodegen::needs_inference(inner) =>
+                {
+                    Some("rl_result_unwrap_result")
+                }
                 _ if CCodegen::needs_inference(&effective) => None,
                 TypeAnnotation::Result(_)
                 | TypeAnnotation::CResult(_)
