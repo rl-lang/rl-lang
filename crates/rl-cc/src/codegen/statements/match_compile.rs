@@ -10,6 +10,13 @@ pub(super) fn compile_match(
     value: ExprId,
     arms: &[(MatchPattern, Vec<rl_ast::statements::Statement>)],
 ) -> Result<(), Error> {
+    // String scrutinees compare with rl_str_eq; C `==` cannot compare
+    // string structs.
+    let is_string = matches!(
+        cc.inferred_expr_type(value).as_ref(),
+        Some(rl_ast::statements::TypeAnnotation::String)
+            | Some(rl_ast::statements::TypeAnnotation::CString)
+    );
     for (i, (pattern, body)) in arms.iter().enumerate() {
         match pattern {
             MatchPattern::Literal(lit_id) => {
@@ -19,14 +26,24 @@ pub(super) fn compile_match(
                 } else {
                     cc.writer.write("else if (");
                 }
-                cc.compile_expr(value)?;
-                cc.writer.write(" == ");
-                cc.compile_expr(*lit_id)?;
+                if is_string {
+                    cc.writer.write("rl_str_eq(");
+                    cc.compile_expr(value)?;
+                    cc.writer.write(", ");
+                    cc.compile_expr(*lit_id)?;
+                    cc.writer.write(")");
+                } else {
+                    cc.compile_expr(value)?;
+                    cc.writer.write(" == ");
+                    cc.compile_expr(*lit_id)?;
+                }
                 cc.writer.write(") {\n");
                 cc.writer.indent();
+                cc.push_scope();
                 for s in body {
                     cc.compile_statement(s)?;
                 }
+                cc.pop_scope();
                 cc.writer.dedent();
                 cc.writer.write_indent();
                 cc.writer.write("}\n");
@@ -35,9 +52,11 @@ pub(super) fn compile_match(
                 cc.writer.write_indent();
                 cc.writer.write("else {\n");
                 cc.writer.indent();
+                cc.push_scope();
                 for s in body {
                     cc.compile_statement(s)?;
                 }
+                cc.pop_scope();
                 cc.writer.dedent();
                 cc.writer.write_indent();
                 cc.writer.write("}\n");

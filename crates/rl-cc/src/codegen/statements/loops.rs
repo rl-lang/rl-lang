@@ -1,5 +1,4 @@
 use crate::codegen::CCodegen;
-use crate::name_mangle::mangle;
 use crate::types::type_to_c;
 use rl_ast::nodes::ExpressionKind;
 use rl_ast::statements::{Statement, StatementKind, TypeAnnotation};
@@ -53,8 +52,8 @@ pub(super) fn compile_foreach(
         idx_temp, arr_temp, idx_temp
     ));
     cc.writer.indent();
-    let c_name = mangle(variable);
-    cc.declare(variable, &c_name);
+    cc.push_scope();
+    let c_name = cc.declare_unique(variable);
     cc.var_types.insert(variable.to_string(), elem_type);
     cc.writer.write_indent();
     cc.writer.write(&format!(
@@ -64,6 +63,7 @@ pub(super) fn compile_foreach(
     for s in body {
         cc.compile_statement(s)?;
     }
+    cc.pop_scope();
     cc.writer.dedent();
     cc.writer.write_indent();
     cc.writer.write("}\n");
@@ -85,8 +85,8 @@ pub(super) fn compile_for_range(
     if !items.is_empty() {
         let first = items[0];
         let last = items[items.len() - 1];
-        let c_name = mangle(variable);
-        cc.declare(variable, &c_name);
+        cc.push_scope();
+        let c_name = cc.declare_unique(variable);
         cc.var_types
             .insert(variable.to_string(), TypeAnnotation::Int);
         cc.writer.write_indent();
@@ -102,6 +102,7 @@ pub(super) fn compile_for_range(
         for s in body {
             cc.compile_statement(s)?;
         }
+        cc.pop_scope();
         cc.writer.dedent();
         cc.writer.write_indent();
         cc.writer.write("}\n");

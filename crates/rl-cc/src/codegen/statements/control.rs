@@ -1,7 +1,6 @@
 use super::propagate::{emit_propagate_assign, emit_propagate_guard};
 use super::result_field_access;
 use crate::codegen::CCodegen;
-use crate::name_mangle::mangle;
 use crate::types::type_to_c;
 use rl_ast::nodes::ExpressionKind;
 use rl_ast::statements::{Statement, StatementKind};
@@ -25,7 +24,8 @@ pub(super) fn compile_expr_stmt(cc: &mut CCodegen, expr_id: ExprId) -> Result<()
 
 /// `return expr` / bare `return`. A `return ?expr` always returns the
 /// `rl_result` on failure (never the script-mode exit path), then
-/// unwraps the success value for the caller.
+/// unwraps the success value for the caller. Inside a lambda the static
+/// C function returns `rl_result`, so values wrap with `rl_ok`.
 pub(super) fn compile_return(cc: &mut CCodegen, ret: Option<ExprId>) -> Result<(), Error> {
     match ret {
         Some(expr_id) => {
@@ -34,10 +34,22 @@ pub(super) fn compile_return(cc: &mut CCodegen, ret: Option<ExprId>) -> Result<(
                 let temp = emit_propagate_assign(cc, *inner)?;
                 emit_propagate_guard(cc, &temp, false)?;
                 cc.writer.write_indent();
-                cc.writer.write(&format!(
-                    "return {};\n",
-                    result_field_access("rl_result", &temp)
-                ));
+                if cc.in_lambda_body {
+                    cc.writer.write(&format!(
+                        "return rl_ok({});\n",
+                        result_field_access("rl_result", &temp)
+                    ));
+                } else {
+                    cc.writer.write(&format!(
+                        "return {};\n",
+                        result_field_access("rl_result", &temp)
+                    ));
+                }
+            } else if cc.in_lambda_body {
+                cc.writer.write_indent();
+                cc.writer.write("return rl_ok(");
+                cc.compile_expr(expr_id)?;
+                cc.writer.write(");\n");
             } else {
                 cc.writer.write_indent();
                 cc.writer.write("return ");
@@ -63,9 +75,11 @@ pub(super) fn compile_while(
     cc.compile_expr(condition)?;
     cc.writer.write(") {\n");
     cc.writer.indent();
+    cc.push_scope();
     for s in body {
         cc.compile_statement(s)?;
     }
+    cc.pop_scope();
     cc.writer.dedent();
     cc.writer.write_indent();
     cc.writer.write("}\n");
@@ -82,6 +96,7 @@ pub(super) fn compile_for(
 ) -> Result<(), Error> {
     cc.writer.write_indent();
     cc.writer.write("for (");
+    cc.push_scope();
     compile_for_init(cc, initializer)?;
     cc.writer.write("; ");
     cc.compile_expr(condition)?;
@@ -92,6 +107,7 @@ pub(super) fn compile_for(
     for s in body {
         cc.compile_statement(s)?;
     }
+    cc.pop_scope();
     cc.writer.dedent();
     cc.writer.write_indent();
     cc.writer.write("}\n");
@@ -109,8 +125,7 @@ fn compile_for_init(cc: &mut CCodegen, stmt: &Statement) -> Result<(), Error> {
     } = &stmt.kind
     {
         let c_type = type_to_c(type_annotation);
-        let c_name = mangle(name);
-        cc.declare(name, &c_name);
+        let c_name = cc.declare_unique(name);
         cc.writer.write(&format!("{} {} = ", c_type, c_name));
         cc.compile_expr(*value)?;
     }
@@ -122,9 +137,11 @@ pub(super) fn compile_loop(cc: &mut CCodegen, body: &[Statement]) -> Result<(), 
     cc.writer.write_indent();
     cc.writer.write("while (1) {\n");
     cc.writer.indent();
+    cc.push_scope();
     for s in body {
         cc.compile_statement(s)?;
     }
+    cc.pop_scope();
     cc.writer.dedent();
     cc.writer.write_indent();
     cc.writer.write("}\n");

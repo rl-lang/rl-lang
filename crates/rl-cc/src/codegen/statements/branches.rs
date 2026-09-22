@@ -23,9 +23,11 @@ pub(super) fn write_conditional(
             cc.writer.write("{\n");
         }
         cc.writer.indent();
+        cc.push_scope();
         for s in body {
             cc.compile_statement(s)?;
         }
+        cc.pop_scope();
         cc.writer.dedent();
         cc.writer.write_indent();
         if else_branch.is_some() {
@@ -58,9 +60,11 @@ fn write_else_branch(cc: &mut CCodegen, else_stmt: &Statement) -> Result<(), Err
                 cc.writer.write("else {\n");
             }
             cc.writer.indent();
+            cc.push_scope();
             for s in body {
                 cc.compile_statement(s)?;
             }
+            cc.pop_scope();
             cc.writer.dedent();
             cc.writer.write_indent();
             cc.writer.write("}\n");
@@ -83,9 +87,11 @@ fn write_else_branch(cc: &mut CCodegen, else_stmt: &Statement) -> Result<(), Err
                     cc.writer.write("{\n");
                 }
                 cc.writer.indent();
+                cc.push_scope();
                 for s in body {
                     cc.compile_statement(s)?;
                 }
+                cc.pop_scope();
                 cc.writer.dedent();
                 cc.writer.write_indent();
                 if else_branch.is_some() {
@@ -101,7 +107,9 @@ fn write_else_branch(cc: &mut CCodegen, else_stmt: &Statement) -> Result<(), Err
         _ => {
             cc.writer.write("else {\n");
             cc.writer.indent();
+            cc.push_scope();
             cc.compile_statement(else_stmt)?;
+            cc.pop_scope();
             cc.writer.dedent();
             cc.writer.write_indent();
             cc.writer.write("}\n");
