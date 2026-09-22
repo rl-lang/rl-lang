@@ -1,13 +1,33 @@
 use crate::writer::CWriter;
+use crate::name_mangle::mangle;
 use crate::types::type_to_c;
 use rl_ast::{Ast, statements::*};
 use rl_checker::structs::TypeChecker;
+use rl_utils::errors::{Error, Reason};
+use rl_utils::span::Span;
 use std::collections::{HashMap, HashSet};
 
 pub mod expressions;
+pub mod infer;
 pub mod ops;
 pub mod scope;
 pub mod statements;
+pub mod stdlib_names;
+
+/// One `get ... from std::ns` import record, kept in source order.
+/// Mirrors the VM's `stdlib_methods` table where later imports overwrite
+/// earlier ones on name conflicts.
+#[derive(Clone)]
+pub enum StdImport {
+    /// `get name as alias from std::ns` (`alias` defaults to `name`).
+    Named {
+        visible: String,
+        namespace: String,
+        original: String,
+    },
+    /// `get * from std::ns`.
+    Wildcard { namespace: String },
+}
 
 pub struct CCodegen<'a> {
     pub ast: &'a Ast,
@@ -27,6 +47,44 @@ pub struct CCodegen<'a> {
     pub std_c_imports: HashSet<String>,
     pub std_net_imports: HashSet<String>,
     pub std_http_imports: HashSet<String>,
+    pub std_fs_imports: HashSet<String>,
+    pub std_imports: Vec<StdImport>,
+    /// Lambdas that return a closure literal, mapped to the inner
+    /// lambda's return type (`dec mk = fn(k) { return fn(x)->int... }`
+    /// records `mk -> int`). Lets calls through factory results unwrap.
+    pub closure_factories: HashMap<String, TypeAnnotation>,
+    pub user_fns: HashSet<String>,
+    /// Declared return types of top-level user functions, for inferring
+    /// the type of `CallExpr` results (`dec x = get_filtered_notes()`).
+    pub user_fn_returns: HashMap<String, TypeAnnotation>,
+    /// Top-level variables, emitted at C file scope so every function
+    /// body can read and assign them.
+    pub global_names: HashSet<String>,
+    /// True while emitting top-level initializers inside `main`: storage
+    /// was already declared at file scope, so only assign.
+    pub in_global_init: bool,
+    /// True while compiling a lambda body: `return` values wrap with
+    /// `rl_ok`, and `?` guards return the result instead of exiting.
+    pub in_lambda_body: bool,
+    /// Return type of the enclosing function, if any. Top-level code
+    /// leaves it None.
+    pub fn_return: Option<TypeAnnotation>,
+    /// Disambiguates shadowed C names (`c`, `c_0`, ...).
+    pub shadow_counter: usize,
+    /// Scope snapshots for the flat type maps, pushed alongside scopes.
+    pub type_snapshots: Vec<(
+        HashMap<String, TypeAnnotation>,
+        HashSet<String>,
+        HashMap<String, TypeAnnotation>,
+        HashMap<String, TypeAnnotation>,
+    )>,
+    /// Expected element type for an empty array literal (`[]`), set by
+    /// the surrounding declaration or assignment context.
+    pub array_elem_hint: Option<TypeAnnotation>,
+    /// File-scope global definitions, emitted before `main`.
+    pub globals_code: String,
+    /// File-scope tuple typedefs, emitted before globals.
+    pub tuple_defs: String,
 }
 
 impl<'a> CCodegen<'a> {
@@ -47,63 +105,484 @@ impl<'a> CCodegen<'a> {
             tuple_names: Vec::new(),
             nullable_vars: HashSet::new(),
             std_c_imports: HashSet::new(),
+            std_imports: Vec::new(),
+            closure_factories: HashMap::new(),
+            user_fns: HashSet::new(),
+            user_fn_returns: HashMap::new(),
+            global_names: HashSet::new(),
+            tuple_defs: String::new(),
+            in_global_init: false,
+            in_lambda_body: false,
+            fn_return: None,
+            shadow_counter: 0,
+            type_snapshots: Vec::new(),
+            array_elem_hint: None,
+            globals_code: String::new(),
             std_net_imports: HashSet::new(),
             std_http_imports: HashSet::new(),
+            std_fs_imports: HashSet::new(),
         }
     }
 
-    pub fn emit_program(&mut self, statements: &[Statement]) -> Result<String, rl_utils::errors::Error> {
-        self.emit_header(statements);
+    /// Records one `get ... from std::ns` import. Called both by the
+    /// pre-scan (so hoisted function bodies resolve methods) and by the
+    /// `Import` statement arm itself.
+    pub fn record_import(
+        &mut self,
+        names: &[(String, Option<String>)],
+        wildcard: bool,
+        path: &[String],
+    ) {
+        if path.is_empty() || path[0] != "std" {
+            return;
+        }
+        let namespace = path.join("::");
+        if wildcard {
+            self.std_imports.push(StdImport::Wildcard {
+                namespace: namespace.clone(),
+            });
+        } else {
+            for (name, alias) in names {
+                self.std_imports.push(StdImport::Named {
+                    visible: alias.clone().unwrap_or_else(|| name.clone()),
+                    namespace: namespace.clone(),
+                    original: name.clone(),
+                });
+            }
+        }
+        if path.len() >= 2 && path[1] == "c" {
+            if wildcard {
+                self.std_c_imports.insert("*".to_string());
+            } else {
+                for (name, _alias) in names {
+                    self.std_c_imports.insert(name.clone());
+                }
+            }
+        }
+        if path.len() >= 2 && path[1] == "net" {
+            if wildcard {
+                self.std_net_imports.insert("*".to_string());
+            } else {
+                for (name, _alias) in names {
+                    self.std_net_imports.insert(name.clone());
+                }
+            }
+        }
+        if path.len() >= 2 && path[1] == "http" {
+            if wildcard {
+                self.std_http_imports.insert("*".to_string());
+            } else {
+                for (name, _alias) in names {
+                    self.std_http_imports.insert(name.clone());
+                }
+            }
+        }
+        if path.len() >= 2 && path[1] == "fs" {
+            if wildcard {
+                self.std_fs_imports.insert("*".to_string());
+            } else {
+                for (name, _alias) in names {
+                    self.std_fs_imports.insert(name.clone());
+                }
+            }
+        }
+    }
 
-        let has_main = statements.iter().any(|s| {
-            matches!(&s.kind,
-                StatementKind::ResolvedFunctionDeclaration { name, .. }
-                if name == "main" || name == "__entry__"
-            )
-        });
+    /// True for top-level declaration statements, which become C file-scope
+    /// globals initialized inside `main`.
+    pub(crate) fn is_global_decl(kind: &StatementKind) -> bool {
+        matches!(
+            kind,
+            StatementKind::ResolvedVariableDeclaration { .. }
+                | StatementKind::ResolvedConstantDeclaration { .. }
+                | StatementKind::ResolvedArray { .. }
+                | StatementKind::ResolvedConstantArray { .. }
+                | StatementKind::ResolvedMap { .. }
+                | StatementKind::ResolvedConstantMap { .. }
+                | StatementKind::ResolvedSet { .. }
+                | StatementKind::ResolvedConstantSet { .. }
+                | StatementKind::ResolvedDestructureDeclaration { .. }
+        )
+    }
 
-        // Hoist function declarations and impl methods before main
+    /// Pre-scan pass declaring every top-level variable at file scope
+    /// (storage only; initializers run inside `main`). Recurses into
+    /// inlined file bodies. Function bodies compiled afterwards resolve
+    /// globals by name and type.
+    fn declare_globals(&mut self, statements: &[Statement]) {
         for stmt in statements {
             match &stmt.kind {
-                StatementKind::ResolvedFunctionDeclaration { .. } => {
-                    self.compile_statement(stmt)?;
+                StatementKind::ResolvedVariableDeclaration {
+                    name,
+                    type_annotation,
+                    value,
+                    ..
+                } => {
+                    crate::codegen::statements::declarations::declare_global_var(
+                        self,
+                        name,
+                        type_annotation,
+                        *value,
+                    );
                 }
-                StatementKind::ResolvedImplBlock { .. } => {
-                    self.compile_statement(stmt)?;
+                StatementKind::ResolvedConstantDeclaration {
+                    name,
+                    type_annotation,
+                    value,
+                    ..
+                } => {
+                    crate::codegen::statements::declarations::declare_global_const(
+                        self,
+                        name,
+                        type_annotation,
+                        *value,
+                    );
+                }
+                StatementKind::ResolvedArray {
+                    name, type_annotation, ..
+                } => {
+                    crate::codegen::statements::collections::declare_global_array(
+                        self,
+                        name,
+                        type_annotation,
+                        false,
+                    );
+                }
+                StatementKind::ResolvedConstantArray {
+                    name, type_annotation, ..
+                } => {
+                    crate::codegen::statements::collections::declare_global_array(
+                        self,
+                        name,
+                        type_annotation,
+                        true,
+                    );
+                }
+                StatementKind::ResolvedMap {
+                    name, type_annotation, ..
+                }
+                | StatementKind::ResolvedConstantMap {
+                    name, type_annotation, ..
+                }
+                | StatementKind::ResolvedSet {
+                    name, type_annotation, ..
+                }
+                | StatementKind::ResolvedConstantSet {
+                    name, type_annotation, ..
+                } => {
+                    crate::codegen::statements::collections::declare_global_map_set(
+                        self,
+                        name,
+                        type_annotation,
+                    );
+                }
+                StatementKind::ResolvedDestructureDeclaration { bindings, .. } => {
+                    crate::codegen::statements::declarations::declare_global_destructure(
+                        self, bindings,
+                    );
+                }
+                StatementKind::ResolvedImportFile { body, .. } => {
+                    self.declare_globals(body);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Compile one top-level statement, using init-only emission for
+    /// globals whose storage was declared at file scope.
+    fn compile_top_level(&mut self, stmt: &Statement) -> Result<(), Error> {
+        if Self::is_global_decl(&stmt.kind) {
+            self.in_global_init = true;
+            let result = self.compile_statement(stmt);
+            self.in_global_init = false;
+            result
+        } else {
+            self.compile_statement(stmt)
+        }
+    }
+
+    /// Pre-scan pass over the whole program (including inlined file bodies)
+    /// recording every import before any function body compiles. Hoisted
+    /// functions and lambdas resolve methods and aliases against this.
+    fn record_all_imports(&mut self, statements: &[Statement]) {
+        for stmt in statements {
+            match &stmt.kind {
+                StatementKind::Import {
+                    names,
+                    wildcard,
+                    path,
+                } => {
+                    self.record_import(names, *wildcard, path);
+                }
+                StatementKind::ResolvedImportFile { body, .. } => {
+                    self.record_all_imports(body);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Resolves a visible function name (bare call or method) against the
+    /// recorded stdlib imports, mirroring the VM's `stdlib_methods` table:
+    /// later imports win. Returns (namespace, original name).
+    pub fn resolve_std_name(&self, name: &str) -> Option<(String, String)> {
+        let mut found = None;
+        for import in &self.std_imports {
+            match import {
+                StdImport::Named {
+                    visible,
+                    namespace,
+                    original,
+                } => {
+                    if visible == name {
+                        found = Some((namespace.clone(), original.clone()));
+                    }
+                }
+                StdImport::Wildcard { namespace } => {
+                    if crate::codegen::stdlib_names::namespace_provides(namespace, name) {
+                        found = Some((namespace.clone(), name.to_string()));
+                    }
+                }
+            }
+        }
+        found
+    }
+
+    /// Scans top-level function declarations for the entry point (`!#[entry]`
+    /// or `main`/`__entry__` fallback), tests, inits and finals. Mirrors the
+    /// VM's `scan_entry_points`: numbered init/final priorities run first in
+    /// ascending order, unnumbered ones last in declaration order.
+    fn scan_entry(
+        statements: &[Statement],
+    ) -> Result<
+        Option<(
+            String,
+            Vec<String>,
+            Vec<String>,
+            Vec<String>,
+        )>,
+        Error,
+    > {
+        let mut explicit_entry: Option<String> = None;
+        let mut main_entry: Option<String> = None;
+        let mut tests: Vec<String> = Vec::new();
+        let mut inits: Vec<(String, Option<u32>, usize)> = Vec::new();
+        let mut finals: Vec<(String, Option<u32>, usize)> = Vec::new();
+
+        for (order, stmt) in statements.iter().enumerate() {
+            let StatementKind::ResolvedFunctionDeclaration {
+                name,
+                attribute,
+                ..
+            } = &stmt.kind
+            else {
+                continue;
+            };
+            match attribute {
+                Some(FunctionAttribute::Entry) => {
+                    if explicit_entry.is_some() {
+                        return Err(Error::at(
+                            Reason::Compile,
+                            "multiple !#[entry] functions found",
+                            Span::dummy(),
+                        ));
+                    }
+                    explicit_entry = Some(name.clone());
+                }
+                Some(FunctionAttribute::Test) => tests.push(name.clone()),
+                Some(FunctionAttribute::Init(priority)) => {
+                    inits.push((name.clone(), *priority, order));
+                }
+                Some(FunctionAttribute::Final(priority)) => {
+                    finals.push((name.clone(), *priority, order));
+                }
+                None if name == "main" || name == "__entry__" => {
+                    main_entry = Some(name.clone());
                 }
                 _ => {}
             }
         }
 
-        if !has_main {
-            self.is_script_mode = true;
-            self.writer.write("int main(int argc, char **argv) {\n");
-            self.writer.indent();
-            self.writer.writeln("rl_store_args(argc, argv);");
-        }
+        let Some(entry) = explicit_entry.or(main_entry) else {
+            return Ok(None);
+        };
+        // Numbered priorities first ascending, unnumbered last in order.
+        // `sort_by_key` is stable, so declaration order is preserved.
+        inits.sort_by_key(|(_, p, _)| (p.is_none(), p.unwrap_or(0)));
+        finals.sort_by_key(|(_, p, _)| (p.is_none(), p.unwrap_or(0)));
+        Ok(Some((
+            entry,
+            tests,
+            inits.into_iter().map(|(n, _, _)| n).collect(),
+            finals.into_iter().map(|(n, _, _)| n).collect(),
+        )))
+    }
 
+    /// True for top-level statements that run in entry mode. Mirrors the
+    /// VM's `is_program_setup_statement`: only declarations and imports
+    /// execute; control flow and bare expressions are skipped.
+    fn is_entry_setup(kind: &StatementKind) -> bool {
+        matches!(
+            kind,
+            StatementKind::ResolvedImportFile { .. }
+                | StatementKind::Import { .. }
+                | StatementKind::ImportFile { .. }
+                | StatementKind::ImportFileNamed { .. }
+                | StatementKind::ResolvedVariableDeclaration { .. }
+                | StatementKind::ResolvedConstantDeclaration { .. }
+                | StatementKind::ResolvedArray { .. }
+                | StatementKind::ResolvedConstantArray { .. }
+                | StatementKind::ResolvedMap { .. }
+                | StatementKind::ResolvedConstantMap { .. }
+                | StatementKind::ResolvedSet { .. }
+                | StatementKind::ResolvedConstantSet { .. }
+                | StatementKind::ResolvedDestructureDeclaration { .. }
+        )
+    }
+
+    pub fn emit_program(&mut self, statements: &[Statement]) -> Result<String, rl_utils::errors::Error> {
+        self.emit_header(statements);
+
+        // Top-level `?` fails the program the same way in both modes.
+        self.is_script_mode = true;
+
+        // Collect top-level user function names for the method-call fallback
+        // (`x.double()` calls user `fn double(x)`), mirroring the VM's
+        // `user_methods` table, plus their return types for inference.
         for stmt in statements {
-            if !matches!(&stmt.kind,
-                StatementKind::ResolvedFunctionDeclaration { .. }
-                | StatementKind::RecordDeclaration { .. }
-                | StatementKind::TagDeclaration { .. }
-                | StatementKind::ResolvedImplBlock { .. }
-                | StatementKind::ImplBlock { .. }
-            ) {
-                self.compile_statement(stmt)?;
+            if let StatementKind::ResolvedFunctionDeclaration {
+                name, return_type, ..
+            } = &stmt.kind
+            {
+                self.user_fns.insert(name.clone());
+                self.user_fn_returns
+                    .insert(name.clone(), return_type.clone());
             }
         }
 
-        if !has_main {
+        // Record imports before anything compiles so hoisted function
+        // bodies resolve methods and aliases.
+        self.record_all_imports(statements);
+
+        // Declare top-level variables at file scope before hoisting so
+        // function bodies see every global's name and type.
+        self.declare_globals(statements);
+
+        let entry = Self::scan_entry(statements)?;
+
+        // Entry mode: tests, inits, entry, finals around the setup
+        // statements. Script mode: everything runs top to bottom.
+        if let Some((entry_name, tests, inits, finals)) = entry {
+            let is_main_entry = entry_name == "main" || entry_name == "__entry__";
+            // A `main` entry runs inline inside the C `main` wrapper, so
+            // its definition is skipped during hoisting to avoid a clash.
+            let mut entry_body: Option<Vec<Statement>> = None;
+            for stmt in statements {
+                match &stmt.kind {
+                    StatementKind::ResolvedFunctionDeclaration {
+                        name, body, params, ..
+                    } if is_main_entry && name == &entry_name => {
+                        if !params.is_empty() {
+                            return Err(Error::at(
+                                Reason::Compile,
+                                "entry function `main` must take no arguments",
+                                Span::dummy(),
+                            ));
+                        }
+                        entry_body = Some(body.clone());
+                    }
+                    StatementKind::ResolvedFunctionDeclaration { .. } => {
+                        self.compile_statement(stmt)?;
+                    }
+                    StatementKind::ResolvedImplBlock { .. } => {
+                        self.compile_statement(stmt)?;
+                    }
+                    _ => {}
+                }
+            }
+            self.writer.write("int main(int argc, char **argv) {\n");
+            self.writer.indent();
+            self.writer.writeln("rl_store_args(argc, argv);");
+            for stmt in statements {
+                if Self::is_entry_setup(&stmt.kind) {
+                    self.compile_top_level(stmt)?;
+                }
+            }
+            for name in &tests {
+                self.writer.write_indent();
+                self.writer.write(&format!("{}();\n", mangle(name)));
+            }
+            for name in &inits {
+                self.writer.write_indent();
+                self.writer.write(&format!("{}();\n", mangle(name)));
+            }
+            if is_main_entry {
+                // Main body is function scope: its declarations are locals.
+                for stmt in entry_body.unwrap_or_default() {
+                    self.compile_statement(&stmt)?;
+                }
+            } else {
+                self.writer.write_indent();
+                self.writer.write(&format!("{}();\n", mangle(&entry_name)));
+            }
+            for name in &finals {
+                self.writer.write_indent();
+                self.writer.write(&format!("{}();\n", mangle(name)));
+            }
+            self.writer.writeln("return 0;");
+            self.writer.dedent();
+            self.writer.writeln("}");
+        } else {
+            self.is_script_mode = true;
+            // Hoist function declarations and impl methods before main
+            for stmt in statements {
+                match &stmt.kind {
+                    StatementKind::ResolvedFunctionDeclaration { .. } => {
+                        self.compile_statement(stmt)?;
+                    }
+                    StatementKind::ResolvedImplBlock { .. } => {
+                        self.compile_statement(stmt)?;
+                    }
+                    _ => {}
+                }
+            }
+            self.writer.write("int main(int argc, char **argv) {\n");
+            self.writer.indent();
+            self.writer.writeln("rl_store_args(argc, argv);");
+
+            for stmt in statements {
+                if !matches!(&stmt.kind,
+                    StatementKind::ResolvedFunctionDeclaration { .. }
+                    | StatementKind::RecordDeclaration { .. }
+                    | StatementKind::TagDeclaration { .. }
+                    | StatementKind::ResolvedImplBlock { .. }
+                    | StatementKind::ImplBlock { .. }
+                ) {
+                    self.compile_top_level(stmt)?;
+                }
+            }
+
             self.writer.writeln("return 0;");
             self.writer.dedent();
             self.writer.writeln("}");
         }
 
-        // Combine: insert static lambda functions at file scope
+        // Combine: insert tuple typedefs, globals, then static lambda
+        // functions at file scope, in that order.
         let mut output = self.writer.source().to_string();
+        let mut file_scope = String::new();
+        if !self.tuple_defs.is_empty() {
+            file_scope.push_str(&format!("\n/* tuple types */\n{}\n", self.tuple_defs));
+        }
+        if !self.globals_code.is_empty() {
+            file_scope.push_str(&format!("\n/* top-level globals */\n{}\n", self.globals_code));
+        }
         if !self.static_funcs.is_empty() {
             let static_funcs_str: String = self.static_funcs.iter().cloned().collect();
+            file_scope.push_str(&format!("\n{}\n", static_funcs_str));
+        }
+        if !file_scope.is_empty() {
             // Insert right after the #include "rl_runtime.h" line
             if let Some(pos) = output.find("#include \"rl_runtime.h\"") {
                 let insert_pos = pos + "#include \"rl_runtime.h\"".len();
@@ -113,9 +592,9 @@ impl<'a> CCodegen<'a> {
                 } else {
                     insert_pos
                 };
-                output.insert_str(insert_pos, &format!("\n{}\n", static_funcs_str));
+                output.insert_str(insert_pos, &file_scope);
             } else {
-                output.push_str(&static_funcs_str);
+                output.push_str(&file_scope);
             }
         }
 
@@ -441,6 +920,30 @@ impl<'a> CCodegen<'a> {
         "rl_tuple_2"
     }
 
+    /// Ensures the element printer plus an array printer looping over it.
+    /// Returns `(print_fn, println_fn)` for `rl_array` values of tuples.
+    pub fn ensure_tuple_array_printer(
+        &mut self,
+        field_types: Vec<TypeAnnotation>,
+    ) -> (String, String) {
+        let tuple_name = self.ensure_tuple_type(field_types);
+        let print_fn = format!("rl_print_{}_arr", tuple_name);
+        let println_fn = format!("rl_println_{}_arr", tuple_name);
+        if !self.tuple_defs.contains(&format!("void {}(", print_fn)) {
+            let mut def = String::new();
+            def.push_str(&format!(
+                "void {}(rl_array v) {{ printf(\"[\"); for (uint64_t _i = 0; _i < v.len; _i++) {{ if (_i > 0) printf(\", \"); rl_print_{}((({}*)v.data)[_i]); }} printf(\"]\"); }}\n",
+                print_fn, tuple_name, tuple_name
+            ));
+            def.push_str(&format!(
+                "void {}(rl_array v) {{ {}(v); printf(\"\\n\"); }}\n",
+                println_fn, print_fn
+            ));
+            self.tuple_defs.push_str(&def);
+        }
+        (print_fn, println_fn)
+    }
+
     pub fn ensure_tuple_type(&mut self, field_types: Vec<TypeAnnotation>) -> String {
         for (fields, name) in &self.tuple_names {
             if *fields == field_types {
@@ -454,40 +957,32 @@ impl<'a> CCodegen<'a> {
         } else {
             format!("rl_tuple_{}_{}", arity, count)
         };
-        self.writer.write("typedef struct { ");
+        // Buffered for file scope: emitting here would land mid-expression.
+        let mut def = String::new();
+        def.push_str("typedef struct { ");
         for (i, field_type) in field_types.iter().enumerate() {
             let c_type = type_to_c(field_type);
-            self.writer.write(&format!("{} field_{}; ", c_type, i));
+            def.push_str(&format!("{} field_{}; ", c_type, i));
         }
-        self.writer.writeln(&format!("}} {};", name));
-        self.writer.write(&format!("void rl_print_{}({} v) {{ ", name, name));
-        self.writer.writeln("printf(\"(\");");
+        def.push_str(&format!("}} {};\n", name));
+        def.push_str(&format!("void rl_print_{}({} v) {{ ", name, name));
+        def.push_str("printf(\"(\");\n");
+        // Render field printers into a side buffer via writer swap.
+        let saved = std::mem::take(&mut self.writer);
         for (i, field_type) in field_types.iter().enumerate() {
             if i > 0 {
                 self.writer.writeln("printf(\", \");");
             }
             self.emit_field_print(field_type, &format!("v.field_{}", i));
         }
-        self.writer.writeln("printf(\")\");");
-        self.writer.writeln("}");
-        self.writer.write(&format!("void rl_println_{}({} v) {{ rl_print_{}(v); printf(\"\\n\"); }}\n", name, name, name));
+        let rendered = std::mem::replace(&mut self.writer, saved).into_source();
+        def.push_str(&rendered);
+        def.push_str("printf(\")\");\n");
+        def.push_str("}\n");
+        def.push_str(&format!("void rl_println_{}({} v) {{ rl_print_{}(v); printf(\"\\n\"); }}\n", name, name, name));
+        self.tuple_defs.push_str(&def);
         self.tuple_names.push((field_types, name.clone()));
         name
     }
 
-    pub fn unwrap_fn_for_result(&self, arg_id: rl_ast::ExprId) -> &'static str {
-        use rl_ast::nodes::ExpressionKind;
-        use rl_ast::statements::TypeAnnotation;
-        let expr = self.ast.exprs.get(arg_id);
-        if let ExpressionKind::ResolvedIdentifier { name, .. } = &expr.kind
-            && let Some(TypeAnnotation::Result(inner)) = self.var_types.get(name) {
-                return match inner.as_ref() {
-                    TypeAnnotation::Float | TypeAnnotation::SFloat => "rl_result_unwrap_f64",
-                    TypeAnnotation::Bool => "rl_result_unwrap_bool",
-                    TypeAnnotation::String => "rl_result_unwrap_str",
-                    _ => "rl_result_unwrap_i64",
-                };
-            }
-        "rl_result_unwrap_i64"
-    }
 }

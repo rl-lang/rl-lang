@@ -11,6 +11,6 @@ rl_version()"#,
     errors: None,
     see_also: &[],
     since: Some("v0.1.5"),
-    deprecated: None,
+    deprecated: Some("std::rl is deprecated and may be removed in a future version"),
     updated: Some("v0.1.5"),
 };

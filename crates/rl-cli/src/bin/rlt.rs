@@ -83,12 +83,29 @@ fn main() {
         if let Ok(c_src) = std::fs::read_to_string(&c_path) {
             if c_src.contains("rl_c_") {
                 cmd.arg("-DRL_USE_LIBFFI");
+                // Gentoo and friends keep ffi.h outside the default
+                // include path; ask pkg-config where it lives.
+                if let Ok(pc) = std::process::Command::new("pkg-config")
+                    .args(["--cflags", "libffi"])
+                    .output()
+                    && pc.status.success()
+                {
+                    for flag in String::from_utf8_lossy(&pc.stdout).split_whitespace() {
+                        cmd.arg(flag);
+                    }
+                }
                 cmd.arg("-lffi");
                 cmd.arg("-ldl");
             }
             if c_src.contains("rl_http_") && c_src.contains("RL_USE_CURL") {
                 cmd.arg("-DRL_USE_CURL");
                 cmd.arg("-lcurl");
+            }
+            // miniaudio playback needs threads and dlopen on Linux.
+            if c_src.contains("rl_audio_") {
+                cmd.arg("-DRL_USE_AUDIO");
+                cmd.arg("-lpthread");
+                cmd.arg("-ldl");
             }
         }
 

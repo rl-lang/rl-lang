@@ -62,6 +62,7 @@ impl TypeChecker {
             loop_depth: 0,
             stdlib_fn_names,
             imported_std_fns: HashMap::new(),
+            imported_std_paths: HashMap::new(),
             hovers: Vec::new(),
             definitions: Vec::new(),
             record_spans: HashMap::new(),
@@ -87,6 +88,20 @@ impl TypeChecker {
             vec!["std".into(), "array".into(), "len".into()],
             "use std::len instead".into(),
         );
+        // std::rl metaprogramming is deprecated
+        for name in [
+            "lex",
+            "eval",
+            "eval_isolated",
+            "check",
+            "rl_version",
+            "source_name",
+        ] {
+            m.insert(
+                vec!["std".into(), "rl".into(), name.into()],
+                "std::rl is deprecated and may be removed in a future version".into(),
+            );
+        }
         // fs reorg: io file ops -> fs
         m.insert(
             vec!["std".into(), "io".into(), "read_file".into()],
