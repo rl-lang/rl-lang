@@ -72,6 +72,8 @@ All notable changes to the rl-lang toolchain are documented here. The format is 
   - FS: file-handle API (`open`, `close`, `read_handle`, `write_handle`, `seek`, `flush`, `read_all`, `readline`) with a handle table, plus `list_dir_names`, `file_accessed`, `file_permissions`, `set_permissions`, `temp_file`, `temp_file_in`, `truncate_file`, `glob`, `walk_dir`, `symlink`, `readlink`, `hardlink`, `realpath`, `lock_file`, `unlock_file`, `path_canonicalize`, `path_absolute`, `path_expand_home`, `path_relative`, `copy_dir`, `dir_size`, `is_symlink`, `rmdir`, `move_file`, `rename_file`
   - Handles: `is_c_handle`, `is_net_handle`, `is_http_handle`, `is_file_handle` (`is_audio_handle`/`is_gui_handle` report false; no backends yet)
 - **rl-cc http/net return shapes** - `http_get`/`http_post`/`http_request` and `udp_recv_from` return real tuples; socket handles use tagged ids per module; `udp_bind` returns a handle.
+- **rl-cc std::audio** - all 18 audio functions work in transpiled programs via vendored miniaudio (playback, handles, volume, devices, metadata). The miniaudio implementation compiles only for programs using audio (`RL_USE_AUDIO`); other programs skip the 4MB header entirely.
+- **Deprecations** - the type checker now warns on deprecated stdlib functions called by bare name, not just qualified paths (aliases and wildcards resolve to canonical paths). `std::rl` (`lex`, `eval`, `eval_isolated`, `check`, `rl_version`, `source_name`) is deprecated ahead of self-hosting, when metaprogramming moves to an RL-written library (see ADR-0001). Deprecation docs flags filled in for moved `io` handle functions and `path_relative`.
 
 ### Changed
 
