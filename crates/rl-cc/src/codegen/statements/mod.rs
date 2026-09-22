@@ -9,7 +9,8 @@ pub mod propagate;
 
 use crate::codegen::CCodegen;
 use rl_ast::statements::*;
-use rl_utils::errors::Error;
+use rl_utils::errors::{Error, Reason};
+use rl_utils::span::Span;
 
 impl<'a> CCodegen<'a> {
     pub fn compile_statement(&mut self, stmt: &Statement) -> Result<(), Error> {
@@ -117,9 +118,23 @@ impl<'a> CCodegen<'a> {
             } => loops::compile_for_range(self, variable, range, body),
             StatementKind::Loop(body) => control::compile_loop(self, body),
             StatementKind::ResolvedImportFile { body, .. } => {
+                // Inlined module body: its declarations were pre-declared
+                // as globals, so initialize them without redeclaring.
+                let was_init = self.in_global_init;
+                self.in_global_init = true;
                 for stmt in body {
-                    self.compile_statement(stmt)?;
+                    // Only declarations need init mode; anything else
+                    // compiles normally.
+                    if crate::codegen::CCodegen::is_global_decl(&stmt.kind) {
+                        self.compile_statement(stmt)?;
+                    } else {
+                        self.in_global_init = false;
+                        let result = self.compile_statement(stmt);
+                        self.in_global_init = true;
+                        result?;
+                    }
                 }
+                self.in_global_init = was_init;
                 Ok(())
             }
             StatementKind::Import {
@@ -127,37 +142,22 @@ impl<'a> CCodegen<'a> {
                 wildcard,
                 path,
             } => {
-                if path.len() >= 2 && path[0] == "std" && path[1] == "c" {
-                    if *wildcard {
-                        self.std_c_imports.insert("*".to_string());
-                    } else {
-                        for (name, _alias) in names {
-                            self.std_c_imports.insert(name.clone());
-                        }
-                    }
-                }
-                if path.len() >= 2 && path[0] == "std" && path[1] == "net" {
-                    if *wildcard {
-                        self.std_net_imports.insert("*".to_string());
-                    } else {
-                        for (name, _alias) in names {
-                            self.std_net_imports.insert(name.clone());
-                        }
-                    }
-                }
-                if path.len() >= 2 && path[0] == "std" && path[1] == "http" {
-                    if *wildcard {
-                        self.std_http_imports.insert("*".to_string());
-                    } else {
-                        for (name, _alias) in names {
-                            self.std_http_imports.insert(name.clone());
-                        }
-                    }
-                }
+                // Recorded again here for any path that compiles statements
+                // without the emit_program pre-scan; duplicates are harmless.
+                self.record_import(names, *wildcard, path);
                 Ok(())
             }
             StatementKind::ImportFile { .. } | StatementKind::ImportFileNamed { .. } => Ok(()),
-            _ => Ok(()),
+            // Record and tag declarations emit their C types in the header.
+            StatementKind::RecordDeclaration { .. } | StatementKind::TagDeclaration { .. } => Ok(()),
+            other => Err(Error::at(
+                Reason::Compile,
+                format!(
+                    "statement kind not supported by the C transpiler: {:?}",
+                    other
+                ),
+                Span::dummy(),
+            )),
         }
     }
 }

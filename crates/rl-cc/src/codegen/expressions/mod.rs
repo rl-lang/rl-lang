@@ -21,7 +21,8 @@ use crate::writer::CWriter;
 use rl_ast::{ExprId, nodes::ExpressionKind};
 use rl_ast::statements::TypeAnnotation;
 use rl_lexer::tokentypes::TokenType;
-use rl_utils::errors::Error;
+use rl_utils::errors::{Error, Reason};
+use rl_utils::span::Span;
 
 impl<'a> CCodegen<'a> {
     pub fn compile_expr(&mut self, id: ExprId) -> Result<(), Error> {
@@ -53,8 +54,10 @@ impl<'a> CCodegen<'a> {
             }
             ExpressionKind::String(v) => {
                 let escaped = escape_c_string(v);
+                // Decoded length is the original byte length: escapes only
+                // change the source spelling, never the byte count.
                 self.writer
-                    .write(&format!("rl_str_literal(\"{}\", {})", escaped, escaped.len()));
+                    .write(&format!("rl_str_literal(\"{}\", {})", escaped, v.len()));
             }
             ExpressionKind::Null => {
                 self.writer.write("rl_ok_null()");
@@ -79,17 +82,46 @@ impl<'a> CCodegen<'a> {
                 operator,
                 right,
             } => {
+                // String equality compares contents; C `==` cannot
+                // compare string structs.
+                if matches!(
+                    operator,
+                    TokenType::Compare | TokenType::BangEqual
+                ) && Self::is_string_valued(self, *left)
+                    && Self::is_string_valued(self, *right)
+                {
+                    if matches!(operator, TokenType::BangEqual) {
+                        self.writer.write("!rl_str_eq(");
+                    } else {
+                        self.writer.write("rl_str_eq(");
+                    }
+                    self.compile_expr(*left)?;
+                    self.writer.write(", ");
+                    self.compile_expr(*right)?;
+                    self.writer.write(")");
+                    return Ok(());
+                }
                 self.compile_expr(*left)?;
-                self.writer.write(&format!(" {} ", token_to_c_op(operator)));
+                self.writer.write(&format!(" {} ", token_to_c_op(operator)?));
                 self.compile_expr(*right)?;
             }
             ExpressionKind::Unary { operator, operand } => {
                 match operator {
                     TokenType::Minus => self.writer.write("-"),
-                    TokenType::Bang => self.writer.write("!"),
-                    _ => {}
+                    // Parenthesized: `!(a == b)` must not become `!a == b`.
+                    TokenType::Bang => self.writer.write("!("),
+                    _ => {
+                        return Err(Error::at(
+                            Reason::Compile,
+                            format!("unsupported unary operator {:?}", operator),
+                            Span::dummy(),
+                        ));
+                    }
                 }
                 self.compile_expr(*operand)?;
+                if matches!(operator, TokenType::Bang) {
+                    self.writer.write(")");
+                }
             }
             ExpressionKind::ResolvedIdentifier { name, .. } => {
                 let c_name = self.lookup(name);
@@ -127,6 +159,19 @@ impl<'a> CCodegen<'a> {
             }
             ExpressionKind::CallExpr { callee, args } => {
                 let callee_expr = self.ast.exprs.get(*callee);
+                // Immediately-invoked lambda: call the literal through the
+                // closure machinery like the VM does.
+                if matches!(&callee_expr.kind, ExpressionKind::ResolvedLambda { .. }) {
+                    self.writer.write("rl_closure_call(");
+                    self.compile_expr(*callee)?;
+                    self.writer.write(", (rl_result[]){ ");
+                    for (i, arg) in args.iter().enumerate() {
+                        if i > 0 { self.writer.write(", "); }
+                        self.write_arg_as_result(*arg)?;
+                    }
+                    self.writer.write(&format!(" }}, {})", args.len()));
+                    return Ok(());
+                }
                 let (is_closure, callee_name) = if let ExpressionKind::ResolvedIdentifier { name, .. } = &callee_expr.kind {
                     let is_fn = matches!(self.var_types.get(name), Some(TypeAnnotation::Fn) | Some(TypeAnnotation::Callback(_, _)));
                     (is_fn, Some(name.clone()))
@@ -134,9 +179,60 @@ impl<'a> CCodegen<'a> {
                     (false, None)
                 };
 
+                // Aliased or bare imported name (`sine(1.0)` for
+                // `get sin as sine from std::math`): rewrite to the
+                // canonical stdlib path. User functions keep the direct
+                // C call below, as do plain variables shadowing a stdlib
+                // name (`dec args = args()`).
+                let is_variable = callee_name.as_ref().is_some_and(|name| {
+                    self.var_types.contains_key(name)
+                        || self.scopes.iter().any(|s| s.contains_key(name))
+                });
+                if !is_closure
+                    && !is_variable
+                    && let Some(name) = &callee_name
+                    && !self.user_fns.contains(name)
+                    && let Some((namespace, original)) = self.resolve_std_name(name) {
+                        let mut path: Vec<String> =
+                            namespace.split("::").map(|s| s.to_string()).collect();
+                        path.push(original);
+                        self.compile_func_call(&path, args)?;
+                        return Ok(());
+                    }
+
+                // Dynamically-typed callee (e.g. `dec add7 = mk(7)` without
+                // a `fn` annotation stores an opaque result): unbox and
+                // call, aborting loudly when it holds no closure. Goes
+                // beyond the VM, which fails these calls at runtime.
+                let is_boxed_callee = callee_name.as_ref().is_some_and(|name| {
+                    matches!(
+                        self.var_types.get(name.as_str()),
+                        Some(TypeAnnotation::Result(_))
+                            | Some(TypeAnnotation::CResult(_))
+                            | Some(TypeAnnotation::Infer)
+                            | Some(TypeAnnotation::Generic(_))
+                    )
+                });
+                if !is_closure && is_boxed_callee {
+                    self.writer.write("rl_closure_call_checked(");
+                    self.compile_expr(*callee)?;
+                    self.writer.write(", (rl_result[]){ ");
+                    for (i, arg) in args.iter().enumerate() {
+                        if i > 0 { self.writer.write(", "); }
+                        self.write_arg_as_result(*arg)?;
+                    }
+                    self.writer.write(&format!(" }}, {})", args.len()));
+                    return Ok(());
+                }
+
                 if is_closure {
                     let return_type = callee_name.as_ref().and_then(|n| self.closure_return_types.get(n));
-                    let need_unwrap = !matches!(return_type, None | Some(TypeAnnotation::Result(_)));
+                    // Unknown (unannotated) stays wrapped; only known
+                    // non-result returns unwrap.
+                    let need_unwrap = !matches!(
+                        return_type,
+                        None | Some(TypeAnnotation::Result(_)) | Some(TypeAnnotation::CResult(_))
+                    );
                     if need_unwrap {
                         match return_type {
                             Some(TypeAnnotation::Int) | Some(TypeAnnotation::CInt) => self.writer.write("rl_unwrap_i64("),
@@ -191,30 +287,38 @@ impl<'a> CCodegen<'a> {
                 self.writer.write(")");
             }
             ExpressionKind::Propagate(inner) => {
-                let temp = self.temp_var();
-                self.writer.write_indent();
-                self.writer.write(&format!("rl_result {} = ", temp));
+                // `?` in expression position (conditions, indexes, call
+                // arguments, nested operands): unwrap inline, aborting on
+                // error like the checked unwraps do. Statement-level `?`
+                // (declarations, bare `?;`, `return ?`) keeps precise
+                // early-return propagation in its own arms above.
+                let unwrap_fn = self.unwrap_fn_for_result(*inner);
+                self.writer.write(&format!("{unwrap_fn}("));
                 self.compile_expr(*inner)?;
-                self.writer.write(";\n");
-                self.writer.write_indent();
-                self.writer.write(&format!("if (!{}.is_ok) {{\n", temp));
-                self.writer.indent();
-                self.writer.write_indent();
-                self.writer.write(&format!("return {};\n", temp));
-                self.writer.dedent();
-                self.writer.write_indent();
-                self.writer.write("}\n");
-                self.writer.write(&format!("{}.data.i64", temp));
+                self.writer.write(")");
             }
             ExpressionKind::ArrayLiteral(elems) => {
-                self.writer.write("rl_arr_from_vals(&(int64_t[]){");
+                // Element type: first element wins, else the contextual
+                // hint (e.g. `dec arr[string] x = []`), else int64. The
+                // payload tag travels along so later ops dispatch right.
+                let mut elem_ta = elems
+                    .first()
+                    .and_then(|e| self.inferred_expr_type(*e))
+                    .or_else(|| self.array_elem_hint.clone())
+                    .unwrap_or(TypeAnnotation::Int);
+                if Self::needs_inference(&elem_ta) {
+                    elem_ta = TypeAnnotation::Int;
+                }
+                let c_elem = type_to_c(&elem_ta);
+                let tag = Self::array_elem_tag_from_type(&elem_ta);
+                self.writer.write(&format!("rl_arr_from_vals_tag(&({}[]){{", c_elem));
                 for (i, elem) in elems.iter().enumerate() {
                     if i > 0 {
                         self.writer.write(", ");
                     }
                     self.compile_expr(*elem)?;
                 }
-                self.writer.write(&format!("}}, {}, (int32_t)sizeof(int64_t))", elems.len()));
+                self.writer.write(&format!("}}, {}, (int32_t)sizeof({}), {})", elems.len(), c_elem, tag));
             }
             ExpressionKind::MapLiteral(entries) => {
                 let temp = self.temp_var();
@@ -361,25 +465,83 @@ impl<'a> CCodegen<'a> {
                     }
                 } else {
                     self.writer.write(&format!("{} = ", c_name));
+                    // Hint empty literals (`x = []`) with the element type.
+                    let saved_hint = self.array_elem_hint.clone();
+                    if let Some(TypeAnnotation::Array(elem))
+                    | Some(TypeAnnotation::CArray(elem)) =
+                        self.var_types.get(name).cloned()
+                    {
+                        self.array_elem_hint = Some(*elem);
+                    }
                     self.compile_expr(*value)?;
+                    self.array_elem_hint = saved_hint;
                 }
             }
             ExpressionKind::Index { target, index } => {
-                let target_expr = self.ast.exprs.get(*target);
-                if let ExpressionKind::ResolvedIdentifier { name, .. } = &target_expr.kind
-                    && let Some(ta) = self.var_types.get(name)
-                        && let TypeAnnotation::Array(inner) = ta {
-                            let c_type = type_to_c(inner);
-                            let c_name = self.lookup(name);
-                            self.writer.write(&format!("(({}*){}.data)[", c_type, c_name));
-                            self.compile_expr(*index)?;
-                            self.writer.write("]");
-                            return Ok(());
+                // Arrays index through the data buffer with the element
+                // type; tuples use `.field_N` for literal indexes; maps
+                // look up string keys. Anything else is a compile error
+                // instead of an invalid C subscript.
+                match self.inferred_expr_type(*target).as_ref() {
+                    Some(TypeAnnotation::Array(inner))
+                    | Some(TypeAnnotation::CArray(inner)) => {
+                        let c_type = type_to_c(&inner);
+                        self.writer.write(&format!("(({}*)(", c_type));
+                        self.compile_expr(*target)?;
+                        self.writer.write(").data)[");
+                        self.compile_expr(*index)?;
+                        self.writer.write("]");
+                    }
+                    Some(TypeAnnotation::Tuple(_)) | Some(TypeAnnotation::CTuple(_)) => {
+                        let index_expr = self.ast.exprs.get(*index);
+                        if let ExpressionKind::Integer(n) = &index_expr.kind {
+                            self.writer.write("(");
+                            self.compile_expr(*target)?;
+                            self.writer.write(&format!(").field_{}", n));
+                        } else {
+                            return Err(Error::at(
+                                Reason::Compile,
+                                "tuple index must be an integer literal",
+                                Span::dummy(),
+                            ));
                         }
-                self.compile_expr(*target)?;
-                self.writer.write("[");
-                self.compile_expr(*index)?;
-                self.writer.write("]");
+                    }
+                    Some(TypeAnnotation::Map(_, vt)) | Some(TypeAnnotation::CMap(_, vt)) => {
+                        // Checked lookup aborts on a missing key, like the VM.
+                        let unwrap = match vt.as_ref() {
+                            TypeAnnotation::String | TypeAnnotation::CString => {
+                                "rl_result_unwrap_str"
+                            }
+                            TypeAnnotation::Float | TypeAnnotation::CFloat => {
+                                "rl_result_unwrap_f64"
+                            }
+                            TypeAnnotation::Bool | TypeAnnotation::CBool => {
+                                "rl_result_unwrap_bool"
+                            }
+                            TypeAnnotation::Array(_) | TypeAnnotation::CArray(_) => {
+                                "rl_result_unwrap_arr"
+                            }
+                            TypeAnnotation::Map(_, _)
+                            | TypeAnnotation::CMap(_, _) => "rl_result_unwrap_map",
+                            TypeAnnotation::Set(_) | TypeAnnotation::CSet(_) => {
+                                "rl_result_unwrap_set"
+                            }
+                            _ => "rl_result_unwrap_i64",
+                        };
+                        self.writer.write(&format!("{}(rl_map_get_s(", unwrap));
+                        self.compile_expr(*target)?;
+                        self.writer.write(", ");
+                        self.compile_expr(*index)?;
+                        self.writer.write("))");
+                    }
+                    _ => {
+                        return Err(Error::at(
+                            Reason::Compile,
+                            "indexing a value that is not an array, tuple or map",
+                            Span::dummy(),
+                        ));
+                    }
+                }
             }
             ExpressionKind::IndexAssign {
                 target,
@@ -412,8 +574,12 @@ impl<'a> CCodegen<'a> {
             ExpressionKind::ResolvedLambda { params, return_type, body, .. } => {
                 self.compile_lambda(params, return_type, body)?;
             }
-            _ => {
-                self.writer.write("/* unhandled expr */");
+            other => {
+                return Err(Error::at(
+                    Reason::Compile,
+                    format!("expression kind not supported by the C transpiler: {:?}", other),
+                    Span::dummy(),
+                ));
             }
         }
         Ok(())
@@ -422,6 +588,66 @@ impl<'a> CCodegen<'a> {
     pub fn compile_func_call(&mut self, path: &[String], args: &[ExprId]) -> Result<(), Error> {
         let func_name = path.last().map(|s| s.as_str()).unwrap_or("");
         let _is_stdlib = path.first().map(|s| s.as_str()) == Some("std");
+
+        // A user function shadows any stdlib arm on a bare call.
+        if path.len() == 1 && self.user_fns.contains(func_name) {
+            return self.compile_user_call(func_name, args);
+        }
+
+        // Aliased import on a bare call (`sine(1.0)` for
+        // `get sin as sine from std::math`): redispatch on the canonical
+        // path. Only single-segment paths rewrite, so this terminates.
+        if path.len() == 1
+            && let Some((namespace, original)) = self.resolve_std_name(func_name)
+                && original != func_name {
+                    let mut canonical: Vec<String> =
+                        namespace.split("::").map(|s| s.to_string()).collect();
+                    canonical.push(original);
+                    return self.compile_func_call(&canonical, args);
+                }
+
+        // Namespaces with no C backend: fail loudly at transpile time
+        // instead of emitting a dangling C call.
+        if path.len() >= 2 && path[0] == "std" {
+            match path[1].as_str() {
+                "gui" => {
+                    return Err(Error::at(
+                        Reason::Compile,
+                        format!(
+                            "std::gui::{} is not supported by the C transpiler",
+                            func_name
+                        ),
+                        Span::dummy(),
+                    ));
+                }
+                "rl" => match func_name {
+                    "rl_version" => {
+                        self.writer.write(&format!(
+                            "rl_str_literal(\"{}\", {})",
+                            env!("CARGO_PKG_VERSION"),
+                            env!("CARGO_PKG_VERSION").len()
+                        ));
+                        return Ok(());
+                    }
+                    // No source file exists inside a transpiled binary.
+                    "source_name" => {
+                        self.writer.write("rl_ok_null()");
+                        return Ok(());
+                    }
+                    _ => {
+                        return Err(Error::at(
+                            Reason::Compile,
+                            format!(
+                                "std::rl::{} needs the compiler pipeline and cannot run in transpiled programs",
+                                func_name
+                            ),
+                            Span::dummy(),
+                        ));
+                    }
+                },
+                _ => {}
+            }
+        }
 
         match func_name {
             "println" | "print" => return self::io::compile_print(self, func_name, args),
@@ -436,6 +662,7 @@ impl<'a> CCodegen<'a> {
             "delete_file" => return self::io::compile_delete_file(self, args),
             "eprint" => return self::io::compile_eprint(self, args),
             "eprintln" => return self::io::compile_eprintln(self, args),
+            "isatty" => return self::io::compile_isatty(self),
             "to_upper" => return self::string::compile_to_upper(self, args),
             "to_lower" => return self::string::compile_to_lower(self, args),
             "trim" => return self::string::compile_trim(self, args),
@@ -486,6 +713,8 @@ impl<'a> CCodegen<'a> {
             "is_ok" | "is_err" => return self::result::compile_is_ok_err(self, func_name, args),
             "result_unwrap" | "result_unwrap_err" => return self::result::compile_unwrap(self, func_name, args),
             "result_unwrap_or" => return self::result::compile_unwrap_or(self, args),
+            "result_unwrap_or_else" => return self::result::compile_unwrap_or_else(self, args),
+            "result_and_then" => return self::result::compile_and_then(self, args),
             "arr_is_empty" | "set_is_empty" | "map_is_empty" => return self::collections::compile_is_empty(self, args),
             "arr_count" => return self::collections::compile_arr_count(self, args),
             "len" => return self::collections::compile_len(self, args),
@@ -498,6 +727,13 @@ impl<'a> CCodegen<'a> {
             "cwd" => return self::process::compile_cwd(self),
             "set_cwd" => return self::process::compile_set_cwd(self, args),
             "exec" => return self::process::compile_exec(self, args),
+            "exec_fg" => return self::process::compile_exec_fg(self, args),
+            "exec_background" => return self::process::compile_exec_background(self, args),
+            "process_running" => return self::process::compile_process_running(self, args),
+            "term_pid" => return self::process::compile_term_pid(self, args),
+            "kill_pid" => return self::process::compile_kill_pid(self, args),
+            "wait_pid" => return self::process::compile_wait_pid(self, args),
+            "os_name" => return self::process::compile_os_name(self),
             "exec_code" => return self::process::compile_exec_code(self, args),
             "exec_lines" => return self::process::compile_exec_lines(self, args),
             "with_exec" => return self::process::compile_with_exec(self, args),
@@ -524,7 +760,10 @@ impl<'a> CCodegen<'a> {
             "path_is_file" => return self::process::compile_path_is_file(self, args),
             "mkdir" => return self::process::compile_mkdir(self, args),
             "rmdir" => return self::process::compile_rmdir(self, args),
-            "move_file" | "rename_file" => return self::process::compile_move_file(self, args),
+            "move_file" => return self::process::compile_move_file(self, args),
+            "rename_file" => return self::process::compile_rename_file(self, args),
+            "file_created" => return self::process::compile_file_created(self, args),
+            "touch" => return self::process::compile_touch(self, args),
             "temp_dir" => return self::process::compile_temp_dir(self),
             "file_size" => return self::process::compile_file_size(self, args),
             "file_modified" => return self::process::compile_file_modified(self, args),
@@ -619,7 +858,12 @@ impl<'a> CCodegen<'a> {
             _ => {}
         }
 
-        let c_name = mangle(&path.join("_"));
+        self.compile_user_call(&path.join("_"), args)
+    }
+
+    /// Plain C call to a user-defined RL function (no stdlib dispatch).
+    fn compile_user_call(&mut self, name: &str, args: &[ExprId]) -> Result<(), Error> {
+        let c_name = mangle(name);
         self.writer.write(&format!("{}(", c_name));
         for (i, arg) in args.iter().enumerate() {
             if i > 0 {
@@ -631,20 +875,33 @@ impl<'a> CCodegen<'a> {
         Ok(())
     }
 
+    fn is_string_valued(cc: &CCodegen, id: ExprId) -> bool {
+        matches!(
+            cc.inferred_expr_type(id).as_ref(),
+            Some(TypeAnnotation::String) | Some(TypeAnnotation::CString)
+        )
+    }
+
     pub fn compile_method_call(
         &mut self,
         caller: ExprId,
         method: &[String],
         args: &[ExprId],
     ) -> Result<(), Error> {
+        // Qualified path (`x.std::ns::f(args)`): canonical stdlib call
+        // with the receiver prepended, mirroring the VM.
+        if method.len() > 1 {
+            let mut full_args = Vec::with_capacity(args.len() + 1);
+            full_args.push(caller);
+            full_args.extend_from_slice(args);
+            return self.compile_func_call(method, &full_args);
+        }
         let method_name = method.first().map(|s| s.as_str()).unwrap_or("");
 
         match method_name {
             "len" => {
-                self.writer.write("rl_str_len(");
-                self.compile_expr(caller)?;
-                self.writer.write(")");
-                return Ok(());
+                // Same shape as the `len()` function: result[int].
+                return self::collections::compile_len(self, &[caller]);
             }
             "println" => {
                 self.writer.write("rl_println(");
@@ -661,6 +918,10 @@ impl<'a> CCodegen<'a> {
             _ => {}
         }
 
+        // A record's own impl method wins, exactly like the VM. When the
+        // receiver is a record the call must resolve to an impl method;
+        // anything else is a compile error here instead of a broken
+        // C function call downstream.
         let caller_expr = self.ast.exprs.get(caller);
         if let ExpressionKind::ResolvedIdentifier { name, .. } = &caller_expr.kind
             && let Some(ta) = self.var_types.get(name)
@@ -676,22 +937,42 @@ impl<'a> CCodegen<'a> {
                     return Ok(());
                 }
 
-        self.compile_expr(caller)?;
-        self.writer.write(&format!(".{}(", method_name));
-        for (i, arg) in args.iter().enumerate() {
-            if i > 0 {
-                self.writer.write(", ");
-            }
-            self.compile_expr(*arg)?;
+        // Imported stdlib function with the receiver as first argument
+        // (`"ab".repeat(3)` calls `repeat("ab", 3)` when imported).
+        if let Some((namespace, original)) = self.resolve_std_name(method_name) {
+            let mut path: Vec<String> =
+                namespace.split("::").map(|s| s.to_string()).collect();
+            path.push(original);
+            let mut full_args = Vec::with_capacity(args.len() + 1);
+            full_args.push(caller);
+            full_args.extend_from_slice(args);
+            return self.compile_func_call(&path, &full_args);
         }
-        self.writer.write(")");
-        Ok(())
+
+        // Named user function with the receiver as first argument.
+        if self.user_fns.contains(method_name) {
+            let c_fn = mangle(method_name);
+            self.writer.write(&format!("{}(", c_fn));
+            self.compile_expr(caller)?;
+            for arg in args.iter() {
+                self.writer.write(", ");
+                self.compile_expr(*arg)?;
+            }
+            self.writer.write(")");
+            return Ok(());
+        }
+
+        Err(Error::at(
+            Reason::Compile,
+            format!("cannot call method `{}` on this value", method_name),
+            Span::dummy(),
+        ))
     }
 
     fn compile_lambda(
         &mut self,
         params: &[rl_ast::statements::Param],
-        return_type: &Option<rl_ast::statements::TypeAnnotation>,
+        _return_type: &Option<rl_ast::statements::TypeAnnotation>,
         body: &[rl_ast::statements::Statement],
     ) -> Result<(), Error> {
         let lambda_id = self.lambda_counter;
@@ -705,11 +986,6 @@ impl<'a> CCodegen<'a> {
         captured_names.sort();
         captured_names.dedup();
 
-        let _c_ret = match return_type {
-            Some(ta) => type_to_c(ta),
-            None => "rl_result".to_string(),
-        };
-
         let mut func_code = String::new();
         func_code.push_str(&format!("static rl_result {}(rl_closure *_self, rl_result *_args, uint64_t _argc) {{\n", fn_name));
 
@@ -717,56 +993,64 @@ impl<'a> CCodegen<'a> {
             let c_type = type_to_c(&p.param_type);
             let c_name = mangle(&p.param_name);
             func_code.push_str(&format!("    {} {} = ", c_type, c_name));
-            match &p.param_type {
-                TypeAnnotation::Int | TypeAnnotation::CInt => {
-                    func_code.push_str(&format!("rl_unwrap_i64(_args[{}]);\n", i));
-                }
-                TypeAnnotation::Float | TypeAnnotation::CFloat => {
-                    func_code.push_str(&format!("rl_unwrap_f64(_args[{}]);\n", i));
-                }
-                TypeAnnotation::Bool | TypeAnnotation::CBool => {
-                    func_code.push_str(&format!("rl_unwrap_bool(_args[{}]);\n", i));
-                }
-                TypeAnnotation::String | TypeAnnotation::CString => {
-                    func_code.push_str(&format!("rl_unwrap_str(_args[{}]);\n", i));
-                }
-                _ => {
-                    func_code.push_str(&format!("rl_unwrap_i64(_args[{}]);\n", i));
+            match Self::closure_payload_read(&p.param_type, &format!("_args[{}]", i)) {
+                Ok(read) => func_code.push_str(&format!("{};\n", read)),
+                Err(msg) => {
+                    return Err(Error::at(
+                        Reason::Compile,
+                        format!("lambda parameter `{}`: {}", p.param_name, msg),
+                        Span::dummy(),
+                    ));
                 }
             }
         }
 
         for (i, name) in captured_names.iter().enumerate() {
             let c_name = mangle(name);
-            let c_type = self.var_types.get(name).map(type_to_c).unwrap_or_else(|| "int64_t".to_string());
+            let ta = self
+                .var_types
+                .get(name)
+                .cloned()
+                .unwrap_or(TypeAnnotation::Int);
+            let c_type = type_to_c(&ta);
             func_code.push_str(&format!("    {} {} = ", c_type, c_name));
-            match self.var_types.get(name) {
-                Some(TypeAnnotation::Int) | Some(TypeAnnotation::CInt) => {
-                    func_code.push_str(&format!("rl_unwrap_i64(_self->captures[{}]);\n", i));
-                }
-                Some(TypeAnnotation::Float) | Some(TypeAnnotation::CFloat) => {
-                    func_code.push_str(&format!("rl_unwrap_f64(_self->captures[{}]);\n", i));
-                }
-                Some(TypeAnnotation::Bool) | Some(TypeAnnotation::CBool) => {
-                    func_code.push_str(&format!("rl_unwrap_bool(_self->captures[{}]);\n", i));
-                }
-                Some(TypeAnnotation::String) | Some(TypeAnnotation::CString) => {
-                    func_code.push_str(&format!("rl_unwrap_str(_self->captures[{}]);\n", i));
-                }
-                Some(TypeAnnotation::Array(_)) | Some(TypeAnnotation::CArray(_)) => {
-                    func_code.push_str(&format!("rl_unwrap_arr(_self->captures[{}]);\n", i));
-                }
-                _ => {
-                    func_code.push_str(&format!("rl_unwrap_i64(_self->captures[{}]);\n", i));
+            match Self::closure_payload_read(&ta, &format!("_self->captures[{}]", i)) {
+                Ok(read) => func_code.push_str(&format!("{};\n", read)),
+                Err(msg) => {
+                    return Err(Error::at(
+                        Reason::Compile,
+                        format!("lambda capture `{}`: {}", name, msg),
+                        Span::dummy(),
+                    ));
                 }
             }
         }
 
-        for s in body {
-            self.compile_lambda_statement(s, &mut func_code)?;
-        }
+        // Lambda bodies run as rl_result functions: trailing expressions
+        // are the return value (mirroring the VM), explicit `return`
+        // otherwise, null when neither is present.
+        let captured_typed: Vec<(String, TypeAnnotation)> = captured_names
+            .iter()
+            .map(|name| {
+                (
+                    name.clone(),
+                    self.var_types
+                        .get(name)
+                        .cloned()
+                        .unwrap_or(TypeAnnotation::Int),
+                )
+            })
+            .collect();
+        let saved_lambda = self.in_lambda_body;
+        let saved_init = self.in_global_init;
+        self.in_lambda_body = true;
+        self.in_global_init = false;
+        let body_result =
+            self.compile_lambda_body(params, &captured_typed, body, &mut func_code);
+        self.in_lambda_body = saved_lambda;
+        self.in_global_init = saved_init;
+        body_result?;
 
-        func_code.push_str("    return rl_ok_null();\n");
         func_code.push_str("}\n\n");
 
         self.static_funcs.push(func_code);
@@ -776,35 +1060,132 @@ impl<'a> CCodegen<'a> {
             if i > 0 { captures_code.push_str(", "); }
             let c_name = self.lookup(name);
             let c_type = self.var_types.get(name).cloned().unwrap_or(TypeAnnotation::Int);
-            match c_type {
-                TypeAnnotation::Int | TypeAnnotation::CInt => {
-                    captures_code.push_str(&format!("rl_ok_i64({})", c_name));
-                }
-                TypeAnnotation::Float | TypeAnnotation::CFloat => {
-                    captures_code.push_str(&format!("rl_ok_f64({})", c_name));
-                }
-                TypeAnnotation::Bool | TypeAnnotation::CBool => {
-                    captures_code.push_str(&format!("rl_ok_bool({})", c_name));
-                }
-                TypeAnnotation::String | TypeAnnotation::CString => {
-                    captures_code.push_str(&format!("rl_ok_str({})", c_name));
-                }
-                TypeAnnotation::Array(_) | TypeAnnotation::CArray(_) => {
-                    captures_code.push_str(&format!("rl_ok_arr({})", c_name));
-                }
-                _ => {
-                    captures_code.push_str(&format!("rl_ok_i64({})", c_name));
-                }
-            }
+            captures_code.push_str(&Self::closure_capture_wrap(&c_name, &c_type)?);
         }
 
         let capture_count = captured_names.len();
         self.writer.write(&format!(
-            "rl_closure_new({}, (rl_result[]){{ {} }}, {})",
+            "rl_closure_new_heap({}, (rl_result[]){{ {} }}, {})",
             fn_name, captures_code, capture_count
         ));
 
         Ok(())
+    }
+
+    /// C expression reading an `rl_result` payload as type `ta`.
+    /// Struct types (records, tuples) cannot cross the boundary.
+    fn closure_payload_read(ta: &TypeAnnotation, src: &str) -> Result<String, String> {
+        use TypeAnnotation as T;
+        let read = match ta {
+            T::Int | T::CInt | T::UInt | T::CUInt | T::SInt | T::CSInt | T::SUInt
+            | T::CSUInt | T::Byte | T::CByte | T::SByte | T::CSByte | T::BByte
+            | T::CBByte | T::BSByte | T::CBSByte | T::Handle(_) | T::HandleInfer => {
+                format!("({}).data.i64", src)
+            }
+            T::Float | T::CFloat | T::SFloat | T::CSFloat => {
+                format!("({}).data.f64", src)
+            }
+            T::Bool | T::CBool => format!("({}).data.boolean", src),
+            T::String | T::CString => format!("({}).data.str", src),
+            T::Char | T::CChar => format!("(char)({}).data.i64", src),
+            T::Array(_) | T::CArray(_) => format!("({}).data.arr", src),
+            T::Map(_, _) | T::CMap(_, _) => format!("({}).data.map", src),
+            T::Set(_) | T::CSet(_) => format!("({}).data.set", src),
+            T::Result(_) | T::CResult(_) | T::Error | T::CError => src.to_string(),
+            T::Fn | T::Callback(_, _) => format!("(*({}).data.closure)", src),
+            _ => {
+                return Err("cannot pass records, tuples or generic values through a closure boundary".to_string());
+            }
+        };
+        Ok(read)
+    }
+
+    /// C expression wrapping a C value of type `ta` into an `rl_result`
+    /// for the captures array.
+    fn closure_capture_wrap(c_name: &str, ta: &TypeAnnotation) -> Result<String, Error> {
+        use TypeAnnotation as T;
+        let wrapped = match ta {
+            T::Int | T::CInt => format!("rl_ok_i64({})", c_name),
+            T::Float | T::CFloat => format!("rl_ok_f64({})", c_name),
+            T::Bool | T::CBool => format!("rl_ok_bool({})", c_name),
+            T::String | T::CString => format!("rl_ok_str({})", c_name),
+            T::Array(_) | T::CArray(_) => format!("rl_ok_arr({})", c_name),
+            T::Map(_, _) | T::CMap(_, _) => format!("rl_ok_map({})", c_name),
+            T::Set(_) | T::CSet(_) => format!("rl_ok_set({})", c_name),
+            T::Result(_) | T::CResult(_) | T::Error | T::CError => c_name.to_string(),
+            // The generic macro covers narrow ints, floats, chars and
+            // closures; anything else (records, tuples) fails loudly.
+            _ => format!("rl_ok({})", c_name),
+        };
+        // Struct types reach the generic fallback and fail in _Generic;
+        // catch records and tuples here with a clear message instead.
+        // (Enums are plain int64 values and wrap fine.)
+        match ta {
+            T::Record(_) | T::CRecord(_) | T::Tuple(_) | T::CTuple(_) => Err(Error::at(
+                Reason::Compile,
+                "cannot capture records or tuples in a lambda",
+                Span::dummy(),
+            )),
+            _ => Ok(wrapped),
+        }
+    }
+
+    /// Compiles a lambda body with trailing-expression value semantics.
+    /// Params and captures are declared in a dedicated scope so body
+    /// statements resolve names and types through the normal paths.
+    fn compile_lambda_body(
+        &mut self,
+        params: &[rl_ast::statements::Param],
+        captured: &[(String, TypeAnnotation)],
+        body: &[rl_ast::statements::Statement],
+        func_code: &mut String,
+    ) -> Result<(), Error> {
+        use rl_ast::statements::StatementKind;
+        self.push_scope();
+        let saved_types = self.var_types.clone();
+        let saved_nullable = self.nullable_vars.clone();
+        let saved_closures = self.closure_return_types.clone();
+        for p in params {
+            self.declare(&p.param_name, &mangle(&p.param_name));
+            self.var_types
+                .insert(p.param_name.clone(), p.param_type.clone());
+        }
+        for (name, ta) in captured {
+            self.declare(name, &mangle(name));
+            self.var_types.insert(name.clone(), ta.clone());
+        }
+        let trailing_expr = match body.last().map(|s| &s.kind) {
+            Some(StatementKind::Expression(expr_id)) => Some(*expr_id),
+            _ => None,
+        };
+        let main = if trailing_expr.is_some() {
+            &body[..body.len() - 1]
+        } else {
+            body
+        };
+        let mut result: Result<(), Error> = Ok(());
+        for s in main {
+            result = self.compile_lambda_statement(s, func_code);
+            if result.is_err() {
+                break;
+            }
+        }
+        if result.is_ok() {
+            if let Some(expr_id) = trailing_expr {
+                func_code.push_str("    return rl_ok(");
+                result = self.compile_expr_to_string(expr_id, func_code);
+                if result.is_ok() {
+                    func_code.push_str(");\n");
+                }
+            } else {
+                func_code.push_str("    return rl_ok_null();\n");
+            }
+        }
+        self.var_types = saved_types;
+        self.nullable_vars = saved_nullable;
+        self.closure_return_types = saved_closures;
+        self.pop_scope();
+        result
     }
 
     fn compile_lambda_statement(
@@ -828,99 +1209,40 @@ impl<'a> CCodegen<'a> {
                     self.compile_expr_to_string(*expr_id, func_code)?;
                     func_code.push_str(");\n");
                 }
+                Ok(())
             }
-            StatementKind::ResolvedVariableDeclaration {
-                name,
-                type_annotation,
-                value,
-                ..
-            } => {
-                let c_type = type_to_c(type_annotation);
-                let c_name = mangle(name);
-                func_code.push_str(&format!("    {} {} = ", c_type, c_name));
-                self.compile_expr_to_string(*value, func_code)?;
-                func_code.push_str(";\n");
+            StatementKind::Return(None) => {
+                func_code.push_str("    return rl_ok_null();\n");
+                Ok(())
             }
-            StatementKind::ResolvedConstantDeclaration {
-                name,
-                type_annotation,
-                value,
-                ..
-            } => {
-                let c_type = type_to_c(type_annotation);
-                let c_name = mangle(name);
-                func_code.push_str(&format!("    const {} {} = ", c_type, c_name));
-                self.compile_expr_to_string(*value, func_code)?;
-                func_code.push_str(";\n");
-            }
-            StatementKind::Expression(expr_id) => {
-                func_code.push_str("    ");
-                self.compile_expr_to_string(*expr_id, func_code)?;
-                func_code.push_str(";\n");
-            }
-            StatementKind::Conditional { if_branch, else_branch } => {
-                if let StatementKind::ConditionalBranch { condition, body, .. } = &if_branch.kind {
-                    func_code.push_str("    if (");
-                    if let Some(cond) = condition {
-                        self.compile_expr_to_string(*cond, func_code)?;
-                    } else {
-                        func_code.push('1');
-                    }
-                    func_code.push_str(") {\n");
-                    for s in body {
-                        self.compile_lambda_statement(s, func_code)?;
-                    }
-                }
-                if let Some(else_b) = else_branch
-                    && let StatementKind::ConditionalBranch { condition, body, .. } = &else_b.kind {
-                        if condition.is_some() {
-                            func_code.push_str("    } else if (");
-                            self.compile_expr_to_string(condition.unwrap(), func_code)?;
-                            func_code.push_str(") {\n");
-                        } else {
-                            func_code.push_str("    } else {\n");
-                        }
-                        for s in body {
-                            self.compile_lambda_statement(s, func_code)?;
-                        }
-                    }
-                func_code.push_str("    }\n");
-            }
-            StatementKind::ResolvedForRange {
-                variable,
-                range,
-                body,
-                ..
-            } => {
-                let items = match &range.kind {
-                    StatementKind::Range(items) => items.clone(),
-                    _ => vec![],
-                };
-                if !items.is_empty() {
-                    let first = items[0];
-                    let last = items[items.len() - 1];
-                    let c_name = mangle(variable);
-                    func_code.push_str(&format!(
-                        "    for (int64_t {} = {}; {} < {}; {}++) {{\n",
-                        c_name, first, c_name, last + 1, c_name
-                    ));
-                    for s in body {
-                        self.compile_lambda_statement(s, func_code)?;
-                    }
-                    func_code.push_str("    }\n");
-                }
-            }
-            StatementKind::Loop(body) => {
-                func_code.push_str("    while (1) {\n");
-                for s in body {
-                    self.compile_lambda_statement(s, func_code)?;
-                }
-                func_code.push_str("    }\n");
-            }
-            _ => {
-                func_code.push_str("    /* unhandled statement in lambda */\n");
-            }
+            _ => self.compile_lambda_delegate(stmt, func_code),
         }
+    }
+
+    /// Compiles a lambda body statement with the normal statement
+    /// compilers into the static function text. This gives lambda bodies
+    /// the full statement support (loops, match, nested conditionals)
+    /// for free. Locals stay scoped to the lambda via save/restore.
+    fn compile_lambda_delegate(
+        &mut self,
+        stmt: &rl_ast::statements::Statement,
+        func_code: &mut String,
+    ) -> Result<(), Error> {
+        let saved_writer = std::mem::take(&mut self.writer);
+        self.writer = CWriter::new();
+        self.writer.indent();
+        self.push_scope();
+        let saved_types = self.var_types.clone();
+        let saved_nullable = self.nullable_vars.clone();
+        let saved_closures = self.closure_return_types.clone();
+        let result = self.compile_statement(stmt);
+        self.var_types = saved_types;
+        self.nullable_vars = saved_nullable;
+        self.closure_return_types = saved_closures;
+        self.pop_scope();
+        let chunk = std::mem::replace(&mut self.writer, saved_writer).into_source();
+        result?;
+        func_code.push_str(&chunk);
         Ok(())
     }
 
@@ -991,11 +1313,16 @@ impl<'a> CCodegen<'a> {
         let kind = self.ast.exprs.get(id).kind.clone();
         match &kind {
             ExpressionKind::ResolvedIdentifier { name, .. } => {
-                if !param_names.contains(name) {
-                    if (self.var_types.contains_key(name) || self.scopes.iter().rev().any(|s| s.contains_key(name)))
-                        && !captured.contains(name) {
-                            captured.push(name.clone());
-                        }
+                if !param_names.contains(name) && !captured.contains(name) {
+                    // Globals live at C file scope: reference them directly
+                    // instead of snapshotting. A same-named local in an
+                    // enclosing function scope still captures by value.
+                    let is_local = self.scopes.iter().skip(1).any(|s| s.contains_key(name));
+                    let is_known = self.var_types.contains_key(name)
+                        || self.scopes.iter().rev().any(|s| s.contains_key(name));
+                    if is_known && (is_local || !self.global_names.contains(name)) {
+                        captured.push(name.clone());
+                    }
                 }
             }
             ExpressionKind::Binary { left, right, .. } => {
@@ -1096,12 +1423,21 @@ impl<'a> CCodegen<'a> {
             }
             ExpressionKind::String(v) => {
                 let escaped = escape_c_string(v);
-                self.writer.write(&format!("rl_ok_str(rl_str_literal(\"{}\", {}))", escaped, escaped.len()));
+                self.writer.write(&format!("rl_ok_str(rl_str_literal(\"{}\", {}))", escaped, v.len()));
             }
             ExpressionKind::ResolvedIdentifier { name, .. } => {
-                if let Some(ta) = self.var_types.get(name) {
+                if self.nullable_vars.contains(name) {
+                    // Stored as rl_result: compile_expr unwraps to the C
+                    // value, then re-wrap.
+                    self.writer.write("rl_ok(");
+                    self.compile_expr(id)?;
+                    self.writer.write(")");
+                } else if let Some(ta) = self.var_types.get(name) {
                     let c_name = self.lookup(name);
                     match ta {
+                        TypeAnnotation::Result(_) | TypeAnnotation::CResult(_) => {
+                            self.writer.write(&c_name);
+                        }
                         TypeAnnotation::Int | TypeAnnotation::CInt => {
                             self.writer.write(&format!("rl_ok_i64({})", c_name));
                         }
@@ -1118,11 +1454,15 @@ impl<'a> CCodegen<'a> {
                             self.writer.write(&format!("rl_ok_arr({})", c_name));
                         }
                         _ => {
-                            self.writer.write(&format!("rl_ok_i64({})", c_name));
+                            self.writer.write("rl_ok(");
+                            self.compile_expr(id)?;
+                            self.writer.write(")");
                         }
                     }
                 } else {
+                    self.writer.write("rl_ok(");
                     self.compile_expr(id)?;
+                    self.writer.write(")");
                 }
             }
             _ => {
@@ -1130,6 +1470,45 @@ impl<'a> CCodegen<'a> {
                 self.compile_expr(id)?;
                 self.writer.write(")");
             }
+        }
+        Ok(())
+    }
+
+    /// True when a format/concat argument is already a plain value rather
+    /// than a wrapped result. Results render `ok(...)`, bare values render
+    /// the payload, mirroring the VM's Display.
+    pub fn fmt_arg_is_bare(&self, id: ExprId) -> bool {
+        match self.inferred_expr_type(id).as_ref() {
+            // Results and dynamically-typed values render wrapped. The
+            // fallback storage for unknown calls is rl_result, so treat
+            // unknown the same way for calls.
+            Some(TypeAnnotation::Result(_))
+            | Some(TypeAnnotation::CResult(_))
+            | Some(TypeAnnotation::Infer)
+            | Some(TypeAnnotation::Generic(_)) => false,
+            Some(_) => true,
+            None => {
+                let kind = &self.ast.exprs.get(id).kind;
+                !matches!(
+                    kind,
+                    ExpressionKind::Call { .. }
+                        | ExpressionKind::MethodCall { .. }
+                        | ExpressionKind::CallExpr { .. }
+                )
+            }
+        }
+    }
+
+    /// Emits one `(rl_fmt_arg)` element: the value as `rl_result` plus
+    /// whether it was already bare.
+    pub fn write_arg_as_fmt(&mut self, id: ExprId) -> Result<(), Error> {
+        let bare = self.fmt_arg_is_bare(id);
+        self.writer.write("{ ");
+        self.write_arg_as_result(id)?;
+        if bare {
+            self.writer.write(", true }");
+        } else {
+            self.writer.write(", false }");
         }
         Ok(())
     }
