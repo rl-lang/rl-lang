@@ -2,6 +2,13 @@
 #define _POSIX_C_SOURCE 200809L
 #include "rl_runtime.h"
 
+// Single-header audio backend: compiled only for programs using it
+// (rlt defines RL_USE_AUDIO then), so other programs skip the ~4MB header.
+#ifdef RL_USE_AUDIO
+#define MINIAUDIO_IMPLEMENTATION
+#include "miniaudio.h"
+#endif
+
 // Forward declarations for helpers used before their definitions.
 static const char *_rl_tag_name(enum rl_type_tag tag);
 static char *_rl_trim_copy(rl_string s, uint64_t *out_len);
@@ -14,6 +21,7 @@ static void _rl_abort(void);
 #define RL_HANDLE_NET_BASE ((int64_t)0x2000000)
 #define RL_HANDLE_HTTP_BASE ((int64_t)0x3000000)
 #define RL_HANDLE_FILE_BASE ((int64_t)0x4000000)
+#define RL_HANDLE_AUDIO_BASE ((int64_t)0x5000000)
 
 // Invoke a boxed closure value: unboxes, aborts loudly when the value
 // is not a closure (e.g. calling a result that holds no closure).
@@ -10036,11 +10044,600 @@ rl_result rl_http_request(rl_string m, rl_string u, rl_string b, int hb, rl_arra
 
 #endif
 
+// ---- std::audio (playback via miniaudio) ----
+#ifdef RL_USE_AUDIO
+
+#include <stdarg.h>
+
+#define RL_AUDIO_MAX_HANDLES 256
+
+static struct {
+    bool used;
+    ma_sound *sound;
+    float base_volume;
+    bool paused;
+} rl_audio_handles[RL_AUDIO_MAX_HANDLES];
+static int rl_audio_handle_count = 0;
+// Master volume applied to every sound, set by set_master_volume.
+static float rl_audio_master_volume = 1.0f;
+// Selected output device name (NULL means the system default).
+static char *rl_audio_output_device = NULL;
+static bool rl_audio_output_has_device = false;
+static ma_device_id rl_audio_output_device_id;
+// Device the shared engine currently runs on (NULL means default).
+static char *rl_audio_engine_device = NULL;
+static ma_engine rl_audio_engine;
+static bool rl_audio_engine_ready = false;
+static ma_result rl_audio_engine_status = MA_SUCCESS;
+
+// Format an audio error message into an owned RL error result.
+static rl_result _rl_audio_err(const char *fmt, ...) {
+    char buf[1024];
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    if (n < 0) return rl_err(-1);
+    if (n >= (int)sizeof(buf)) n = (int)sizeof(buf) - 1;
+    char *msg = malloc((uint64_t)n + 1);
+    memcpy(msg, buf, (uint64_t)n + 1);
+    return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+}
+
+// Copy an RL string into a NUL-terminated buffer. False when the RL
+// string is null or does not fit; RL strings are never NUL-terminated
+// so this copy is required before any C file or device API.
+static bool _rl_audio_cstr(rl_string s, char *buf, uint64_t cap) {
+    if (s.data == NULL || s.len + 1 > cap) return false;
+    memcpy(buf, s.data, s.len);
+    buf[s.len] = '\0';
+    return true;
+}
+
+// True when the path opens for reading (errno reports why not).
+static bool _rl_audio_probe_file(const char *cpath) {
+    FILE *f = fopen(cpath, "rb");
+    if (f == NULL) return false;
+    fclose(f);
+    return true;
+}
+
+// Start the shared engine on the selected output device when needed.
+// Reuses the running engine; when the selection changed it restarts the
+// engine only while no sound is live (live sounds keep their device,
+// mirroring the VM where existing sinks stay on the old device).
+static bool _rl_audio_ensure_engine(void) {
+    const char *want = rl_audio_output_device;
+    bool same = (want == NULL && rl_audio_engine_device == NULL)
+        || (want != NULL && rl_audio_engine_device != NULL
+            && strcmp(want, rl_audio_engine_device) == 0);
+    if (rl_audio_engine_ready && same) {
+        rl_audio_engine_status = MA_SUCCESS;
+        return true;
+    }
+    if (rl_audio_engine_ready) {
+        int live = 0;
+        for (int i = 0; i < rl_audio_handle_count; i++) {
+            if (rl_audio_handles[i].used) live++;
+        }
+        if (live > 0) {
+            rl_audio_engine_status = MA_SUCCESS;
+            return true;
+        }
+        ma_engine_uninit(&rl_audio_engine);
+        rl_audio_engine_ready = false;
+        free(rl_audio_engine_device);
+        rl_audio_engine_device = NULL;
+    }
+    ma_engine_config config = ma_engine_config_init();
+    if (rl_audio_output_has_device) {
+        config.pPlaybackDeviceID = &rl_audio_output_device_id;
+    }
+    rl_audio_engine_status = ma_engine_init(&config, &rl_audio_engine);
+    if (rl_audio_engine_status != MA_SUCCESS) return false;
+    rl_audio_engine_ready = true;
+    if (want != NULL) {
+        rl_audio_engine_device = malloc(strlen(want) + 1);
+        strcpy(rl_audio_engine_device, want);
+    }
+    return true;
+}
+
+// Allocate a tagged audio handle id for a live sound.
+static rl_result _rl_audio_new_handle(ma_sound *sound, float base_volume) {
+    if (rl_audio_handle_count >= RL_AUDIO_MAX_HANDLES) {
+        return _rl_audio_err("audio: too many open handles");
+    }
+    int idx = rl_audio_handle_count++;
+    rl_audio_handles[idx].used = true;
+    rl_audio_handles[idx].sound = sound;
+    rl_audio_handles[idx].base_volume = base_volume;
+    rl_audio_handles[idx].paused = false;
+    return rl_ok_i64(RL_HANDLE_AUDIO_BASE + (int64_t)idx);
+}
+
+// Live sound for a tagged id, or NULL when unknown or stopped. Never
+// crashes on stale ids; callers turn NULL into an RL unknown-handle error.
+static ma_sound *_rl_audio_get(int64_t tagged, int *out_idx) {
+    int64_t idx = tagged - RL_HANDLE_AUDIO_BASE;
+    if (idx < 0 || idx >= rl_audio_handle_count) return NULL;
+    if (!rl_audio_handles[idx].used || rl_audio_handles[idx].sound == NULL) return NULL;
+    if (out_idx != NULL) *out_idx = (int)idx;
+    return rl_audio_handles[idx].sound;
+}
+
+// Play a file to completion; ok null on success, or an RL error.
+rl_result rl_audio_play_file(rl_string path) {
+    char cpath[4096];
+    if (!_rl_audio_cstr(path, cpath, sizeof(cpath))) {
+        return _rl_audio_err("play_file: invalid path");
+    }
+    if (!_rl_audio_probe_file(cpath)) {
+        int e = errno;
+        return _rl_audio_err("play_file(\"%s\"): %s (os error %d)", cpath, strerror(e), e);
+    }
+    if (!_rl_audio_ensure_engine()) {
+        return _rl_audio_err("play_file: %s", ma_result_description(rl_audio_engine_status));
+    }
+    ma_sound sound;
+    ma_result r = ma_sound_init_from_file(&rl_audio_engine, cpath, 0, NULL, NULL, &sound);
+    if (r != MA_SUCCESS) {
+        return _rl_audio_err("play_file(\"%s\"): %s", cpath, ma_result_description(r));
+    }
+    ma_sound_start(&sound);
+    while (!ma_sound_at_end(&sound)) {
+        ma_sleep(5);
+    }
+    ma_sound_uninit(&sound);
+    return rl_ok_null();
+}
+
+// Start async playback; ok with the sound handle id, or an RL error.
+rl_result rl_audio_play_file_async(rl_string path) {
+    char cpath[4096];
+    if (!_rl_audio_cstr(path, cpath, sizeof(cpath))) {
+        return _rl_audio_err("play_file_async: invalid path");
+    }
+    if (!_rl_audio_probe_file(cpath)) {
+        int e = errno;
+        return _rl_audio_err("play_file_async(\"%s\"): %s (os error %d)", cpath, strerror(e), e);
+    }
+    if (!_rl_audio_ensure_engine()) {
+        return _rl_audio_err("play_file_async: %s", ma_result_description(rl_audio_engine_status));
+    }
+    ma_sound *sound = malloc(sizeof(ma_sound));
+    ma_result r = ma_sound_init_from_file(&rl_audio_engine, cpath, 0, NULL, NULL, sound);
+    if (r != MA_SUCCESS) {
+        free(sound);
+        return _rl_audio_err("play_file_async(\"%s\"): %s", cpath, ma_result_description(r));
+    }
+    ma_sound_set_volume(sound, rl_audio_master_volume);
+    ma_sound_start(sound);
+    rl_result h = _rl_audio_new_handle(sound, 1.0f);
+    if (!h.is_ok) {
+        ma_sound_uninit(sound);
+        free(sound);
+    }
+    return h;
+}
+
+// Play a sine tone and block until done; ok null, or an RL error.
+rl_result rl_audio_beep(double freq, int64_t duration_ms) {
+    if (!_rl_audio_ensure_engine()) {
+        return _rl_audio_err("beep: %s", ma_result_description(rl_audio_engine_status));
+    }
+    if (duration_ms < 0) duration_ms = 0;
+    ma_waveform_config wcfg = ma_waveform_config_init(
+        ma_format_f32, 1, ma_engine_get_sample_rate(&rl_audio_engine),
+        ma_waveform_type_sine, 0.5, freq);
+    ma_waveform wave;
+    ma_result r = ma_waveform_init(&wcfg, &wave);
+    if (r != MA_SUCCESS) {
+        return _rl_audio_err("beep: %s", ma_result_description(r));
+    }
+    ma_sound sound;
+    r = ma_sound_init_from_data_source(&rl_audio_engine, &wave, 0, NULL, &sound);
+    if (r != MA_SUCCESS) {
+        ma_waveform_uninit(&wave);
+        return _rl_audio_err("beep: %s", ma_result_description(r));
+    }
+    ma_sound_start(&sound);
+    ma_sleep((ma_uint32)duration_ms);
+    ma_sound_stop(&sound);
+    ma_sound_uninit(&sound);
+    ma_waveform_uninit(&wave);
+    return rl_ok_null();
+}
+
+// Pause a live sound; ok null, or an unknown-handle RL error.
+rl_result rl_audio_sound_pause(int64_t handle_id) {
+    int idx = -1;
+    ma_sound *s = _rl_audio_get(handle_id, &idx);
+    if (s == NULL) {
+        return _rl_audio_err("sound_pause: unknown handle %ld", (long)handle_id);
+    }
+    ma_sound_stop(s);
+    rl_audio_handles[idx].paused = true;
+    return rl_ok_null();
+}
+
+// Resume a live sound; ok null, or an unknown-handle RL error.
+rl_result rl_audio_sound_resume(int64_t handle_id) {
+    int idx = -1;
+    ma_sound *s = _rl_audio_get(handle_id, &idx);
+    if (s == NULL) {
+        return _rl_audio_err("sound_resume: unknown handle %ld", (long)handle_id);
+    }
+    ma_sound_start(s);
+    rl_audio_handles[idx].paused = false;
+    return rl_ok_null();
+}
+
+// Stop a sound and release its handle; ok null, or an unknown-handle error.
+rl_result rl_audio_sound_stop(int64_t handle_id) {
+    int idx = -1;
+    ma_sound *s = _rl_audio_get(handle_id, &idx);
+    if (s == NULL) {
+        return _rl_audio_err("sound_stop: unknown handle %ld", (long)handle_id);
+    }
+    ma_sound_stop(s);
+    ma_sound_uninit(s);
+    free(s);
+    rl_audio_handles[idx].sound = NULL;
+    rl_audio_handles[idx].used = false;
+    return rl_ok_null();
+}
+
+// True when the sound is paused; ok bool, or an unknown-handle error.
+rl_result rl_audio_sound_is_paused(int64_t handle_id) {
+    int idx = -1;
+    ma_sound *s = _rl_audio_get(handle_id, &idx);
+    if (s == NULL) {
+        return _rl_audio_err("sound_is_paused: unknown handle %ld", (long)handle_id);
+    }
+    return rl_ok_bool(rl_audio_handles[idx].paused);
+}
+
+// Per-sound base volume (scaled by the master volume); ok null.
+rl_result rl_audio_sound_set_volume(int64_t handle_id, double volume) {
+    int idx = -1;
+    ma_sound *s = _rl_audio_get(handle_id, &idx);
+    if (s == NULL) {
+        return _rl_audio_err("sound_set_volume: unknown handle %ld", (long)handle_id);
+    }
+    float base = (float)volume;
+    rl_audio_handles[idx].base_volume = base;
+    ma_sound_set_volume(s, base * rl_audio_master_volume);
+    return rl_ok_null();
+}
+
+// Per-sound base volume; ok float, or an unknown-handle RL error.
+rl_result rl_audio_sound_get_volume(int64_t handle_id) {
+    int idx = -1;
+    ma_sound *s = _rl_audio_get(handle_id, &idx);
+    if (s == NULL) {
+        return _rl_audio_err("sound_get_volume: unknown handle %ld", (long)handle_id);
+    }
+    return rl_ok_f64((double)rl_audio_handles[idx].base_volume);
+}
+
+// Playback speed multiplier; ok null, or an unknown-handle RL error.
+rl_result rl_audio_sound_set_speed(int64_t handle_id, double speed) {
+    ma_sound *s = _rl_audio_get(handle_id, NULL);
+    if (s == NULL) {
+        return _rl_audio_err("sound_set_speed: unknown handle %ld", (long)handle_id);
+    }
+    ma_sound_set_pitch(s, (float)speed);
+    return rl_ok_null();
+}
+
+// Seek to position_ms from the start; ok null, or an RL error.
+rl_result rl_audio_sound_seek(int64_t handle_id, int64_t position_ms) {
+    ma_sound *s = _rl_audio_get(handle_id, NULL);
+    if (s == NULL) {
+        return _rl_audio_err("sound_seek: unknown handle %ld", (long)handle_id);
+    }
+    if (position_ms < 0) position_ms = 0;
+    ma_format fmt = ma_format_unknown;
+    ma_uint32 channels = 0;
+    ma_uint32 srate = 0;
+    ma_sound_get_data_format(s, &fmt, &channels, &srate, NULL, 0);
+    if (srate == 0) srate = ma_engine_get_sample_rate(&rl_audio_engine);
+    ma_uint64 frame = (ma_uint64)((double)position_ms * (double)srate / 1000.0);
+    ma_result r = ma_sound_seek_to_pcm_frame(s, frame);
+    if (r != MA_SUCCESS) {
+        return _rl_audio_err("sound_seek: %s", ma_result_description(r));
+    }
+    (void)fmt;
+    (void)channels;
+    return rl_ok_null();
+}
+
+// True when playback reached the end; ok bool, or an unknown-handle error.
+rl_result rl_audio_sound_is_finished(int64_t handle_id) {
+    ma_sound *s = _rl_audio_get(handle_id, NULL);
+    if (s == NULL) {
+        return _rl_audio_err("sound_is_finished: unknown handle %ld", (long)handle_id);
+    }
+    return rl_ok_bool(ma_sound_at_end(s));
+}
+
+// Block until playback reaches the end; ok null, or an unknown-handle error.
+rl_result rl_audio_sound_wait(int64_t handle_id) {
+    ma_sound *s = _rl_audio_get(handle_id, NULL);
+    if (s == NULL) {
+        return _rl_audio_err("sound_wait: unknown handle %ld", (long)handle_id);
+    }
+    while (!ma_sound_at_end(s)) {
+        ma_sleep(5);
+    }
+    return rl_ok_null();
+}
+
+// List playback device names; ok with a string array, or an RL error.
+rl_result rl_audio_list_output_devices(void) {
+    ma_context context;
+    ma_result r = ma_context_init(NULL, 0, NULL, &context);
+    if (r != MA_SUCCESS) {
+        return _rl_audio_err("list_output_devices: %s", ma_result_description(r));
+    }
+    ma_device_info *infos = NULL;
+    ma_uint32 count = 0;
+    r = ma_context_get_devices(&context, &infos, &count, NULL, NULL);
+    if (r != MA_SUCCESS) {
+        ma_context_uninit(&context);
+        return _rl_audio_err("list_output_devices: %s", ma_result_description(r));
+    }
+    if (count == 0) {
+        ma_context_uninit(&context);
+        rl_array empty = { .data = NULL, .len = 0, .cap = 0,
+            .elem_size = (int32_t)sizeof(rl_string), .type_tag = RL_TAG_STR };
+        return rl_ok_arr(empty);
+    }
+    rl_string *items = malloc((uint64_t)count * sizeof(rl_string));
+    for (ma_uint32 i = 0; i < count; i++) {
+        uint64_t n = strlen(infos[i].name);
+        char *dup = malloc(n + 1);
+        memcpy(dup, infos[i].name, n + 1);
+        items[i] = (rl_string){ .data = dup, .len = n, .rc = 1 };
+    }
+    ma_context_uninit(&context);
+    rl_array out;
+    out.data = items;
+    out.len = count;
+    out.cap = count;
+    out.elem_size = (int32_t)sizeof(rl_string);
+    out.type_tag = RL_TAG_STR;
+    return rl_ok_arr(out);
+}
+
+// Select the device used for future playback; ok null, or an RL error
+// when the name is unknown.
+rl_result rl_audio_set_output_device(rl_string name) {
+    char nbuf[512];
+    if (!_rl_audio_cstr(name, nbuf, sizeof(nbuf))) {
+        return _rl_audio_err("set_output_device: invalid device name");
+    }
+    ma_context context;
+    ma_result r = ma_context_init(NULL, 0, NULL, &context);
+    if (r != MA_SUCCESS) {
+        return _rl_audio_err("set_output_device: %s", ma_result_description(r));
+    }
+    ma_device_info *infos = NULL;
+    ma_uint32 count = 0;
+    r = ma_context_get_devices(&context, &infos, &count, NULL, NULL);
+    if (r != MA_SUCCESS) {
+        ma_context_uninit(&context);
+        return _rl_audio_err("set_output_device: %s", ma_result_description(r));
+    }
+    bool found = false;
+    ma_device_id picked;
+    memset(&picked, 0, sizeof(picked));
+    for (ma_uint32 i = 0; i < count; i++) {
+        if (strcmp(infos[i].name, nbuf) == 0) {
+            picked = infos[i].id;
+            found = true;
+            break;
+        }
+    }
+    ma_context_uninit(&context);
+    if (!found) {
+        return _rl_audio_err("set_output_device: output device \"%s\" not found", nbuf);
+    }
+    free(rl_audio_output_device);
+    rl_audio_output_device = malloc(strlen(nbuf) + 1);
+    strcpy(rl_audio_output_device, nbuf);
+    rl_audio_output_device_id = picked;
+    rl_audio_output_has_device = true;
+    return rl_ok_null();
+}
+
+// Set the master volume and rescale every live sound; ok null.
+rl_result rl_audio_set_master_volume(double volume) {
+    float master = (float)volume;
+    rl_audio_master_volume = master;
+    for (int i = 0; i < rl_audio_handle_count; i++) {
+        if (rl_audio_handles[i].used && rl_audio_handles[i].sound != NULL) {
+            ma_sound_set_volume(rl_audio_handles[i].sound,
+                rl_audio_handles[i].base_volume * master);
+        }
+    }
+    return rl_ok_null();
+}
+
+// Decode just enough metadata for duration and channel info. True on
+// success; false keeps the caller returning a decode RL error.
+static bool _rl_audio_probe_meta(const char *cpath, ma_format *fmt,
+    ma_uint32 *channels, ma_uint32 *srate, int64_t *ms, ma_result *rc) {
+    ma_decoder decoder;
+    ma_result r = ma_decoder_init_file(cpath, NULL, &decoder);
+    if (r != MA_SUCCESS) {
+        if (rc != NULL) *rc = r;
+        return false;
+    }
+    ma_uint64 frames = 0;
+    if (ma_decoder_get_length_in_pcm_frames(&decoder, &frames) != MA_SUCCESS) {
+        frames = 0;
+    }
+    ma_uint32 rate = decoder.outputSampleRate;
+    ma_uint32 ch = decoder.outputChannels;
+    ma_format format = decoder.outputFormat;
+    ma_decoder_uninit(&decoder);
+    if (channels != NULL) *channels = ch;
+    if (srate != NULL) *srate = rate;
+    if (fmt != NULL) *fmt = format;
+    if (ms != NULL) {
+        *ms = (rate == 0) ? 0 : (int64_t)(((double)frames / (double)rate) * 1000.0);
+    }
+    return true;
+}
+
+// Short codec/container name in the style of the VM metadata probe
+// ("pcm_s16le", "mp3", "flac", "vorbis"); "unknown" when unrecognized.
+static void _rl_audio_format_name(const char *cpath, ma_format fmt, char *out, uint64_t cap) {
+    char magic[12];
+    uint64_t mlen = 0;
+    FILE *f = fopen(cpath, "rb");
+    if (f != NULL) {
+        mlen = fread(magic, 1, sizeof(magic), f);
+        fclose(f);
+    }
+    const char *name = "unknown";
+    if (mlen >= 12 && memcmp(magic, "RIFF", 4) == 0 && memcmp(magic + 8, "WAVE", 4) == 0) {
+        switch (fmt) {
+            case ma_format_u8: name = "pcm_u8"; break;
+            case ma_format_s16: name = "pcm_s16le"; break;
+            case ma_format_s24: name = "pcm_s24le"; break;
+            case ma_format_s32: name = "pcm_s32le"; break;
+            case ma_format_f32: name = "pcm_f32le"; break;
+            default: name = "pcm_s16le"; break;
+        }
+    } else if (mlen >= 4 && memcmp(magic, "fLaC", 4) == 0) {
+        name = "flac";
+    } else if (mlen >= 4 && (memcmp(magic, "OggS", 4) == 0)) {
+        name = "vorbis";
+    } else if (mlen >= 3 && (memcmp(magic, "ID3", 3) == 0
+        || ((unsigned char)magic[0] == 0xFF && ((unsigned char)magic[1] & 0xE0) == 0xE0))) {
+        name = "mp3";
+    } else {
+        const char *dot = strrchr(cpath, '.');
+        const char *ext = (dot != NULL) ? dot + 1 : "";
+        char lower[16];
+        uint64_t i = 0;
+        while (ext[i] != '\0' && i + 1 < sizeof(lower)) {
+            char c = ext[i];
+            lower[i] = (c >= 'A' && c <= 'Z') ? (char)(c + 32) : c;
+            i++;
+        }
+        lower[i] = '\0';
+        if (strcmp(lower, "mp3") == 0) name = "mp3";
+        else if (strcmp(lower, "flac") == 0) name = "flac";
+        else if (strcmp(lower, "ogg") == 0 || strcmp(lower, "oga") == 0) name = "vorbis";
+        else if (strcmp(lower, "opus") == 0) name = "opus";
+        else if (strcmp(lower, "wav") == 0) name = "pcm_s16le";
+        else if (strcmp(lower, "m4a") == 0 || strcmp(lower, "mp4") == 0) name = "aac";
+    }
+    uint64_t n = strlen(name);
+    if (n + 1 > cap) n = cap - 1;
+    memcpy(out, name, n);
+    out[n] = '\0';
+}
+
+// File duration in milliseconds; ok int, or an RL error.
+rl_result rl_audio_duration(rl_string path) {
+    char cpath[4096];
+    if (!_rl_audio_cstr(path, cpath, sizeof(cpath))) {
+        return _rl_audio_err("audio_duration: invalid path");
+    }
+    if (!_rl_audio_probe_file(cpath)) {
+        int e = errno;
+        return _rl_audio_err("audio_duration(\"%s\"): %s (os error %d)", cpath, strerror(e), e);
+    }
+    ma_result r = MA_SUCCESS;
+    int64_t ms = 0;
+    if (!_rl_audio_probe_meta(cpath, NULL, NULL, NULL, &ms, &r)) {
+        return _rl_audio_err("audio_duration(\"%s\"): %s", cpath, ma_result_description(r));
+    }
+    return rl_ok_i64(ms);
+}
+
+// Canonical 4-tuple layout for audio metadata results, matching the
+// program generated rl_tuple_4 struct field for field.
+typedef struct { int64_t field_0; int64_t field_1; int64_t field_2; rl_string field_3; } _rl_tuple_iiis;
+
+// Wrap (channels, sample rate, duration ms, format) as a single element
+// array result, like the other tuple shaped results.
+static rl_result _rl_ok_tuple_iiis(int64_t c0, int64_t c1, int64_t c2, char *sdata, uint64_t slen) {
+    _rl_tuple_iiis *slot = malloc(sizeof(_rl_tuple_iiis));
+    slot->field_0 = c0;
+    slot->field_1 = c1;
+    slot->field_2 = c2;
+    slot->field_3 = (rl_string){ .data = sdata, .len = slen, .rc = 1 };
+    rl_array out;
+    out.data = slot;
+    out.len = 1;
+    out.cap = 1;
+    out.elem_size = (int32_t)sizeof(_rl_tuple_iiis);
+    out.type_tag = RL_TAG_I64;
+    return rl_ok_arr(out);
+}
+
+// File metadata as (channels, sample rate, duration ms, format name);
+// ok with the tuple, or an RL error.
+rl_result rl_audio_file_info(rl_string path) {
+    char cpath[4096];
+    if (!_rl_audio_cstr(path, cpath, sizeof(cpath))) {
+        return _rl_audio_err("audio_file_info: invalid path");
+    }
+    if (!_rl_audio_probe_file(cpath)) {
+        int e = errno;
+        return _rl_audio_err("audio_file_info(\"%s\"): %s (os error %d)", cpath, strerror(e), e);
+    }
+    ma_format fmt = ma_format_unknown;
+    ma_uint32 ch = 0;
+    ma_uint32 rate = 0;
+    int64_t ms = 0;
+    ma_result r = MA_SUCCESS;
+    if (!_rl_audio_probe_meta(cpath, &fmt, &ch, &rate, &ms, &r)) {
+        return _rl_audio_err("audio_file_info(\"%s\"): %s", cpath, ma_result_description(r));
+    }
+    char fname[32];
+    _rl_audio_format_name(cpath, fmt, fname, sizeof(fname));
+    uint64_t flen = strlen(fname);
+    char *fdup = malloc(flen + 1);
+    memcpy(fdup, fname, flen + 1);
+    return _rl_ok_tuple_iiis((int64_t)ch, (int64_t)rate, ms, fdup, flen);
+}
+
+#else
+
+// Stubs when miniaudio is not compiled in (programs not using audio).
+rl_result rl_audio_play_file(rl_string path) { (void)path; return rl_err(-1); }
+rl_result rl_audio_play_file_async(rl_string path) { (void)path; return rl_err(-1); }
+rl_result rl_audio_beep(double freq, int64_t duration_ms) { (void)freq; (void)duration_ms; return rl_err(-1); }
+rl_result rl_audio_sound_pause(int64_t handle_id) { (void)handle_id; return rl_err(-1); }
+rl_result rl_audio_sound_resume(int64_t handle_id) { (void)handle_id; return rl_err(-1); }
+rl_result rl_audio_sound_stop(int64_t handle_id) { (void)handle_id; return rl_err(-1); }
+rl_result rl_audio_sound_is_paused(int64_t handle_id) { (void)handle_id; return rl_err(-1); }
+rl_result rl_audio_sound_set_volume(int64_t handle_id, double volume) { (void)handle_id; (void)volume; return rl_err(-1); }
+rl_result rl_audio_sound_get_volume(int64_t handle_id) { (void)handle_id; return rl_err(-1); }
+rl_result rl_audio_sound_set_speed(int64_t handle_id, double speed) { (void)handle_id; (void)speed; return rl_err(-1); }
+rl_result rl_audio_sound_seek(int64_t handle_id, int64_t position_ms) { (void)handle_id; (void)position_ms; return rl_err(-1); }
+rl_result rl_audio_sound_is_finished(int64_t handle_id) { (void)handle_id; return rl_err(-1); }
+rl_result rl_audio_sound_wait(int64_t handle_id) { (void)handle_id; return rl_err(-1); }
+rl_result rl_audio_list_output_devices(void) { return rl_err(-1); }
+rl_result rl_audio_set_output_device(rl_string name) { (void)name; return rl_err(-1); }
+rl_result rl_audio_set_master_volume(double volume) { (void)volume; return rl_err(-1); }
+rl_result rl_audio_duration(rl_string path) { (void)path; return rl_err(-1); }
+rl_result rl_audio_file_info(rl_string path) { (void)path; return rl_err(-1); }
+
+#endif
+
 // ---- handle kind testers ----
 
 // True only for ok I64 ids ever issued by that domain. Errors, other
-// tags, bare small ints and other domains are false. Audio and gui have
-// no C backend and always return false.
+// tags, bare small ints and other domains are false. Gui has no C
+// backend and always returns false.
 rl_result rl_is_c_handle(rl_result x) {
     if (!x.is_ok || x.tag != RL_TAG_I64) return rl_ok_bool(false);
     return rl_ok_bool(_rl_id_in_range(x.data.i64, RL_HANDLE_C_BASE, rl_c_handle_count));
@@ -10054,8 +10651,13 @@ rl_result rl_is_http_handle(rl_result x) {
     return rl_ok_bool(_rl_id_in_range(x.data.i64, RL_HANDLE_HTTP_BASE, rl_http_handle_count));
 }
 rl_result rl_is_audio_handle(rl_result x) {
+#ifdef RL_USE_AUDIO
+    if (!x.is_ok || x.tag != RL_TAG_I64) return rl_ok_bool(false);
+    return rl_ok_bool(_rl_id_in_range(x.data.i64, RL_HANDLE_AUDIO_BASE, rl_audio_handle_count));
+#else
     (void)x;
     return rl_ok_bool(false);
+#endif
 }
 rl_result rl_is_gui_handle(rl_result x) {
     (void)x;

@@ -1,4 +1,5 @@
 mod assert;
+mod audio;
 mod c_ffi;
 mod closure;
 mod collections;
@@ -986,6 +987,24 @@ impl<'a> CCodegen<'a> {
             "http_get" if self.std_http_imports.contains("http_get") => return self::http::compile_get(self, args),
             "http_post" if self.std_http_imports.contains("http_post") => return self::http::compile_post(self, args),
             "http_request" if self.std_http_imports.contains("http_request") => return self::http::compile_request(self, args),
+            "play_file" => return self::audio::compile_play_file(self, args),
+            "play_file_async" => return self::audio::compile_play_file_async(self, args),
+            "beep" => return self::audio::compile_beep(self, args),
+            "sound_pause" => return self::audio::compile_sound_pause(self, args),
+            "sound_resume" => return self::audio::compile_sound_resume(self, args),
+            "sound_stop" => return self::audio::compile_sound_stop(self, args),
+            "sound_is_paused" => return self::audio::compile_sound_is_paused(self, args),
+            "sound_set_volume" => return self::audio::compile_sound_set_volume(self, args),
+            "sound_get_volume" => return self::audio::compile_sound_get_volume(self, args),
+            "sound_set_speed" => return self::audio::compile_sound_set_speed(self, args),
+            "sound_seek" => return self::audio::compile_sound_seek(self, args),
+            "sound_is_finished" => return self::audio::compile_sound_is_finished(self, args),
+            "sound_wait" => return self::audio::compile_sound_wait(self, args),
+            "list_output_devices" => return self::audio::compile_list_output_devices(self),
+            "set_output_device" => return self::audio::compile_set_output_device(self, args),
+            "set_master_volume" => return self::audio::compile_set_master_volume(self, args),
+            "audio_duration" => return self::audio::compile_audio_duration(self, args),
+            "audio_file_info" => return self::audio::compile_audio_file_info(self, args),
             "compile" if self.std_c_imports.contains("compile") => return self::c_ffi::compile_c_compile(self, args),
             "load" if self.std_c_imports.contains("load") => return self::c_ffi::compile_c_load(self, args),
             "has_symbol" if self.std_c_imports.contains("has_symbol") => return self::c_ffi::compile_c_has_symbol(self, args),

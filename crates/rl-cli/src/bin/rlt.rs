@@ -103,6 +103,7 @@ fn main() {
             }
             // miniaudio playback needs threads and dlopen on Linux.
             if c_src.contains("rl_audio_") {
+                cmd.arg("-DRL_USE_AUDIO");
                 cmd.arg("-lpthread");
                 cmd.arg("-ldl");
             }

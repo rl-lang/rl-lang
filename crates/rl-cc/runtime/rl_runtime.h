@@ -1118,8 +1118,8 @@ rl_result rl_is_suint(rl_result x);
 // Small float erases to F64 at runtime; literals fold statically.
 rl_result rl_is_sfloat(rl_result x);
 // Handle kind testers: true only for live ids of that kind. Bare ints
-// and other payloads are always false. Audio and gui have no C backend
-// and always return false.
+// and other payloads are always false. Gui has no C backend and always
+// returns false.
 rl_result rl_is_c_handle(rl_result x);
 rl_result rl_is_net_handle(rl_result x);
 rl_result rl_is_http_handle(rl_result x);
@@ -1239,5 +1239,49 @@ rl_result rl_http_post(rl_string url, rl_string body, rl_string content_type, in
 // in a single element array. `headers` is an array of 2-tuples
 // (name string, value string). Pass `has_body` / `has_headers` 0 to skip.
 rl_result rl_http_request(rl_string method, rl_string url, rl_string body, int has_body, rl_array headers, int has_headers);
+
+// ---- std::audio (playback via miniaudio) ----
+// Blocking and async sound playback plus file metadata. Playing sounds
+// are int64 handle ids into an internal table (tagged so kinds never
+// overlap and small bare ints never collide with real handles); results
+// hold either the value (null, bool, float, int, handle id, string
+// array, metadata tuple) or an RL error. Unknown or stopped ids fail
+// with an RL error and never crash.
+// Play a file to completion; ok null on success.
+rl_result rl_audio_play_file(rl_string path);
+// Start async playback; ok with the sound handle id.
+rl_result rl_audio_play_file_async(rl_string path);
+// Play a sine tone of `freq` Hz for `duration_ms` and block; ok null.
+rl_result rl_audio_beep(double freq, int64_t duration_ms);
+// Pause / resume a live sound; ok null.
+rl_result rl_audio_sound_pause(int64_t handle_id);
+rl_result rl_audio_sound_resume(int64_t handle_id);
+// Stop a sound and release its handle; ok null.
+rl_result rl_audio_sound_stop(int64_t handle_id);
+// True when the sound is paused; ok bool.
+rl_result rl_audio_sound_is_paused(int64_t handle_id);
+// Per-sound volume (base, before the master volume); ok null.
+rl_result rl_audio_sound_set_volume(int64_t handle_id, double volume);
+// Per-sound base volume; ok float.
+rl_result rl_audio_sound_get_volume(int64_t handle_id);
+// Playback speed multiplier; ok null.
+rl_result rl_audio_sound_set_speed(int64_t handle_id, double speed);
+// Seek to `position_ms` from the start; ok null.
+rl_result rl_audio_sound_seek(int64_t handle_id, int64_t position_ms);
+// True when playback reached the end; ok bool.
+rl_result rl_audio_sound_is_finished(int64_t handle_id);
+// Block until playback reaches the end; ok null.
+rl_result rl_audio_sound_wait(int64_t handle_id);
+// Playback device names; ok with a string array.
+rl_result rl_audio_list_output_devices(void);
+// Select the device used for future playback; ok null.
+rl_result rl_audio_set_output_device(rl_string name);
+// Master volume applied to every sound; ok null.
+rl_result rl_audio_set_master_volume(double volume);
+// File duration in milliseconds; ok int.
+rl_result rl_audio_duration(rl_string path);
+// File metadata as (channels, sample rate, duration ms, format name)
+// in a single element array; ok with the tuple.
+rl_result rl_audio_file_info(rl_string path);
 
 #endif
