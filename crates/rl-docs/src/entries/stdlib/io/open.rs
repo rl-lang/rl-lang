@@ -13,6 +13,6 @@ close(file)?"#,
     errors: Some("Will return error on invalid mode or if the file cannot be opened"),
     see_also: &["close", "read_handle", "write_handle"],
     since: Some("v2.1.0"),
-    deprecated: None,
+    deprecated: Some("moved to std::fs::open"),
     updated: Some("v2.1.0"),
 };

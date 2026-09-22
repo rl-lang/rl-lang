@@ -12,6 +12,6 @@ eval("println(x + 1)")?"#,
     errors: Some("returns an error message if the code fails to parse, resolve, or run"),
     see_also: &["eval_isolated", "check"],
     since: Some("v0.1.5"),
-    deprecated: None,
+    deprecated: Some("std::rl is deprecated and may be removed in a future version"),
     updated: Some("v0.1.5"),
 };
