@@ -5914,6 +5914,893 @@ rl_result rl_cli_read_line_with_history(rl_string msg, rl_array history) {
     return _rl_ok_tuple_sarr(ls, hist);
 }
 
+// ---- crypto ----
+// Mirrors `std::crypto`. Compact from-spec hash implementations; every
+// round constant below was verified against the sha2/sha1/md-5 crate
+// sources. Byte arrays are int64-element arrays holding 0-255 (the
+// transpiler-wide convention, matching rl_io_read_bytes). Out-of-range
+// inputs abort, mirroring the VM's loud runtime type error.
+
+static uint32_t _rl_rotr32(uint32_t x, unsigned n) { return (x >> n) | (x << (32 - n)); }
+static uint64_t _rl_rotr64(uint64_t x, unsigned n) { return (x >> n) | (x << (64 - n)); }
+
+// ---- SHA-256 ----
+
+static const uint32_t _RL_SHA256_K[64] = {
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+};
+
+typedef struct { uint32_t h[8]; uint64_t len; uint8_t buf[64]; size_t buflen; } _rl_sha256_ctx;
+
+static void _rl_sha256_init(_rl_sha256_ctx *c) {
+    c->h[0] = 0x6a09e667; c->h[1] = 0xbb67ae85; c->h[2] = 0x3c6ef372; c->h[3] = 0xa54ff53a;
+    c->h[4] = 0x510e527f; c->h[5] = 0x9b05688c; c->h[6] = 0x1f83d9ab; c->h[7] = 0x5be0cd19;
+    c->len = 0;
+    c->buflen = 0;
+}
+
+static void _rl_sha256_block(_rl_sha256_ctx *c, const uint8_t *p) {
+    uint32_t w[64];
+    for (int i = 0; i < 16; i++) {
+        w[i] = ((uint32_t)p[4 * i] << 24) | ((uint32_t)p[4 * i + 1] << 16)
+            | ((uint32_t)p[4 * i + 2] << 8) | (uint32_t)p[4 * i + 3];
+    }
+    for (int i = 16; i < 64; i++) {
+        uint32_t s0 = _rl_rotr32(w[i - 15], 7) ^ _rl_rotr32(w[i - 15], 18) ^ (w[i - 15] >> 3);
+        uint32_t s1 = _rl_rotr32(w[i - 2], 17) ^ _rl_rotr32(w[i - 2], 19) ^ (w[i - 2] >> 10);
+        w[i] = w[i - 16] + s0 + w[i - 7] + s1;
+    }
+    uint32_t a = c->h[0], b = c->h[1], c2 = c->h[2], d = c->h[3];
+    uint32_t e = c->h[4], f = c->h[5], g = c->h[6], h = c->h[7];
+    for (int i = 0; i < 64; i++) {
+        uint32_t S1 = _rl_rotr32(e, 6) ^ _rl_rotr32(e, 11) ^ _rl_rotr32(e, 25);
+        uint32_t ch = (e & f) ^ (~e & g);
+        uint32_t t1 = h + S1 + ch + _RL_SHA256_K[i] + w[i];
+        uint32_t S0 = _rl_rotr32(a, 2) ^ _rl_rotr32(a, 13) ^ _rl_rotr32(a, 22);
+        uint32_t mj = (a & b) ^ (a & c2) ^ (b & c2);
+        uint32_t t2 = S0 + mj;
+        h = g; g = f; f = e; e = d + t1; d = c2; c2 = b; b = a; a = t1 + t2;
+    }
+    c->h[0] += a; c->h[1] += b; c->h[2] += c2; c->h[3] += d;
+    c->h[4] += e; c->h[5] += f; c->h[6] += g; c->h[7] += h;
+}
+
+static void _rl_sha256_update(_rl_sha256_ctx *c, const uint8_t *data, size_t n) {
+    c->len += (uint64_t)n;
+    while (n > 0) {
+        size_t take = 64 - c->buflen;
+        if (take > n) take = n;
+        memcpy(c->buf + c->buflen, data, take);
+        c->buflen += take;
+        data += take;
+        n -= take;
+        if (c->buflen == 64) {
+            _rl_sha256_block(c, c->buf);
+            c->buflen = 0;
+        }
+    }
+}
+
+static void _rl_sha256_final(_rl_sha256_ctx *c, uint8_t out[32]) {
+    uint64_t bitlen = c->len * 8;
+    uint8_t pad = 0x80;
+    _rl_sha256_update(c, &pad, 1);
+    uint8_t zero = 0;
+    while (c->buflen != 56) _rl_sha256_update(c, &zero, 1);
+    uint8_t lenbuf[8];
+    for (int i = 0; i < 8; i++) lenbuf[i] = (uint8_t)(bitlen >> (56 - 8 * i));
+    // Bypass update (length must NOT include padding): fill + compress.
+    memcpy(c->buf + 56, lenbuf, 8);
+    _rl_sha256_block(c, c->buf);
+    for (int i = 0; i < 8; i++) {
+        out[4 * i] = (uint8_t)(c->h[i] >> 24);
+        out[4 * i + 1] = (uint8_t)(c->h[i] >> 16);
+        out[4 * i + 2] = (uint8_t)(c->h[i] >> 8);
+        out[4 * i + 3] = (uint8_t)c->h[i];
+    }
+}
+
+// ---- SHA-512 ----
+
+static const uint64_t _RL_SHA512_K[80] = {
+    0x428a2f98d728ae22ULL, 0x7137449123ef65cdULL, 0xb5c0fbcfec4d3b2fULL, 0xe9b5dba58189dbbcULL,
+    0x3956c25bf348b538ULL, 0x59f111f1b605d019ULL, 0x923f82a4af194f9bULL, 0xab1c5ed5da6d8118ULL,
+    0xd807aa98a3030242ULL, 0x12835b0145706fbeULL, 0x243185be4ee4b28cULL, 0x550c7dc3d5ffb4e2ULL,
+    0x72be5d74f27b896fULL, 0x80deb1fe3b1696b1ULL, 0x9bdc06a725c71235ULL, 0xc19bf174cf692694ULL,
+    0xe49b69c19ef14ad2ULL, 0xefbe4786384f25e3ULL, 0x0fc19dc68b8cd5b5ULL, 0x240ca1cc77ac9c65ULL,
+    0x2de92c6f592b0275ULL, 0x4a7484aa6ea6e483ULL, 0x5cb0a9dcbd41fbd4ULL, 0x76f988da831153b5ULL,
+    0x983e5152ee66dfabULL, 0xa831c66d2db43210ULL, 0xb00327c898fb213fULL, 0xbf597fc7beef0ee4ULL,
+    0xc6e00bf33da88fc2ULL, 0xd5a79147930aa725ULL, 0x06ca6351e003826fULL, 0x142929670a0e6e70ULL,
+    0x27b70a8546d22ffcULL, 0x2e1b21385c26c926ULL, 0x4d2c6dfc5ac42aedULL, 0x53380d139d95b3dfULL,
+    0x650a73548baf63deULL, 0x766a0abb3c77b2a8ULL, 0x81c2c92e47edaee6ULL, 0x92722c851482353bULL,
+    0xa2bfe8a14cf10364ULL, 0xa81a664bbc423001ULL, 0xc24b8b70d0f89791ULL, 0xc76c51a30654be30ULL,
+    0xd192e819d6ef5218ULL, 0xd69906245565a910ULL, 0xf40e35855771202aULL, 0x106aa07032bbd1b8ULL,
+    0x19a4c116b8d2d0c8ULL, 0x1e376c085141ab53ULL, 0x2748774cdf8eeb99ULL, 0x34b0bcb5e19b48a8ULL,
+    0x391c0cb3c5c95a63ULL, 0x4ed8aa4ae3418acbULL, 0x5b9cca4f7763e373ULL, 0x682e6ff3d6b2b8a3ULL,
+    0x748f82ee5defb2fcULL, 0x78a5636f43172f60ULL, 0x84c87814a1f0ab72ULL, 0x8cc702081a6439ecULL,
+    0x90befffa23631e28ULL, 0xa4506cebde82bde9ULL, 0xbef9a3f7b2c67915ULL, 0xc67178f2e372532bULL,
+    0xca273eceea26619cULL, 0xd186b8c721c0c207ULL, 0xeada7dd6cde0eb1eULL, 0xf57d4f7fee6ed178ULL,
+    0x06f067aa72176fbaULL, 0x0a637dc5a2c898a6ULL, 0x113f9804bef90daeULL, 0x1b710b35131c471bULL,
+    0x28db77f523047d84ULL, 0x32caab7b40c72493ULL, 0x3c9ebe0a15c9bebcULL, 0x431d67c49c100d4cULL,
+    0x4cc5d4becb3e42b6ULL, 0x597f299cfc657e2aULL, 0x5fcb6fab3ad6faecULL, 0x6c44198c4a475817ULL,
+};
+
+typedef struct { uint64_t h[8]; uint64_t len; uint8_t buf[128]; size_t buflen; } _rl_sha512_ctx;
+
+static void _rl_sha512_init(_rl_sha512_ctx *c) {
+    c->h[0] = 0x6a09e667f3bcc908ULL; c->h[1] = 0xbb67ae8584caa73bULL;
+    c->h[2] = 0x3c6ef372fe94f82bULL; c->h[3] = 0xa54ff53a5f1d36f1ULL;
+    c->h[4] = 0x510e527fade682d1ULL; c->h[5] = 0x9b05688c2b3e6c1fULL;
+    c->h[6] = 0x1f83d9abfb41bd6bULL; c->h[7] = 0x5be0cd19137e2179ULL;
+    c->len = 0;
+    c->buflen = 0;
+}
+
+static void _rl_sha512_block(_rl_sha512_ctx *c, const uint8_t *p) {
+    uint64_t w[80];
+    for (int i = 0; i < 16; i++) {
+        w[i] = ((uint64_t)p[8 * i] << 56) | ((uint64_t)p[8 * i + 1] << 48)
+            | ((uint64_t)p[8 * i + 2] << 40) | ((uint64_t)p[8 * i + 3] << 32)
+            | ((uint64_t)p[8 * i + 4] << 24) | ((uint64_t)p[8 * i + 5] << 16)
+            | ((uint64_t)p[8 * i + 6] << 8) | (uint64_t)p[8 * i + 7];
+    }
+    for (int i = 16; i < 80; i++) {
+        uint64_t s0 = _rl_rotr64(w[i - 15], 1) ^ _rl_rotr64(w[i - 15], 8) ^ (w[i - 15] >> 7);
+        uint64_t s1 = _rl_rotr64(w[i - 2], 19) ^ _rl_rotr64(w[i - 2], 61) ^ (w[i - 2] >> 6);
+        w[i] = w[i - 16] + s0 + w[i - 7] + s1;
+    }
+    uint64_t a = c->h[0], b = c->h[1], c2 = c->h[2], d = c->h[3];
+    uint64_t e = c->h[4], f = c->h[5], g = c->h[6], h = c->h[7];
+    for (int i = 0; i < 80; i++) {
+        uint64_t S1 = _rl_rotr64(e, 14) ^ _rl_rotr64(e, 18) ^ _rl_rotr64(e, 41);
+        uint64_t ch = (e & f) ^ (~e & g);
+        uint64_t t1 = h + S1 + ch + _RL_SHA512_K[i] + w[i];
+        uint64_t S0 = _rl_rotr64(a, 28) ^ _rl_rotr64(a, 34) ^ _rl_rotr64(a, 39);
+        uint64_t mj = (a & b) ^ (a & c2) ^ (b & c2);
+        uint64_t t2 = S0 + mj;
+        h = g; g = f; f = e; e = d + t1; d = c2; c2 = b; b = a; a = t1 + t2;
+    }
+    c->h[0] += a; c->h[1] += b; c->h[2] += c2; c->h[3] += d;
+    c->h[4] += e; c->h[5] += f; c->h[6] += g; c->h[7] += h;
+}
+
+static void _rl_sha512_update(_rl_sha512_ctx *c, const uint8_t *data, size_t n) {
+    c->len += (uint64_t)n;
+    while (n > 0) {
+        size_t take = 128 - c->buflen;
+        if (take > n) take = n;
+        memcpy(c->buf + c->buflen, data, take);
+        c->buflen += take;
+        data += take;
+        n -= take;
+        if (c->buflen == 128) {
+            _rl_sha512_block(c, c->buf);
+            c->buflen = 0;
+        }
+    }
+}
+
+static void _rl_sha512_final(_rl_sha512_ctx *c, uint8_t out[64]) {
+    // 128-bit length: high 64 bits are zero for any real input.
+    uint64_t bitlen = c->len * 8;
+    uint8_t pad = 0x80;
+    _rl_sha512_update(c, &pad, 1);
+    uint8_t zero = 0;
+    while (c->buflen != 112) _rl_sha512_update(c, &zero, 1);
+    uint8_t lenbuf[16];
+    memset(lenbuf, 0, 8);
+    for (int i = 0; i < 8; i++) lenbuf[8 + i] = (uint8_t)(bitlen >> (56 - 8 * i));
+    memcpy(c->buf + 112, lenbuf, 16);
+    _rl_sha512_block(c, c->buf);
+    for (int i = 0; i < 8; i++) {
+        for (int k = 0; k < 8; k++) out[8 * i + k] = (uint8_t)(c->h[i] >> (56 - 8 * k));
+    }
+}
+
+// ---- SHA-1 ----
+
+typedef struct { uint32_t h[5]; uint64_t len; uint8_t buf[64]; size_t buflen; } _rl_sha1_ctx;
+
+static void _rl_sha1_init(_rl_sha1_ctx *c) {
+    c->h[0] = 0x67452301; c->h[1] = 0xefcdab89; c->h[2] = 0x98badcfe;
+    c->h[3] = 0x10325476; c->h[4] = 0xc3d2e1f0;
+    c->len = 0;
+    c->buflen = 0;
+}
+
+static void _rl_sha1_block(_rl_sha1_ctx *c, const uint8_t *p) {
+    uint32_t w[80];
+    for (int i = 0; i < 16; i++) {
+        w[i] = ((uint32_t)p[4 * i] << 24) | ((uint32_t)p[4 * i + 1] << 16)
+            | ((uint32_t)p[4 * i + 2] << 8) | (uint32_t)p[4 * i + 3];
+    }
+    for (int i = 16; i < 80; i++) {
+        w[i] = _rl_rotr32(w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16], 31);
+    }
+    uint32_t a = c->h[0], b = c->h[1], cc = c->h[2], d = c->h[3], e = c->h[4];
+    for (int i = 0; i < 80; i++) {
+        uint32_t f, k;
+        if (i < 20) { f = (b & cc) | (~b & d); k = 0x5a827999; }
+        else if (i < 40) { f = b ^ cc ^ d; k = 0x6ed9eba1; }
+        else if (i < 60) { f = (b & cc) | (b & d) | (cc & d); k = 0x8f1bbcdc; }
+        else { f = b ^ cc ^ d; k = 0xca62c1d6; }
+        uint32_t t = _rl_rotr32(a, 27) + f + e + k + w[i];
+        e = d; d = cc; cc = _rl_rotr32(b, 2); b = a; a = t;
+    }
+    c->h[0] += a; c->h[1] += b; c->h[2] += cc; c->h[3] += d; c->h[4] += e;
+}
+
+static void _rl_sha1_update(_rl_sha1_ctx *c, const uint8_t *data, size_t n) {
+    c->len += (uint64_t)n;
+    while (n > 0) {
+        size_t take = 64 - c->buflen;
+        if (take > n) take = n;
+        memcpy(c->buf + c->buflen, data, take);
+        c->buflen += take;
+        data += take;
+        n -= take;
+        if (c->buflen == 64) {
+            _rl_sha1_block(c, c->buf);
+            c->buflen = 0;
+        }
+    }
+}
+
+static void _rl_sha1_final(_rl_sha1_ctx *c, uint8_t out[20]) {
+    uint64_t bitlen = c->len * 8;
+    uint8_t pad = 0x80;
+    _rl_sha1_update(c, &pad, 1);
+    uint8_t zero = 0;
+    while (c->buflen != 56) _rl_sha1_update(c, &zero, 1);
+    uint8_t lenbuf[8];
+    for (int i = 0; i < 8; i++) lenbuf[i] = (uint8_t)(bitlen >> (56 - 8 * i));
+    memcpy(c->buf + 56, lenbuf, 8);
+    _rl_sha1_block(c, c->buf);
+    for (int i = 0; i < 5; i++) {
+        out[4 * i] = (uint8_t)(c->h[i] >> 24);
+        out[4 * i + 1] = (uint8_t)(c->h[i] >> 16);
+        out[4 * i + 2] = (uint8_t)(c->h[i] >> 8);
+        out[4 * i + 3] = (uint8_t)c->h[i];
+    }
+}
+
+// ---- MD5 ----
+
+static const uint32_t _RL_MD5_K[64] = {
+    0xd76aa478, 0xe8c7b756, 0x242070db, 0xc1bdceee, 0xf57c0faf, 0x4787c62a, 0xa8304613, 0xfd469501,
+    0x698098d8, 0x8b44f7af, 0xffff5bb1, 0x895cd7be, 0x6b901122, 0xfd987193, 0xa679438e, 0x49b40821,
+    0xf61e2562, 0xc040b340, 0x265e5a51, 0xe9b6c7aa, 0xd62f105d, 0x02441453, 0xd8a1e681, 0xe7d3fbc8,
+    0x21e1cde6, 0xc33707d6, 0xf4d50d87, 0x455a14ed, 0xa9e3e905, 0xfcefa3f8, 0x676f02d9, 0x8d2a4c8a,
+    0xfffa3942, 0x8771f681, 0x6d9d6122, 0xfde5380c, 0xa4beea44, 0x4bdecfa9, 0xf6bb4b60, 0xbebfbc70,
+    0x289b7ec6, 0xeaa127fa, 0xd4ef3085, 0x04881d05, 0xd9d4d039, 0xe6db99e5, 0x1fa27cf8, 0xc4ac5665,
+    0xf4292244, 0x432aff97, 0xab9423a7, 0xfc93a039, 0x655b59c3, 0x8f0ccc92, 0xffeff47d, 0x85845dd1,
+    0x6fa87e4f, 0xfe2ce6e0, 0xa3014314, 0x4e0811a1, 0xf7537e82, 0xbd3af235, 0x2ad7d2bb, 0xeb86d391,
+};
+
+static const uint8_t _RL_MD5_S[64] = {
+    7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
+    5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20,
+    4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23,
+    6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21,
+};
+
+typedef struct { uint32_t h[4]; uint64_t len; uint8_t buf[64]; size_t buflen; } _rl_md5_ctx;
+
+static void _rl_md5_init(_rl_md5_ctx *c) {
+    c->h[0] = 0x67452301; c->h[1] = 0xefcdab89; c->h[2] = 0x98badcfe; c->h[3] = 0x10325476;
+    c->len = 0;
+    c->buflen = 0;
+}
+
+static void _rl_md5_block(_rl_md5_ctx *c, const uint8_t *p) {
+    uint32_t m[16];
+    for (int i = 0; i < 16; i++) {
+        m[i] = (uint32_t)p[4 * i] | ((uint32_t)p[4 * i + 1] << 8)
+            | ((uint32_t)p[4 * i + 2] << 16) | ((uint32_t)p[4 * i + 3] << 24);
+    }
+    uint32_t a = c->h[0], b = c->h[1], cc = c->h[2], d = c->h[3];
+    for (int i = 0; i < 64; i++) {
+        uint32_t f;
+        unsigned g;
+        if (i < 16) { f = (b & cc) | (~b & d); g = (unsigned)i; }
+        else if (i < 32) { f = (d & b) | (~d & cc); g = (unsigned)((5 * i + 1) % 16); }
+        else if (i < 48) { f = b ^ cc ^ d; g = (unsigned)((3 * i + 5) % 16); }
+        else { f = cc ^ (b | ~d); g = (unsigned)((7 * i) % 16); }
+        f = f + a + _RL_MD5_K[i] + m[g];
+        a = d; d = cc; cc = b;
+        b = b + _rl_rotr32(f, 32 - _RL_MD5_S[i]);
+    }
+    c->h[0] += a; c->h[1] += b; c->h[2] += cc; c->h[3] += d;
+}
+
+static void _rl_md5_update(_rl_md5_ctx *c, const uint8_t *data, size_t n) {
+    c->len += (uint64_t)n;
+    while (n > 0) {
+        size_t take = 64 - c->buflen;
+        if (take > n) take = n;
+        memcpy(c->buf + c->buflen, data, take);
+        c->buflen += take;
+        data += take;
+        n -= take;
+        if (c->buflen == 64) {
+            _rl_md5_block(c, c->buf);
+            c->buflen = 0;
+        }
+    }
+}
+
+static void _rl_md5_final(_rl_md5_ctx *c, uint8_t out[16]) {
+    uint64_t bitlen = c->len * 8;
+    uint8_t pad = 0x80;
+    _rl_md5_update(c, &pad, 1);
+    uint8_t zero = 0;
+    while (c->buflen != 56) _rl_md5_update(c, &zero, 1);
+    // Little-endian length, bypassing update like the others.
+    for (int i = 0; i < 8; i++) c->buf[56 + i] = (uint8_t)(bitlen >> (8 * i));
+    _rl_md5_block(c, c->buf);
+    for (int i = 0; i < 4; i++) {
+        out[4 * i] = (uint8_t)c->h[i];
+        out[4 * i + 1] = (uint8_t)(c->h[i] >> 8);
+        out[4 * i + 2] = (uint8_t)(c->h[i] >> 16);
+        out[4 * i + 3] = (uint8_t)(c->h[i] >> 24);
+    }
+}
+
+// ---- crypto HMAC ----
+// Generic HMAC over the init/update/final triples above. Keys longer
+// than the block hash down first, exactly like the hmac crate.
+
+typedef struct {
+    void (*init)(void *ctx);
+    void (*update)(void *ctx, const uint8_t *data, size_t n);
+    void (*final)(void *ctx, uint8_t *out);
+    size_t ctx_size;
+    size_t block_size;
+    size_t out_len;
+} _rl_hash_ops;
+
+static void _rl_hmac(const _rl_hash_ops *ops, const uint8_t *key, size_t keylen,
+        const uint8_t *data, size_t datalen, uint8_t *out) {
+    uint8_t keybuf[128];
+    memset(keybuf, 0, ops->block_size);
+    if (keylen > ops->block_size) {
+        uint8_t condensed[64];
+        uint8_t cbuf[256];
+        ops->init(cbuf);
+        ops->update(cbuf, key, keylen);
+        ops->final(cbuf, condensed);
+        memcpy(keybuf, condensed, ops->out_len);
+    } else {
+        memcpy(keybuf, key, keylen);
+    }
+    uint8_t ipad[128], opad[128];
+    for (size_t i = 0; i < ops->block_size; i++) {
+        ipad[i] = keybuf[i] ^ 0x36;
+        opad[i] = keybuf[i] ^ 0x5c;
+    }
+    uint8_t inner[64];
+    uint8_t cbuf[256];
+    ops->init(cbuf);
+    ops->update(cbuf, ipad, ops->block_size);
+    ops->update(cbuf, data, datalen);
+    ops->final(cbuf, inner);
+    ops->init(cbuf);
+    ops->update(cbuf, opad, ops->block_size);
+    ops->update(cbuf, inner, ops->out_len);
+    ops->final(cbuf, out);
+}
+
+static void _rl_sha256_init_v(void *c) { _rl_sha256_init((_rl_sha256_ctx *)c); }
+static void _rl_sha256_update_v(void *c, const uint8_t *d, size_t n) {
+    _rl_sha256_update((_rl_sha256_ctx *)c, d, n);
+}
+static void _rl_sha256_final_v(void *c, uint8_t *o) { _rl_sha256_final((_rl_sha256_ctx *)c, o); }
+static void _rl_sha512_init_v(void *c) { _rl_sha512_init((_rl_sha512_ctx *)c); }
+static void _rl_sha512_update_v(void *c, const uint8_t *d, size_t n) {
+    _rl_sha512_update((_rl_sha512_ctx *)c, d, n);
+}
+static void _rl_sha512_final_v(void *c, uint8_t *o) { _rl_sha512_final((_rl_sha512_ctx *)c, o); }
+
+static const _rl_hash_ops _RL_OPS_SHA256 = {
+    _rl_sha256_init_v, _rl_sha256_update_v, _rl_sha256_final_v,
+    sizeof(_rl_sha256_ctx), 64, 32,
+};
+static const _rl_hash_ops _RL_OPS_SHA512 = {
+    _rl_sha512_init_v, _rl_sha512_update_v, _rl_sha512_final_v,
+    sizeof(_rl_sha512_ctx), 128, 64,
+};
+
+// ---- crypto byte plumbing ----
+// Byte arrays are int64-element arrays holding 0-255. Literals arrive
+// that way; out-of-range elements abort like the VM's type error.
+
+static uint8_t *_rl_crypto_bytes(rl_array a, uint64_t *n_out) {
+    if (a.elem_size != (int32_t)sizeof(int64_t)) {
+        fprintf(stderr, "error: expected array[byte]\n");
+        _rl_abort();
+    }
+    int64_t *elems = (int64_t *)a.data;
+    uint8_t *out = malloc(a.len > 0 ? a.len : 1);
+    for (uint64_t i = 0; i < a.len; i++) {
+        if (elems[i] < 0 || elems[i] > 255) {
+            free(out);
+            fprintf(stderr, "error: byte value %lld out of range 0-255\n", (long long)elems[i]);
+            _rl_abort();
+        }
+        out[i] = (uint8_t)elems[i];
+    }
+    *n_out = a.len;
+    return out;
+}
+
+static rl_array _rl_crypto_push_bytes(const uint8_t *data, uint64_t n) {
+    int64_t *buf = malloc((n > 0 ? n : 1) * sizeof(int64_t));
+    for (uint64_t i = 0; i < n; i++) buf[i] = (int64_t)data[i];
+    rl_array arr = { .data = buf, .len = n, .cap = n,
+        .elem_size = (int32_t)sizeof(int64_t), .type_tag = RL_TAG_I64 };
+    return arr;
+}
+
+static rl_string _rl_crypto_push_str(const char *data, uint64_t n) {
+    char *dup = malloc(n + 1);
+    memcpy(dup, data, n);
+    dup[n] = '\0';
+    rl_string s = { .data = dup, .len = n };
+    return s;
+}
+
+rl_array rl_crypto_sha256(rl_array data) {
+    uint64_t n = 0;
+    uint8_t *bytes = _rl_crypto_bytes(data, &n);
+    _rl_sha256_ctx c;
+    _rl_sha256_init(&c);
+    _rl_sha256_update(&c, bytes, (size_t)n);
+    uint8_t out[32];
+    _rl_sha256_final(&c, out);
+    free(bytes);
+    return _rl_crypto_push_bytes(out, 32);
+}
+
+rl_array rl_crypto_sha512(rl_array data) {
+    uint64_t n = 0;
+    uint8_t *bytes = _rl_crypto_bytes(data, &n);
+    _rl_sha512_ctx c;
+    _rl_sha512_init(&c);
+    _rl_sha512_update(&c, bytes, (size_t)n);
+    uint8_t out[64];
+    _rl_sha512_final(&c, out);
+    free(bytes);
+    return _rl_crypto_push_bytes(out, 64);
+}
+
+rl_array rl_crypto_sha1(rl_array data) {
+    uint64_t n = 0;
+    uint8_t *bytes = _rl_crypto_bytes(data, &n);
+    _rl_sha1_ctx c;
+    _rl_sha1_init(&c);
+    _rl_sha1_update(&c, bytes, (size_t)n);
+    uint8_t out[20];
+    _rl_sha1_final(&c, out);
+    free(bytes);
+    return _rl_crypto_push_bytes(out, 20);
+}
+
+rl_array rl_crypto_md5(rl_array data) {
+    uint64_t n = 0;
+    uint8_t *bytes = _rl_crypto_bytes(data, &n);
+    _rl_md5_ctx c;
+    _rl_md5_init(&c);
+    _rl_md5_update(&c, bytes, (size_t)n);
+    uint8_t out[16];
+    _rl_md5_final(&c, out);
+    free(bytes);
+    return _rl_crypto_push_bytes(out, 16);
+}
+
+rl_array rl_crypto_hmac_sha256(rl_array key, rl_array data) {
+    uint64_t nk = 0, nd = 0;
+    uint8_t *k = _rl_crypto_bytes(key, &nk);
+    uint8_t *d = _rl_crypto_bytes(data, &nd);
+    uint8_t out[32];
+    _rl_hmac(&_RL_OPS_SHA256, k, (size_t)nk, d, (size_t)nd, out);
+    free(k);
+    free(d);
+    return _rl_crypto_push_bytes(out, 32);
+}
+
+rl_array rl_crypto_hmac_sha512(rl_array key, rl_array data) {
+    uint64_t nk = 0, nd = 0;
+    uint8_t *k = _rl_crypto_bytes(key, &nk);
+    uint8_t *d = _rl_crypto_bytes(data, &nd);
+    uint8_t out[64];
+    _rl_hmac(&_RL_OPS_SHA512, k, (size_t)nk, d, (size_t)nd, out);
+    free(k);
+    free(d);
+    return _rl_crypto_push_bytes(out, 64);
+}
+
+bool rl_crypto_constant_time_eq(rl_array a, rl_array b) {
+    uint64_t na = 0, nb = 0;
+    uint8_t *ba = _rl_crypto_bytes(a, &na);
+    uint8_t *bb = _rl_crypto_bytes(b, &nb);
+    // Lengths fold into the diff like subtle's slice ct_eq; the data
+    // loop always runs over the shared prefix.
+    uint64_t diff = na ^ nb;
+    uint64_t n = (na < nb) ? na : nb;
+    for (uint64_t i = 0; i < n; i++) diff |= (uint64_t)(ba[i] ^ bb[i]);
+    free(ba);
+    free(bb);
+    return diff == 0;
+}
+
+// ---- crypto base64 / hex ----
+
+static const char _RL_B64_STD[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+static const char _RL_B64_URL[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
+static rl_string _rl_crypto_b64_encode(const uint8_t *data, uint64_t n, const char *alpha, int pad) {
+    uint64_t outlen = ((n + 2) / 3) * 4;
+    char *out = malloc(outlen + 1);
+    uint64_t o = 0;
+    for (uint64_t i = 0; i < n; i += 3) {
+        uint32_t triple = (uint32_t)data[i] << 16;
+        int rem = (int)(n - i);
+        if (rem > 1) triple |= (uint32_t)data[i + 1] << 8;
+        if (rem > 2) triple |= data[i + 2];
+        out[o++] = alpha[(triple >> 18) & 63];
+        out[o++] = alpha[(triple >> 12) & 63];
+        if (rem > 1) {
+            out[o++] = alpha[(triple >> 6) & 63];
+        } else if (pad) {
+            out[o++] = '=';
+        }
+        if (rem > 2) {
+            out[o++] = alpha[triple & 63];
+        } else if (pad) {
+            out[o++] = '=';
+        }
+    }
+    out[o] = '\0';
+    rl_string s = { .data = out, .len = o };
+    return s;
+}
+
+static int _rl_crypto_b64_val(char c, const char *alpha) {
+    if (c >= 'A' && c <= 'Z') return c - 'A';
+    if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+    if (c >= '0' && c <= '9') return c - '0' + 52;
+    if (c == alpha[62]) return 62;
+    if (c == alpha[63]) return 63;
+    return -1;
+}
+
+// Decodes base64; pad!=0 requires standard padding, pad==0 forbids it
+// (URL_SAFE_NO_PAD). Returns NULL + *err on invalid input.
+static uint8_t *_rl_crypto_b64_decode(const char *s, uint64_t n, const char *alpha, int pad,
+        uint64_t *out_n, const char **err) {
+    *err = NULL;
+    if (!pad && n % 4 == 1) {
+        *err = "invalid base64 length";
+        return NULL;
+    }
+    uint64_t cap = (n / 4) * 3 + 3;
+    uint8_t *out = malloc(cap > 0 ? cap : 1);
+    uint64_t o = 0;
+    uint64_t i = 0;
+    while (i < n) {
+        int vals[4];
+        int got = 0, padding = 0;
+        for (int k = 0; k < 4 && i < n; k++, i++) {
+            if (pad && s[i] == '=') {
+                vals[k] = 0;
+                padding++;
+                got++;
+            } else {
+                int v = _rl_crypto_b64_val(s[i], alpha);
+                if (v < 0) {
+                    free(out);
+                    *err = "invalid base64 character";
+                    return NULL;
+                }
+                if (padding > 0) {
+                    free(out);
+                    *err = "misplaced base64 padding";
+                    return NULL;
+                }
+                vals[k] = v;
+                got++;
+            }
+        }
+        if (got < 4) {
+            if (pad || got == 1) {
+                free(out);
+                *err = "truncated base64 input";
+                return NULL;
+            }
+            // Unpadded tail: 2 chars -> 1 byte, 3 chars -> 2 bytes.
+            uint32_t triple = ((uint32_t)vals[0] << 18) | ((uint32_t)vals[1] << 12);
+            if (got == 3) triple |= (uint32_t)vals[2] << 6;
+            out[o++] = (uint8_t)(triple >> 16);
+            if (got == 3) out[o++] = (uint8_t)(triple >> 8);
+            break;
+        }
+        uint32_t triple = ((uint32_t)vals[0] << 18) | ((uint32_t)vals[1] << 12)
+            | ((uint32_t)vals[2] << 6) | (uint32_t)vals[3];
+        // Padding only valid as the last 1-2 chars of the final group.
+        if (padding > 0 && i < n) {
+            free(out);
+            *err = "misplaced base64 padding";
+            return NULL;
+        }
+        if (padding > 2) {
+            free(out);
+            *err = "invalid base64 padding";
+            return NULL;
+        }
+        out[o++] = (uint8_t)(triple >> 16);
+        if (padding < 2) out[o++] = (uint8_t)(triple >> 8);
+        if (padding < 1) out[o++] = (uint8_t)triple;
+    }
+    *out_n = o;
+    return out;
+}
+
+rl_string rl_crypto_base64_encode(rl_array data) {
+    uint64_t n = 0;
+    uint8_t *bytes = _rl_crypto_bytes(data, &n);
+    rl_string s = _rl_crypto_b64_encode(bytes, n, _RL_B64_STD, 1);
+    free(bytes);
+    return s;
+}
+
+rl_result rl_crypto_base64_decode(rl_string s) {
+    const char *data = (s.data != NULL) ? s.data : "";
+    uint64_t n = 0;
+    const char *err = NULL;
+    uint8_t *bytes = _rl_crypto_b64_decode(data, s.len, _RL_B64_STD, 1, &n, &err);
+    if (err != NULL) return _rl_cli_err(err);
+    rl_array arr = _rl_crypto_push_bytes(bytes, n);
+    free(bytes);
+    return rl_ok_arr(arr);
+}
+
+rl_string rl_crypto_base64_url_encode(rl_array data) {
+    uint64_t n = 0;
+    uint8_t *bytes = _rl_crypto_bytes(data, &n);
+    rl_string s = _rl_crypto_b64_encode(bytes, n, _RL_B64_URL, 0);
+    free(bytes);
+    return s;
+}
+
+rl_result rl_crypto_base64_url_decode(rl_string s) {
+    const char *data = (s.data != NULL) ? s.data : "";
+    uint64_t n = 0;
+    const char *err = NULL;
+    uint8_t *bytes = _rl_crypto_b64_decode(data, s.len, _RL_B64_URL, 0, &n, &err);
+    if (err != NULL) return _rl_cli_err(err);
+    rl_array arr = _rl_crypto_push_bytes(bytes, n);
+    free(bytes);
+    return rl_ok_arr(arr);
+}
+
+static const char _RL_HEX[] = "0123456789abcdef";
+
+rl_string rl_crypto_hex_encode(rl_array data) {
+    uint64_t n = 0;
+    uint8_t *bytes = _rl_crypto_bytes(data, &n);
+    char *out = malloc(n * 2 + 1);
+    for (uint64_t i = 0; i < n; i++) {
+        out[2 * i] = _RL_HEX[bytes[i] >> 4];
+        out[2 * i + 1] = _RL_HEX[bytes[i] & 15];
+    }
+    out[n * 2] = '\0';
+    free(bytes);
+    rl_string s = { .data = out, .len = n * 2 };
+    return s;
+}
+
+static int _rl_crypto_hex_val(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+rl_result rl_crypto_hex_decode(rl_string s) {
+    const char *data = (s.data != NULL) ? s.data : "";
+    if (s.len % 2 != 0) return _rl_cli_err("hex_decode: odd length");
+    uint8_t *out = malloc(s.len / 2 > 0 ? s.len / 2 : 1);
+    for (uint64_t i = 0; i < s.len; i += 2) {
+        int hi = _rl_crypto_hex_val(data[i]);
+        int lo = _rl_crypto_hex_val(data[i + 1]);
+        if (hi < 0 || lo < 0) {
+            free(out);
+            return _rl_cli_err("hex_decode: invalid hex character");
+        }
+        out[i / 2] = (uint8_t)((hi << 4) | lo);
+    }
+    rl_array arr = _rl_crypto_push_bytes(out, s.len / 2);
+    free(out);
+    return rl_ok_arr(arr);
+}
+
+// ---- crypto RNG ----
+
+static void _rl_crypto_random(uint8_t *buf, uint64_t n) {
+    // getrandom() first (fast, no fd), /dev/urandom fallback. Failure
+    // aborts like the VM's expect: predictable bytes are worse than none.
+    uint64_t done = 0;
+    while (done < n) {
+        ssize_t r = getrandom(buf + done, (size_t)(n - done), 0);
+        if (r < 0) break;
+        done += (uint64_t)r;
+    }
+    if (done < n) {
+        FILE *f = fopen("/dev/urandom", "rb");
+        if (f != NULL) {
+            while (done < n) {
+                size_t r = fread(buf + done, 1, (size_t)(n - done), f);
+                if (r == 0) break;
+                done += r;
+            }
+            fclose(f);
+        }
+    }
+    if (done < n) {
+        fprintf(stderr, "error: secure_random_bytes: OS entropy failure\n");
+        _rl_abort();
+    }
+}
+
+rl_array rl_crypto_secure_random_bytes(int64_t count) {
+    if (count <= 0) return _rl_crypto_push_bytes(NULL, 0);
+    uint8_t *buf = malloc((uint64_t)count);
+    _rl_crypto_random(buf, (uint64_t)count);
+    rl_array arr = _rl_crypto_push_bytes(buf, (uint64_t)count);
+    free(buf);
+    return arr;
+}
+
+rl_array rl_crypto_secure_token(int64_t count) {
+    return rl_crypto_secure_random_bytes(count);
+}
+
+rl_string rl_crypto_secure_token_hex(int64_t count) {
+    rl_array t = rl_crypto_secure_token(count);
+    uint64_t n = 0;
+    uint8_t *bytes = _rl_crypto_bytes(t, &n);
+    char *out = malloc(n * 2 + 1);
+    for (uint64_t i = 0; i < n; i++) {
+        out[2 * i] = _RL_HEX[bytes[i] >> 4];
+        out[2 * i + 1] = _RL_HEX[bytes[i] & 15];
+    }
+    out[n * 2] = '\0';
+    free(bytes);
+    // t owns int64 storage; element bytes were copied out above.
+    free(t.data);
+    rl_string s = { .data = out, .len = n * 2 };
+    return s;
+}
+
+rl_string rl_crypto_secure_token_urlsafe(int64_t count) {
+    rl_array t = rl_crypto_secure_token(count);
+    uint64_t n = 0;
+    uint8_t *bytes = _rl_crypto_bytes(t, &n);
+    rl_string s = _rl_crypto_b64_encode(bytes, n, _RL_B64_URL, 0);
+    free(bytes);
+    free(t.data);
+    return s;
+}
+
+// ---- crypto UUID ----
+
+static rl_string _rl_crypto_uuid_str(const uint8_t id[16]) {
+    char *out = malloc(37);
+    snprintf(out, 37, "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+        id[0], id[1], id[2], id[3], id[4], id[5], id[6], id[7],
+        id[8], id[9], id[10], id[11], id[12], id[13], id[14], id[15]);
+    rl_string s = { .data = out, .len = 36 };
+    return s;
+}
+
+rl_string rl_crypto_uuid_v4(void) {
+    uint8_t id[16];
+    _rl_crypto_random(id, 16);
+    id[6] = (id[6] & 0x0f) | 0x40;
+    id[8] = (id[8] & 0x3f) | 0x80;
+    return _rl_crypto_uuid_str(id);
+}
+
+rl_string rl_crypto_uuid_v7(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    uint64_t ms = (uint64_t)ts.tv_sec * 1000 + (uint64_t)ts.tv_nsec / 1000000;
+    uint8_t id[16];
+    _rl_crypto_random(id, 16);
+    id[0] = (uint8_t)(ms >> 40); id[1] = (uint8_t)(ms >> 32);
+    id[2] = (uint8_t)(ms >> 24); id[3] = (uint8_t)(ms >> 16);
+    id[4] = (uint8_t)(ms >> 8); id[5] = (uint8_t)ms;
+    id[6] = (id[6] & 0x0f) | 0x70;
+    id[8] = (id[8] & 0x3f) | 0x80;
+    return _rl_crypto_uuid_str(id);
+}
+
+rl_result rl_crypto_uuid_parse(rl_string s) {
+    const char *data = (s.data != NULL) ? s.data : "";
+    // 8-4-4-4-12 hex with dashes; normalized output on success.
+    if (s.len != 36 || data[8] != '-' || data[13] != '-' || data[18] != '-' || data[23] != '-') {
+        return _rl_cli_err("uuid_parse: malformed UUID");
+    }
+    uint8_t id[16];
+    unsigned pos = 0;
+    for (uint64_t i = 0; i < 36; i++) {
+        if (data[i] == '-') continue;
+        int v = _rl_crypto_hex_val(data[i]);
+        if (v < 0) return _rl_cli_err("uuid_parse: malformed UUID");
+        if (pos % 2 == 0) id[pos / 2] = (uint8_t)(v << 4);
+        else id[pos / 2] |= (uint8_t)v;
+        pos++;
+    }
+    if (pos != 32) return _rl_cli_err("uuid_parse: malformed UUID");
+    return rl_ok_str(_rl_crypto_uuid_str(id));
+}
+
+// ---- crypto passwords (argon2) ----
+// Needs libargon2: rlt links -DRL_USE_ARGON2 -largon2 when generated code
+// mentions rl_crypto_password. Hand-built binaries without the flag get a
+// loud abort naming the missing flags. Params match the VM exactly
+// (argon2id, m=19456, t=2, p=1, 16-byte salt, 32-byte hash) so hashes
+// verify cross-backend.
+
+#ifdef RL_USE_ARGON2
+#include <argon2.h>
+#endif
+
+rl_string rl_crypto_password_hash(rl_string password) {
+#ifdef RL_USE_ARGON2
+    const char *pwd = (password.data != NULL) ? password.data : "";
+    uint8_t salt[16];
+    _rl_crypto_random(salt, 16);
+    char encoded[256];
+    int rc = argon2id_hash_encoded(2, 19456, 1, pwd, password.len, salt, 16, 32, encoded, sizeof(encoded));
+    if (rc != ARGON2_OK) {
+        fprintf(stderr, "error: password_hash: %s\n", argon2_error_message(rc));
+        _rl_abort();
+    }
+    return _rl_crypto_push_str(encoded, strlen(encoded));
+#else
+    (void)password;
+    fprintf(stderr, "error: password_hash needs -DRL_USE_ARGON2 -largon2\n");
+    _rl_abort();
+    return _rl_crypto_push_str("", 0);
+#endif
+}
+
+bool rl_crypto_password_verify(rl_string password, rl_string hash) {
+#ifdef RL_USE_ARGON2
+    const char *pwd = (password.data != NULL) ? password.data : "";
+    char *h = malloc(hash.len + 1);
+    if (hash.len > 0 && hash.data != NULL) memcpy(h, hash.data, hash.len);
+    h[hash.len] = '\0';
+    int rc = argon2id_verify(h, pwd, password.len);
+    free(h);
+    return rc == ARGON2_OK;
+#else
+    (void)password;
+    (void)hash;
+    fprintf(stderr, "error: password_verify needs -DRL_USE_ARGON2 -largon2\n");
+    _rl_abort();
+    return 0;
+#endif
+}
+
 // ---- cli progress ----
 // Byte-identical format to the VM: \r{label} [{#24}] {pct:3}%, \n at 100%.
 

@@ -107,6 +107,11 @@ fn main() {
                 cmd.arg("-lpthread");
                 cmd.arg("-ldl");
             }
+            // password hashing needs libargon2 (only when used).
+            if c_src.contains("rl_crypto_password") {
+                cmd.arg("-DRL_USE_ARGON2");
+                cmd.arg("-largon2");
+            }
         }
 
         if embed_rt {

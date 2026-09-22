@@ -4,6 +4,7 @@ mod c_ffi;
 mod cli;
 mod closure;
 mod collections;
+mod crypto;
 mod http;
 mod io;
 mod math;
@@ -824,6 +825,28 @@ impl<'a> CCodegen<'a> {
             "read_line_with_history" => return self::cli::compile_read_line_with_history(self, args),
             "progress_bar" => return self::cli::compile_progress_bar(self, args),
             "spinner_tick" => return self::cli::compile_spinner_tick(self, args),
+            "sha256" => return self::crypto::compile_sha256(self, args),
+            "sha512" => return self::crypto::compile_sha512(self, args),
+            "sha1" => return self::crypto::compile_sha1(self, args),
+            "md5" => return self::crypto::compile_md5(self, args),
+            "hmac_sha256" => return self::crypto::compile_hmac_sha256(self, args),
+            "hmac_sha512" => return self::crypto::compile_hmac_sha512(self, args),
+            "constant_time_eq" => return self::crypto::compile_constant_time_eq(self, args),
+            "secure_random_bytes" => return self::crypto::compile_secure_random_bytes(self, args),
+            "secure_token" => return self::crypto::compile_secure_token(self, args),
+            "secure_token_hex" => return self::crypto::compile_secure_token_hex(self, args),
+            "secure_token_urlsafe" => return self::crypto::compile_secure_token_urlsafe(self, args),
+            "base64_encode" => return self::crypto::compile_base64_encode(self, args),
+            "base64_decode" => return self::crypto::compile_base64_decode(self, args),
+            "base64_url_encode" => return self::crypto::compile_base64_url_encode(self, args),
+            "base64_url_decode" => return self::crypto::compile_base64_url_decode(self, args),
+            "hex_encode" => return self::crypto::compile_hex_encode(self, args),
+            "hex_decode" => return self::crypto::compile_hex_decode(self, args),
+            "uuid_v4" => return self::crypto::compile_uuid_v4(self),
+            "uuid_v7" => return self::crypto::compile_uuid_v7(self),
+            "uuid_parse" => return self::crypto::compile_uuid_parse(self, args),
+            "password_hash" => return self::crypto::compile_password_hash(self, args),
+            "password_verify" => return self::crypto::compile_password_verify(self, args),
             "pipe" => return self::process::compile_pipe(self, args),
             "pipe_all" => return self::process::compile_pipe_all(self, args),
             "args" => return self::process::compile_args(self),

@@ -100,6 +100,7 @@ impl TypeChecker {
                 .chain(keywords::bitwise::KEYWORDS)
                 .chain(keywords::c::KEYWORDS)
                 .chain(keywords::cli::KEYWORDS)
+                .chain(keywords::crypto::KEYWORDS)
                 .chain(keywords::collections::KEYWORDS)
                 .chain(keywords::debug::KEYWORDS)
                 .chain(keywords::fs::KEYWORDS)

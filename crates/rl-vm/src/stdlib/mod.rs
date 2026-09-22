@@ -32,6 +32,8 @@ pub fn root() -> Module {
     { std = std.with_module(Module::from_std("c", rl_std::c::handles::<VmRuntime>())); }
     #[cfg(any(feature = "std-cli", feature = "impls"))]
     { std = std.with_module(Module::from_std("cli", rl_std::cli::handles::<VmRuntime>())); }
+    #[cfg(any(feature = "std-crypto", feature = "impls"))]
+    { std = std.with_module(Module::from_std("crypto", rl_std::crypto::handles::<VmRuntime>())); }
     #[cfg(any(feature = "std-audio", feature = "impls"))]
     { std = std.with_module(Module::from_std("audio", rl_std::audio::handles::<VmRuntime>())); }
     #[cfg(any(feature = "std-gui", feature = "impls"))]

@@ -2,6 +2,7 @@ mod arr_zip;
 mod bitwise;
 mod cli;
 mod collections;
+mod crypto;
 mod fs;
 mod io;
 mod math;

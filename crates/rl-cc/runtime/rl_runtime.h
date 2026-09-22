@@ -30,6 +30,7 @@
 #include <termios.h>
 #include <errno.h>
 #include <time.h>
+#include <sys/random.h>
 #include <ctype.h>
 #include <dlfcn.h>
 #include <dirent.h>
@@ -760,6 +761,33 @@ rl_string rl_cli_read_line_editable(rl_string msg);
 rl_result rl_cli_read_line_with_history(rl_string msg, rl_array history);
 rl_result rl_cli_progress_bar(int64_t current, int64_t total, rl_string label);
 rl_result rl_cli_spinner_tick(int64_t frame);
+
+// ---- crypto ----
+// Mirrors `std::crypto`. Byte arrays are int64-element arrays holding
+// 0-255. Password hashing needs libargon2 (rlt links it when generated
+// code mentions rl_crypto_password).
+rl_array rl_crypto_sha256(rl_array data);
+rl_array rl_crypto_sha512(rl_array data);
+rl_array rl_crypto_sha1(rl_array data);
+rl_array rl_crypto_md5(rl_array data);
+rl_array rl_crypto_hmac_sha256(rl_array key, rl_array data);
+rl_array rl_crypto_hmac_sha512(rl_array key, rl_array data);
+bool rl_crypto_constant_time_eq(rl_array a, rl_array b);
+rl_array rl_crypto_secure_random_bytes(int64_t count);
+rl_array rl_crypto_secure_token(int64_t count);
+rl_string rl_crypto_secure_token_hex(int64_t count);
+rl_string rl_crypto_secure_token_urlsafe(int64_t count);
+rl_string rl_crypto_base64_encode(rl_array data);
+rl_result rl_crypto_base64_decode(rl_string s);
+rl_string rl_crypto_base64_url_encode(rl_array data);
+rl_result rl_crypto_base64_url_decode(rl_string s);
+rl_string rl_crypto_hex_encode(rl_array data);
+rl_result rl_crypto_hex_decode(rl_string s);
+rl_string rl_crypto_uuid_v4(void);
+rl_string rl_crypto_uuid_v7(void);
+rl_result rl_crypto_uuid_parse(rl_string s);
+rl_string rl_crypto_password_hash(rl_string password);
+bool rl_crypto_password_verify(rl_string password, rl_string hash);
 
 // ---- time ----
 // Format a Unix timestamp with a strftime-style `pattern`, or an error.

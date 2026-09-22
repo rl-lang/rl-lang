@@ -291,7 +291,28 @@ pub fn unify(
         (
             TypeAnnotation::Array(e) | TypeAnnotation::CArray(e),
             TypeAnnotation::Array(a) | TypeAnnotation::CArray(a),
-        ) => unify(e, a, bindings),
+        ) => {
+            // An empty literal adopts the needed element type (vacuously
+            // sound: no elements to violate it). Same rule as
+            // null_array_elision, which the matches-path already applies.
+            if matches!(a.as_ref(), TypeAnnotation::Null) {
+                return true;
+            }
+            // Integer elements coerce to bytes (`[104, 105]` for an
+            // array[byte] param); out-of-range values stay a runtime
+            // type error via as_u8, mirroring the numeric leniency
+            // already in as_f64.
+            if matches!(
+                e.as_ref(),
+                TypeAnnotation::Byte | TypeAnnotation::CByte
+            ) && matches!(
+                a.as_ref(),
+                TypeAnnotation::Int | TypeAnnotation::CInt
+            ) {
+                return true;
+            }
+            unify(e, a, bindings)
+        }
 
         (
             TypeAnnotation::Set(e) | TypeAnnotation::CSet(e),

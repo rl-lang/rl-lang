@@ -1,5 +1,32 @@
 //! Static name lists for every `std::*` stdlib module.
 
+pub mod crypto {
+    pub const KEYWORDS: &[&str] = &[
+        "sha256",
+        "sha512",
+        "sha1",
+        "md5",
+        "hmac_sha256",
+        "hmac_sha512",
+        "constant_time_eq",
+        "secure_random_bytes",
+        "secure_token",
+        "secure_token_hex",
+        "secure_token_urlsafe",
+        "base64_encode",
+        "base64_decode",
+        "base64_url_encode",
+        "base64_url_decode",
+        "hex_encode",
+        "hex_decode",
+        "uuid_v4",
+        "uuid_v7",
+        "uuid_parse",
+        "password_hash",
+        "password_verify",
+    ];
+}
+
 pub mod cli {
     pub const KEYWORDS: &[&str] = &[
         "parse_args",
