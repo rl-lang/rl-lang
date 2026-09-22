@@ -44,12 +44,8 @@ pub(super) fn compile_term_with_args(cc: &mut CCodegen, func_name: &str, args: &
 }
 
 pub(super) fn compile_term_get_size(cc: &mut CCodegen) -> Result<(), Error> {
-    let w = cc.temp_var();
-    let h = cc.temp_var();
-    cc.writer.write(&format!(
-        "{{ int64_t {0}, {1}; rl_term_get_size(&{0}, &{1}); rl_ok_arr(rl_arr_from_vals(&(int64_t[]){{{0}, {1}}}, 2, sizeof(int64_t))) }}",
-        w, h
-    ));
+    // VM returns ok([cols, rows]); the runtime builds that array or an error.
+    cc.writer.write("rl_term_size()");
     Ok(())
 }
 
@@ -68,9 +64,11 @@ pub(super) fn compile_term_str(cc: &mut CCodegen, func_name: &str, args: &[ExprI
             cc.writer.write(")");
         }
         "term_print" => {
-            cc.writer.write("rl_term_print_inline(");
+            cc.writer.write("rl_term_print_inline((rl_fmt_arg)");
             if !args.is_empty() {
-                cc.compile_expr(args[0])?;
+                cc.write_arg_as_fmt(args[0])?;
+            } else {
+                cc.writer.write("{ rl_ok_null(), true }");
             }
             cc.writer.write(")");
         }

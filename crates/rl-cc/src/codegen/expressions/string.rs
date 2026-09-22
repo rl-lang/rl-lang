@@ -184,10 +184,10 @@ pub(super) fn compile_split(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Er
 }
 
 pub(super) fn compile_concat(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
-    cc.writer.write("rl_str_concat_variadic((rl_result[]){ ");
+    cc.writer.write("rl_str_concat_variadic((rl_fmt_arg[]){ ");
     for (i, arg) in args.iter().enumerate() {
         if i > 0 { cc.writer.write(", "); }
-        cc.write_arg_as_result(*arg)?;
+        cc.write_arg_as_fmt(*arg)?;
     }
     cc.writer.write(&format!(" }}, {})", args.len()));
     Ok(())
@@ -197,16 +197,15 @@ pub(super) fn compile_format(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), E
     cc.writer.write("rl_str_format(");
     if !args.is_empty() { cc.compile_expr(args[0])?; }
     if args.len() > 1 {
-        cc.writer.write(", (rl_result[]){ ");
+        cc.writer.write(", (rl_fmt_arg[]){ ");
         for (i, arg) in args[1..].iter().enumerate() {
             if i > 0 { cc.writer.write(", "); }
-            cc.write_arg_as_result(*arg)?;
+            cc.write_arg_as_fmt(*arg)?;
         }
         cc.writer.write(&format!(" }}, {})", args.len() - 1));
     } else {
-        cc.writer.write(", NULL, 0");
+        cc.writer.write(", NULL, 0)");
     }
-    cc.writer.write(")");
     Ok(())
 }
 

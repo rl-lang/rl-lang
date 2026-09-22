@@ -22,7 +22,8 @@ pub(super) fn compile_sleep(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Er
 }
 
 pub(super) fn compile_env(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
-    cc.writer.write("getenv(");
+    // VM returns a bare string when set, null when missing.
+    cc.writer.write("rl_process_env(");
     if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(")");
     Ok(())
@@ -34,9 +35,9 @@ pub(super) fn compile_cwd(cc: &mut CCodegen) -> Result<(), Error> {
 }
 
 pub(super) fn compile_set_cwd(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
-    cc.writer.write("rl_ok(rl_process_set_cwd(");
+    cc.writer.write("rl_process_set_cwd(");
     if !args.is_empty() { cc.compile_expr(args[0])?; }
-    cc.writer.write("))");
+    cc.writer.write(")");
     Ok(())
 }
 
@@ -47,17 +48,24 @@ pub(super) fn compile_exec(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Err
     Ok(())
 }
 
-pub(super) fn compile_exec_code(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
-    cc.writer.write("rl_ok(rl_process_exec_code(");
+pub(super) fn compile_exec_fg(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    cc.writer.write("rl_process_exec_fg(");
     if !args.is_empty() { cc.compile_expr(args[0])?; }
-    cc.writer.write("))");
+    cc.writer.write(")");
+    Ok(())
+}
+
+pub(super) fn compile_exec_code(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    cc.writer.write("rl_process_exec_code(");
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
+    cc.writer.write(")");
     Ok(())
 }
 
 pub(super) fn compile_exec_lines(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
-    cc.writer.write("rl_ok(rl_process_exec_lines(");
+    cc.writer.write("rl_process_exec_lines(");
     if !args.is_empty() { cc.compile_expr(args[0])?; }
-    cc.writer.write("))");
+    cc.writer.write(")");
     Ok(())
 }
 
@@ -71,25 +79,66 @@ pub(super) fn compile_with_exec(cc: &mut CCodegen, args: &[ExprId]) -> Result<()
 }
 
 pub(super) fn compile_with_exec_code(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
-    cc.writer.write("rl_ok(rl_process_with_exec_code(");
+    cc.writer.write("rl_process_with_exec_code(");
     if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(", ");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
-    cc.writer.write("))");
+    cc.writer.write(")");
     Ok(())
 }
 
 pub(super) fn compile_with_exec_lines(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
-    cc.writer.write("rl_ok(rl_process_with_exec_lines(");
+    cc.writer.write("rl_process_with_exec_lines(");
     if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(", ");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
-    cc.writer.write("))");
+    cc.writer.write(")");
     Ok(())
 }
 
 pub(super) fn compile_args(cc: &mut CCodegen) -> Result<(), Error> {
-    cc.writer.write("rl_ok(rl_process_args())");
+    // VM returns a bare array of strings.
+    cc.writer.write("rl_process_args()");
+    Ok(())
+}
+
+pub(super) fn compile_os_name(cc: &mut CCodegen) -> Result<(), Error> {
+    cc.writer.write("rl_process_os_name()");
+    Ok(())
+}
+
+pub(super) fn compile_exec_background(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    cc.writer.write("rl_process_exec_background(");
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
+    cc.writer.write(")");
+    Ok(())
+}
+
+pub(super) fn compile_process_running(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    cc.writer.write("rl_process_running(");
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
+    cc.writer.write(")");
+    Ok(())
+}
+
+pub(super) fn compile_term_pid(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    cc.writer.write("rl_process_term_pid(");
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
+    cc.writer.write(")");
+    Ok(())
+}
+
+pub(super) fn compile_kill_pid(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    cc.writer.write("rl_process_kill_pid(");
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
+    cc.writer.write(")");
+    Ok(())
+}
+
+pub(super) fn compile_wait_pid(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    cc.writer.write("rl_process_wait_pid(");
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
+    cc.writer.write(")");
     Ok(())
 }
 
@@ -141,9 +190,9 @@ pub(super) fn compile_format_time_str(cc: &mut CCodegen, args: &[ExprId]) -> Res
 }
 
 pub(super) fn compile_time_parts(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
-    cc.writer.write("rl_ok(rl_time_parts(");
+    cc.writer.write("rl_time_parts(");
     if !args.is_empty() { cc.compile_expr(args[0])?; }
-    cc.writer.write("))");
+    cc.writer.write(")");
     Ok(())
 }
 
@@ -232,17 +281,40 @@ pub(super) fn compile_mkdir(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Er
 }
 
 pub(super) fn compile_rmdir(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
-    cc.writer.write("rmdir(");
+    cc.writer.write("rl_fs_rmdir(");
     if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(")");
     Ok(())
 }
 
 pub(super) fn compile_move_file(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
-    cc.writer.write("rename(");
+    cc.writer.write("rl_fs_move_file(");
     if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(", ");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
+    cc.writer.write(")");
+    Ok(())
+}
+
+pub(super) fn compile_rename_file(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    cc.writer.write("rl_fs_rename_file(");
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
+    cc.writer.write(", ");
+    if args.len() >= 2 { cc.compile_expr(args[1])?; }
+    cc.writer.write(")");
+    Ok(())
+}
+
+pub(super) fn compile_file_created(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    cc.writer.write("rl_fs_file_created(");
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
+    cc.writer.write(")");
+    Ok(())
+}
+
+pub(super) fn compile_touch(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    cc.writer.write("rl_fs_touch(");
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(")");
     Ok(())
 }
@@ -253,45 +325,45 @@ pub(super) fn compile_temp_dir(cc: &mut CCodegen) -> Result<(), Error> {
 }
 
 pub(super) fn compile_file_size(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
-    cc.writer.write("rl_ok(rl_fs_file_size(");
+    cc.writer.write("rl_fs_file_size(");
     if !args.is_empty() { cc.compile_expr(args[0])?; }
-    cc.writer.write("))");
+    cc.writer.write(")");
     Ok(())
 }
 
 pub(super) fn compile_file_modified(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
-    cc.writer.write("rl_ok(rl_fs_file_modified(");
+    cc.writer.write("rl_fs_file_modified(");
     if !args.is_empty() { cc.compile_expr(args[0])?; }
-    cc.writer.write("))");
+    cc.writer.write(")");
     Ok(())
 }
 
 pub(super) fn compile_copy_file(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
-    cc.writer.write("rl_ok(rl_fs_copy_file(");
+    cc.writer.write("rl_fs_copy_file(");
     if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(", ");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
-    cc.writer.write("))");
+    cc.writer.write(")");
     Ok(())
 }
 
 pub(super) fn compile_mkdir_all(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
-    cc.writer.write("rl_ok(rl_fs_mkdir_all(");
+    cc.writer.write("rl_fs_mkdir_all(");
     if !args.is_empty() { cc.compile_expr(args[0])?; }
-    cc.writer.write("))");
+    cc.writer.write(")");
     Ok(())
 }
 
 pub(super) fn compile_rmdir_all(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
-    cc.writer.write("rl_ok(rl_fs_rmdir_all(");
+    cc.writer.write("rl_fs_rmdir_all(");
     if !args.is_empty() { cc.compile_expr(args[0])?; }
-    cc.writer.write("))");
+    cc.writer.write(")");
     Ok(())
 }
 
 pub(super) fn compile_list_dir(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
-    cc.writer.write("rl_ok(rl_fs_list_dir(");
+    cc.writer.write("rl_fs_list_dir(");
     if !args.is_empty() { cc.compile_expr(args[0])?; }
-    cc.writer.write("))");
+    cc.writer.write(")");
     Ok(())
 }
