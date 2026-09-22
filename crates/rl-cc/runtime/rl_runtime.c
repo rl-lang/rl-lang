@@ -2,12 +2,25 @@
 #define _POSIX_C_SOURCE 200809L
 #include "rl_runtime.h"
 
+// Forward declarations for helpers used before their definitions.
+static const char *_rl_tag_name(enum rl_type_tag tag);
+static char *_rl_trim_copy(rl_string s, uint64_t *out_len);
+static bool _rl_utf8_decode(const char *s, uint64_t len, uint32_t *code, uint64_t *used);
+static void _rl_abort(void);
+
+// Tagged handle ids: each domain adds its base to a small index so
+// kinds never overlap and small bare ints never collide with handles.
+#define RL_HANDLE_C_BASE ((int64_t)0x1000000)
+#define RL_HANDLE_NET_BASE ((int64_t)0x2000000)
+#define RL_HANDLE_HTTP_BASE ((int64_t)0x3000000)
+#define RL_HANDLE_FILE_BASE ((int64_t)0x4000000)
+
 // Invoke a boxed closure value: unboxes, aborts loudly when the value
 // is not a closure (e.g. calling a result that holds no closure).
 rl_result rl_closure_call_checked(rl_result callee, rl_result *args, uint64_t argc) {
     if (!callee.is_ok || callee.tag != RL_TAG_CLOSURE || callee.data.closure == NULL) {
         fprintf(stderr, "error: value is not callable\n");
-        abort();
+        _rl_abort();
     }
     return rl_closure_call(*callee.data.closure, args, argc);
 }
@@ -24,10 +37,13 @@ rl_closure rl_closure_new_heap(rl_closure_fn fn, rl_result *captures, uint64_t c
     return c;
 }
 
-// Forward declarations for helpers used before their definitions.
-static const char *_rl_tag_name(enum rl_type_tag tag);
-static char *_rl_trim_copy(rl_string s, uint64_t *out_len);
-static bool _rl_utf8_decode(const char *s, uint64_t len, uint32_t *code, uint64_t *used);
+// Abort loud failures only after flushing pending output, so earlier
+// prints are never lost when stdout is block-buffered (pipes).
+static void _rl_abort(void) {
+    fflush(stdout);
+    fflush(stderr);
+    abort();
+}
 
 
 // ---- string ----
@@ -140,7 +156,7 @@ rl_string rl_str_format(rl_string tmpl, rl_fmt_arg *args, uint64_t argc) {
                 for (uint64_t j = 0; j < part_count; j++) free(parts[j]);
                 free(parts); free(part_lens);
                 fprintf(stderr, "error: format() has placeholder(s) with no matching argument\n");
-                abort();
+                _rl_abort();
             }
             _rl_fmt_arg_to_str(args[arg_idx], &parts[part_count], &part_lens[part_count]);
             total += part_lens[part_count];
@@ -163,7 +179,7 @@ rl_string rl_str_format(rl_string tmpl, rl_fmt_arg *args, uint64_t argc) {
         for (uint64_t j = 0; j < part_count; j++) free(parts[j]);
         free(parts); free(part_lens);
         fprintf(stderr, "error: format() received more arguments than placeholders\n");
-        abort();
+        _rl_abort();
     }
     char *buf = malloc(total + 1);
     uint64_t pos = 0;
@@ -598,6 +614,10 @@ void rl_print_rl_array(rl_array v) {
         if (i > 0) printf(", ");
         if (v.type_tag == RL_TAG_CHAR) {
             printf("%c", ((char *)v.data)[i]);
+        } else if (v.elem_size == sizeof(rl_array) && v.type_tag == RL_TAG_ARR) {
+            rl_print_rl_array(((rl_array *)v.data)[i]);
+        } else if (v.type_tag == RL_TAG_F64 && v.elem_size == sizeof(double)) {
+            { double fv = ((double *)v.data)[i]; rl_print_f64(fv); }
         } else if (v.elem_size == sizeof(int64_t)) {
             printf("%ld", (long)((int64_t *)v.data)[i]);
         } else if (v.elem_size == sizeof(double)) {
@@ -729,6 +749,52 @@ int64_t rl_math_fibonacci(int64_t n) {
     return b;
 }
 
+// Rotate left (64-bit, shift mod 64 like the VM).
+rl_result rl_bitwise_rotate_left(int64_t a, int64_t shift) {
+    uint32_t s = (uint32_t)shift;
+    uint32_t n = s % 64;
+    uint64_t u = (uint64_t)a;
+    uint64_t r = n == 0 ? u : (u << n) | (u >> (64 - n));
+    return rl_ok_i64((int64_t)r);
+}
+
+// Rotate right (64-bit, shift mod 64 like the VM).
+rl_result rl_bitwise_rotate_right(int64_t a, int64_t shift) {
+    uint32_t s = (uint32_t)shift;
+    uint32_t n = s % 64;
+    uint64_t u = (uint64_t)a;
+    uint64_t r = n == 0 ? u : (u >> n) | (u << (64 - n));
+    return rl_ok_i64((int64_t)r);
+}
+
+// Copy of `a` with bit `n` set.
+rl_result rl_bitwise_bit_set(int64_t a, int64_t n) {
+    uint32_t pos = (uint32_t)n;
+    if (pos >= 64) return rl_ok_i64(a);
+    return rl_ok_i64(a | ((int64_t)1 << pos));
+}
+
+// Copy of `a` with bit `n` cleared.
+rl_result rl_bitwise_bit_clear(int64_t a, int64_t n) {
+    uint32_t pos = (uint32_t)n;
+    if (pos >= 64) return rl_ok_i64(a);
+    return rl_ok_i64(a & ~((int64_t)1 << pos));
+}
+
+// Copy of `a` with bit `n` flipped.
+rl_result rl_bitwise_bit_toggle(int64_t a, int64_t n) {
+    uint32_t pos = (uint32_t)n;
+    if (pos >= 64) return rl_ok_i64(a);
+    return rl_ok_i64(a ^ ((int64_t)1 << pos));
+}
+
+// True when bit `n` of `a` is set.
+rl_result rl_bitwise_bit_is_set(int64_t a, int64_t n) {
+    uint32_t pos = (uint32_t)n;
+    if (pos >= 64) return rl_ok_bool(false);
+    return rl_ok_bool((a & ((int64_t)1 << pos)) != 0);
+}
+
 // ---- time ----
 
 // Wall-clock time in milliseconds since the Unix epoch.
@@ -736,6 +802,20 @@ int64_t rl_time_now_ms(void) {
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
     return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+// Monotonic nanos since first call (RL monotonic_now).
+int64_t rl_time_monotonic_now(void) {
+    static struct timespec start;
+    static int started = 0;
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    if (!started) {
+        start = now;
+        started = 1;
+        return 0;
+    }
+    return (int64_t)(now.tv_sec - start.tv_sec) * 1000000000LL + (int64_t)(now.tv_nsec - start.tv_nsec);
 }
 
 // ---- fs ----
@@ -1105,6 +1185,66 @@ rl_string rl_str_join(rl_array arr, rl_string delim) {
     return result;
 }
 
+// Append one element rendering to the join buffer, growing as needed.
+static void _rl_join_push(char **buf, uint64_t *w, uint64_t *cap, const char *s, uint64_t n) {
+    while (*w + n + 1 > *cap) {
+        *cap *= 2;
+        *buf = realloc(*buf, *cap);
+    }
+    memcpy(*buf + *w, s, n);
+    *w += n;
+}
+
+// Join an array of any element type with `delim`; elements render like
+// the VM's Display (strings raw, bools/floats formatted, ints decimal).
+rl_string rl_str_join_t(rl_array arr, rl_string delim, int32_t tag) {
+    if (arr.len == 0) {
+        rl_string result = { .data = "", .len = 0, .rc = 1 };
+        return result;
+    }
+    uint64_t es = arr.elem_size ? (uint64_t)arr.elem_size : sizeof(int64_t);
+    uint64_t cap = 64;
+    char *buf = malloc(cap);
+    uint64_t w = 0;
+    for (uint64_t i = 0; i < arr.len; i++) {
+        if (i > 0 && delim.data != NULL) {
+            _rl_join_push(&buf, &w, &cap, delim.data, delim.len);
+        }
+        char *slot = arr.data ? (char *)arr.data + i * es : NULL;
+        if (tag == RL_TAG_STR && es == sizeof(rl_string) && slot) {
+            rl_string s;
+            memcpy(&s, slot, sizeof(rl_string));
+            if (s.data != NULL) _rl_join_push(&buf, &w, &cap, s.data, s.len);
+        } else if (tag == RL_TAG_F64) {
+            double v = 0;
+            if (slot) memcpy(&v, slot, es < sizeof(double) ? es : sizeof(double));
+            char tmp[32];
+            int len = snprintf(tmp, sizeof(tmp), "%g", v);
+            _rl_join_push(&buf, &w, &cap, tmp, len);
+        } else if (tag == RL_TAG_BOOL) {
+            bool b = slot && *(uint8_t *)slot != 0;
+            _rl_join_push(&buf, &w, &cap, b ? "true" : "false", b ? 4 : 5);
+        } else if (tag == RL_TAG_CHAR) {
+            int64_t v = 0;
+            if (slot) memcpy(&v, slot, es < sizeof(int64_t) ? es : sizeof(int64_t));
+            char tmp[8];
+            int len = snprintf(tmp, sizeof(tmp), "%c", (char)(unsigned char)v);
+            _rl_join_push(&buf, &w, &cap, tmp, len);
+        } else if (tag == RL_TAG_NULL) {
+            _rl_join_push(&buf, &w, &cap, "null", 4);
+        } else {
+            int64_t v = 0;
+            if (slot) memcpy(&v, slot, es < sizeof(int64_t) ? es : sizeof(int64_t));
+            char tmp[32];
+            int len = snprintf(tmp, sizeof(tmp), "%ld", (long)v);
+            _rl_join_push(&buf, &w, &cap, tmp, len);
+        }
+    }
+    buf[w] = '\0';
+    rl_string result = { .data = buf, .len = w, .rc = 1 };
+    return result;
+}
+
 // Split on `delim` into an array of strings.
 rl_array rl_str_split(rl_string s, rl_string delim) {
     if (delim.len == 0 || s.len == 0) {
@@ -1148,6 +1288,456 @@ rl_array rl_str_split(rl_string s, rl_string delim) {
     arr.elem_size = sizeof(rl_string);
     arr.type_tag = RL_TAG_STR;
     return arr;
+}
+
+// Count Unicode codepoints (UTF-8) in `s`.
+static uint64_t _rl_str_char_count(rl_string s) {
+    if (s.data == NULL) return 0;
+    uint64_t n = 0;
+    for (uint64_t i = 0; i < s.len; i++) {
+        if (((unsigned char)s.data[i] & 0xC0) != 0x80) n++;
+    }
+    return n;
+}
+
+// Remainder after `prefix`, or an error when missing.
+rl_result rl_str_strip_prefix(rl_string s, rl_string prefix) {
+    if (s.data == NULL || prefix.data == NULL) return rl_err(-1);
+    if (prefix.len <= s.len && memcmp(s.data, prefix.data, prefix.len) == 0) {
+        uint64_t rest = s.len - prefix.len;
+        char *buf = malloc(rest + 1);
+        memcpy(buf, s.data + prefix.len, rest);
+        buf[rest] = '\0';
+        rl_string out = { .data = buf, .len = rest, .rc = 1 };
+        return rl_ok_str(out);
+    }
+    int n = snprintf(NULL, 0, "strip_prefix: string does not start with \"%.*s\"",
+        (int)prefix.len, prefix.data);
+    char *msg = malloc((uint64_t)n + 1);
+    snprintf(msg, (uint64_t)n + 1, "strip_prefix: string does not start with \"%.*s\"",
+        (int)prefix.len, prefix.data);
+    return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+}
+
+// Remainder without `suffix`, or an error when missing.
+rl_result rl_str_strip_suffix(rl_string s, rl_string suffix) {
+    if (s.data == NULL || suffix.data == NULL) return rl_err(-1);
+    if (suffix.len <= s.len && memcmp(s.data + s.len - suffix.len, suffix.data, suffix.len) == 0) {
+        uint64_t rest = s.len - suffix.len;
+        char *buf = malloc(rest + 1);
+        memcpy(buf, s.data, rest);
+        buf[rest] = '\0';
+        rl_string out = { .data = buf, .len = rest, .rc = 1 };
+        return rl_ok_str(out);
+    }
+    int n = snprintf(NULL, 0, "strip_suffix: string does not end with \"%.*s\"",
+        (int)suffix.len, suffix.data);
+    char *msg = malloc((uint64_t)n + 1);
+    snprintf(msg, (uint64_t)n + 1, "strip_suffix: string does not end with \"%.*s\"",
+        (int)suffix.len, suffix.data);
+    return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+}
+
+// Char index of the last `needle` hit, or -1 when absent.
+int64_t rl_str_last_index_of(rl_string s, rl_string needle) {
+    if (s.data == NULL || needle.data == NULL) return -1;
+    if (needle.len == 0) return (int64_t)_rl_str_char_count(s);
+    if (needle.len > s.len) return -1;
+    int64_t found = -1;
+    for (uint64_t i = 0; i + needle.len <= s.len; i++) {
+        if (memcmp(s.data + i, needle.data, needle.len) == 0) found = (int64_t)i;
+    }
+    if (found < 0) return -1;
+    uint64_t n = 0;
+    for (int64_t i = 0; i < found; i++) {
+        if (((unsigned char)s.data[i] & 0xC0) != 0x80) n++;
+    }
+    return (int64_t)n;
+}
+
+// Split on the first `sep` into [before, after], or an error.
+rl_result rl_str_split_once(rl_string s, rl_string sep) {
+    if (s.data == NULL || sep.data == NULL) return rl_err(-1);
+    uint64_t at = s.len + 1;
+    if (sep.len == 0) {
+        at = 0;
+    } else if (sep.len <= s.len) {
+        for (uint64_t i = 0; i + sep.len <= s.len; i++) {
+            if (memcmp(s.data + i, sep.data, sep.len) == 0) { at = i; break; }
+        }
+    }
+    if (at > s.len) {
+        int n = snprintf(NULL, 0, "split_once: separator \"%.*s\" not found in string",
+            (int)sep.len, sep.data);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "split_once: separator \"%.*s\" not found in string",
+            (int)sep.len, sep.data);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    uint64_t before_len = at;
+    uint64_t after_len = s.len - at - sep.len;
+    char *b = malloc(before_len + 1);
+    memcpy(b, s.data, before_len);
+    b[before_len] = '\0';
+    char *a = malloc(after_len + 1);
+    memcpy(a, s.data + at + sep.len, after_len);
+    a[after_len] = '\0';
+    rl_string *buf = malloc(2 * sizeof(rl_string));
+    buf[0] = (rl_string){ .data = b, .len = before_len, .rc = 1 };
+    buf[1] = (rl_string){ .data = a, .len = after_len, .rc = 1 };
+    rl_array arr = { .data = buf, .len = 2, .cap = 2,
+        .elem_size = sizeof(rl_string), .type_tag = RL_TAG_STR };
+    return rl_ok_arr(arr);
+}
+
+// One element per line (handles \n and \r\n).
+rl_array rl_str_lines(rl_string s) {
+    rl_array empty = { .data = NULL, .len = 0, .cap = 0,
+        .elem_size = sizeof(rl_string), .type_tag = RL_TAG_STR };
+    if (s.data == NULL || s.len == 0) return empty;
+    uint64_t cap = 16;
+    rl_string *buf = malloc(cap * sizeof(rl_string));
+    uint64_t count = 0;
+    uint64_t pos = 0;
+    while (pos < s.len) {
+        uint64_t next = pos;
+        while (next < s.len && s.data[next] != '\n') next++;
+        uint64_t seg_len = next - pos;
+        if (seg_len > 0 && s.data[pos + seg_len - 1] == '\r') seg_len--;
+        if (count >= cap) { cap *= 2; buf = realloc(buf, cap * sizeof(rl_string)); }
+        char *seg = malloc(seg_len + 1);
+        memcpy(seg, s.data + pos, seg_len);
+        seg[seg_len] = '\0';
+        buf[count++] = (rl_string){ .data = seg, .len = seg_len, .rc = 1 };
+        if (next >= s.len) break;
+        pos = next + 1;
+    }
+    rl_array arr = { .data = buf, .len = count, .cap = cap,
+        .elem_size = sizeof(rl_string), .type_tag = RL_TAG_STR };
+    return arr;
+}
+
+// True for ASCII whitespace bytes (wrap word splitting).
+static bool _rl_is_wrap_space(char c) {
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v';
+}
+
+// Word-wrap to `width` bytes (copy when `width <= 0`).
+rl_string rl_str_wrap(rl_string s, int64_t width) {
+    rl_string null_str = { .data = NULL, .len = 0, .rc = 0 };
+    if (s.data == NULL) return null_str;
+    if (width <= 0) {
+        char *buf = malloc(s.len + 1);
+        memcpy(buf, s.data, s.len);
+        buf[s.len] = '\0';
+        return (rl_string){ .data = buf, .len = s.len, .rc = 1 };
+    }
+    uint64_t w = (uint64_t)width;
+    uint64_t cap = s.len + 1;
+    char *out = malloc(cap);
+    uint64_t len = 0;
+    uint64_t line_len = 0;
+    uint64_t pos = 0;
+    bool first = true;
+    while (pos < s.len) {
+        while (pos < s.len && _rl_is_wrap_space(s.data[pos])) pos++;
+        if (pos >= s.len) break;
+        uint64_t start = pos;
+        while (pos < s.len && !_rl_is_wrap_space(s.data[pos])) pos++;
+        uint64_t word_len = pos - start;
+        if (first) {
+            if (len + word_len >= cap) { cap = len + word_len + 1; out = realloc(out, cap); }
+            memcpy(out + len, s.data + start, word_len);
+            len += word_len;
+            line_len = word_len;
+            first = false;
+        } else if (line_len + 1 + word_len <= w) {
+            if (len + 1 + word_len >= cap) { cap = len + 1 + word_len + 1; out = realloc(out, cap); }
+            out[len++] = ' ';
+            memcpy(out + len, s.data + start, word_len);
+            len += word_len;
+            line_len += 1 + word_len;
+        } else {
+            if (len + 1 + word_len >= cap) { cap = len + 1 + word_len + 1; out = realloc(out, cap); }
+            out[len++] = '\n';
+            memcpy(out + len, s.data + start, word_len);
+            len += word_len;
+            line_len = word_len;
+        }
+    }
+    out[len] = '\0';
+    return (rl_string){ .data = out, .len = len, .rc = 1 };
+}
+
+// Prefix every line with `prefix`.
+rl_string rl_str_indent(rl_string s, rl_string prefix) {
+    rl_string null_str = { .data = NULL, .len = 0, .rc = 0 };
+    if (s.data == NULL || prefix.data == NULL) return null_str;
+    rl_array ls = rl_str_lines(s);
+    if (ls.len == 0) {
+        char *buf = malloc(1);
+        buf[0] = '\0';
+        return (rl_string){ .data = buf, .len = 0, .rc = 1 };
+    }
+    rl_string *lines = (rl_string *)ls.data;
+    uint64_t total = 0;
+    for (uint64_t i = 0; i < ls.len; i++) total += prefix.len + lines[i].len;
+    total += ls.len - 1;
+    char *out = malloc(total + 1);
+    uint64_t w = 0;
+    for (uint64_t i = 0; i < ls.len; i++) {
+        if (i > 0) out[w++] = '\n';
+        memcpy(out + w, prefix.data, prefix.len);
+        w += prefix.len;
+        memcpy(out + w, lines[i].data, lines[i].len);
+        w += lines[i].len;
+    }
+    out[total] = '\0';
+    return (rl_string){ .data = out, .len = total, .rc = 1 };
+}
+
+// Count leading spaces/tabs (dedent indent width).
+static uint64_t _rl_dedent_width(rl_string line) {
+    uint64_t n = 0;
+    while (n < line.len && (line.data[n] == ' ' || line.data[n] == '\t')) n++;
+    return n;
+}
+
+// Remove the common leading indent.
+rl_string rl_str_dedent(rl_string s) {
+    rl_string null_str = { .data = NULL, .len = 0, .rc = 0 };
+    if (s.data == NULL) return null_str;
+    rl_array ls = rl_str_lines(s);
+    if (ls.len == 0) {
+        char *buf = malloc(1);
+        buf[0] = '\0';
+        return (rl_string){ .data = buf, .len = 0, .rc = 1 };
+    }
+    rl_string *lines = (rl_string *)ls.data;
+    uint64_t min_w = (uint64_t)-1;
+    for (uint64_t i = 0; i < ls.len; i++) {
+        if (lines[i].len == 0) continue;
+        uint64_t cur = _rl_dedent_width(lines[i]);
+        if (cur < min_w) min_w = cur;
+    }
+    if (min_w == (uint64_t)-1) min_w = 0;
+    uint64_t total = 0;
+    for (uint64_t i = 0; i < ls.len; i++) {
+        uint64_t keep = lines[i].len == 0 ? 0 :
+            (lines[i].len > min_w ? lines[i].len - min_w : 0);
+        total += keep;
+    }
+    total += ls.len - 1;
+    char *out = malloc(total + 1);
+    uint64_t w = 0;
+    for (uint64_t i = 0; i < ls.len; i++) {
+        if (i > 0) out[w++] = '\n';
+        if (lines[i].len == 0) continue;
+        uint64_t strip = min_w < lines[i].len ? min_w : lines[i].len;
+        uint64_t keep = lines[i].len - strip;
+        memcpy(out + w, lines[i].data + strip, keep);
+        w += keep;
+    }
+    out[w] = '\0';
+    return (rl_string){ .data = out, .len = w, .rc = 1 };
+}
+
+// One diff row: text plus -1|0|1.
+typedef struct { rl_string field_0; int64_t field_1; } _rl_diff_tuple;
+
+// Line diff as [(text, -1|0|1)], always ok.
+rl_result rl_str_diff_lines(rl_string a, rl_string b) {
+    if (a.data == NULL || b.data == NULL) return rl_err(-1);
+    rl_array la = rl_str_lines(a);
+    rl_array lb = rl_str_lines(b);
+    rl_string *xa = (rl_string *)la.data;
+    rl_string *xb = (rl_string *)lb.data;
+    uint64_t max_len = la.len > lb.len ? la.len : lb.len;
+    uint64_t cap = max_len * 2 + 1;
+    if (cap < 1) cap = 1;
+    _rl_diff_tuple *buf = malloc(cap * sizeof(_rl_diff_tuple));
+    uint64_t count = 0;
+    for (uint64_t i = 0; i < max_len; i++) {
+        bool has_a = i < la.len;
+        bool has_b = i < lb.len;
+        if (has_a && has_b && xa[i].len == xb[i].len
+            && memcmp(xa[i].data, xb[i].data, xa[i].len) == 0) {
+            char *t = malloc(xa[i].len + 1);
+            memcpy(t, xa[i].data, xa[i].len);
+            t[xa[i].len] = '\0';
+            buf[count].field_0 = (rl_string){ .data = t, .len = xa[i].len, .rc = 1 };
+            buf[count].field_1 = 0;
+            count++;
+        } else if (has_a && has_b) {
+            uint64_t al = xa[i].len + 1;
+            char *t1 = malloc(al + 1);
+            t1[0] = '-';
+            memcpy(t1 + 1, xa[i].data, xa[i].len);
+            t1[al] = '\0';
+            buf[count].field_0 = (rl_string){ .data = t1, .len = al, .rc = 1 };
+            buf[count].field_1 = -1;
+            count++;
+            uint64_t bl = xb[i].len + 1;
+            char *t2 = malloc(bl + 1);
+            t2[0] = '+';
+            memcpy(t2 + 1, xb[i].data, xb[i].len);
+            t2[bl] = '\0';
+            buf[count].field_0 = (rl_string){ .data = t2, .len = bl, .rc = 1 };
+            buf[count].field_1 = 1;
+            count++;
+        } else if (has_a) {
+            uint64_t al = xa[i].len + 1;
+            char *t1 = malloc(al + 1);
+            t1[0] = '-';
+            memcpy(t1 + 1, xa[i].data, xa[i].len);
+            t1[al] = '\0';
+            buf[count].field_0 = (rl_string){ .data = t1, .len = al, .rc = 1 };
+            buf[count].field_1 = -1;
+            count++;
+        } else {
+            uint64_t bl = xb[i].len + 1;
+            char *t2 = malloc(bl + 1);
+            t2[0] = '+';
+            memcpy(t2 + 1, xb[i].data, xb[i].len);
+            t2[bl] = '\0';
+            buf[count].field_0 = (rl_string){ .data = t2, .len = bl, .rc = 1 };
+            buf[count].field_1 = 1;
+            count++;
+        }
+    }
+    rl_array arr = { .data = buf, .len = count, .cap = cap,
+        .elem_size = sizeof(_rl_diff_tuple), .type_tag = RL_TAG_I64 };
+    return rl_ok_arr(arr);
+}
+
+// True for alphabetic codepoints (ASCII plus common letter ranges).
+static bool _rl_cp_is_alpha(uint32_t cp) {
+    if (cp < 128) return (cp >= 'A' && cp <= 'Z') || (cp >= 'a' && cp <= 'z');
+    if (cp >= 0xC0 && cp <= 0xD6) return true;
+    if (cp >= 0xD8 && cp <= 0xF6) return true;
+    if (cp >= 0xF8 && cp <= 0x2AF) return true;
+    if (cp >= 0x370 && cp <= 0x3FF) return true;
+    if (cp >= 0x400 && cp <= 0x4FF) return true;
+    if (cp >= 0x530 && cp <= 0x58F) return true;
+    if (cp >= 0x590 && cp <= 0x5FF) return true;
+    if (cp >= 0x600 && cp <= 0x6FF) {
+        if (cp >= 0x660 && cp <= 0x669) return false;
+        if (cp >= 0x6F0 && cp <= 0x6F9) return false;
+        return true;
+    }
+    if (cp >= 0x3040 && cp <= 0x30FF) return true;
+    if (cp >= 0x4E00 && cp <= 0x9FFF) return true;
+    if (cp >= 0xAC00 && cp <= 0xD7AF) return true;
+    return false;
+}
+
+// True for whitespace codepoints (ASCII plus NBSP and common spaces).
+static bool _rl_cp_is_space(uint32_t cp) {
+    if (cp == ' ' || cp == '\t' || cp == '\n' || cp == '\r' || cp == '\f' || cp == '\v') return true;
+    if (cp == 0xA0 || cp == 0x1680 || cp == 0x2028 || cp == 0x2029
+        || cp == 0x202F || cp == 0x205F || cp == 0x3000) return true;
+    if (cp >= 0x2000 && cp <= 0x200A) return true;
+    return false;
+}
+
+// True when non-empty and all chars are alphabetic.
+bool rl_str_is_alpha(rl_string s) {
+    if (s.data == NULL || s.len == 0) return false;
+    uint64_t pos = 0;
+    while (pos < s.len) {
+        uint32_t cp = 0;
+        uint64_t used = 0;
+        if (!_rl_utf8_decode(s.data + pos, s.len - pos, &cp, &used)) return false;
+        if (!_rl_cp_is_alpha(cp)) return false;
+        pos += used;
+    }
+    return true;
+}
+
+// True when non-empty and all chars are ASCII digits.
+bool rl_str_is_numeric(rl_string s) {
+    if (s.data == NULL || s.len == 0) return false;
+    for (uint64_t i = 0; i < s.len; i++) {
+        unsigned char c = (unsigned char)s.data[i];
+        if (c < '0' || c > '9') return false;
+    }
+    return true;
+}
+
+// True when non-empty and all chars are whitespace.
+bool rl_str_is_whitespace(rl_string s) {
+    if (s.data == NULL || s.len == 0) return false;
+    uint64_t pos = 0;
+    while (pos < s.len) {
+        uint32_t cp = 0;
+        uint64_t used = 0;
+        if (!_rl_utf8_decode(s.data + pos, s.len - pos, &cp, &used)) return false;
+        if (!_rl_cp_is_space(cp)) return false;
+        pos += used;
+    }
+    return true;
+}
+
+// True for uppercase codepoints (ASCII plus Latin-1).
+static bool _rl_cp_is_upper(uint32_t cp) {
+    if (cp >= 'A' && cp <= 'Z') return true;
+    if (cp >= 0xC0 && cp <= 0xD6) return true;
+    if (cp >= 0xD8 && cp <= 0xDE) return true;
+    return false;
+}
+
+// True for lowercase codepoints (ASCII plus Latin-1).
+static bool _rl_cp_is_lower(uint32_t cp) {
+    if (cp >= 'a' && cp <= 'z') return true;
+    if (cp == 0xDF) return true;
+    if (cp >= 0xE0 && cp <= 0xF6) return true;
+    if (cp >= 0xF8 && cp <= 0xFF) return true;
+    return false;
+}
+
+// True for numeric codepoints (ASCII plus common digit ranges).
+static bool _rl_cp_is_numeric(uint32_t cp) {
+    if (cp >= '0' && cp <= '9') return true;
+    if (cp >= 0x660 && cp <= 0x669) return true;
+    if (cp >= 0x6F0 && cp <= 0x6F9) return true;
+    if (cp == 0xB2 || cp == 0xB3 || cp == 0xB9) return true;
+    return false;
+}
+
+// True for control codepoints.
+static bool _rl_cp_is_control(uint32_t cp) {
+    if (cp < 0x20) return true;
+    if (cp == 0x7F) return true;
+    if (cp >= 0x80 && cp <= 0x9F) return true;
+    return false;
+}
+
+// Two-letter category of the first char, or an error when empty.
+rl_result rl_str_unicode_category(rl_string s) {
+    if (s.data == NULL || s.len == 0) {
+        return rl_err_msg(rl_str_literal("unicode_category: empty string", 30));
+    }
+    uint32_t cp = 0;
+    uint64_t used = 0;
+    if (!_rl_utf8_decode(s.data, s.len, &cp, &used)) cp = (unsigned char)s.data[0];
+    const char *cat;
+    if (_rl_cp_is_alpha(cp)) {
+        if (_rl_cp_is_upper(cp)) cat = "Lu";
+        else if (_rl_cp_is_lower(cp)) cat = "Ll";
+        else cat = "Lt";
+    } else if (_rl_cp_is_numeric(cp)) {
+        cat = "Nd";
+    } else if (_rl_cp_is_space(cp)) {
+        cat = "Zs";
+    } else if (!_rl_cp_is_control(cp)) {
+        cat = "Po";
+    } else {
+        cat = "Cc";
+    }
+    uint64_t len = 2;
+    char *buf = malloc(3);
+    memcpy(buf, cat, 3);
+    return rl_ok_str((rl_string){ .data = buf, .len = len, .rc = 1 });
 }
 
 // ---- debug ----
@@ -1289,6 +1879,42 @@ bool rl_dbg_bool(bool v) {
 rl_string rl_dbg_str(rl_string v) {
     fprintf(stderr, "[dbg] \"%.*s\" (string)\n", (int)v.len, v.data);
     return v;
+}
+
+// Print a yellow warning to stderr (RL warn).
+void rl_debug_warn(rl_string msg) {
+    if (msg.data == NULL) {
+        fprintf(stderr, "\x1b[33m[warn]\x1b[0m \n");
+    } else {
+        fprintf(stderr, "\x1b[33m[warn]\x1b[0m %.*s\n", (int)msg.len, msg.data);
+    }
+}
+
+#include <execinfo.h>
+
+// Capture a backtrace (RL stack_trace); bare string, empty when unsupported.
+rl_string rl_debug_stack_trace(void) {
+    void *frames[64];
+    int n = backtrace(frames, 64);
+    char **syms = backtrace_symbols(frames, n);
+    if (n <= 0 || !syms) {
+        rl_string empty = { .data = "", .len = 0, .rc = 1 };
+        return empty;
+    }
+    size_t total = 0;
+    for (int i = 0; i < n; i++) total += strlen(syms[i]) + 1;
+    char *buf = malloc(total + 1);
+    size_t pos = 0;
+    for (int i = 0; i < n; i++) {
+        size_t l = strlen(syms[i]);
+        memcpy(buf + pos, syms[i], l);
+        pos += l;
+        buf[pos++] = '\n';
+    }
+    buf[pos] = '\0';
+    free(syms);
+    rl_string out = { .data = buf, .len = pos, .rc = 1 };
+    return out;
 }
 
 // ---- path ----
@@ -1434,6 +2060,617 @@ bool rl_path_is_file(rl_string path) {
     struct stat st;
     if (stat(buf, &st) != 0) return false;
     return S_ISREG(st.st_mode);
+}
+
+// True when `path` starts with `/`.
+bool rl_path_is_absolute(rl_string path) {
+    if (path.data == NULL || path.len == 0) return false;
+    return path.data[0] == '/';
+}
+
+// True when `path` does not start with `/`.
+bool rl_path_is_relative(rl_string path) {
+    if (path.data == NULL || path.len == 0) return true;
+    return path.data[0] != '/';
+}
+
+// Split `s` into components: `is_abs` for leading `/`, `parts` holds
+// non-empty segments (`.` and `..` kept literally). Caller frees `parts`
+// items and the array itself.
+static void _rl_path_split_parts(rl_string s, bool *is_abs,
+    char ***parts, uint64_t **lens, uint64_t *count) {
+    *is_abs = s.len > 0 && s.data[0] == '/';
+    uint64_t cap = 16;
+    char **pp = malloc(cap * sizeof(char *));
+    uint64_t *ll = malloc(cap * sizeof(uint64_t));
+    uint64_t n = 0;
+    uint64_t i = 0;
+    while (i < s.len) {
+        while (i < s.len && s.data[i] == '/') i++;
+        if (i >= s.len) break;
+        uint64_t start = i;
+        while (i < s.len && s.data[i] != '/') i++;
+        uint64_t seg = i - start;
+        if (n >= cap) {
+            cap *= 2;
+            pp = realloc(pp, cap * sizeof(char *));
+            ll = realloc(ll, cap * sizeof(uint64_t));
+        }
+        pp[n] = (char *)(s.data + start);
+        ll[n] = seg;
+        n++;
+    }
+    *parts = pp;
+    *lens = ll;
+    *count = n;
+}
+
+// True when `path` starts with `base` at a component boundary.
+bool rl_path_starts_with(rl_string path, rl_string base) {
+    if (path.data == NULL || base.data == NULL) return false;
+    bool pa_abs = false, ba_abs = false;
+    char **pp = NULL, **bp = NULL;
+    uint64_t *pl = NULL, *bl = NULL;
+    uint64_t pn = 0, bn = 0;
+    _rl_path_split_parts(path, &pa_abs, &pp, &pl, &pn);
+    _rl_path_split_parts(base, &ba_abs, &bp, &bl, &bn);
+    bool ok = true;
+    if (pa_abs != ba_abs) ok = false;
+    else {
+        // Rust ignores `.` segments when comparing, so filter first.
+        uint64_t pfn = 0;
+        for (uint64_t i = 0; i < pn; i++) {
+            if (pl[i] == 1 && pp[i][0] == '.') continue;
+            pp[pfn] = pp[i];
+            pl[pfn] = pl[i];
+            pfn++;
+        }
+        uint64_t bfn = 0;
+        for (uint64_t i = 0; i < bn; i++) {
+            if (bl[i] == 1 && bp[i][0] == '.') continue;
+            bp[bfn] = bp[i];
+            bl[bfn] = bl[i];
+            bfn++;
+        }
+        if (bfn > pfn) ok = false;
+        else {
+            for (uint64_t i = 0; i < bfn; i++) {
+                if (pl[i] != bl[i] || memcmp(pp[i], bp[i], pl[i]) != 0) {
+                    ok = false;
+                    break;
+                }
+            }
+        }
+    }
+    free(pp);
+    free(pl);
+    free(bp);
+    free(bl);
+    return ok;
+}
+
+// True when `path` ends with `child` at a component boundary.
+bool rl_path_ends_with(rl_string path, rl_string child) {
+    if (path.data == NULL || child.data == NULL) return false;
+    bool pa_abs = false, ca_abs = false;
+    char **pp = NULL, **cp = NULL;
+    uint64_t *pl = NULL, *cl = NULL;
+    uint64_t pn = 0, cn = 0;
+    _rl_path_split_parts(path, &pa_abs, &pp, &pl, &pn);
+    _rl_path_split_parts(child, &ca_abs, &cp, &cl, &cn);
+    // Filter `.` out of both sides (Rust ignores `.`).
+    uint64_t pcap = pn + 1;
+    char **pf = malloc(pcap * sizeof(char *));
+    uint64_t *lf = malloc(pcap * sizeof(uint64_t));
+    uint64_t pfn = 0;
+    for (uint64_t i = 0; i < pn; i++) {
+        if (pl[i] == 1 && pp[i][0] == '.') continue;
+        pf[pfn] = pp[i];
+        lf[pfn] = pl[i];
+        pfn++;
+    }
+    uint64_t ccap = cn + 1;
+    char **cf = malloc(ccap * sizeof(char *));
+    uint64_t *mf = malloc(ccap * sizeof(uint64_t));
+    uint64_t cfn = 0;
+    for (uint64_t i = 0; i < cn; i++) {
+        if (cl[i] == 1 && cp[i][0] == '.') continue;
+        cf[cfn] = cp[i];
+        mf[cfn] = cl[i];
+        cfn++;
+    }
+    bool ok = true;
+    if (cfn > pfn) ok = false;
+    else {
+        for (uint64_t i = 0; i < cfn; i++) {
+            uint64_t pi = pfn - cfn + i;
+            if (lf[pi] != mf[i] || memcmp(pf[pi], cf[i], lf[pi]) != 0) {
+                ok = false;
+                break;
+            }
+        }
+    }
+    free(pp);
+    free(pl);
+    free(cp);
+    free(cl);
+    free(pf);
+    free(lf);
+    free(cf);
+    free(mf);
+    return ok;
+}
+
+// Lexically clean `.` and duplicate separators (keeps `..`).
+rl_string rl_path_normalize(rl_string path) {
+    rl_string null_str = { .data = NULL, .len = 0, .rc = 0 };
+    if (path.data == NULL) return null_str;
+    if (path.len == 0) {
+        char *buf = malloc(1);
+        buf[0] = '\0';
+        return (rl_string){ .data = buf, .len = 0, .rc = 1 };
+    }
+    bool is_abs = path.data[0] == '/';
+    bool dotdot_lead = path.len >= 2 && path.data[0] == '.' && path.data[1] == '.';
+    uint64_t cap = 16;
+    char **pp = malloc(cap * sizeof(char *));
+    uint64_t *pl = malloc(cap * sizeof(uint64_t));
+    uint64_t n = 0;
+    uint64_t i = 0;
+    bool first_seg = true;
+    while (i < path.len) {
+        while (i < path.len && path.data[i] == '/') i++;
+        if (i >= path.len) break;
+        uint64_t start = i;
+        while (i < path.len && path.data[i] != '/') i++;
+        uint64_t seg = i - start;
+        if (seg == 1 && path.data[start] == '.') {
+            if (first_seg && !is_abs) {
+                if (n >= cap) {
+                    cap *= 2;
+                    pp = realloc(pp, cap * sizeof(char *));
+                    pl = realloc(pl, cap * sizeof(uint64_t));
+                }
+                pp[n] = (char *)(path.data + start);
+                pl[n] = seg;
+                n++;
+            }
+        } else {
+            if (n >= cap) {
+                cap *= 2;
+                pp = realloc(pp, cap * sizeof(char *));
+                pl = realloc(pl, cap * sizeof(uint64_t));
+            }
+            pp[n] = (char *)(path.data + start);
+            pl[n] = seg;
+            n++;
+        }
+        first_seg = false;
+    }
+    if (n == 0) {
+        free(pp);
+        free(pl);
+        if (is_abs) {
+            char *buf = malloc(2);
+            buf[0] = '/';
+            buf[1] = '\0';
+            return (rl_string){ .data = buf, .len = 1, .rc = 1 };
+        }
+        char *buf = malloc(path.len + 1);
+        memcpy(buf, path.data, path.len);
+        buf[path.len] = '\0';
+        return (rl_string){ .data = buf, .len = path.len, .rc = 1 };
+    }
+    uint64_t total = 0;
+    for (uint64_t k = 0; k < n; k++) total += pl[k];
+    total += n - 1;
+    if (is_abs) total += 1;
+    char *out = malloc(total + 1);
+    uint64_t w = 0;
+    if (is_abs) out[w++] = '/';
+    for (uint64_t k = 0; k < n; k++) {
+        if (k > 0) out[w++] = '/';
+        memcpy(out + w, pp[k], pl[k]);
+        w += pl[k];
+    }
+    out[w] = '\0';
+    free(pp);
+    free(pl);
+    bool starts_dd = w >= 2 && out[0] == '.' && out[1] == '.';
+    if (dotdot_lead && !starts_dd) {
+        uint64_t nlen = w + 3;
+        char *nbuf = malloc(nlen + 1);
+        memcpy(nbuf, "../", 3);
+        memcpy(nbuf + 3, out, w + 1);
+        free(out);
+        out = nbuf;
+        w = nlen;
+    }
+    if (is_abs && out[0] != '/') {
+        uint64_t nlen = w + 1;
+        char *nbuf = malloc(nlen + 1);
+        nbuf[0] = '/';
+        memcpy(nbuf + 1, out, w + 1);
+        free(out);
+        out = nbuf;
+        w = nlen;
+    }
+    return (rl_string){ .data = out, .len = w, .rc = 1 };
+}
+
+// Absolute form via cwd when relative, or an error.
+rl_result rl_path_absolute(rl_string path) {
+    if (path.data == NULL) return rl_err(-1);
+    if (path.len > 0 && path.data[0] == '/') {
+        char *buf = malloc(path.len + 1);
+        memcpy(buf, path.data, path.len);
+        buf[path.len] = '\0';
+        return rl_ok_str((rl_string){ .data = buf, .len = path.len, .rc = 1 });
+    }
+    char cwd[4096];
+    if (getcwd(cwd, sizeof(cwd)) == NULL) {
+        int e = errno;
+        char tmp[256];
+        int n = snprintf(tmp, sizeof(tmp), "path_absolute: %s", strerror(e));
+        char *msg = malloc((uint64_t)n + 1);
+        memcpy(msg, tmp, (uint64_t)n + 1);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    uint64_t cl = strlen(cwd);
+    uint64_t total = cl + 1 + path.len;
+    char *out = malloc(total + 1);
+    memcpy(out, cwd, cl);
+    out[cl] = '/';
+    memcpy(out + cl + 1, path.data, path.len);
+    out[total] = '\0';
+    return rl_ok_str((rl_string){ .data = out, .len = total, .rc = 1 });
+}
+
+// Canonical form via realpath, or an error.
+rl_result rl_path_canonicalize(rl_string path) {
+    if (path.data == NULL) return rl_err(-1);
+    char *tmp = malloc(path.len + 1);
+    memcpy(tmp, path.data, path.len);
+    tmp[path.len] = '\0';
+    char resolved[4096];
+    if (realpath(tmp, resolved) == NULL) {
+        int e = errno;
+        const char *es = strerror(e);
+        int n = snprintf(NULL, 0, "path_canonicalize: %.*s: %s (os error %d)",
+            (int)path.len, path.data, es, e);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "path_canonicalize: %.*s: %s (os error %d)",
+            (int)path.len, path.data, es, e);
+        free(tmp);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    free(tmp);
+    uint64_t len = strlen(resolved);
+    char *out = malloc(len + 1);
+    memcpy(out, resolved, len + 1);
+    return rl_ok_str((rl_string){ .data = out, .len = len, .rc = 1 });
+}
+
+// Replace a leading `~` with $HOME (copy when unset).
+rl_string rl_path_expand_home(rl_string path) {
+    rl_string null_str = { .data = NULL, .len = 0, .rc = 0 };
+    if (path.data == NULL) return null_str;
+    if (path.len == 0 || path.data[0] != '~') {
+        char *buf = malloc(path.len + 1);
+        memcpy(buf, path.data, path.len);
+        buf[path.len] = '\0';
+        return (rl_string){ .data = buf, .len = path.len, .rc = 1 };
+    }
+    const char *home = getenv("HOME");
+    if (home == NULL) {
+        char *buf = malloc(path.len + 1);
+        memcpy(buf, path.data, path.len);
+        buf[path.len] = '\0';
+        return (rl_string){ .data = buf, .len = path.len, .rc = 1 };
+    }
+    uint64_t hl = strlen(home);
+    uint64_t rest = path.len - 1;
+    char *buf = malloc(hl + rest + 1);
+    memcpy(buf, home, hl);
+    memcpy(buf + hl, path.data + 1, rest);
+    buf[hl + rest] = '\0';
+    return (rl_string){ .data = buf, .len = hl + rest, .rc = 1 };
+}
+
+// Make an owned copy of `len` bytes.
+static rl_string _rl_path_copy(const char *p, uint64_t len) {
+    char *buf = malloc(len + 1);
+    memcpy(buf, p, len);
+    buf[len] = '\0';
+    return (rl_string){ .data = buf, .len = len, .rc = 1 };
+}
+
+// [parent, file] pair for `path`.
+rl_array rl_path_split(rl_string path) {
+    rl_array empty = { .data = NULL, .len = 0, .cap = 0,
+        .elem_size = sizeof(rl_string), .type_tag = RL_TAG_STR };
+    if (path.data == NULL) return empty;
+    uint64_t len = path.len;
+    while (len > 0 && path.data[len - 1] == '/') len--;
+    if (len == 0) {
+        rl_string *buf = malloc(2 * sizeof(rl_string));
+        buf[0] = _rl_path_copy("", 0);
+        buf[1] = _rl_path_copy("", 0);
+        rl_array arr = { .data = buf, .len = 2, .cap = 2,
+            .elem_size = sizeof(rl_string), .type_tag = RL_TAG_STR };
+        return arr;
+    }
+    int64_t last = -1;
+    for (uint64_t i = 0; i < len; i++) {
+        if (path.data[i] == '/') last = (int64_t)i;
+    }
+    rl_string parent;
+    rl_string file;
+    if (last < 0) {
+        parent = _rl_path_copy("", 0);
+        file = _rl_path_copy(path.data, len);
+    } else if (last == 0) {
+        parent = _rl_path_copy("/", 1);
+        file = _rl_path_copy(path.data + 1, len - 1);
+    } else {
+        parent = _rl_path_copy(path.data, (uint64_t)last);
+        file = _rl_path_copy(path.data + last + 1, len - (uint64_t)last - 1);
+    }
+    rl_string *buf = malloc(2 * sizeof(rl_string));
+    buf[0] = parent;
+    buf[1] = file;
+    rl_array arr = { .data = buf, .len = 2, .cap = 2,
+        .elem_size = sizeof(rl_string), .type_tag = RL_TAG_STR };
+    return arr;
+}
+
+// [stem, extension-with-dot] pair for `path`.
+rl_array rl_path_split_extension(rl_string path) {
+    rl_array empty = { .data = NULL, .len = 0, .cap = 0,
+        .elem_size = sizeof(rl_string), .type_tag = RL_TAG_STR };
+    if (path.data == NULL) return empty;
+    uint64_t len = path.len;
+    while (len > 0 && path.data[len - 1] == '/') len--;
+    uint64_t fstart = 0;
+    for (uint64_t i = 0; i < len; i++) {
+        if (path.data[i] == '/') fstart = i + 1;
+    }
+    uint64_t flen = len - fstart;
+    int64_t dot = -1;
+    for (uint64_t i = 0; i < flen; i++) {
+        if (path.data[fstart + i] == '.') dot = (int64_t)i;
+    }
+    rl_string stem;
+    rl_string ext;
+    if (dot <= 0) {
+        stem = _rl_path_copy(path.data + fstart, flen);
+        ext = _rl_path_copy("", 0);
+    } else {
+        stem = _rl_path_copy(path.data + fstart, (uint64_t)dot);
+        uint64_t elen = flen - (uint64_t)dot;
+        ext = _rl_path_copy(path.data + fstart + dot, elen);
+    }
+    rl_string *buf = malloc(2 * sizeof(rl_string));
+    buf[0] = stem;
+    buf[1] = ext;
+    rl_array arr = { .data = buf, .len = 2, .cap = 2,
+        .elem_size = sizeof(rl_string), .type_tag = RL_TAG_STR };
+    return arr;
+}
+
+// One element per path component (`/` first when absolute).
+rl_array rl_path_components(rl_string path) {
+    rl_array empty = { .data = NULL, .len = 0, .cap = 0,
+        .elem_size = sizeof(rl_string), .type_tag = RL_TAG_STR };
+    if (path.data == NULL || path.len == 0) return empty;
+    bool is_abs = path.data[0] == '/';
+    uint64_t cap = 16;
+    rl_string *buf = malloc(cap * sizeof(rl_string));
+    uint64_t count = 0;
+    if (is_abs) {
+        buf[count++] = _rl_path_copy("/", 1);
+    }
+    uint64_t i = 0;
+    while (i < path.len) {
+        while (i < path.len && path.data[i] == '/') i++;
+        if (i >= path.len) break;
+        uint64_t start = i;
+        while (i < path.len && path.data[i] != '/') i++;
+        uint64_t seg = i - start;
+        if (count >= cap) {
+            cap *= 2;
+            buf = realloc(buf, cap * sizeof(rl_string));
+        }
+        buf[count++] = _rl_path_copy(path.data + start, seg);
+    }
+    if (!is_abs && count == 0) {
+        free(buf);
+        return empty;
+    }
+    if (is_abs && count == 1) {
+        rl_array arr = { .data = buf, .len = 1, .cap = cap,
+            .elem_size = sizeof(rl_string), .type_tag = RL_TAG_STR };
+        return arr;
+    }
+    rl_array arr = { .data = buf, .len = count, .cap = cap,
+        .elem_size = sizeof(rl_string), .type_tag = RL_TAG_STR };
+    return arr;
+}
+
+// Replace the file name with `name`.
+rl_string rl_path_with_file_name(rl_string path, rl_string name) {
+    rl_string null_str = { .data = NULL, .len = 0, .rc = 0 };
+    if (path.data == NULL || name.data == NULL) return null_str;
+    if (path.len == 0) return _rl_path_copy(name.data, name.len);
+    uint64_t len = path.len;
+    while (len > 1 && path.data[len - 1] == '/') len--;
+    if (len == 1 && path.data[0] == '/') {
+        uint64_t total = 1 + name.len;
+        char *buf = malloc(total + 1);
+        buf[0] = '/';
+        memcpy(buf + 1, name.data, name.len);
+        buf[total] = '\0';
+        return (rl_string){ .data = buf, .len = total, .rc = 1 };
+    }
+    int64_t last = -1;
+    for (uint64_t i = 0; i < len; i++) {
+        if (path.data[i] == '/') last = (int64_t)i;
+    }
+    if (last < 0) return _rl_path_copy(name.data, name.len);
+    if (last == 0) {
+        uint64_t total = 1 + name.len;
+        char *buf = malloc(total + 1);
+        buf[0] = '/';
+        memcpy(buf + 1, name.data, name.len);
+        buf[total] = '\0';
+        return (rl_string){ .data = buf, .len = total, .rc = 1 };
+    }
+    uint64_t dir = (uint64_t)last;
+    uint64_t total = dir + 1 + name.len;
+    char *buf = malloc(total + 1);
+    memcpy(buf, path.data, dir);
+    buf[dir] = '/';
+    memcpy(buf + dir + 1, name.data, name.len);
+    buf[total] = '\0';
+    return (rl_string){ .data = buf, .len = total, .rc = 1 };
+}
+
+// Build an absolute component list for `p` using `cwd` when relative.
+static void _rl_path_abs_parts(rl_string p, const char *cwd, uint64_t cwd_len,
+    char ***out_pp, uint64_t **out_ll, uint64_t *out_n) {
+    bool p_abs = p.len > 0 && p.data[0] == '/';
+    uint64_t cap = 32;
+    char **pp = malloc(cap * sizeof(char *));
+    uint64_t *ll = malloc(cap * sizeof(uint64_t));
+    uint64_t n = 0;
+    if (!p_abs) {
+        uint64_t i = 0;
+        while (i < cwd_len) {
+            while (i < cwd_len && cwd[i] == '/') i++;
+            if (i >= cwd_len) break;
+            uint64_t s = i;
+            while (i < cwd_len && cwd[i] != '/') i++;
+            if (n >= cap) {
+                cap *= 2;
+                pp = realloc(pp, cap * sizeof(char *));
+                ll = realloc(ll, cap * sizeof(uint64_t));
+            }
+            pp[n] = (char *)(cwd + s);
+            ll[n] = i - s;
+            n++;
+        }
+    }
+    uint64_t i = 0;
+    while (i < p.len) {
+        while (i < p.len && p.data[i] == '/') i++;
+        if (i >= p.len) break;
+        uint64_t s = i;
+        while (i < p.len && p.data[i] != '/') i++;
+        if (n >= cap) {
+            cap *= 2;
+            pp = realloc(pp, cap * sizeof(char *));
+            ll = realloc(ll, cap * sizeof(uint64_t));
+        }
+        pp[n] = (char *)(p.data + s);
+        ll[n] = i - s;
+        n++;
+    }
+    // Drop `.` segments (Rust ignores them when comparing).
+    uint64_t w = 0;
+    for (uint64_t k = 0; k < n; k++) {
+        if (ll[k] == 1 && pp[k][0] == '.') continue;
+        pp[w] = pp[k];
+        ll[w] = ll[k];
+        w++;
+    }
+    *out_pp = pp;
+    *out_ll = ll;
+    *out_n = w;
+}
+
+// Relative route from `from` to `to`, or an error.
+rl_result rl_path_relative(rl_string from, rl_string to) {
+    if (from.data == NULL || to.data == NULL) return rl_err(-1);
+    char cwd[4096];
+    if (getcwd(cwd, sizeof(cwd)) == NULL) {
+        int e = errno;
+        char tmp[256];
+        int n = snprintf(tmp, sizeof(tmp), "path_relative: %s", strerror(e));
+        char *msg = malloc((uint64_t)n + 1);
+        memcpy(msg, tmp, (uint64_t)n + 1);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    uint64_t cwd_len = strlen(cwd);
+    char **fp = NULL, **tp = NULL;
+    uint64_t *fl = NULL, *tl = NULL;
+    uint64_t fn = 0, tn = 0;
+    _rl_path_abs_parts(from, cwd, cwd_len, &fp, &fl, &fn);
+    _rl_path_abs_parts(to, cwd, cwd_len, &tp, &tl, &tn);
+    uint64_t common = 0;
+    while (common < fn && common < tn && fl[common] == tl[common]
+        && memcmp(fp[common], tp[common], fl[common]) == 0) common++;
+    uint64_t ups = fn - common;
+    uint64_t total = 0;
+    for (uint64_t k = 0; k < ups; k++) total += (k > 0 ? 1 : 0) + 2;
+    for (uint64_t k = common; k < tn; k++) total += (total > 0 ? 1 : 0) + tl[k];
+    char *out = malloc(total + 1);
+    uint64_t w = 0;
+    for (uint64_t k = 0; k < ups; k++) {
+        if (w > 0) out[w++] = '/';
+        out[w++] = '.';
+        out[w++] = '.';
+    }
+    for (uint64_t k = common; k < tn; k++) {
+        if (w > 0) out[w++] = '/';
+        memcpy(out + w, tp[k], tl[k]);
+        w += tl[k];
+    }
+    out[w] = '\0';
+    free(fp);
+    free(fl);
+    free(tp);
+    free(tl);
+    return rl_ok_str((rl_string){ .data = out, .len = w, .rc = 1 });
+}
+
+// Join all `parts` (absolute parts reset the base).
+rl_string rl_path_join_many(rl_array parts) {
+    rl_string null_str = { .data = NULL, .len = 0, .rc = 0 };
+    if (parts.data == NULL) {
+        char *buf = malloc(1);
+        buf[0] = '\0';
+        return (rl_string){ .data = buf, .len = 0, .rc = 1 };
+    }
+    rl_string *elems = (rl_string *)parts.data;
+    uint64_t cap = 256;
+    char *buf = malloc(cap);
+    uint64_t len = 0;
+    for (uint64_t i = 0; i < parts.len; i++) {
+        rl_string p = elems[i];
+        if (p.data == NULL) {
+            free(buf);
+            return null_str;
+        }
+        if (p.len > 0 && p.data[0] == '/') {
+            if (p.len + 1 > cap) { cap = p.len + 1; buf = realloc(buf, cap); }
+            memcpy(buf, p.data, p.len);
+            len = p.len;
+            continue;
+        }
+        if (len == 0) {
+            if (p.len + 1 > cap) { cap = p.len + 1; buf = realloc(buf, cap); }
+            memcpy(buf, p.data, p.len);
+            len = p.len;
+            continue;
+        }
+        uint64_t need = len + (buf[len - 1] == '/' ? 0 : 1) + p.len;
+        if (need + 1 > cap) { cap = need + 1; buf = realloc(buf, cap); }
+        if (buf[len - 1] != '/') buf[len++] = '/';
+        memcpy(buf + len, p.data, p.len);
+        len += p.len;
+    }
+    buf[len] = '\0';
+    return (rl_string){ .data = buf, .len = len, .rc = 1 };
 }
 
 // ---- fs ----
@@ -1630,6 +2867,1330 @@ rl_result rl_fs_rename_file(rl_string path, rl_string new_name) {
     if (rename(pbuf, full) != 0) { free(full); return rl_err(-1); }
     rl_string result = { .data = full, .len = full_len, .rc = 1 };
     return rl_ok_str(result);
+}
+
+// File names of entries in the directory at `path`, or an error.
+rl_result rl_fs_list_dir_names(rl_string path) {
+    if (path.data == NULL) return rl_err(-1);
+    char buf[path.len + 1];
+    memcpy(buf, path.data, path.len);
+    buf[path.len] = '\0';
+    DIR *d = opendir(buf);
+    if (!d) {
+        int e = errno;
+        const char *es = strerror(e);
+        int n = snprintf(NULL, 0, "list_dir_names: failed to read \"%.*s\": %s (os error %d)", (int)path.len, path.data, es, e);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "list_dir_names: failed to read \"%.*s\": %s (os error %d)", (int)path.len, path.data, es, e);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    uint64_t cap = 16;
+    rl_string *entries = malloc(cap * sizeof(rl_string));
+    uint64_t count = 0;
+    struct dirent *ent;
+    while ((ent = readdir(d)) != NULL) {
+        if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) continue;
+        if (count >= cap) {
+            cap *= 2;
+            entries = realloc(entries, cap * sizeof(rl_string));
+        }
+        uint64_t name_len = strlen(ent->d_name);
+        char *name = malloc(name_len + 1);
+        memcpy(name, ent->d_name, name_len + 1);
+        entries[count] = (rl_string){ .data = name, .len = name_len, .rc = 1 };
+        count++;
+    }
+    closedir(d);
+    rl_array arr;
+    arr.data = entries;
+    arr.len = count;
+    arr.cap = cap;
+    arr.elem_size = sizeof(rl_string);
+    arr.type_tag = RL_TAG_STR;
+    return rl_ok_arr(arr);
+}
+
+// Last-accessed time of the file at `path` (Unix seconds), or an error.
+rl_result rl_fs_file_accessed(rl_string path) {
+    if (path.data == NULL) return rl_err(-1);
+    char buf[path.len + 1];
+    memcpy(buf, path.data, path.len);
+    buf[path.len] = '\0';
+    struct stat st;
+    if (stat(buf, &st) != 0) {
+        int e = errno;
+        const char *es = strerror(e);
+        int n = snprintf(NULL, 0, "file_accessed: failed to read \"%.*s\": %s (os error %d)", (int)path.len, path.data, es, e);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "file_accessed: failed to read \"%.*s\": %s (os error %d)", (int)path.len, path.data, es, e);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    return rl_ok_i64((int64_t)st.st_atime);
+}
+
+// Raw mode bits of the file at `path`, or an error.
+rl_result rl_fs_file_permissions(rl_string path) {
+    if (path.data == NULL) return rl_err(-1);
+    char buf[path.len + 1];
+    memcpy(buf, path.data, path.len);
+    buf[path.len] = '\0';
+    struct stat st;
+    if (stat(buf, &st) != 0) {
+        int e = errno;
+        const char *es = strerror(e);
+        int n = snprintf(NULL, 0, "file_permissions: failed to read \"%.*s\": %s (os error %d)", (int)path.len, path.data, es, e);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "file_permissions: failed to read \"%.*s\": %s (os error %d)", (int)path.len, path.data, es, e);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    return rl_ok_i64((int64_t)st.st_mode);
+}
+
+// Set permission bits on `path`; ok null on success, or an error.
+rl_result rl_fs_set_permissions(rl_string path, int64_t mode) {
+    if (path.data == NULL) return rl_err(-1);
+    char buf[path.len + 1];
+    memcpy(buf, path.data, path.len);
+    buf[path.len] = '\0';
+    struct stat st;
+    if (stat(buf, &st) != 0) {
+        int e = errno;
+        const char *es = strerror(e);
+        int n = snprintf(NULL, 0, "set_permissions: failed to read \"%.*s\": %s (os error %d)", (int)path.len, path.data, es, e);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "set_permissions: failed to read \"%.*s\": %s (os error %d)", (int)path.len, path.data, es, e);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    if (chmod(buf, (mode_t)(mode & 07777)) != 0) {
+        int e = errno;
+        const char *es = strerror(e);
+        int n = snprintf(NULL, 0, "set_permissions: failed to set permissions on \"%.*s\": %s (os error %d)", (int)path.len, path.data, es, e);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "set_permissions: failed to set permissions on \"%.*s\": %s (os error %d)", (int)path.len, path.data, es, e);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    return rl_ok_null();
+}
+
+// Fresh temp file path; ok with the path, or an error.
+rl_result rl_fs_temp_file(void) {
+    const char *tmpdir = getenv("TMPDIR");
+    if (!tmpdir) tmpdir = "/tmp";
+    char tmpl[4096];
+    snprintf(tmpl, sizeof(tmpl), "%s/.tmpXXXXXX", tmpdir);
+    int fd = mkstemp(tmpl);
+    if (fd < 0) {
+        int e = errno;
+        const char *es = strerror(e);
+        int n = snprintf(NULL, 0, "temp_file: %s (os error %d)", es, e);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "temp_file: %s (os error %d)", es, e);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    close(fd);
+    uint64_t len = strlen(tmpl);
+    char *out = malloc(len + 1);
+    memcpy(out, tmpl, len + 1);
+    return rl_ok_str((rl_string){ .data = out, .len = len, .rc = 1 });
+}
+
+// Fresh temp file path inside `dir`; ok with the path, or an error.
+rl_result rl_fs_temp_file_in(rl_string dir) {
+    if (dir.data == NULL) return rl_err(-1);
+    char dbuf[dir.len + 1];
+    memcpy(dbuf, dir.data, dir.len);
+    dbuf[dir.len] = '\0';
+    uint64_t need = dir.len + 12;
+    char *tmpl = malloc(need + 1);
+    memcpy(tmpl, dir.data, dir.len);
+    memcpy(tmpl + dir.len, "/.tmpXXXXXX", 12);
+    int fd = mkstemp(tmpl);
+    if (fd < 0) {
+        int e = errno;
+        const char *es = strerror(e);
+        int n = snprintf(NULL, 0, "temp_file_in: %s (os error %d) at path \"%s\"", es, e, tmpl);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "temp_file_in: %s (os error %d) at path \"%s\"", es, e, tmpl);
+        free(tmpl);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    close(fd);
+    uint64_t len = strlen(tmpl);
+    char *out = malloc(len + 1);
+    memcpy(out, tmpl, len + 1);
+    free(tmpl);
+    return rl_ok_str((rl_string){ .data = out, .len = len, .rc = 1 });
+}
+
+// Truncate `path` to `len` bytes; ok null on success, or an error.
+rl_result rl_fs_truncate_file(rl_string path, int64_t len) {
+    if (path.data == NULL) return rl_err(-1);
+    char buf[path.len + 1];
+    memcpy(buf, path.data, path.len);
+    buf[path.len] = '\0';
+    int fd = open(buf, O_RDONLY);
+    if (fd < 0) {
+        int e = errno;
+        const char *es = strerror(e);
+        int n = snprintf(NULL, 0, "truncate_file: failed to open \"%.*s\": %s (os error %d)", (int)path.len, path.data, es, e);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "truncate_file: failed to open \"%.*s\": %s (os error %d)", (int)path.len, path.data, es, e);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    uint64_t want = len < 0 ? 0 : (uint64_t)len;
+    if (ftruncate(fd, (off_t)want) != 0) {
+        int e = errno;
+        const char *es = strerror(e);
+        int n = snprintf(NULL, 0, "truncate_file: failed to truncate \"%.*s\": %s (os error %d)", (int)path.len, path.data, es, e);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "truncate_file: failed to truncate \"%.*s\": %s (os error %d)", (int)path.len, path.data, es, e);
+        close(fd);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    close(fd);
+    return rl_ok_null();
+}
+
+// True when `c` is a path separator.
+static bool _rl_glob_is_sep(char c) {
+    return c == '/';
+}
+
+// Validate a glob pattern like the glob crate; 0 when valid.
+static int _rl_glob_validate(const char *pat, uint64_t len, uint64_t *out_pos, const char **out_msg) {
+    static const char *wild = "wildcards are either regular `*` or recursive `**`";
+    static const char *rec = "recursive wildcards must form a single path component";
+    static const char *range = "invalid range pattern";
+    uint64_t i = 0;
+    while (i < len) {
+        char c = pat[i];
+        if (c == '*') {
+            uint64_t old = i;
+            while (i < len && pat[i] == '*') i++;
+            uint64_t count = i - old;
+            if (count > 2) {
+                *out_pos = old + 2;
+                *out_msg = wild;
+                return 1;
+            }
+            if (count == 2) {
+                bool prev_sep = (old == 0) || (old >= 1 && _rl_glob_is_sep(pat[old - 1]) && !(old == 1 && len >= 2 && pat[0] == '*' && pat[1] == '*')) ;
+                // Mirror the crate: valid only as a whole component.
+                bool starts_ok = (i == 2) || (old > 0 && _rl_glob_is_sep(pat[old - 1]));
+                if (starts_ok) {
+                    if (i < len && _rl_glob_is_sep(pat[i])) {
+                        i++;
+                    } else if (i == len) {
+                    } else {
+                        *out_pos = i;
+                        *out_msg = rec;
+                        return 1;
+                    }
+                } else {
+                    (void)prev_sep;
+                    *out_pos = old > 0 ? old - 1 : old;
+                    *out_msg = rec;
+                    return 1;
+                }
+            }
+        } else if (c == '[') {
+            bool neg = (i + 1 < len && pat[i + 1] == '!');
+            if (neg) {
+                if (i + 4 > len) {
+                    *out_pos = i;
+                    *out_msg = range;
+                    return 1;
+                }
+                uint64_t j = i + 3;
+                bool found = false;
+                while (j < len) {
+                    if (pat[j] == ']') { found = true; break; }
+                    j++;
+                }
+                if (!found) {
+                    *out_pos = i;
+                    *out_msg = range;
+                    return 1;
+                }
+                i = j + 1;
+            } else {
+                if (i + 3 > len) {
+                    *out_pos = i;
+                    *out_msg = range;
+                    return 1;
+                }
+                uint64_t j = i + 2;
+                bool found = false;
+                while (j < len) {
+                    if (pat[j] == ']') { found = true; break; }
+                    j++;
+                }
+                if (!found) {
+                    *out_pos = i;
+                    *out_msg = range;
+                    return 1;
+                }
+                i = j + 1;
+            }
+        } else if (c == '?') {
+            i++;
+        } else {
+            i++;
+        }
+    }
+    return 0;
+}
+
+// True when `s` holds no glob metacharacters.
+static bool _rl_glob_has_meta(const char *s, uint64_t len) {
+    for (uint64_t i = 0; i < len; i++) {
+        if (s[i] == '*' || s[i] == '?' || s[i] == '[') return true;
+    }
+    return false;
+}
+
+// Compare two C strings for qsort (lexicographic).
+static int _rl_glob_cmp(const void *a, const void *b) {
+    const char *sa = *(const char *const *)a;
+    const char *sb = *(const char *const *)b;
+    return strcmp(sa, sb);
+}
+
+// Join `base` and `name` into a fresh path (caller owns).
+static char *_rl_glob_join(const char *base, uint64_t base_len, const char *name, uint64_t name_len, uint64_t *out_len) {
+    uint64_t total;
+    char *out;
+    if (base_len == 0 || (base_len == 1 && base[0] == '.')) {
+        total = name_len;
+        out = malloc(total + 1);
+        memcpy(out, name, name_len);
+    } else if (base_len > 0 && base[base_len - 1] == '/') {
+        total = base_len + name_len;
+        out = malloc(total + 1);
+        memcpy(out, base, base_len);
+        memcpy(out + base_len, name, name_len);
+    } else {
+        total = base_len + 1 + name_len;
+        out = malloc(total + 1);
+        memcpy(out, base, base_len);
+        out[base_len] = '/';
+        memcpy(out + base_len + 1, name, name_len);
+    }
+    out[total] = '\0';
+    if (out_len) *out_len = total;
+    return out;
+}
+
+// Recursively match `comps[0..ncomps]` under `base`.
+static void _rl_glob_walk(const char *base, char **comps, uint64_t *comp_lens, uint64_t ncomps, char ***out, uint64_t *count, uint64_t *cap) {
+    if (ncomps == 0) {
+        struct stat st;
+        if (stat(base, &st) == 0) {
+            uint64_t bl = strlen(base);
+            if (*count >= *cap) {
+                *cap = *cap == 0 ? 16 : *cap * 2;
+                *out = realloc(*out, *cap * sizeof(char *));
+            }
+            char *dup = malloc(bl + 1);
+            memcpy(dup, base, bl + 1);
+            (*out)[*count] = dup;
+            (*count)++;
+        }
+        return;
+    }
+    if (strcmp(comps[0], "**") == 0) {
+        _rl_glob_walk(base, comps + 1, comp_lens + 1, ncomps - 1, out, count, cap);
+        DIR *d = opendir(base);
+        if (!d) return;
+        struct dirent *ent;
+        while ((ent = readdir(d)) != NULL) {
+            if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) continue;
+            uint64_t bl = strlen(base);
+            uint64_t nl = strlen(ent->d_name);
+            uint64_t fl = 0;
+            char *full = _rl_glob_join(base, bl, ent->d_name, nl, &fl);
+            struct stat st;
+            bool is_dir = (stat(full, &st) == 0 && S_ISDIR(st.st_mode));
+            if (is_dir) {
+                _rl_glob_walk(full, comps, comp_lens, ncomps, out, count, cap);
+            }
+            free(full);
+        }
+        closedir(d);
+        return;
+    }
+    DIR *d = opendir(base);
+    if (!d) return;
+    struct dirent *ent;
+    while ((ent = readdir(d)) != NULL) {
+        if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) continue;
+        if (fnmatch(comps[0], ent->d_name, 0) != 0) continue;
+        uint64_t bl = strlen(base);
+        uint64_t nl = strlen(ent->d_name);
+        uint64_t fl = 0;
+        char *full = _rl_glob_join(base, bl, ent->d_name, nl, &fl);
+        if (ncomps == 1) {
+            if (*count >= *cap) {
+                *cap = *cap == 0 ? 16 : *cap * 2;
+                *out = realloc(*out, *cap * sizeof(char *));
+            }
+            (*out)[*count] = full;
+            (*count)++;
+        } else {
+            struct stat st;
+            bool is_dir = (stat(full, &st) == 0 && S_ISDIR(st.st_mode));
+            if (is_dir) {
+                _rl_glob_walk(full, comps + 1, comp_lens + 1, ncomps - 1, out, count, cap);
+            }
+            free(full);
+        }
+    }
+    closedir(d);
+}
+
+// Paths matching `pattern` (`*`, `**`, `?`, `[...]`); ok with the list.
+rl_result rl_fs_glob(rl_string pattern) {
+    if (pattern.data == NULL) return rl_err(-1);
+    char *pat = malloc(pattern.len + 1);
+    memcpy(pat, pattern.data, pattern.len);
+    pat[pattern.len] = '\0';
+    uint64_t plen = pattern.len;
+    while (plen > 1 && pat[plen - 1] == '/') { pat[--plen] = '\0'; }
+    uint64_t err_pos = 0;
+    const char *err_msg = NULL;
+    if (_rl_glob_validate(pat, plen, &err_pos, &err_msg)) {
+        int n = snprintf(NULL, 0, "glob: invalid pattern \"%.*s\": Pattern syntax error near position %llu: %s", (int)pattern.len, pattern.data, (unsigned long long)err_pos, err_msg);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "glob: invalid pattern \"%.*s\": Pattern syntax error near position %llu: %s", (int)pattern.len, pattern.data, (unsigned long long)err_pos, err_msg);
+        free(pat);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    if (!_rl_glob_has_meta(pat, plen)) {
+        struct stat st;
+        if (stat(pat, &st) == 0) {
+            rl_string *buf = malloc(sizeof(rl_string));
+            char *dup = malloc(plen + 1);
+            memcpy(dup, pat, plen + 1);
+            buf[0] = (rl_string){ .data = dup, .len = plen, .rc = 1 };
+            free(pat);
+            rl_array arr = { .data = buf, .len = 1, .cap = 1, .elem_size = sizeof(rl_string), .type_tag = RL_TAG_STR };
+            return rl_ok_arr(arr);
+        }
+        free(pat);
+        rl_array empty = { .data = NULL, .len = 0, .cap = 0, .elem_size = sizeof(rl_string), .type_tag = RL_TAG_STR };
+        return rl_ok_arr(empty);
+    }
+    bool is_abs = plen > 0 && pat[0] == '/';
+    uint64_t cap_c = 16;
+    char **comps = malloc(cap_c * sizeof(char *));
+    uint64_t *clens = malloc(cap_c * sizeof(uint64_t));
+    uint64_t ncomps = 0;
+    uint64_t i = 0;
+    while (i < plen) {
+        while (i < plen && pat[i] == '/') i++;
+        if (i >= plen) break;
+        uint64_t s = i;
+        while (i < plen && pat[i] != '/') i++;
+        uint64_t sl = i - s;
+        if (ncomps >= cap_c) {
+            cap_c *= 2;
+            comps = realloc(comps, cap_c * sizeof(char *));
+            clens = realloc(clens, cap_c * sizeof(uint64_t));
+        }
+        char *c = malloc(sl + 1);
+        memcpy(c, pat + s, sl);
+        c[sl] = '\0';
+        comps[ncomps] = c;
+        clens[ncomps] = sl;
+        ncomps++;
+    }
+    uint64_t base_end = 0;
+    while (base_end < ncomps && !_rl_glob_has_meta(comps[base_end], clens[base_end])) base_end++;
+    char base[4096];
+    if (base_end == 0) {
+        if (is_abs) snprintf(base, sizeof(base), "/");
+        else snprintf(base, sizeof(base), ".");
+    } else {
+        if (is_abs) {
+            uint64_t w = 0;
+            base[w++] = '/';
+            for (uint64_t k = 0; k < base_end; k++) {
+                if (k > 0) base[w++] = '/';
+                memcpy(base + w, comps[k], clens[k]);
+                w += clens[k];
+            }
+            base[w] = '\0';
+        } else {
+            uint64_t w = 0;
+            for (uint64_t k = 0; k < base_end; k++) {
+                if (k > 0) base[w++] = '/';
+                memcpy(base + w, comps[k], clens[k]);
+                w += clens[k];
+            }
+            base[w] = '\0';
+        }
+    }
+    char **out = NULL;
+    uint64_t count = 0;
+    uint64_t cap = 0;
+    _rl_glob_walk(base, comps + base_end, clens + base_end, ncomps - base_end, &out, &count, &cap);
+    for (uint64_t k = 0; k < ncomps; k++) free(comps[k]);
+    free(comps);
+    free(clens);
+    free(pat);
+    if (count > 1) qsort(out, count, sizeof(char *), _rl_glob_cmp);
+    if (count == 0) {
+        free(out);
+        rl_array empty = { .data = NULL, .len = 0, .cap = 0, .elem_size = sizeof(rl_string), .type_tag = RL_TAG_STR };
+        return rl_ok_arr(empty);
+    }
+    rl_string *buf = malloc(count * sizeof(rl_string));
+    for (uint64_t k = 0; k < count; k++) {
+        uint64_t l = strlen(out[k]);
+        buf[k] = (rl_string){ .data = out[k], .len = l, .rc = 1 };
+    }
+    free(out);
+    rl_array arr = { .data = buf, .len = count, .cap = count, .elem_size = sizeof(rl_string), .type_tag = RL_TAG_STR };
+    return rl_ok_arr(arr);
+}
+
+// All paths under `path` depth-first; ok with the list, or an error.
+rl_result rl_fs_walk_dir(rl_string path) {
+    if (path.data == NULL) return rl_err(-1);
+    char *root = malloc(path.len + 1);
+    memcpy(root, path.data, path.len);
+    root[path.len] = '\0';
+    uint64_t cap_s = 16;
+    char **stack = malloc(cap_s * sizeof(char *));
+    uint64_t nstack = 0;
+    stack[nstack++] = root;
+    uint64_t cap_r = 16;
+    rl_string *results = malloc(cap_r * sizeof(rl_string));
+    uint64_t nres = 0;
+    while (nstack > 0) {
+        char *dir = stack[--nstack];
+        DIR *d = opendir(dir);
+        if (!d) {
+            int e = errno;
+            const char *es = strerror(e);
+            int n = snprintf(NULL, 0, "walk_dir: failed to read \"%s\": %s (os error %d)", dir, es, e);
+            char *msg = malloc((uint64_t)n + 1);
+            snprintf(msg, (uint64_t)n + 1, "walk_dir: failed to read \"%s\": %s (os error %d)", dir, es, e);
+            for (uint64_t k = 0; k < nstack; k++) free(stack[k]);
+            free(stack);
+            free(dir);
+            for (uint64_t k = 0; k < nres; k++) free((void *)results[k].data);
+            free(results);
+            return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+        }
+        struct dirent *ent;
+        while ((ent = readdir(d)) != NULL) {
+            if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) continue;
+            uint64_t dl = strlen(dir);
+            uint64_t nl = strlen(ent->d_name);
+            bool need_sep = dl > 0 && dir[dl - 1] != '/';
+            uint64_t fl = dl + (need_sep ? 1 : 0) + nl;
+            char *full = malloc(fl + 1);
+            memcpy(full, dir, dl);
+            if (need_sep) full[dl] = '/';
+            memcpy(full + dl + (need_sep ? 1 : 0), ent->d_name, nl + 1);
+            struct stat st;
+            bool is_dir = (stat(full, &st) == 0 && S_ISDIR(st.st_mode));
+            if (is_dir) {
+                if (nstack >= cap_s) {
+                    cap_s *= 2;
+                    stack = realloc(stack, cap_s * sizeof(char *));
+                }
+                stack[nstack++] = full;
+            }
+            if (nres >= cap_r) {
+                cap_r *= 2;
+                results = realloc(results, cap_r * sizeof(rl_string));
+            }
+            uint64_t rl = strlen(full);
+            char *dup = malloc(rl + 1);
+            memcpy(dup, full, rl + 1);
+            results[nres++] = (rl_string){ .data = dup, .len = rl, .rc = 1 };
+            if (is_dir) {
+                // keep full on the stack; do not free here
+            } else {
+                free(full);
+            }
+        }
+        closedir(d);
+        free(dir);
+    }
+    free(stack);
+    rl_array arr;
+    arr.data = results;
+    arr.len = nres;
+    arr.cap = cap_r;
+    arr.elem_size = sizeof(rl_string);
+    arr.type_tag = RL_TAG_STR;
+    return rl_ok_arr(arr);
+}
+
+// Create a symlink from `src` to `dst`; ok null on success, or an error.
+rl_result rl_fs_symlink(rl_string src, rl_string dst) {
+    if (src.data == NULL || dst.data == NULL) return rl_err(-1);
+    char sbuf[src.len + 1];
+    memcpy(sbuf, src.data, src.len);
+    sbuf[src.len] = '\0';
+    char dbuf[dst.len + 1];
+    memcpy(dbuf, dst.data, dst.len);
+    dbuf[dst.len] = '\0';
+    if (symlink(sbuf, dbuf) != 0) {
+        int e = errno;
+        const char *es = strerror(e);
+        int n = snprintf(NULL, 0, "symlink: failed to create symlink from \"%.*s\" to \"%.*s\": %s (os error %d)", (int)src.len, src.data, (int)dst.len, dst.data, es, e);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "symlink: failed to create symlink from \"%.*s\" to \"%.*s\": %s (os error %d)", (int)src.len, src.data, (int)dst.len, dst.data, es, e);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    return rl_ok_null();
+}
+
+// Target of the symlink at `path`, or an error.
+rl_result rl_fs_readlink(rl_string path) {
+    if (path.data == NULL) return rl_err(-1);
+    char buf[path.len + 1];
+    memcpy(buf, path.data, path.len);
+    buf[path.len] = '\0';
+    uint64_t cap = 256;
+    char *out = malloc(cap);
+    ssize_t n = readlink(buf, out, cap);
+    while (n >= 0 && (uint64_t)n >= cap) {
+        cap *= 2;
+        out = realloc(out, cap);
+        n = readlink(buf, out, cap);
+    }
+    if (n < 0) {
+        int e = errno;
+        const char *es = strerror(e);
+        int m = snprintf(NULL, 0, "readlink: failed to read symlink \"%.*s\": %s (os error %d)", (int)path.len, path.data, es, e);
+        char *msg = malloc((uint64_t)m + 1);
+        snprintf(msg, (uint64_t)m + 1, "readlink: failed to read symlink \"%.*s\": %s (os error %d)", (int)path.len, path.data, es, e);
+        free(out);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)m, .rc = 1 });
+    }
+    out[n] = '\0';
+    char *dup = malloc((uint64_t)n + 1);
+    memcpy(dup, out, (uint64_t)n + 1);
+    free(out);
+    return rl_ok_str((rl_string){ .data = dup, .len = (uint64_t)n, .rc = 1 });
+}
+
+// Create a hard link from `src` to `dst`; ok null on success, or an error.
+rl_result rl_fs_hardlink(rl_string src, rl_string dst) {
+    if (src.data == NULL || dst.data == NULL) return rl_err(-1);
+    char sbuf[src.len + 1];
+    memcpy(sbuf, src.data, src.len);
+    sbuf[src.len] = '\0';
+    char dbuf[dst.len + 1];
+    memcpy(dbuf, dst.data, dst.len);
+    dbuf[dst.len] = '\0';
+    if (link(sbuf, dbuf) != 0) {
+        int e = errno;
+        const char *es = strerror(e);
+        int n = snprintf(NULL, 0, "hardlink: failed to create hard link from \"%.*s\" to \"%.*s\": %s (os error %d)", (int)src.len, src.data, (int)dst.len, dst.data, es, e);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "hardlink: failed to create hard link from \"%.*s\" to \"%.*s\": %s (os error %d)", (int)src.len, src.data, (int)dst.len, dst.data, es, e);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    return rl_ok_null();
+}
+
+// Canonical path of `path`; ok with the path, or an error.
+rl_result rl_fs_realpath(rl_string path) {
+    if (path.data == NULL) return rl_err(-1);
+    char buf[path.len + 1];
+    memcpy(buf, path.data, path.len);
+    buf[path.len] = '\0';
+    char resolved[4096];
+    if (realpath(buf, resolved) == NULL) {
+        int e = errno;
+        const char *es = strerror(e);
+        int n = snprintf(NULL, 0, "realpath: failed to resolve \"%.*s\": %s (os error %d)", (int)path.len, path.data, es, e);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "realpath: failed to resolve \"%.*s\": %s (os error %d)", (int)path.len, path.data, es, e);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    uint64_t len = strlen(resolved);
+    char *out = malloc(len + 1);
+    memcpy(out, resolved, len + 1);
+    return rl_ok_str((rl_string){ .data = out, .len = len, .rc = 1 });
+}
+
+// Create `path` and parents; 0 on success, errno otherwise.
+static int _rl_fs_mkdir_p(const char *path) {
+    char *tmp = strdup(path);
+    uint64_t len = strlen(tmp);
+    while (len > 1 && tmp[len - 1] == '/') { tmp[--len] = '\0'; }
+    for (char *p = tmp + 1; *p; p++) {
+        if (*p == '/') {
+            *p = '\0';
+            if (mkdir(tmp, 0755) != 0 && errno != EEXIST) {
+                int e = errno;
+                free(tmp);
+                return e;
+            }
+            *p = '/';
+        }
+    }
+    if (mkdir(tmp, 0755) != 0 && errno != EEXIST) {
+        int e = errno;
+        free(tmp);
+        return e;
+    }
+    free(tmp);
+    return 0;
+}
+
+// Advisory exclusive lock on `path`; ok null on success, or an error.
+rl_result rl_fs_lock_file(rl_string path) {
+    if (path.data == NULL) return rl_err(-1);
+    char buf[path.len + 1];
+    memcpy(buf, path.data, path.len);
+    buf[path.len] = '\0';
+    int fd = open(buf, O_WRONLY | O_CREAT, 0666);
+    if (fd < 0) {
+        int e = errno;
+        const char *es = strerror(e);
+        int n = snprintf(NULL, 0, "lock_file: failed to open \"%.*s\": %s (os error %d)", (int)path.len, path.data, es, e);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "lock_file: failed to open \"%.*s\": %s (os error %d)", (int)path.len, path.data, es, e);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    if (flock(fd, LOCK_EX) != 0) {
+        int n = snprintf(NULL, 0, "lock_file: failed to lock \"%.*s\"", (int)path.len, path.data);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "lock_file: failed to lock \"%.*s\"", (int)path.len, path.data);
+        close(fd);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    return rl_ok_null();
+}
+
+// Release the advisory lock on `path`; ok null on success, or an error.
+rl_result rl_fs_unlock_file(rl_string path) {
+    if (path.data == NULL) return rl_err(-1);
+    char buf[path.len + 1];
+    memcpy(buf, path.data, path.len);
+    buf[path.len] = '\0';
+    int fd = open(buf, O_WRONLY);
+    if (fd < 0) {
+        int e = errno;
+        const char *es = strerror(e);
+        int n = snprintf(NULL, 0, "unlock_file: failed to open \"%.*s\": %s (os error %d)", (int)path.len, path.data, es, e);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "unlock_file: failed to open \"%.*s\": %s (os error %d)", (int)path.len, path.data, es, e);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    if (flock(fd, LOCK_UN) != 0) {
+        int n = snprintf(NULL, 0, "unlock_file: failed to unlock \"%.*s\"", (int)path.len, path.data);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "unlock_file: failed to unlock \"%.*s\"", (int)path.len, path.data);
+        close(fd);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    close(fd);
+    return rl_ok_null();
+}
+
+// Copy one regular file; 0 on success, errno otherwise.
+static int _rl_fs_copy_one(const char *src, const char *dst) {
+    FILE *fin = fopen(src, "rb");
+    if (!fin) return errno;
+    FILE *fout = fopen(dst, "wb");
+    if (!fout) {
+        int e = errno;
+        fclose(fin);
+        return e;
+    }
+    char chunk[8192];
+    size_t n;
+    while ((n = fread(chunk, 1, sizeof(chunk), fin)) > 0) {
+        if (fwrite(chunk, 1, n, fout) != n) {
+            int e = errno ? errno : EIO;
+            fclose(fin);
+            fclose(fout);
+            return e;
+        }
+    }
+    fclose(fin);
+    fclose(fout);
+    return 0;
+}
+
+// Copy the directory tree at `src` to `dst`; ok null, or an error.
+rl_result rl_fs_copy_dir(rl_string src, rl_string dst) {
+    if (src.data == NULL || dst.data == NULL) return rl_err(-1);
+    char sbuf[src.len + 1];
+    memcpy(sbuf, src.data, src.len);
+    sbuf[src.len] = '\0';
+    char dbuf[dst.len + 1];
+    memcpy(dbuf, dst.data, dst.len);
+    dbuf[dst.len] = '\0';
+    struct stat sst;
+    if (stat(sbuf, &sst) != 0 || !S_ISDIR(sst.st_mode)) {
+        int n = snprintf(NULL, 0, "copy_dir: source \"%.*s\" is not a directory", (int)src.len, src.data);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "copy_dir: source \"%.*s\" is not a directory", (int)src.len, src.data);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    int ce = _rl_fs_mkdir_p(dbuf);
+    if (ce != 0) {
+        const char *es = strerror(ce);
+        int n = snprintf(NULL, 0, "copy_dir: failed to create \"%.*s\": %s (os error %d)", (int)dst.len, dst.data, es, ce);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "copy_dir: failed to create \"%.*s\": %s (os error %d)", (int)dst.len, dst.data, es, ce);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    uint64_t cap_s = 16;
+    char **stack = malloc(cap_s * sizeof(char *));
+    uint64_t nstack = 0;
+    stack[nstack++] = strdup(sbuf);
+    uint64_t sroot_len = strlen(sbuf);
+    while (nstack > 0) {
+        char *dir = stack[--nstack];
+        DIR *d = opendir(dir);
+        if (!d) {
+            int e = errno;
+            const char *es = strerror(e);
+            int n = snprintf(NULL, 0, "copy_dir: failed to read \"%s\": %s (os error %d)", dir, es, e);
+            char *msg = malloc((uint64_t)n + 1);
+            snprintf(msg, (uint64_t)n + 1, "copy_dir: failed to read \"%s\": %s (os error %d)", dir, es, e);
+            for (uint64_t k = 0; k < nstack; k++) free(stack[k]);
+            free(stack);
+            free(dir);
+            return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+        }
+        struct dirent *ent;
+        while ((ent = readdir(d)) != NULL) {
+            if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) continue;
+            uint64_t dl = strlen(dir);
+            uint64_t nl = strlen(ent->d_name);
+            char *full = malloc(dl + 1 + nl + 1);
+            memcpy(full, dir, dl);
+            full[dl] = '/';
+            memcpy(full + dl + 1, ent->d_name, nl + 1);
+            const char *rel = full + sroot_len;
+            if (*rel == '/') rel++;
+            uint64_t dl2 = strlen(dbuf);
+            uint64_t rl2 = strlen(rel);
+            char *target = malloc(dl2 + 1 + rl2 + 1);
+            memcpy(target, dbuf, dl2);
+            target[dl2] = '/';
+            memcpy(target + dl2 + 1, rel, rl2 + 1);
+            struct stat est;
+            bool is_dir = (stat(full, &est) == 0 && S_ISDIR(est.st_mode));
+            if (is_dir) {
+                int me = _rl_fs_mkdir_p(target);
+                if (me != 0) {
+                    const char *es = strerror(me);
+                    int n = snprintf(NULL, 0, "copy_dir: failed to create \"%s\": %s (os error %d)", target, es, me);
+                    char *msg = malloc((uint64_t)n + 1);
+                    snprintf(msg, (uint64_t)n + 1, "copy_dir: failed to create \"%s\": %s (os error %d)", target, es, me);
+                    free(full);
+                    free(target);
+                    closedir(d);
+                    for (uint64_t k = 0; k < nstack; k++) free(stack[k]);
+                    free(stack);
+                    free(dir);
+                    return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+                }
+                if (nstack >= cap_s) {
+                    cap_s *= 2;
+                    stack = realloc(stack, cap_s * sizeof(char *));
+                }
+                stack[nstack++] = full;
+            } else {
+                char *slash = strrchr(target, '/');
+                if (slash) {
+                    *slash = '\0';
+                    int pe = _rl_fs_mkdir_p(target);
+                    *slash = '/';
+                    if (pe != 0) {
+                        const char *es = strerror(pe);
+                        int n = snprintf(NULL, 0, "copy_dir: failed to create \"%s\": %s (os error %d)", target, es, pe);
+                        char *msg = malloc((uint64_t)n + 1);
+                        snprintf(msg, (uint64_t)n + 1, "copy_dir: failed to create \"%s\": %s (os error %d)", target, es, pe);
+                        free(full);
+                        free(target);
+                        closedir(d);
+                        for (uint64_t k = 0; k < nstack; k++) free(stack[k]);
+                        free(stack);
+                        free(dir);
+                        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+                    }
+                }
+                int fe = _rl_fs_copy_one(full, target);
+                if (fe != 0) {
+                    const char *es = strerror(fe);
+                    int n = snprintf(NULL, 0, "copy_dir: failed to copy \"%s\" to \"%s\": %s (os error %d)", full, target, es, fe);
+                    char *msg = malloc((uint64_t)n + 1);
+                    snprintf(msg, (uint64_t)n + 1, "copy_dir: failed to copy \"%s\" to \"%s\": %s (os error %d)", full, target, es, fe);
+                    free(full);
+                    free(target);
+                    closedir(d);
+                    for (uint64_t k = 0; k < nstack; k++) free(stack[k]);
+                    free(stack);
+                    free(dir);
+                    return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+                }
+                free(full);
+            }
+            free(target);
+        }
+        closedir(d);
+        free(dir);
+    }
+    free(stack);
+    return rl_ok_null();
+}
+
+// Total byte size under `path`; ok with the sum, or an error.
+rl_result rl_fs_dir_size(rl_string path) {
+    if (path.data == NULL) return rl_err(-1);
+    char *root = malloc(path.len + 1);
+    memcpy(root, path.data, path.len);
+    root[path.len] = '\0';
+    uint64_t cap_s = 16;
+    char **stack = malloc(cap_s * sizeof(char *));
+    uint64_t nstack = 0;
+    stack[nstack++] = root;
+    int64_t total = 0;
+    while (nstack > 0) {
+        char *dir = stack[--nstack];
+        DIR *d = opendir(dir);
+        if (!d) {
+            int e = errno;
+            const char *es = strerror(e);
+            int n = snprintf(NULL, 0, "dir_size: failed to read \"%s\": %s (os error %d)", dir, es, e);
+            char *msg = malloc((uint64_t)n + 1);
+            snprintf(msg, (uint64_t)n + 1, "dir_size: failed to read \"%s\": %s (os error %d)", dir, es, e);
+            for (uint64_t k = 0; k < nstack; k++) free(stack[k]);
+            free(stack);
+            free(dir);
+            return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+        }
+        struct dirent *ent;
+        while ((ent = readdir(d)) != NULL) {
+            if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) continue;
+            uint64_t dl = strlen(dir);
+            uint64_t nl = strlen(ent->d_name);
+            bool need_sep = dl > 0 && dir[dl - 1] != '/';
+            uint64_t fl = dl + (need_sep ? 1 : 0) + nl;
+            char *full = malloc(fl + 1);
+            memcpy(full, dir, dl);
+            if (need_sep) full[dl] = '/';
+            memcpy(full + dl + (need_sep ? 1 : 0), ent->d_name, nl + 1);
+            struct stat st;
+            if (stat(full, &st) == 0 && S_ISDIR(st.st_mode)) {
+                if (nstack >= cap_s) {
+                    cap_s *= 2;
+                    stack = realloc(stack, cap_s * sizeof(char *));
+                }
+                stack[nstack++] = full;
+            } else {
+                struct stat fst;
+                if (stat(full, &fst) != 0) {
+                    int e = errno;
+                    const char *es = strerror(e);
+                    int n = snprintf(NULL, 0, "dir_size: failed to stat \"%s\": %s (os error %d)", full, es, e);
+                    char *msg = malloc((uint64_t)n + 1);
+                    snprintf(msg, (uint64_t)n + 1, "dir_size: failed to stat \"%s\": %s (os error %d)", full, es, e);
+                    free(full);
+                    closedir(d);
+                    for (uint64_t k = 0; k < nstack; k++) free(stack[k]);
+                    free(stack);
+                    free(dir);
+                    return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+                }
+                total += (int64_t)fst.st_size;
+                free(full);
+            }
+        }
+        closedir(d);
+        free(dir);
+    }
+    free(stack);
+    return rl_ok_i64(total);
+}
+
+// True when `path` is a symlink; ok with the bool, or an error.
+rl_result rl_fs_is_symlink(rl_string path) {
+    if (path.data == NULL) return rl_err(-1);
+    char buf[path.len + 1];
+    memcpy(buf, path.data, path.len);
+    buf[path.len] = '\0';
+    struct stat st;
+    if (lstat(buf, &st) != 0) {
+        int e = errno;
+        const char *es = strerror(e);
+        int n = snprintf(NULL, 0, "is_symlink: failed to read \"%.*s\": %s (os error %d)", (int)path.len, path.data, es, e);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "is_symlink: failed to read \"%.*s\": %s (os error %d)", (int)path.len, path.data, es, e);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    return rl_ok_bool(S_ISLNK(st.st_mode));
+}
+
+// File handle table: int64 ids into FILE pointers.
+#define _RL_FS_MAX_HANDLES 256
+static FILE *_rl_fs_files[_RL_FS_MAX_HANDLES];
+static bool _rl_fs_readable[_RL_FS_MAX_HANDLES];
+static bool _rl_fs_writable[_RL_FS_MAX_HANDLES];
+static bool _rl_fs_used[_RL_FS_MAX_HANDLES];
+static int _rl_fs_handle_count = 0;
+
+// Look up a live file handle; NULL when unknown or closed.
+static int64_t _rl_fs_idx(int64_t tagged) {
+    int64_t idx = tagged - RL_HANDLE_FILE_BASE;
+    if (idx < 0 || idx >= _rl_fs_handle_count) return -1;
+    return idx;
+}
+static FILE *_rl_fs_get(int64_t tagged, bool *readable, bool *writable) {
+    int64_t idx = _rl_fs_idx(tagged);
+    if (idx < 0) return NULL;
+    if (!_rl_fs_used[idx] || !_rl_fs_files[idx]) return NULL;
+    if (readable) *readable = _rl_fs_readable[idx];
+    if (writable) *writable = _rl_fs_writable[idx];
+    return _rl_fs_files[idx];
+}
+
+// Open `file` with `mode` (`r`, `w`, `a`, `r+`, `w+`, `a+`).
+rl_result rl_fs_open(rl_string file, rl_string mode) {
+    if (file.data == NULL || mode.data == NULL) return rl_err(-1);
+    char fbuf[file.len + 1];
+    memcpy(fbuf, file.data, file.len);
+    fbuf[file.len] = '\0';
+    char mbuf[mode.len + 1];
+    memcpy(mbuf, mode.data, mode.len);
+    mbuf[mode.len] = '\0';
+    bool is_r = strcmp(mbuf, "r") == 0;
+    bool is_w = strcmp(mbuf, "w") == 0;
+    bool is_a = strcmp(mbuf, "a") == 0;
+    bool is_rp = strcmp(mbuf, "r+") == 0;
+    bool is_wp = strcmp(mbuf, "w+") == 0;
+    bool is_ap = strcmp(mbuf, "a+") == 0;
+    if (!is_r && !is_w && !is_a && !is_rp && !is_wp && !is_ap) {
+        int n = snprintf(NULL, 0, "open: invalid mode \"%s\" (expected r, w, a, r+, w+, a+)", mbuf);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "open: invalid mode \"%s\" (expected r, w, a, r+, w+, a+)", mbuf);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    if (_rl_fs_handle_count >= _RL_FS_MAX_HANDLES) {
+        const char *m = "open: too many open handles";
+        uint64_t ml = strlen(m);
+        char *dup = malloc(ml + 1);
+        memcpy(dup, m, ml + 1);
+        return rl_err_msg((rl_string){ .data = dup, .len = ml, .rc = 1 });
+    }
+    FILE *fp = NULL;
+    if (is_r) fp = fopen(fbuf, "rb");
+    else if (is_w) fp = fopen(fbuf, "wb");
+    else if (is_a) fp = fopen(fbuf, "ab");
+    else if (is_rp) {
+        fp = fopen(fbuf, "r+b");
+        if (!fp && errno == ENOENT) fp = fopen(fbuf, "w+b");
+    } else if (is_wp) fp = fopen(fbuf, "w+b");
+    else if (is_ap) fp = fopen(fbuf, "a+b");
+    if (!fp) {
+        int e = errno;
+        const char *es = strerror(e);
+        int n = snprintf(NULL, 0, "open: failed to open \"%.*s\": %s (os error %d)", (int)file.len, file.data, es, e);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "open: failed to open \"%.*s\": %s (os error %d)", (int)file.len, file.data, es, e);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    int idx = _rl_fs_handle_count++;
+    _rl_fs_files[idx] = fp;
+    _rl_fs_readable[idx] = is_r || is_rp || is_wp || is_ap;
+    _rl_fs_writable[idx] = is_w || is_a || is_rp || is_wp || is_ap;
+    _rl_fs_used[idx] = true;
+    return rl_ok_i64(RL_HANDLE_FILE_BASE + (int64_t)idx);
+}
+
+// Close a file handle id; ok null on success, or an error.
+rl_result rl_fs_close(int64_t handle_id) {
+    FILE *fp = _rl_fs_get(handle_id, NULL, NULL);
+    if (!fp) {
+        const char *m = "close: invalid handle";
+        uint64_t ml = strlen(m);
+        char *dup = malloc(ml + 1);
+        memcpy(dup, m, ml + 1);
+        return rl_err_msg((rl_string){ .data = dup, .len = ml, .rc = 1 });
+    }
+    fclose(fp);
+    int64_t cidx = _rl_fs_idx(handle_id);
+    if (cidx >= 0) {
+        _rl_fs_files[cidx] = NULL;
+        _rl_fs_used[cidx] = false;
+    }
+    return rl_ok_null();
+}
+
+// Read up to `n` bytes from a handle; ok with the text, or an error.
+rl_result rl_fs_read_handle(int64_t handle_id, int64_t n) {
+    bool readable = false;
+    FILE *fp = _rl_fs_get(handle_id, &readable, NULL);
+    if (!fp) {
+        const char *m = "read: invalid handle";
+        uint64_t ml = strlen(m);
+        char *dup = malloc(ml + 1);
+        memcpy(dup, m, ml + 1);
+        return rl_err_msg((rl_string){ .data = dup, .len = ml, .rc = 1 });
+    }
+    if (!readable) {
+        const char *m = "read: handle is not open for reading";
+        uint64_t ml = strlen(m);
+        char *dup = malloc(ml + 1);
+        memcpy(dup, m, ml + 1);
+        return rl_err_msg((rl_string){ .data = dup, .len = ml, .rc = 1 });
+    }
+    if (n <= 0) {
+        char *empty = malloc(1);
+        empty[0] = '\0';
+        return rl_ok_str((rl_string){ .data = empty, .len = 0, .rc = 1 });
+    }
+    int64_t ridx = _rl_fs_idx(handle_id);
+    bool writable = ridx >= 0 ? _rl_fs_writable[ridx] : false;
+    if (writable) fflush(fp);
+    uint64_t want = (uint64_t)n;
+    char *buf = malloc(want + 1);
+    clearerr(fp);
+    size_t got = fread(buf, 1, want, fp);
+    if (got == 0 && ferror(fp)) {
+        int e = errno;
+        const char *es = strerror(e);
+        int m = snprintf(NULL, 0, "read: %s (os error %d)", es, e);
+        char *msg = malloc((uint64_t)m + 1);
+        snprintf(msg, (uint64_t)m + 1, "read: %s (os error %d)", es, e);
+        free(buf);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)m, .rc = 1 });
+    }
+    buf[got] = '\0';
+    char *out = malloc(got + 1);
+    memcpy(out, buf, got + 1);
+    free(buf);
+    return rl_ok_str((rl_string){ .data = out, .len = got, .rc = 1 });
+}
+
+// Write `data` to a handle; ok with the byte count, or an error.
+rl_result rl_fs_write_handle(int64_t handle_id, rl_string data) {
+    if (data.data == NULL) return rl_err(-1);
+    bool writable = false;
+    FILE *fp = _rl_fs_get(handle_id, NULL, &writable);
+    if (!fp) {
+        const char *m = "write: invalid handle";
+        uint64_t ml = strlen(m);
+        char *dup = malloc(ml + 1);
+        memcpy(dup, m, ml + 1);
+        return rl_err_msg((rl_string){ .data = dup, .len = ml, .rc = 1 });
+    }
+    if (!writable) {
+        const char *m = "write: handle is not open for writing";
+        uint64_t ml = strlen(m);
+        char *dup = malloc(ml + 1);
+        memcpy(dup, m, ml + 1);
+        return rl_err_msg((rl_string){ .data = dup, .len = ml, .rc = 1 });
+    }
+    int64_t widx = _rl_fs_idx(handle_id);
+    bool readable = widx >= 0 ? _rl_fs_readable[widx] : false;
+    if (readable) fseek(fp, 0, SEEK_CUR);
+    clearerr(fp);
+    size_t w = fwrite(data.data, 1, data.len, fp);
+    if (w != data.len && ferror(fp)) {
+        int e = errno;
+        const char *es = strerror(e);
+        int m = snprintf(NULL, 0, "write: %s (os error %d)", es, e);
+        char *msg = malloc((uint64_t)m + 1);
+        snprintf(msg, (uint64_t)m + 1, "write: %s (os error %d)", es, e);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)m, .rc = 1 });
+    }
+    return rl_ok_i64((int64_t)data.len);
+}
+
+// Seek a handle; ok with the new position, or an error.
+rl_result rl_fs_seek(int64_t handle_id, int64_t offset, int64_t whence) {
+    FILE *fp = _rl_fs_get(handle_id, NULL, NULL);
+    if (!fp) {
+        const char *m = "seek: invalid handle";
+        uint64_t ml = strlen(m);
+        char *dup = malloc(ml + 1);
+        memcpy(dup, m, ml + 1);
+        return rl_err_msg((rl_string){ .data = dup, .len = ml, .rc = 1 });
+    }
+    int how = 0;
+    if (whence == 0) how = SEEK_SET;
+    else if (whence == 1) how = SEEK_CUR;
+    else if (whence == 2) how = SEEK_END;
+    else {
+        int n = snprintf(NULL, 0, "seek: invalid whence %ld (expected 0, 1, or 2)", (long)whence);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "seek: invalid whence %ld (expected 0, 1, or 2)", (long)whence);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    int64_t off = offset;
+    if (whence == 0 && off < 0) off = 0;
+    clearerr(fp);
+    if (fseeko(fp, (off_t)off, how) != 0) {
+        int e = errno;
+        const char *es = strerror(e);
+        int n = snprintf(NULL, 0, "seek: %s (os error %d)", es, e);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "seek: %s (os error %d)", es, e);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    off_t pos = ftello(fp);
+    return rl_ok_i64((int64_t)pos);
+}
+
+// Flush a writable handle; ok null on success, or an error.
+rl_result rl_fs_flush(int64_t handle_id) {
+    bool writable = false;
+    FILE *fp = _rl_fs_get(handle_id, NULL, &writable);
+    if (!fp) {
+        const char *m = "flush: invalid handle";
+        uint64_t ml = strlen(m);
+        char *dup = malloc(ml + 1);
+        memcpy(dup, m, ml + 1);
+        return rl_err_msg((rl_string){ .data = dup, .len = ml, .rc = 1 });
+    }
+    if (!writable) {
+        const char *m = "flush: handle is not open for writing";
+        uint64_t ml = strlen(m);
+        char *dup = malloc(ml + 1);
+        memcpy(dup, m, ml + 1);
+        return rl_err_msg((rl_string){ .data = dup, .len = ml, .rc = 1 });
+    }
+    if (fflush(fp) != 0) {
+        int e = errno;
+        const char *es = strerror(e);
+        int n = snprintf(NULL, 0, "flush: %s (os error %d)", es, e);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "flush: %s (os error %d)", es, e);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    return rl_ok_null();
+}
+
+// Read from a handle to EOF; ok with the text, or an error.
+rl_result rl_fs_read_all(int64_t handle_id) {
+    bool readable = false;
+    FILE *fp = _rl_fs_get(handle_id, &readable, NULL);
+    if (!fp) {
+        const char *m = "read_all: invalid handle";
+        uint64_t ml = strlen(m);
+        char *dup = malloc(ml + 1);
+        memcpy(dup, m, ml + 1);
+        return rl_err_msg((rl_string){ .data = dup, .len = ml, .rc = 1 });
+    }
+    if (!readable) {
+        const char *m = "read_all: handle is not open for reading";
+        uint64_t ml = strlen(m);
+        char *dup = malloc(ml + 1);
+        memcpy(dup, m, ml + 1);
+        return rl_err_msg((rl_string){ .data = dup, .len = ml, .rc = 1 });
+    }
+    int64_t aidx = _rl_fs_idx(handle_id);
+    bool writable = aidx >= 0 ? _rl_fs_writable[aidx] : false;
+    if (writable) fflush(fp);
+    clearerr(fp);
+    uint64_t cap = 4096;
+    char *buf = malloc(cap);
+    uint64_t len = 0;
+    for (;;) {
+        if (len >= cap) {
+            cap *= 2;
+            buf = realloc(buf, cap);
+        }
+        size_t r = fread(buf + len, 1, cap - len, fp);
+        len += r;
+        if (r == 0) {
+            if (ferror(fp)) {
+                int e = errno;
+                const char *es = strerror(e);
+                int m = snprintf(NULL, 0, "read_all: %s (os error %d)", es, e);
+                char *msg = malloc((uint64_t)m + 1);
+                snprintf(msg, (uint64_t)m + 1, "read_all: %s (os error %d)", es, e);
+                free(buf);
+                return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)m, .rc = 1 });
+            }
+            break;
+        }
+        if (feof(fp)) break;
+    }
+    char *out = malloc(len + 1);
+    memcpy(out, buf, len);
+    out[len] = '\0';
+    free(buf);
+    return rl_ok_str((rl_string){ .data = out, .len = len, .rc = 1 });
+}
+
+// True for ASCII whitespace trimmed by readline.
+static bool _rl_fs_is_space(char c) {
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v';
+}
+
+// Read one line from a handle; ok with the line, or an error.
+rl_result rl_fs_readline(int64_t handle_id) {
+    bool readable = false;
+    FILE *fp = _rl_fs_get(handle_id, &readable, NULL);
+    if (!fp) {
+        const char *m = "readline: invalid handle";
+        uint64_t ml = strlen(m);
+        char *dup = malloc(ml + 1);
+        memcpy(dup, m, ml + 1);
+        return rl_err_msg((rl_string){ .data = dup, .len = ml, .rc = 1 });
+    }
+    if (!readable) {
+        const char *m = "readline: handle is not open for reading";
+        uint64_t ml = strlen(m);
+        char *dup = malloc(ml + 1);
+        memcpy(dup, m, ml + 1);
+        return rl_err_msg((rl_string){ .data = dup, .len = ml, .rc = 1 });
+    }
+    int64_t lidx = _rl_fs_idx(handle_id);
+    bool writable = lidx >= 0 ? _rl_fs_writable[lidx] : false;
+    if (writable) fflush(fp);
+    clearerr(fp);
+    uint64_t cap = 256;
+    char *buf = malloc(cap);
+    uint64_t len = 0;
+    int c;
+    bool any = false;
+    while ((c = fgetc(fp)) != EOF) {
+        any = true;
+        if (len >= cap) {
+            cap *= 2;
+            buf = realloc(buf, cap);
+        }
+        buf[len++] = (char)c;
+        if (c == '\n') break;
+    }
+    if (!any) {
+        if (ferror(fp)) {
+            int e = errno;
+            const char *es = strerror(e);
+            int m = snprintf(NULL, 0, "readline: %s (os error %d)", es, e);
+            char *msg = malloc((uint64_t)m + 1);
+            snprintf(msg, (uint64_t)m + 1, "readline: %s (os error %d)", es, e);
+            free(buf);
+            return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)m, .rc = 1 });
+        }
+        free(buf);
+        char *empty = malloc(1);
+        empty[0] = '\0';
+        return rl_ok_str((rl_string){ .data = empty, .len = 0, .rc = 1 });
+    }
+    while (len > 0 && _rl_fs_is_space(buf[len - 1])) len--;
+    char *out = malloc(len + 1);
+    memcpy(out, buf, len);
+    out[len] = '\0';
+    free(buf);
+    return rl_ok_str((rl_string){ .data = out, .len = len, .rc = 1 });
 }
 
 // ---- process ----
@@ -1891,6 +4452,733 @@ rl_result rl_process_kill_pid(int64_t pid) {
     return rl_ok_null();
 }
 
+// Set an environment variable; ok null on success, or an error.
+rl_result rl_process_set_env(rl_string key, rl_string value) {
+    if (key.data == NULL || value.data == NULL) return rl_err(-1);
+    char kbuf[key.len + 1];
+    memcpy(kbuf, key.data, key.len);
+    kbuf[key.len] = '\0';
+    char vbuf[value.len + 1];
+    memcpy(vbuf, value.data, value.len);
+    vbuf[value.len] = '\0';
+    if (setenv(kbuf, vbuf, 1) != 0) return rl_err(-1);
+    return rl_ok_null();
+}
+
+// Remove an environment variable; ok null on success, or an error.
+rl_result rl_process_remove_env(rl_string key) {
+    if (key.data == NULL) return rl_err(-1);
+    char kbuf[key.len + 1];
+    memcpy(kbuf, key.data, key.len);
+    kbuf[key.len] = '\0';
+    if (unsetenv(kbuf) != 0) return rl_err(-1);
+    return rl_ok_null();
+}
+
+// All environment variable names as an array of strings.
+rl_array rl_process_env_keys(void) {
+    extern char **environ;
+    rl_array empty = { .data = NULL, .len = 0, .cap = 0, .elem_size = sizeof(rl_string), .type_tag = RL_TAG_STR };
+    if (environ == NULL) return empty;
+    uint64_t count = 0;
+    for (char **e = environ; *e != NULL; e++) count++;
+    if (count == 0) return empty;
+    rl_string *buf = malloc(count * sizeof(rl_string));
+    uint64_t n = 0;
+    for (char **e = environ; *e != NULL; e++) {
+        char *eq = strchr(*e, '=');
+        uint64_t klen = eq ? (uint64_t)(eq - *e) : strlen(*e);
+        char *out = malloc(klen + 1);
+        memcpy(out, *e, klen);
+        out[klen] = '\0';
+        buf[n++] = (rl_string){ .data = out, .len = klen, .rc = 1 };
+    }
+    rl_array arr = { .data = buf, .len = n, .cap = n, .elem_size = sizeof(rl_string), .type_tag = RL_TAG_STR };
+    return arr;
+}
+
+// CPU architecture like Rust consts::ARCH.
+rl_string rl_process_arch(void) {
+#if defined(__x86_64__) || defined(_M_X64)
+    return rl_str_literal("x86_64", 6);
+#elif defined(__aarch64__) || defined(_M_ARM64)
+    return rl_str_literal("aarch64", 7);
+#elif defined(__arm__) || defined(_M_ARM)
+    return rl_str_literal("arm", 3);
+#elif defined(__i386__) || defined(_M_IX86)
+    return rl_str_literal("x86", 3);
+#elif defined(__riscv) && __riscv_xlen == 64
+    return rl_str_literal("riscv64", 7);
+#elif defined(__mips64__)
+    return rl_str_literal("mips64", 6);
+#elif defined(__mips__)
+    return rl_str_literal("mips", 4);
+#elif defined(__powerpc64__)
+    return rl_str_literal("powerpc64", 9);
+#elif defined(__powerpc__)
+    return rl_str_literal("powerpc", 7);
+#elif defined(__s390x__)
+    return rl_str_literal("s390x", 5);
+#else
+    return rl_str_literal("unknown", 7);
+#endif
+}
+
+// Number of available CPUs, or 1 when unknown.
+int64_t rl_process_num_cpus(void) {
+    long n = sysconf(_SC_NPROCESSORS_ONLN);
+    if (n < 1) return 1;
+    return (int64_t)n;
+}
+
+// Parent process id.
+int64_t rl_process_parent_pid(void) {
+    return (int64_t)getppid();
+}
+
+// True exactly when kill(pid, 0) succeeds, mirroring the VM (which
+// reports false for EPERM pids and true for pid 0's process group).
+bool rl_process_exists(int64_t pid) {
+    return kill((pid_t)pid, 0) == 0;
+}
+
+// Run exe plus args in the foreground; ok with the exit code, or an error.
+rl_result rl_process_with_exec_fg(rl_string exe, rl_string cmd) {
+    if (exe.data == NULL || cmd.data == NULL) return rl_err(-1);
+    uint64_t total = exe.len + 1 + cmd.len;
+    char buf[total + 1];
+    memcpy(buf, exe.data, exe.len);
+    buf[exe.len] = ' ';
+    memcpy(buf + exe.len + 1, cmd.data, cmd.len);
+    buf[total] = '\0';
+    rl_string combined = { .data = buf, .len = total, .rc = 0 };
+    return rl_process_exec_fg(combined);
+}
+
+// Helper to capture shell output with stdin input via fork.
+static rl_result _rl_stdin_capture(const char *cmd_cstr, rl_string input, const char *prefix, const char *orig_cmd, uint64_t orig_len, bool use_prefix_only) {
+    int in_pipe[2];
+    int out_pipe[2];
+    if (pipe(in_pipe) != 0) {
+        int e = errno;
+        const char *es = strerror(e);
+        int n;
+        char *msg;
+        if (use_prefix_only) {
+            n = snprintf(NULL, 0, "%s: failed: %s (os error %d)", prefix, es, e);
+            msg = malloc((uint64_t)n + 1);
+            snprintf(msg, (uint64_t)n + 1, "%s: failed: %s (os error %d)", prefix, es, e);
+        } else {
+            n = snprintf(NULL, 0, "%s: failed to run \"%.*s\": %s (os error %d)", prefix, (int)orig_len, orig_cmd, es, e);
+            msg = malloc((uint64_t)n + 1);
+            snprintf(msg, (uint64_t)n + 1, "%s: failed to run \"%.*s\": %s (os error %d)", prefix, (int)orig_len, orig_cmd, es, e);
+        }
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    if (pipe(out_pipe) != 0) {
+        int e = errno;
+        const char *es = strerror(e);
+        int n;
+        char *msg;
+        if (use_prefix_only) {
+            n = snprintf(NULL, 0, "%s: failed: %s (os error %d)", prefix, es, e);
+            msg = malloc((uint64_t)n + 1);
+            snprintf(msg, (uint64_t)n + 1, "%s: failed: %s (os error %d)", prefix, es, e);
+        } else {
+            n = snprintf(NULL, 0, "%s: failed to run \"%.*s\": %s (os error %d)", prefix, (int)orig_len, orig_cmd, es, e);
+            msg = malloc((uint64_t)n + 1);
+            snprintf(msg, (uint64_t)n + 1, "%s: failed to run \"%.*s\": %s (os error %d)", prefix, (int)orig_len, orig_cmd, es, e);
+        }
+        close(in_pipe[0]); close(in_pipe[1]);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    pid_t pid = fork();
+    if (pid < 0) {
+        int e = errno;
+        const char *es = strerror(e);
+        int n;
+        char *msg;
+        if (use_prefix_only) {
+            n = snprintf(NULL, 0, "%s: failed: %s (os error %d)", prefix, es, e);
+            msg = malloc((uint64_t)n + 1);
+            snprintf(msg, (uint64_t)n + 1, "%s: failed: %s (os error %d)", prefix, es, e);
+        } else {
+            n = snprintf(NULL, 0, "%s: failed to run \"%.*s\": %s (os error %d)", prefix, (int)orig_len, orig_cmd, es, e);
+            msg = malloc((uint64_t)n + 1);
+            snprintf(msg, (uint64_t)n + 1, "%s: failed to run \"%.*s\": %s (os error %d)", prefix, (int)orig_len, orig_cmd, es, e);
+        }
+        close(in_pipe[0]); close(in_pipe[1]); close(out_pipe[0]); close(out_pipe[1]);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    if (pid == 0) {
+        dup2(in_pipe[0], STDIN_FILENO);
+        dup2(out_pipe[1], STDOUT_FILENO);
+        close(in_pipe[0]); close(in_pipe[1]); close(out_pipe[0]); close(out_pipe[1]);
+        execl("/bin/sh", "sh", "-c", cmd_cstr, (char *)NULL);
+        _exit(127);
+    }
+    close(in_pipe[0]); close(out_pipe[1]);
+    uint64_t written = 0;
+    while (written < input.len) {
+        ssize_t w = write(in_pipe[1], input.data + written, input.len - written);
+        if (w < 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+        if (w == 0) break;
+        written += (uint64_t)w;
+    }
+    close(in_pipe[1]);
+    uint64_t cap = 4096;
+    char *out = malloc(cap);
+    uint64_t len = 0;
+    for (;;) {
+        if (len >= cap) { cap *= 2; out = realloc(out, cap); }
+        ssize_t r = read(out_pipe[0], out + len, cap - len);
+        if (r < 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+        if (r == 0) break;
+        len += (uint64_t)r;
+    }
+    close(out_pipe[0]);
+    int status = 0;
+    while (waitpid(pid, &status, 0) < 0) {
+        if (errno != EINTR) {
+            int e = errno;
+            const char *es = strerror(e);
+            int n = snprintf(NULL, 0, "%s: failed: %s (os error %d)", prefix, es, e);
+            char *msg = malloc((uint64_t)n + 1);
+            snprintf(msg, (uint64_t)n + 1, "%s: failed: %s (os error %d)", prefix, es, e);
+            free(out);
+            return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+        }
+    }
+    out[len] = '\0';
+    while (len > 0 && out[len - 1] == '\n') len--;
+    rl_string result = { .data = out, .len = len, .rc = 1 };
+    return rl_ok_str(result);
+}
+
+// Run cmd with input on stdin; ok with stdout, or an error.
+rl_result rl_process_exec_with_stdin(rl_string cmd, rl_string input) {
+    if (cmd.data == NULL || input.data == NULL) return rl_err(-1);
+    char buf[cmd.len + 1];
+    memcpy(buf, cmd.data, cmd.len);
+    buf[cmd.len] = '\0';
+    return _rl_stdin_capture(buf, input, "exec_with_stdin", cmd.data, cmd.len, false);
+}
+
+// Same with exe plus args and input on stdin; ok with stdout, or an error.
+rl_result rl_process_with_exec_with_stdin(rl_string exe, rl_string cmd, rl_string input) {
+    if (exe.data == NULL || cmd.data == NULL || input.data == NULL) return rl_err(-1);
+    uint64_t total = exe.len + 1 + cmd.len;
+    char *buf = malloc(total + 1);
+    memcpy(buf, exe.data, exe.len);
+    buf[exe.len] = ' ';
+    memcpy(buf + exe.len + 1, cmd.data, cmd.len);
+    buf[total] = '\0';
+    rl_result r = _rl_stdin_capture(buf, input, "with_exec_with_stdin", cmd.data, cmd.len, true);
+    free(buf);
+    return r;
+}
+
+// True when a byte is safe to leave unquoted in shell env assignments.
+static bool _rl_env_char_safe(char c) {
+    if (c >= 'A' && c <= 'Z') return true;
+    if (c >= 'a' && c <= 'z') return true;
+    if (c >= '0' && c <= '9') return true;
+    if (c == '_' || c == '@' || c == '%' || c == '+' || c == '=' || c == ':' || c == ',' || c == '.' || c == '/' || c == '-' ) return true;
+    return false;
+}
+
+// Build "K=V " prefix from envs pairs; returns malloced buffer with len.
+static char *_rl_env_prefix(rl_array envs, uint64_t *out_len) {
+    uint64_t cap = 256;
+    char *buf = malloc(cap);
+    uint64_t len = 0;
+    if (envs.data == NULL || envs.len == 0) {
+        buf[0] = '\0';
+        *out_len = 0;
+        return buf;
+    }
+    rl_array *pairs = (rl_array *)envs.data;
+    for (uint64_t i = 0; i < envs.len; i++) {
+        rl_array pair = pairs[i];
+        if (pair.len != 2 || pair.data == NULL) continue;
+        rl_string *kv = (rl_string *)pair.data;
+        rl_string k = kv[0];
+        rl_string v = kv[1];
+        if (k.data == NULL || v.data == NULL) continue;
+        if (k.len == 0) continue;
+        bool need_quote = (v.len == 0);
+        for (uint64_t j = 0; j < v.len && !need_quote; j++) {
+            if (!_rl_env_char_safe(v.data[j])) need_quote = true;
+        }
+        uint64_t need = k.len + 1 + v.len + 4 + 1;
+        if (need_quote) need += v.len + 2;
+        while (len + need + 1 > cap) { cap *= 2; buf = realloc(buf, cap); }
+        memcpy(buf + len, k.data, k.len);
+        len += k.len;
+        buf[len++] = '=';
+        if (!need_quote) {
+            memcpy(buf + len, v.data, v.len);
+            len += v.len;
+        } else if (v.len == 0) {
+            buf[len++] = '\'';
+            buf[len++] = '\'';
+        } else {
+            buf[len++] = '\'';
+            for (uint64_t j = 0; j < v.len; j++) {
+                if (v.data[j] == '\'') {
+                    memcpy(buf + len, "'\\''", 4);
+                    len += 4;
+                } else {
+                    buf[len++] = v.data[j];
+                }
+            }
+            buf[len++] = '\'';
+        }
+        buf[len++] = ' ';
+    }
+    buf[len] = '\0';
+    *out_len = len;
+    return buf;
+}
+
+// Run cmd with envs pairs; ok with stdout, or an error.
+rl_result rl_process_exec_with_env(rl_string cmd, rl_array envs) {
+    if (cmd.data == NULL) return rl_err(-1);
+    uint64_t plen = 0;
+    char *prefix = _rl_env_prefix(envs, &plen);
+    char *buf = NULL;
+    uint64_t total = 0;
+    if (plen > 0) {
+        // Use export so $VAR expands after assignment. Plain
+        // "K=V cmd" would expand $VAR before assignment.
+        const char *head = "export ";
+        const char *mid = "; ";
+        uint64_t hlen = 7;
+        uint64_t mlen = 2;
+        total = hlen + plen + mlen + cmd.len;
+        buf = malloc(total + 1);
+        memcpy(buf, head, hlen);
+        memcpy(buf + hlen, prefix, plen);
+        memcpy(buf + hlen + plen, mid, mlen);
+        memcpy(buf + hlen + plen + mlen, cmd.data, cmd.len);
+        buf[total] = '\0';
+    } else {
+        total = cmd.len;
+        buf = malloc(total + 1);
+        memcpy(buf, cmd.data, cmd.len);
+        buf[total] = '\0';
+    }
+    free(prefix);
+    rl_string combined = { .data = buf, .len = total, .rc = 1 };
+    rl_result r = rl_process_exec(combined);
+    if (!r.is_ok) {
+        int e = errno;
+        const char *es = strerror(e);
+        int n = snprintf(NULL, 0, "exec_with_env: failed to run \"%.*s\": %s (os error %d)", (int)cmd.len, cmd.data, es, e);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "exec_with_env: failed to run \"%.*s\": %s (os error %d)", (int)cmd.len, cmd.data, es, e);
+        free(buf);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    free(buf);
+    return r;
+}
+
+// Same with exe plus args and envs pairs; ok with stdout, or an error.
+rl_result rl_process_with_exec_with_env(rl_string exe, rl_string cmd, rl_array envs) {
+    if (exe.data == NULL || cmd.data == NULL) return rl_err(-1);
+    uint64_t base = exe.len + 1 + cmd.len;
+    char *basebuf = malloc(base + 1);
+    memcpy(basebuf, exe.data, exe.len);
+    basebuf[exe.len] = ' ';
+    memcpy(basebuf + exe.len + 1, cmd.data, cmd.len);
+    basebuf[base] = '\0';
+    uint64_t plen = 0;
+    char *prefix = _rl_env_prefix(envs, &plen);
+    char *buf = NULL;
+    uint64_t total = 0;
+    if (plen > 0) {
+        const char *head = "export ";
+        const char *mid = "; ";
+        uint64_t hlen = 7;
+        uint64_t mlen = 2;
+        total = hlen + plen + mlen + base;
+        buf = malloc(total + 1);
+        memcpy(buf, head, hlen);
+        memcpy(buf + hlen, prefix, plen);
+        memcpy(buf + hlen + plen, mid, mlen);
+        memcpy(buf + hlen + plen + mlen, basebuf, base);
+        buf[total] = '\0';
+    } else {
+        total = base;
+        buf = malloc(total + 1);
+        memcpy(buf, basebuf, base);
+        buf[total] = '\0';
+    }
+    free(prefix);
+    free(basebuf);
+    rl_string combined = { .data = buf, .len = total, .rc = 1 };
+    rl_result r = rl_process_exec(combined);
+    if (!r.is_ok) {
+        int e = errno;
+        const char *es = strerror(e);
+        int n = snprintf(NULL, 0, "with_exec_with_env: failed: %s (os error %d)", es, e);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "with_exec_with_env: failed: %s (os error %d)", es, e);
+        free(buf);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    free(buf);
+    return r;
+}
+
+// Helper to capture shell output in dir via fork.
+static rl_result _rl_cwd_capture(const char *cmd_cstr, const char *dir_cstr, const char *prefix, const char *orig_cmd, uint64_t orig_len, const char *orig_dir, uint64_t orig_dir_len, bool use_prefix_only) {
+    int out_pipe[2];
+    if (pipe(out_pipe) != 0) {
+        int e = errno;
+        const char *es = strerror(e);
+        int n;
+        char *msg;
+        if (use_prefix_only) {
+            n = snprintf(NULL, 0, "%s: failed: %s (os error %d)", prefix, es, e);
+            msg = malloc((uint64_t)n + 1);
+            snprintf(msg, (uint64_t)n + 1, "%s: failed: %s (os error %d)", prefix, es, e);
+        } else {
+            n = snprintf(NULL, 0, "%s: failed to run \"%.*s\" in \"%.*s\": %s (os error %d)", prefix, (int)orig_len, orig_cmd, (int)orig_dir_len, orig_dir, es, e);
+            msg = malloc((uint64_t)n + 1);
+            snprintf(msg, (uint64_t)n + 1, "%s: failed to run \"%.*s\" in \"%.*s\": %s (os error %d)", prefix, (int)orig_len, orig_cmd, (int)orig_dir_len, orig_dir, es, e);
+        }
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    pid_t pid = fork();
+    if (pid < 0) {
+        int e = errno;
+        const char *es = strerror(e);
+        int n;
+        char *msg;
+        if (use_prefix_only) {
+            n = snprintf(NULL, 0, "%s: failed: %s (os error %d)", prefix, es, e);
+            msg = malloc((uint64_t)n + 1);
+            snprintf(msg, (uint64_t)n + 1, "%s: failed: %s (os error %d)", prefix, es, e);
+        } else {
+            n = snprintf(NULL, 0, "%s: failed to run \"%.*s\" in \"%.*s\": %s (os error %d)", prefix, (int)orig_len, orig_cmd, (int)orig_dir_len, orig_dir, es, e);
+            msg = malloc((uint64_t)n + 1);
+            snprintf(msg, (uint64_t)n + 1, "%s: failed to run \"%.*s\" in \"%.*s\": %s (os error %d)", prefix, (int)orig_len, orig_cmd, (int)orig_dir_len, orig_dir, es, e);
+        }
+        close(out_pipe[0]); close(out_pipe[1]);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    if (pid == 0) {
+        if (chdir(dir_cstr) != 0) _exit(127);
+        dup2(out_pipe[1], STDOUT_FILENO);
+        close(out_pipe[0]); close(out_pipe[1]);
+        execl("/bin/sh", "sh", "-c", cmd_cstr, (char *)NULL);
+        _exit(127);
+    }
+    close(out_pipe[1]);
+    uint64_t cap = 4096;
+    char *out = malloc(cap);
+    uint64_t len = 0;
+    for (;;) {
+        if (len >= cap) { cap *= 2; out = realloc(out, cap); }
+        ssize_t r = read(out_pipe[0], out + len, cap - len);
+        if (r < 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+        if (r == 0) break;
+        len += (uint64_t)r;
+    }
+    close(out_pipe[0]);
+    int status = 0;
+    while (waitpid(pid, &status, 0) < 0) {
+        if (errno != EINTR) {
+            int e = errno;
+            const char *es = strerror(e);
+            int n;
+            char *msg;
+            if (use_prefix_only) {
+                n = snprintf(NULL, 0, "%s: failed: %s (os error %d)", prefix, es, e);
+                msg = malloc((uint64_t)n + 1);
+                snprintf(msg, (uint64_t)n + 1, "%s: failed: %s (os error %d)", prefix, es, e);
+            } else {
+                n = snprintf(NULL, 0, "%s: failed to run \"%.*s\" in \"%.*s\": %s (os error %d)", prefix, (int)orig_len, orig_cmd, (int)orig_dir_len, orig_dir, es, e);
+                msg = malloc((uint64_t)n + 1);
+                snprintf(msg, (uint64_t)n + 1, "%s: failed to run \"%.*s\" in \"%.*s\": %s (os error %d)", prefix, (int)orig_len, orig_cmd, (int)orig_dir_len, orig_dir, es, e);
+            }
+            free(out);
+            return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+        }
+    }
+    if (WIFEXITED(status) && WEXITSTATUS(status) == 127) {
+        struct stat st;
+        if (stat(dir_cstr, &st) != 0 || !S_ISDIR(st.st_mode)) {
+            int e = errno;
+            if (stat(dir_cstr, &st) == 0 && !S_ISDIR(st.st_mode)) e = ENOTDIR;
+            const char *es = strerror(e);
+            int n;
+            char *msg;
+            if (use_prefix_only) {
+                n = snprintf(NULL, 0, "%s: failed: %s (os error %d)", prefix, es, e);
+                msg = malloc((uint64_t)n + 1);
+                snprintf(msg, (uint64_t)n + 1, "%s: failed: %s (os error %d)", prefix, es, e);
+            } else {
+                n = snprintf(NULL, 0, "%s: failed to run \"%.*s\" in \"%.*s\": %s (os error %d)", prefix, (int)orig_len, orig_cmd, (int)orig_dir_len, orig_dir, es, e);
+                msg = malloc((uint64_t)n + 1);
+                snprintf(msg, (uint64_t)n + 1, "%s: failed to run \"%.*s\" in \"%.*s\": %s (os error %d)", prefix, (int)orig_len, orig_cmd, (int)orig_dir_len, orig_dir, es, e);
+            }
+            free(out);
+            return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+        }
+    }
+    out[len] = '\0';
+    while (len > 0 && out[len - 1] == '\n') len--;
+    rl_string result = { .data = out, .len = len, .rc = 1 };
+    return rl_ok_str(result);
+}
+
+// Run cmd in dir; ok with stdout, or an error.
+rl_result rl_process_exec_with_cwd(rl_string cmd, rl_string dir) {
+    if (cmd.data == NULL || dir.data == NULL) return rl_err(-1);
+    char cbuf[cmd.len + 1];
+    memcpy(cbuf, cmd.data, cmd.len);
+    cbuf[cmd.len] = '\0';
+    char dbuf[dir.len + 1];
+    memcpy(dbuf, dir.data, dir.len);
+    dbuf[dir.len] = '\0';
+    struct stat st;
+    if (stat(dbuf, &st) != 0) {
+        int e = errno;
+        const char *es = strerror(e);
+        int n = snprintf(NULL, 0, "exec_with_cwd: failed to run \"%.*s\" in \"%.*s\": %s (os error %d)", (int)cmd.len, cmd.data, (int)dir.len, dir.data, es, e);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "exec_with_cwd: failed to run \"%.*s\" in \"%.*s\": %s (os error %d)", (int)cmd.len, cmd.data, (int)dir.len, dir.data, es, e);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    if (!S_ISDIR(st.st_mode)) {
+        int e = ENOTDIR;
+        const char *es = strerror(e);
+        int n = snprintf(NULL, 0, "exec_with_cwd: failed to run \"%.*s\" in \"%.*s\": %s (os error %d)", (int)cmd.len, cmd.data, (int)dir.len, dir.data, es, e);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "exec_with_cwd: failed to run \"%.*s\" in \"%.*s\": %s (os error %d)", (int)cmd.len, cmd.data, (int)dir.len, dir.data, es, e);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    return _rl_cwd_capture(cbuf, dbuf, "exec_with_cwd", cmd.data, cmd.len, dir.data, dir.len, false);
+}
+
+// Same with exe plus args in dir; ok with stdout, or an error.
+rl_result rl_process_with_exec_with_cwd(rl_string exe, rl_string cmd, rl_string dir) {
+    if (exe.data == NULL || cmd.data == NULL || dir.data == NULL) return rl_err(-1);
+    uint64_t total = exe.len + 1 + cmd.len;
+    char *buf = malloc(total + 1);
+    memcpy(buf, exe.data, exe.len);
+    buf[exe.len] = ' ';
+    memcpy(buf + exe.len + 1, cmd.data, cmd.len);
+    buf[total] = '\0';
+    char dbuf[dir.len + 1];
+    memcpy(dbuf, dir.data, dir.len);
+    dbuf[dir.len] = '\0';
+    struct stat st;
+    if (stat(dbuf, &st) != 0) {
+        int e = errno;
+        const char *es = strerror(e);
+        int n = snprintf(NULL, 0, "with_exec_with_cwd: failed: %s (os error %d)", es, e);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "with_exec_with_cwd: failed: %s (os error %d)", es, e);
+        free(buf);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    if (!S_ISDIR(st.st_mode)) {
+        int e = ENOTDIR;
+        const char *es = strerror(e);
+        int n = snprintf(NULL, 0, "with_exec_with_cwd: failed: %s (os error %d)", es, e);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "with_exec_with_cwd: failed: %s (os error %d)", es, e);
+        free(buf);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    rl_result r = _rl_cwd_capture(buf, dbuf, "with_exec_with_cwd", cmd.data, cmd.len, dir.data, dir.len, true);
+    free(buf);
+    return r;
+}
+
+// Run cmd with timeout; ok with stdout, or an error on timeout.
+rl_result rl_process_exec_with_timeout(rl_string cmd, int64_t timeout_ms) {
+    if (cmd.data == NULL) return rl_err(-1);
+    char cbuf[cmd.len + 1];
+    memcpy(cbuf, cmd.data, cmd.len);
+    cbuf[cmd.len] = '\0';
+    int out_pipe[2];
+    if (pipe(out_pipe) != 0) {
+        int e = errno;
+        const char *es = strerror(e);
+        int n = snprintf(NULL, 0, "exec_with_timeout: failed to run \"%.*s\": %s (os error %d)", (int)cmd.len, cmd.data, es, e);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "exec_with_timeout: failed to run \"%.*s\": %s (os error %d)", (int)cmd.len, cmd.data, es, e);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    pid_t pid = fork();
+    if (pid < 0) {
+        int e = errno;
+        const char *es = strerror(e);
+        int n = snprintf(NULL, 0, "exec_with_timeout: failed to run \"%.*s\": %s (os error %d)", (int)cmd.len, cmd.data, es, e);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "exec_with_timeout: failed to run \"%.*s\": %s (os error %d)", (int)cmd.len, cmd.data, es, e);
+        close(out_pipe[0]); close(out_pipe[1]);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    if (pid == 0) {
+        dup2(out_pipe[1], STDOUT_FILENO);
+        close(out_pipe[0]); close(out_pipe[1]);
+        execl("/bin/sh", "sh", "-c", cbuf, (char *)NULL);
+        _exit(127);
+    }
+    close(out_pipe[1]);
+    int64_t wait_ms = timeout_ms < 0 ? 0 : timeout_ms;
+    struct timespec start;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    int status = 0;
+    bool done = false;
+    bool exited = false;
+    while (!done) {
+        pid_t r = waitpid(pid, &status, WNOHANG);
+        if (r < 0) {
+            if (errno == EINTR) continue;
+            int e = errno;
+            const char *es = strerror(e);
+            int n = snprintf(NULL, 0, "exec_with_timeout: %s (os error %d)", es, e);
+            char *msg = malloc((uint64_t)n + 1);
+            snprintf(msg, (uint64_t)n + 1, "exec_with_timeout: %s (os error %d)", es, e);
+            close(out_pipe[0]);
+            return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+        }
+        if (r > 0) {
+            exited = true;
+            done = true;
+            break;
+        }
+        struct timespec now;
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        int64_t elapsed = (int64_t)(now.tv_sec - start.tv_sec) * 1000 + (int64_t)(now.tv_nsec - start.tv_nsec) / 1000000;
+        if (elapsed >= wait_ms) {
+            kill(pid, SIGKILL);
+            while (waitpid(pid, &status, 0) < 0) {
+                if (errno != EINTR) break;
+            }
+            close(out_pipe[0]);
+            int n = snprintf(NULL, 0, "exec_with_timeout: \"%.*s\" timed out after %ldms", (int)cmd.len, cmd.data, (long)timeout_ms);
+            char *msg = malloc((uint64_t)n + 1);
+            snprintf(msg, (uint64_t)n + 1, "exec_with_timeout: \"%.*s\" timed out after %ldms", (int)cmd.len, cmd.data, (long)timeout_ms);
+            return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+        }
+        usleep(50000);
+    }
+    (void)exited;
+    uint64_t cap = 4096;
+    char *out = malloc(cap);
+    uint64_t len = 0;
+    for (;;) {
+        if (len >= cap) { cap *= 2; out = realloc(out, cap); }
+        ssize_t rr = read(out_pipe[0], out + len, cap - len);
+        if (rr < 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+        if (rr == 0) break;
+        len += (uint64_t)rr;
+    }
+    close(out_pipe[0]);
+    out[len] = '\0';
+    while (len > 0 && out[len - 1] == '\n') len--;
+    if (WIFEXITED(status)) {
+        int code = WEXITSTATUS(status);
+        if (code == 0) {
+            rl_string result = { .data = out, .len = len, .rc = 1 };
+            return rl_ok_str(result);
+        }
+        int n = snprintf(NULL, 0, "exec_with_timeout: \"%.*s\" exited with code %d", (int)cmd.len, cmd.data, code);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "exec_with_timeout: \"%.*s\" exited with code %d", (int)cmd.len, cmd.data, code);
+        free(out);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    int code = -1;
+    int n = snprintf(NULL, 0, "exec_with_timeout: \"%.*s\" exited with code %d", (int)cmd.len, cmd.data, code);
+    char *msg = malloc((uint64_t)n + 1);
+    snprintf(msg, (uint64_t)n + 1, "exec_with_timeout: \"%.*s\" exited with code %d", (int)cmd.len, cmd.data, code);
+    free(out);
+    return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+}
+
+// Spawn exe plus args in the background; ok with pid, or an error.
+rl_result rl_process_with_exec_background(rl_string exe, rl_string cmd) {
+    if (exe.data == NULL || cmd.data == NULL) return rl_err(-1);
+    uint64_t total = exe.len + 1 + cmd.len;
+    char buf[total + 1];
+    memcpy(buf, exe.data, exe.len);
+    buf[exe.len] = ' ';
+    memcpy(buf + exe.len + 1, cmd.data, cmd.len);
+    buf[total] = '\0';
+    rl_string combined = { .data = buf, .len = total, .rc = 0 };
+    return rl_process_exec_background(combined);
+}
+
+// Pipe cmd1 into cmd2; ok with final stdout, or an error.
+rl_result rl_process_pipe(rl_string cmd1, rl_string cmd2) {
+    if (cmd1.data == NULL || cmd2.data == NULL) return rl_err(-1);
+    uint64_t total = cmd1.len + 3 + cmd2.len;
+    char *buf = malloc(total + 1);
+    memcpy(buf, cmd1.data, cmd1.len);
+    memcpy(buf + cmd1.len, " | ", 3);
+    memcpy(buf + cmd1.len + 3, cmd2.data, cmd2.len);
+    buf[total] = '\0';
+    rl_string combined = { .data = buf, .len = total, .rc = 1 };
+    rl_result r = rl_process_exec(combined);
+    free(buf);
+    return r;
+}
+
+// Pipe all cmds; ok with final stdout, or an error.
+rl_result rl_process_pipe_all(rl_array cmds) {
+    if (cmds.len == 0) {
+        return rl_err_msg(rl_str_literal("pipe_all: command list is empty", 31));
+    }
+    if (cmds.data == NULL) return rl_err(-1);
+    if (cmds.len == 1) {
+        rl_string *elems = (rl_string *)cmds.data;
+        return rl_process_exec(elems[0]);
+    }
+    rl_string *elems = (rl_string *)cmds.data;
+    uint64_t total = 0;
+    for (uint64_t i = 0; i < cmds.len; i++) {
+        if (elems[i].data == NULL) return rl_err(-1);
+        total += elems[i].len;
+        if (i + 1 < cmds.len) total += 3;
+    }
+    char *buf = malloc(total + 1);
+    uint64_t pos = 0;
+    for (uint64_t i = 0; i < cmds.len; i++) {
+        memcpy(buf + pos, elems[i].data, elems[i].len);
+        pos += elems[i].len;
+        if (i + 1 < cmds.len) {
+            memcpy(buf + pos, " | ", 3);
+            pos += 3;
+        }
+    }
+    buf[total] = '\0';
+    rl_string combined = { .data = buf, .len = total, .rc = 1 };
+    rl_result r = rl_process_exec(combined);
+    free(buf);
+    return r;
+}
+
 static int _rl_stored_argc = 0;
 static char **_rl_stored_argv = NULL;
 
@@ -1900,9 +5188,12 @@ void rl_store_args(int argc, char **argv) {
     _rl_stored_argv = argv;
     // Unbuffered stdout on TTYs: crossterm flushes after every command,
     // so frames, modals and help render immediately instead of stalling
-    // in the stdio buffer. Pipes and files stay buffered for speed.
+    // in the stdio buffer. Pipes and files are line-buffered like Rust's
+    // stdout, keeping newline prints ordered against stderr.
     if (isatty(STDOUT_FILENO)) {
         setvbuf(stdout, NULL, _IONBF, 0);
+    } else {
+        setvbuf(stdout, NULL, _IOLBF, 0);
     }
 }
 
@@ -2131,6 +5422,102 @@ rl_result rl_io_read_bytes(rl_string path) {
     free(raw);
     rl_array result = { .data = bytes, .len = n, .cap = n, .elem_size = sizeof(int64_t), .type_tag = RL_TAG_I64 };
     return rl_ok_arr(result);
+}
+
+// Read all of stdin until EOF; ok with the text, or an error.
+rl_result rl_io_read_all_stdin(void) {
+    size_t cap = 4096, len = 0;
+    char *buf = malloc(cap + 1);
+    size_t n;
+    while ((n = fread(buf + len, 1, cap - len, stdin)) > 0) {
+        len += n;
+        if (len == cap) {
+            cap *= 2;
+            buf = realloc(buf, cap + 1);
+        }
+    }
+    if (ferror(stdin)) {
+        free(buf);
+        char *msg = malloc(64);
+        int m = snprintf(msg, 64, "read_all_stdin: %s", strerror(errno));
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)m, .rc = 1 });
+    }
+    buf[len] = '\0';
+    rl_string out = { .data = buf, .len = (uint64_t)len, .rc = 1 };
+    return rl_ok_str(out);
+}
+
+// Decode a byte array as UTF-8; ok with the string, or an error.
+rl_result rl_io_decode_utf8(rl_array bytes) {
+    uint64_t n = bytes.len;
+    unsigned char *raw = malloc(n > 0 ? n : 1);
+    for (uint64_t i = 0; i < n; i++) {
+        unsigned v;
+        if (bytes.elem_size == 1) v = ((unsigned char *)bytes.data)[i];
+        else if (bytes.data == NULL) v = 0;
+        else v = (unsigned char)(((int64_t *)bytes.data)[i]);
+        raw[i] = (unsigned char)v;
+    }
+    uint64_t i = 0;
+    while (i < n) {
+        unsigned char c = raw[i];
+        if (c < 0x80) { i++; continue; }
+        uint64_t need = 0;
+        uint32_t cp = 0;
+        if ((c & 0xE0) == 0xC0) { need = 2; cp = c & 0x1F; }
+        else if ((c & 0xF0) == 0xE0) { need = 3; cp = c & 0x0F; }
+        else if ((c & 0xF8) == 0xF0) { need = 4; cp = c & 0x07; }
+        else {
+            char *msg = malloc(96);
+            int m = snprintf(msg, 96, "decode_utf8: invalid UTF-8 at byte invalid utf-8 sequence of 1 bytes from index %llu", (unsigned long long)i);
+            free(raw);
+            return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)m, .rc = 1 });
+        }
+        if (i + need > n) {
+            char *msg = malloc(96);
+            int m = snprintf(msg, 96, "decode_utf8: invalid UTF-8 at byte incomplete utf-8 byte sequence from index %llu", (unsigned long long)i);
+            free(raw);
+            return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)m, .rc = 1 });
+        }
+        bool good = true;
+        for (uint64_t j = 1; j < need; j++) {
+            unsigned char d = raw[i + j];
+            if ((d & 0xC0) != 0x80) { good = false; break; }
+            cp = (cp << 6) | (d & 0x3F);
+        }
+        if (!good) {
+            char *msg = malloc(96);
+            int m = snprintf(msg, 96, "decode_utf8: invalid UTF-8 at byte invalid utf-8 sequence of %llu bytes from index %llu", (unsigned long long)need, (unsigned long long)i);
+            free(raw);
+            return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)m, .rc = 1 });
+        }
+        bool overlong = (need == 2 && cp < 0x80) || (need == 3 && cp < 0x800) || (need == 4 && cp < 0x10000);
+        bool surrogate = (cp >= 0xD800 && cp <= 0xDFFF);
+        bool too_big = (cp > 0x10FFFF);
+        if (overlong || surrogate || too_big) {
+            char *msg = malloc(96);
+            int m = snprintf(msg, 96, "decode_utf8: invalid UTF-8 at byte invalid utf-8 sequence of %llu bytes from index %llu", (unsigned long long)need, (unsigned long long)i);
+            free(raw);
+            return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)m, .rc = 1 });
+        }
+        i += need;
+    }
+    rl_string out = { .data = (char *)raw, .len = n, .rc = 1 };
+    return rl_ok_str(out);
+}
+
+// Encode a string as UTF-8 bytes; bare array of byte values.
+rl_array rl_io_encode_utf8(rl_string s) {
+    if (s.data == NULL || s.len == 0) {
+        rl_array empty = { .data = NULL, .len = 0, .cap = 0, .elem_size = sizeof(int64_t), .type_tag = RL_TAG_I64 };
+        return empty;
+    }
+    int64_t *buf = malloc(s.len * sizeof(int64_t));
+    for (uint64_t i = 0; i < s.len; i++) {
+        buf[i] = (int64_t)(unsigned char)s.data[i];
+    }
+    rl_array out = { .data = buf, .len = s.len, .cap = s.len, .elem_size = sizeof(int64_t), .type_tag = RL_TAG_I64 };
+    return out;
 }
 
 // ---- types ----
@@ -2552,6 +5939,12 @@ static void rl_rand_ensure_init(void) {
     }
 }
 
+// Reseed the C RNG (RL rand_seed); later values are deterministic.
+void rl_rand_seed(int64_t seed) {
+    srand((unsigned int)seed);
+    rl_rand_initialized = 1;
+}
+
 // Unseeded pseudo-random values from the C library RNG. Full-range non-negative int / float in [0, 1).
 int64_t rl_rand_int(void) {
     rl_rand_ensure_init();
@@ -2855,6 +6248,405 @@ rl_array rl_map_to_array_s(rl_map m) {
     }
     rl_array arr = { .data = buf, .len = m.len, .cap = m.len, .elem_size = sizeof(rl_value), .type_tag = RL_TAG_I64 };
     return arr;
+}
+
+// ---- set algebra (batch 2) ----
+
+// Forward declarations for array helpers defined further below.
+static rl_result _rl_arr_elem_as_result(rl_array a, uint64_t idx, int32_t tag);
+static int64_t _rl_arr_read_i64(rl_array a, uint64_t i);
+
+// Union: every element of `a` plus those of `b` not already present.
+rl_set rl_set_union(rl_set a, rl_set b) {
+    rl_set out = rl_set_new();
+    for (uint64_t i = 0; i < a.len; i++) rl_set_add(&out, a.data[i]);
+    for (uint64_t i = 0; i < b.len; i++) {
+        if (!rl_set_contains(out, b.data[i])) rl_set_add(&out, b.data[i]);
+    }
+    return out;
+}
+
+// Intersection: elements present in both sets.
+rl_set rl_set_intersection(rl_set a, rl_set b) {
+    rl_set out = rl_set_new();
+    for (uint64_t i = 0; i < a.len; i++) {
+        if (rl_set_contains(b, a.data[i])) rl_set_add(&out, a.data[i]);
+    }
+    return out;
+}
+
+// Difference: elements of `a` not present in `b`.
+rl_set rl_set_difference(rl_set a, rl_set b) {
+    rl_set out = rl_set_new();
+    for (uint64_t i = 0; i < a.len; i++) {
+        if (!rl_set_contains(b, a.data[i])) rl_set_add(&out, a.data[i]);
+    }
+    return out;
+}
+
+// Symmetric difference: elements in exactly one of the sets.
+rl_set rl_set_symmetric_difference(rl_set a, rl_set b) {
+    rl_set out = rl_set_new();
+    for (uint64_t i = 0; i < a.len; i++) {
+        if (!rl_set_contains(b, a.data[i])) rl_set_add(&out, a.data[i]);
+    }
+    for (uint64_t i = 0; i < b.len; i++) {
+        if (!rl_set_contains(a, b.data[i])) rl_set_add(&out, b.data[i]);
+    }
+    return out;
+}
+
+// True when every element of `a` is also in `b`.
+rl_result rl_set_is_subset(rl_set a, rl_set b) {
+    for (uint64_t i = 0; i < a.len; i++) {
+        if (!rl_set_contains(b, a.data[i])) return rl_ok_bool(false);
+    }
+    return rl_ok_bool(true);
+}
+
+// True when every element of `b` is also in `a`.
+rl_result rl_set_is_superset(rl_set a, rl_set b) {
+    return rl_set_is_subset(b, a);
+}
+
+// Convert a boxed map/set element into a result payload.
+static rl_result _rl_value_to_result(rl_value v) {
+    switch (v.tag) {
+        case RL_VTAG_NULL: return rl_ok_null();
+        case RL_VTAG_I64: return rl_ok_i64(v.data.i64);
+        case RL_VTAG_F64: return rl_ok_f64(v.data.f64);
+        case RL_VTAG_BOOL: return rl_ok_bool(v.data.boolean);
+        case RL_VTAG_CHAR: {
+            rl_result r = { .is_ok = true, .tag = RL_TAG_CHAR, .err_code = 0 };
+            r.data.i64 = v.data.i64;
+            return r;
+        }
+        case RL_VTAG_STR: return rl_ok_str(v.data.str);
+        case RL_VTAG_ARR: return rl_ok_arr(v.data.arr);
+        case RL_VTAG_MAP:
+            if (v.data.map) return rl_ok_map(*v.data.map);
+            return rl_ok_null();
+        case RL_VTAG_SET:
+            if (v.data.set) return rl_ok_set(*v.data.set);
+            return rl_ok_null();
+        case RL_VTAG_CLOSURE: {
+            rl_result r = { .is_ok = true, .tag = RL_TAG_CLOSURE, .err_code = 0 };
+            r.data.closure = v.data.closure;
+            return r;
+        }
+        default: return rl_ok_i64(v.data.i64);
+    }
+}
+
+// Lookup with a boxed default; ok with the value or the default.
+rl_result rl_map_get_or_s(rl_map m, rl_string key, rl_value def) {
+    if (key.data == NULL) return rl_err(-1);
+    char *buf = malloc(key.len + 1);
+    if (key.len > 0) memcpy(buf, key.data, key.len);
+    buf[key.len] = '\0';
+    rl_result out;
+    if (rl_map_contains(m, buf)) {
+        rl_value v = rl_map_get(m, buf);
+        out = _rl_value_to_result(v);
+    } else {
+        out = _rl_value_to_result(def);
+    }
+    free(buf);
+    return out;
+}
+
+// Lookup with insert; stores the default when missing, ok with the value.
+rl_result rl_map_get_or_insert_s(rl_map *m, rl_string key, rl_value def) {
+    if (key.data == NULL) return rl_err(-1);
+    char *buf = malloc(key.len + 1);
+    if (key.len > 0) memcpy(buf, key.data, key.len);
+    buf[key.len] = '\0';
+    rl_result out;
+    if (rl_map_contains(*m, buf)) {
+        rl_value v = rl_map_get(*m, buf);
+        out = _rl_value_to_result(v);
+    } else {
+        rl_map_set(m, buf, def);
+        out = _rl_value_to_result(def);
+    }
+    free(buf);
+    return out;
+}
+
+// Legacy int-default variants for dynamically typed defaults.
+rl_result rl_map_get_or(rl_map m, rl_string key, int64_t def) {
+    rl_value v = { .tag = RL_VTAG_I64, .data.i64 = def };
+    return rl_map_get_or_s(m, key, v);
+}
+
+// Legacy int-default variant for dynamically typed defaults.
+rl_result rl_map_get_or_insert(rl_map *m, rl_string key, int64_t def) {
+    rl_value v = { .tag = RL_VTAG_I64, .data.i64 = def };
+    return rl_map_get_or_insert_s(m, key, v);
+}
+
+// Sift one int element up toward the root (min-heap).
+static void _rl_heap_sift_up_i64(char *buf, uint64_t idx, uint64_t es) {
+    uint64_t i = idx;
+    while (i > 0) {
+        uint64_t parent = (i - 1) / 2;
+        int64_t a = 0;
+        int64_t b = 0;
+        memcpy(&a, buf + i * es, es < sizeof(int64_t) ? es : sizeof(int64_t));
+        memcpy(&b, buf + parent * es, es < sizeof(int64_t) ? es : sizeof(int64_t));
+        if (a < b) {
+            char tmp[8];
+            memcpy(tmp, buf + i * es, es);
+            memcpy(buf + i * es, buf + parent * es, es);
+            memcpy(buf + parent * es, tmp, es);
+            i = parent;
+        } else {
+            break;
+        }
+    }
+}
+
+// Sift one float element up toward the root (min-heap).
+static void _rl_heap_sift_up_f64(char *buf, uint64_t idx, uint64_t es) {
+    uint64_t i = idx;
+    while (i > 0) {
+        uint64_t parent = (i - 1) / 2;
+        double a = 0;
+        double b = 0;
+        memcpy(&a, buf + i * es, sizeof(double));
+        memcpy(&b, buf + parent * es, sizeof(double));
+        if (a < b) {
+            char tmp[8];
+            memcpy(tmp, buf + i * es, es);
+            memcpy(buf + i * es, buf + parent * es, es);
+            memcpy(buf + parent * es, tmp, es);
+            i = parent;
+        } else {
+            break;
+        }
+    }
+}
+
+// Sift the root down (min-heap) for int elements.
+static void _rl_heap_sift_down_i64(char *buf, uint64_t len, uint64_t es) {
+    uint64_t i = 0;
+    for (;;) {
+        uint64_t left = 2 * i + 1;
+        uint64_t right = 2 * i + 2;
+        uint64_t smallest = i;
+        int64_t cur = 0;
+        memcpy(&cur, buf + smallest * es, es < sizeof(int64_t) ? es : sizeof(int64_t));
+        if (left < len) {
+            int64_t lv = 0;
+            memcpy(&lv, buf + left * es, es < sizeof(int64_t) ? es : sizeof(int64_t));
+            if (lv < cur) {
+                smallest = left;
+                cur = lv;
+            }
+        }
+        if (right < len) {
+            int64_t rv = 0;
+            memcpy(&rv, buf + right * es, es < sizeof(int64_t) ? es : sizeof(int64_t));
+            if (rv < cur) smallest = right;
+        }
+        if (smallest != i) {
+            char tmp[8];
+            memcpy(tmp, buf + i * es, es);
+            memcpy(buf + i * es, buf + smallest * es, es);
+            memcpy(buf + smallest * es, tmp, es);
+            i = smallest;
+        } else {
+            break;
+        }
+    }
+}
+
+// Sift the root down (min-heap) for float elements.
+static void _rl_heap_sift_down_f64(char *buf, uint64_t len, uint64_t es) {
+    uint64_t i = 0;
+    for (;;) {
+        uint64_t left = 2 * i + 1;
+        uint64_t right = 2 * i + 2;
+        uint64_t smallest = i;
+        double cur = 0;
+        memcpy(&cur, buf + smallest * es, sizeof(double));
+        if (left < len) {
+            double lv = 0;
+            memcpy(&lv, buf + left * es, sizeof(double));
+            if (lv < cur) {
+                smallest = left;
+                cur = lv;
+            }
+        }
+        if (right < len) {
+            double rv = 0;
+            memcpy(&rv, buf + right * es, sizeof(double));
+            if (rv < cur) smallest = right;
+        }
+        if (smallest != i) {
+            char tmp[8];
+            memcpy(tmp, buf + i * es, es);
+            memcpy(buf + i * es, buf + smallest * es, es);
+            memcpy(buf + smallest * es, tmp, es);
+            i = smallest;
+        } else {
+            break;
+        }
+    }
+}
+
+// Push an int onto the heap; only int and float heaps sift.
+rl_result rl_heap_push(rl_array a, int64_t v) {
+    uint64_t es = a.elem_size ? (uint64_t)a.elem_size : sizeof(int64_t);
+    uint64_t new_len = a.len + 1;
+    char *buf = malloc(new_len * es);
+    if (a.data && a.len > 0) memcpy(buf, a.data, a.len * es);
+    memset(buf + a.len * es, 0, es);
+    memcpy(buf + a.len * es, &v, es < sizeof(int64_t) ? es : sizeof(int64_t));
+    if (a.type_tag == RL_TAG_F64 && es == sizeof(double)) {
+        double fv = (double)v;
+        memcpy(buf + a.len * es, &fv, sizeof(double));
+        _rl_heap_sift_up_f64(buf, a.len, es);
+    } else if (a.type_tag == RL_TAG_I64) {
+        _rl_heap_sift_up_i64(buf, a.len, es);
+    }
+    rl_array out;
+    out.data = buf;
+    out.len = new_len;
+    out.cap = new_len;
+    out.elem_size = (int32_t)es;
+    out.type_tag = a.type_tag;
+    return rl_ok_arr(out);
+}
+
+// Push a boxed value onto the heap, preserving width like push_v.
+rl_result rl_heap_push_v(rl_array a, rl_value v) {
+    rl_result pushed = rl_arr_push_v(a, v);
+    if (!pushed.is_ok) return pushed;
+    rl_array out = pushed.data.arr;
+    uint64_t es = out.elem_size ? (uint64_t)out.elem_size : sizeof(int64_t);
+    if (out.len == 0) return pushed;
+    if (out.type_tag == RL_TAG_F64 && es == sizeof(double)) {
+        _rl_heap_sift_up_f64((char *)out.data, out.len - 1, es);
+    } else if (out.type_tag == RL_TAG_I64) {
+        _rl_heap_sift_up_i64((char *)out.data, out.len - 1, es);
+    }
+    pushed.data.arr = out;
+    return pushed;
+}
+
+// Pop the root; ok with the remaining heap, error when empty.
+rl_result rl_heap_pop(rl_array a) {
+    if (a.len == 0) return rl_make_err(-1, "heap_pop: called on empty array");
+    uint64_t es = a.elem_size ? (uint64_t)a.elem_size : sizeof(int64_t);
+    uint64_t new_len = a.len - 1;
+    if (new_len == 0) {
+        rl_array out;
+        out.data = NULL;
+        out.len = 0;
+        out.cap = 0;
+        out.elem_size = (int32_t)es;
+        out.type_tag = a.type_tag;
+        return rl_ok_arr(out);
+    }
+    char *buf = malloc(new_len * es);
+    memcpy(buf, a.data, new_len * es);
+    memcpy(buf, (char *)a.data + (a.len - 1) * es, es);
+    if (a.type_tag == RL_TAG_F64 && es == sizeof(double)) {
+        _rl_heap_sift_down_f64(buf, new_len, es);
+    } else if (a.type_tag == RL_TAG_I64) {
+        _rl_heap_sift_down_i64(buf, new_len, es);
+    }
+    rl_array out;
+    out.data = buf;
+    out.len = new_len;
+    out.cap = new_len;
+    out.elem_size = (int32_t)es;
+    out.type_tag = a.type_tag;
+    return rl_ok_arr(out);
+}
+
+// Peek at the root without removing it; error when empty.
+rl_result rl_heap_peek(rl_array a) {
+    if (a.len == 0) return rl_make_err(-1, "heap_peek: called on empty array");
+    uint64_t es = a.elem_size ? (uint64_t)a.elem_size : sizeof(int64_t);
+    int64_t v = 0;
+    memcpy(&v, a.data, es < sizeof(int64_t) ? es : sizeof(int64_t));
+    return rl_ok_i64(v);
+}
+
+// Peek with an explicit payload tag for non-int heaps.
+rl_result rl_heap_peek_t(rl_array a, int32_t tag) {
+    if (a.len == 0) return rl_make_err(-1, "heap_peek: called on empty array");
+    return _rl_arr_elem_as_result(a, 0, tag);
+}
+
+// Push an int to the front of the deque.
+rl_result rl_deque_push_front(rl_array a, int64_t v) {
+    return rl_arr_insert(a, 0, v);
+}
+
+// Push a boxed value to the front, preserving width like insert_v.
+rl_result rl_deque_push_front_v(rl_array a, rl_value v) {
+    return rl_arr_insert_v(a, 0, v);
+}
+
+// Drop the front element; error when empty.
+rl_result rl_deque_pop_front(rl_array a) {
+    if (a.len == 0) return rl_make_err(-1, "deque_pop_front: called on empty array");
+    return rl_arr_remove(a, 0);
+}
+
+// Leftmost insertion point for `v` in a sorted int array.
+rl_result rl_bisect_left(rl_array a, int64_t v) {
+    uint64_t lo = 0;
+    uint64_t hi = a.len;
+    while (lo < hi) {
+        uint64_t mid = lo + (hi - lo) / 2;
+        int64_t mv = _rl_arr_read_i64(a, mid);
+        if (mv < v) lo = mid + 1;
+        else hi = mid;
+    }
+    return rl_ok_i64((int64_t)lo);
+}
+
+// Rightmost insertion point for `v` in a sorted int array.
+rl_result rl_bisect_right(rl_array a, int64_t v) {
+    uint64_t lo = 0;
+    uint64_t hi = a.len;
+    while (lo < hi) {
+        uint64_t mid = lo + (hi - lo) / 2;
+        int64_t mv = _rl_arr_read_i64(a, mid);
+        if (mv <= v) lo = mid + 1;
+        else hi = mid;
+    }
+    return rl_ok_i64((int64_t)lo);
+}
+
+// Copy with `v` inserted at its sorted position (after equals).
+rl_result rl_sorted_insert(rl_array a, int64_t v) {
+    uint64_t es = a.elem_size ? (uint64_t)a.elem_size : sizeof(int64_t);
+    uint64_t pos = a.len;
+    for (uint64_t i = 0; i < a.len; i++) {
+        if (_rl_arr_read_i64(a, i) > v) {
+            pos = i;
+            break;
+        }
+    }
+    uint64_t new_len = a.len + 1;
+    char *buf = malloc(new_len * es);
+    char *src = (char *)a.data;
+    if (pos > 0 && src) memcpy(buf, src, pos * es);
+    memset(buf + pos * es, 0, es);
+    memcpy(buf + pos * es, &v, es < sizeof(int64_t) ? es : sizeof(int64_t));
+    if (src && pos < a.len) memcpy(buf + (pos + 1) * es, src + pos * es, (a.len - pos) * es);
+    rl_array out;
+    out.data = buf;
+    out.len = new_len;
+    out.cap = new_len;
+    out.elem_size = (int32_t)es;
+    out.type_tag = a.type_tag;
+    return rl_ok_arr(out);
 }
 
 // ---- array (generic) ----
@@ -3479,6 +7271,204 @@ rl_array rl_arr_flatten(rl_array a) {
     return out;
 }
 
+// ---- array batch 2: chunk / windows / swap / cycle_take ----
+
+// Split into chunks of `size`; the last chunk may be smaller.
+rl_result rl_arr_chunk(rl_array a, int64_t size) {
+    if (size <= 0) {
+        int n = snprintf(NULL, 0, "arr_chunk: size must be positive, got %ld", (long)size);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "arr_chunk: size must be positive, got %ld", (long)size);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    uint64_t es = a.elem_size ? (uint64_t)a.elem_size : sizeof(int64_t);
+    uint64_t sz = (uint64_t)size;
+    if (a.len == 0) {
+        rl_array out = { .data = NULL, .len = 0, .cap = 0, .elem_size = sizeof(rl_array), .type_tag = RL_TAG_ARR };
+        return rl_ok_arr(out);
+    }
+    uint64_t chunk_n = (a.len + sz - 1) / sz;
+    rl_array *buf = malloc(chunk_n * sizeof(rl_array));
+    for (uint64_t c = 0; c < chunk_n; c++) {
+        uint64_t start = c * sz;
+        uint64_t len = a.len - start < sz ? a.len - start : sz;
+        char *cbuf = malloc(len * es);
+        memcpy(cbuf, (char *)a.data + start * es, len * es);
+        buf[c].data = cbuf;
+        buf[c].len = len;
+        buf[c].cap = len;
+        buf[c].elem_size = (int32_t)es;
+        buf[c].type_tag = a.type_tag;
+    }
+    rl_array out;
+    out.data = buf;
+    out.len = chunk_n;
+    out.cap = chunk_n;
+    out.elem_size = sizeof(rl_array);
+    out.type_tag = RL_TAG_ARR;
+    return rl_ok_arr(out);
+}
+
+// Sliding windows of `size`; error when size exceeds the length.
+rl_result rl_arr_windows(rl_array a, int64_t size) {
+    if (size <= 0) {
+        int n = snprintf(NULL, 0, "arr_windows: size must be positive, got %ld", (long)size);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "arr_windows: size must be positive, got %ld", (long)size);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    uint64_t sz = (uint64_t)size;
+    if (sz > a.len) {
+        int n = snprintf(NULL, 0, "arr_windows: size %ld exceeds array length %llu", (long)size, (unsigned long long)a.len);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "arr_windows: size %ld exceeds array length %llu", (long)size, (unsigned long long)a.len);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    uint64_t es = a.elem_size ? (uint64_t)a.elem_size : sizeof(int64_t);
+    uint64_t win_n = a.len - sz + 1;
+    if (win_n == 0) {
+        rl_array out = { .data = NULL, .len = 0, .cap = 0, .elem_size = sizeof(rl_array), .type_tag = RL_TAG_ARR };
+        return rl_ok_arr(out);
+    }
+    rl_array *buf = malloc(win_n * sizeof(rl_array));
+    for (uint64_t w = 0; w < win_n; w++) {
+        char *cbuf = malloc(sz * es);
+        memcpy(cbuf, (char *)a.data + w * es, sz * es);
+        buf[w].data = cbuf;
+        buf[w].len = sz;
+        buf[w].cap = sz;
+        buf[w].elem_size = (int32_t)es;
+        buf[w].type_tag = a.type_tag;
+    }
+    rl_array out;
+    out.data = buf;
+    out.len = win_n;
+    out.cap = win_n;
+    out.elem_size = sizeof(rl_array);
+    out.type_tag = RL_TAG_ARR;
+    return rl_ok_arr(out);
+}
+
+// Copy with elements `i` and `j` exchanged.
+rl_result rl_arr_swap(rl_array a, int64_t i, int64_t j) {
+    if (i < 0 || (uint64_t)i >= a.len || j < 0 || (uint64_t)j >= a.len) {
+        int n = snprintf(NULL, 0, "arr_swap: index out of bounds: %ld or %ld (len %llu)", (long)i, (long)j, (unsigned long long)a.len);
+        char *msg = malloc((uint64_t)n + 1);
+        snprintf(msg, (uint64_t)n + 1, "arr_swap: index out of bounds: %ld or %ld (len %llu)", (long)i, (long)j, (unsigned long long)a.len);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)n, .rc = 1 });
+    }
+    uint64_t es = a.elem_size ? (uint64_t)a.elem_size : sizeof(int64_t);
+    char *buf = malloc(a.len * es);
+    if (a.len > 0 && a.data) memcpy(buf, a.data, a.len * es);
+    if (i != j) {
+        char *tmp = malloc(es);
+        memcpy(tmp, buf + i * es, es);
+        memcpy(buf + i * es, buf + j * es, es);
+        memcpy(buf + j * es, tmp, es);
+        free(tmp);
+    }
+    rl_array out;
+    out.data = buf;
+    out.len = a.len;
+    out.cap = a.len;
+    out.elem_size = (int32_t)es;
+    out.type_tag = a.type_tag;
+    return rl_ok_arr(out);
+}
+
+// First `n` elements of the endlessly repeated array.
+rl_result rl_arr_cycle_take(rl_array a, int64_t n) {
+    if (n < 0) {
+        int m = snprintf(NULL, 0, "arr_cycle_take: n must be non-negative, got %ld", (long)n);
+        char *msg = malloc((uint64_t)m + 1);
+        snprintf(msg, (uint64_t)m + 1, "arr_cycle_take: n must be non-negative, got %ld", (long)n);
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)m, .rc = 1 });
+    }
+    uint64_t es = a.elem_size ? (uint64_t)a.elem_size : sizeof(int64_t);
+    if (a.len == 0 || n == 0) {
+        rl_array out = { .data = NULL, .len = 0, .cap = 0, .elem_size = (int32_t)es, .type_tag = a.type_tag };
+        return rl_ok_arr(out);
+    }
+    uint64_t count = (uint64_t)n;
+    char *buf = malloc(count * es);
+    for (uint64_t k = 0; k < count; k++) {
+        memcpy(buf + k * es, (char *)a.data + (k % a.len) * es, es);
+    }
+    rl_array out;
+    out.data = buf;
+    out.len = count;
+    out.cap = count;
+    out.elem_size = (int32_t)es;
+    out.type_tag = a.type_tag;
+    return rl_ok_arr(out);
+}
+
+// Write a boxed fill value into a tuple field of `es` bytes.
+static void _rl_write_fill(char *slot, uint64_t es, rl_value fill) {
+    memset(slot, 0, es);
+    switch (fill.tag) {
+        case RL_VTAG_I64:
+            memcpy(slot, &fill.data.i64, es < 8 ? es : 8);
+            break;
+        case RL_VTAG_F64:
+            if (es == sizeof(double)) memcpy(slot, &fill.data.f64, es);
+            else {
+                int64_t iv = (int64_t)fill.data.f64;
+                memcpy(slot, &iv, es < 8 ? es : 8);
+            }
+            break;
+        case RL_VTAG_BOOL: {
+            uint64_t one = fill.data.boolean ? 1 : 0;
+            memcpy(slot, &one, es < 8 ? es : 8);
+            break;
+        }
+        case RL_VTAG_STR:
+            if (es == sizeof(rl_string)) memcpy(slot, &fill.data.str, es);
+            break;
+        case RL_VTAG_CHAR: {
+            uint64_t code = (uint64_t)fill.data.i64;
+            memcpy(slot, &code, es < 8 ? es : 8);
+            break;
+        }
+        case RL_VTAG_ARR:
+            if (es == sizeof(rl_array)) memcpy(slot, &fill.data.arr, es);
+            break;
+        default:
+            break;
+    }
+}
+
+// Pairwise tuples padded with `fill` up to the longer length.
+rl_result rl_arr_zip_longest_t(rl_array a, rl_array b, rl_value fill, uint64_t es_tuple, uint64_t off_b, uint64_t es_a, uint64_t es_b) {
+    uint64_t max_len = a.len > b.len ? a.len : b.len;
+    if (max_len == 0) {
+        rl_array out = { .data = NULL, .len = 0, .cap = 0, .elem_size = (int32_t)es_tuple, .type_tag = RL_TAG_I64 };
+        return rl_ok_arr(out);
+    }
+    char *buf = malloc(max_len * es_tuple);
+    for (uint64_t i = 0; i < max_len; i++) {
+        char *slot = buf + i * es_tuple;
+        memset(slot, 0, es_tuple);
+        if (i < a.len && a.data) memcpy(slot, (char *)a.data + i * es_a, es_a);
+        else _rl_write_fill(slot, es_a, fill);
+        if (i < b.len && b.data) memcpy(slot + off_b, (char *)b.data + i * es_b, es_b);
+        else _rl_write_fill(slot + off_b, es_b, fill);
+    }
+    rl_array out;
+    out.data = buf;
+    out.len = max_len;
+    out.cap = max_len;
+    out.elem_size = (int32_t)es_tuple;
+    out.type_tag = RL_TAG_I64;
+    return rl_ok_arr(out);
+}
+
+// Legacy int-fill variant for dynamically typed fills.
+rl_result rl_arr_zip_longest(rl_array a, rl_array b, int64_t fill, uint64_t es_tuple, uint64_t off_b, uint64_t es_a, uint64_t es_b) {
+    rl_value v = { .tag = RL_VTAG_I64, .data.i64 = fill };
+    return rl_arr_zip_longest_t(a, b, v, es_tuple, off_b, es_a, es_b);
+}
+
 // ---- closure-consuming array functions ----
 
 // Box one array element as an `rl_result` argument by payload tag.
@@ -3778,6 +7768,127 @@ rl_result rl_arr_sort_by_closure(rl_array arr, rl_closure cmp, int32_t tag) {
     out.elem_size = (int32_t)es;
     out.type_tag = arr.type_tag;
     return rl_ok_arr(out);
+}
+
+// Split into matching and rest by predicate; ok with the pair.
+rl_result rl_arr_partition_closure(rl_array arr, rl_closure pred, int32_t tag) {
+    uint64_t es = arr.elem_size ? (uint64_t)arr.elem_size : sizeof(int64_t);
+    uint64_t cap_m = 16;
+    uint64_t cap_r = 16;
+    char *buf_m = malloc(cap_m * es);
+    char *buf_r = malloc(cap_r * es);
+    uint64_t count_m = 0;
+    uint64_t count_r = 0;
+    for (uint64_t i = 0; i < arr.len; i++) {
+        rl_result arg = _rl_box_array_elem(arr, i, tag);
+        rl_result keep = rl_closure_call(pred, &arg, 1);
+        if (!keep.is_ok) {
+            free(buf_m);
+            free(buf_r);
+            return keep;
+        }
+        if (_rl_pred_truth(keep)) {
+            if (count_m >= cap_m) {
+                cap_m *= 2;
+                buf_m = realloc(buf_m, cap_m * es);
+            }
+            memcpy(buf_m + count_m * es, (char *)arr.data + i * es, es);
+            count_m++;
+        } else {
+            if (count_r >= cap_r) {
+                cap_r *= 2;
+                buf_r = realloc(buf_r, cap_r * es);
+            }
+            memcpy(buf_r + count_r * es, (char *)arr.data + i * es, es);
+            count_r++;
+        }
+    }
+    rl_array left;
+    left.data = count_m > 0 ? buf_m : NULL;
+    if (count_m == 0) free(buf_m);
+    left.len = count_m;
+    left.cap = count_m > 0 ? cap_m : 0;
+    left.elem_size = (int32_t)es;
+    left.type_tag = arr.type_tag;
+    rl_array right;
+    right.data = count_r > 0 ? buf_r : NULL;
+    if (count_r == 0) free(buf_r);
+    right.len = count_r;
+    right.cap = count_r > 0 ? cap_r : 0;
+    right.elem_size = (int32_t)es;
+    right.type_tag = arr.type_tag;
+    rl_array *pair = malloc(2 * sizeof(rl_array));
+    pair[0] = left;
+    pair[1] = right;
+    rl_array out;
+    out.data = pair;
+    out.len = 2;
+    out.cap = 2;
+    out.elem_size = sizeof(rl_array);
+    out.type_tag = RL_TAG_ARR;
+    return rl_ok_arr(out);
+}
+
+// Compare two mapped keys: ints, then floats, then strings, else equal.
+static int _rl_key_cmp(rl_result a, rl_result b) {
+    if (a.tag == RL_TAG_I64 && b.tag == RL_TAG_I64) {
+        if (a.data.i64 < b.data.i64) return -1;
+        if (a.data.i64 > b.data.i64) return 1;
+        return 0;
+    }
+    if (a.tag == RL_TAG_F64 && b.tag == RL_TAG_F64) {
+        if (a.data.f64 < b.data.f64) return -1;
+        if (a.data.f64 > b.data.f64) return 1;
+        return 0;
+    }
+    if (a.tag == RL_TAG_STR && b.tag == RL_TAG_STR) {
+        uint64_t min_len = a.data.str.len < b.data.str.len ? a.data.str.len : b.data.str.len;
+        int cmp = 0;
+        if (min_len > 0) cmp = memcmp(a.data.str.data, b.data.str.data, min_len);
+        if (cmp != 0) return cmp < 0 ? -1 : 1;
+        if (a.data.str.len < b.data.str.len) return -1;
+        if (a.data.str.len > b.data.str.len) return 1;
+        return 0;
+    }
+    return 0;
+}
+
+// Element with the greatest mapped key; callback errors propagate.
+rl_result rl_arr_max_by_closure(rl_array arr, rl_closure fn, int32_t tag) {
+    if (arr.len == 0) return rl_make_err(-1, "arr_max_by: called on empty array");
+    rl_result first = _rl_box_array_elem(arr, 0, tag);
+    rl_result best_key = rl_closure_call(fn, &first, 1);
+    if (!best_key.is_ok) return best_key;
+    uint64_t best = 0;
+    for (uint64_t i = 1; i < arr.len; i++) {
+        rl_result arg = _rl_box_array_elem(arr, i, tag);
+        rl_result key = rl_closure_call(fn, &arg, 1);
+        if (!key.is_ok) return key;
+        if (_rl_key_cmp(best_key, key) < 0) {
+            best = i;
+            best_key = key;
+        }
+    }
+    return _rl_box_array_elem(arr, best, tag);
+}
+
+// Element with the smallest mapped key; callback errors propagate.
+rl_result rl_arr_min_by_closure(rl_array arr, rl_closure fn, int32_t tag) {
+    if (arr.len == 0) return rl_make_err(-1, "arr_min_by: called on empty array");
+    rl_result first = _rl_box_array_elem(arr, 0, tag);
+    rl_result best_key = rl_closure_call(fn, &first, 1);
+    if (!best_key.is_ok) return best_key;
+    uint64_t best = 0;
+    for (uint64_t i = 1; i < arr.len; i++) {
+        rl_result arg = _rl_box_array_elem(arr, i, tag);
+        rl_result key = rl_closure_call(fn, &arg, 1);
+        if (!key.is_ok) return key;
+        if (_rl_key_cmp(best_key, key) > 0) {
+            best = i;
+            best_key = key;
+        }
+    }
+    return _rl_box_array_elem(arr, best, tag);
 }
 
 // ---- closure-consuming result functions ----
@@ -4361,6 +8472,68 @@ rl_result rl_term_size(void) {
     return rl_ok_arr(rl_arr_from_vals(vals, 2, sizeof(int64_t)));
 }
 
+// Query cursor via DSR; ok with [x, y] or an error on timeout/non-tty.
+rl_result rl_term_get_cursor_pos(void) {
+    if (!isatty(STDIN_FILENO)) {
+        char *msg = malloc(64);
+        int m = snprintf(msg, 64, "term_get_cursor_pos(): not a tty");
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)m, .rc = 1 });
+    }
+    fflush(stdout);
+    fputs("\x1b[6n", stdout);
+    fflush(stdout);
+    uint8_t c = 0;
+    if (!_rl_term_try_read(&c, 100000) || c != 27) {
+        char *msg = malloc(64);
+        int m = snprintf(msg, 64, "term_get_cursor_pos(): timeout");
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)m, .rc = 1 });
+    }
+    if (!_rl_term_try_read(&c, 100000) || c != '[') {
+        char *msg = malloc(64);
+        int m = snprintf(msg, 64, "term_get_cursor_pos(): timeout");
+        return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)m, .rc = 1 });
+    }
+    long row = 0, col = 0;
+    bool have_digit = false;
+    while (1) {
+        if (!_rl_term_try_read(&c, 100000)) {
+            char *msg = malloc(64);
+            int m = snprintf(msg, 64, "term_get_cursor_pos(): timeout");
+            return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)m, .rc = 1 });
+        }
+        if (c >= '0' && c <= '9') {
+            row = row * 10 + (c - '0');
+            have_digit = true;
+        } else if (c == ';' && have_digit) {
+            break;
+        } else {
+            char *msg = malloc(64);
+            int m = snprintf(msg, 64, "term_get_cursor_pos(): timeout");
+            return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)m, .rc = 1 });
+        }
+    }
+    have_digit = false;
+    while (1) {
+        if (!_rl_term_try_read(&c, 100000)) {
+            char *msg = malloc(64);
+            int m = snprintf(msg, 64, "term_get_cursor_pos(): timeout");
+            return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)m, .rc = 1 });
+        }
+        if (c >= '0' && c <= '9') {
+            col = col * 10 + (c - '0');
+            have_digit = true;
+        } else if (c == 'R' && have_digit) {
+            break;
+        } else {
+            char *msg = malloc(64);
+            int m = snprintf(msg, 64, "term_get_cursor_pos(): timeout");
+            return rl_err_msg((rl_string){ .data = msg, .len = (uint64_t)m, .rc = 1 });
+        }
+    }
+    int64_t vals[2] = { (int64_t)col, (int64_t)row };
+    return rl_ok_arr(rl_arr_from_vals(vals, 2, sizeof(int64_t)));
+}
+
 // True when input arrives within `ms` milliseconds.
 rl_result rl_term_poll(int64_t ms) {
     fflush(stdout);
@@ -4378,7 +8551,7 @@ rl_result rl_term_poll(int64_t ms) {
 int64_t rl_result_unwrap_i64(rl_result r) {
     if (!r.is_ok) {
         fprintf(stderr, "error: unwrap called on err value\n");
-        abort();
+        _rl_abort();
     }
     return r.data.i64;
 }
@@ -4388,7 +8561,7 @@ int64_t rl_result_unwrap_i64(rl_result r) {
 double rl_result_unwrap_f64(rl_result r) {
     if (!r.is_ok) {
         fprintf(stderr, "error: unwrap called on err value\n");
-        abort();
+        _rl_abort();
     }
     return r.data.f64;
 }
@@ -4398,7 +8571,7 @@ double rl_result_unwrap_f64(rl_result r) {
 bool rl_result_unwrap_bool(rl_result r) {
     if (!r.is_ok) {
         fprintf(stderr, "error: unwrap called on err value\n");
-        abort();
+        _rl_abort();
     }
     return r.data.boolean;
 }
@@ -4408,7 +8581,7 @@ bool rl_result_unwrap_bool(rl_result r) {
 rl_string rl_result_unwrap_str(rl_result r) {
     if (!r.is_ok) {
         fprintf(stderr, "error: unwrap called on err value\n");
-        abort();
+        _rl_abort();
     }
     return r.data.str;
 }
@@ -4417,7 +8590,7 @@ rl_string rl_result_unwrap_str(rl_result r) {
 rl_array rl_result_unwrap_arr(rl_result r) {
     if (!r.is_ok) {
         fprintf(stderr, "error: unwrap called on err value\n");
-        abort();
+        _rl_abort();
     }
     return r.data.arr;
 }
@@ -4426,7 +8599,7 @@ rl_array rl_result_unwrap_arr(rl_result r) {
 rl_map rl_result_unwrap_map(rl_result r) {
     if (!r.is_ok) {
         fprintf(stderr, "error: unwrap called on err value\n");
-        abort();
+        _rl_abort();
     }
     return r.data.map;
 }
@@ -4435,7 +8608,7 @@ rl_map rl_result_unwrap_map(rl_result r) {
 rl_set rl_result_unwrap_set(rl_result r) {
     if (!r.is_ok) {
         fprintf(stderr, "error: unwrap called on err value\n");
-        abort();
+        _rl_abort();
     }
     return r.data.set;
 }
@@ -4444,9 +8617,44 @@ rl_set rl_result_unwrap_set(rl_result r) {
 rl_closure rl_result_unwrap_closure(rl_result r) {
     if (!r.is_ok) {
         fprintf(stderr, "error: unwrap called on err value\n");
-        abort();
+        _rl_abort();
     }
     return *r.data.closure;
+}
+
+// Abort for result_unwrap_err called on an ok value, echoing the value
+// like the VM's message does.
+static void _rl_unwrap_err_abort(rl_result v) {
+    char *s = NULL;
+    uint64_t n = 0;
+    _rl_fmt_arg_to_str((rl_fmt_arg){ v, false }, &s, &n);
+    fprintf(stderr, "error: result_unwrap_err: called on %.*s\n", (int)n, s ? s : "");
+    free(s);
+                _rl_abort();
+}
+
+// Unwrap an error payload; aborts when given an ok value.
+rl_string rl_result_unwrap_err_str(rl_result r) {
+    if (r.is_ok) _rl_unwrap_err_abort(r);
+    return r.data.str;
+}
+
+// Unwrap an error payload; aborts when given an ok value.
+int64_t rl_result_unwrap_err_i64(rl_result r) {
+    if (r.is_ok) _rl_unwrap_err_abort(r);
+    return r.data.i64;
+}
+
+// Unwrap an error payload; aborts when given an ok value.
+double rl_result_unwrap_err_f64(rl_result r) {
+    if (r.is_ok) _rl_unwrap_err_abort(r);
+    return r.data.f64;
+}
+
+// Unwrap an error payload; aborts when given an ok value.
+bool rl_result_unwrap_err_bool(rl_result r) {
+    if (r.is_ok) _rl_unwrap_err_abort(r);
+    return r.data.boolean;
 }
 
 // Length of a string/array/map/set result payload, or an error for
@@ -4511,11 +8719,40 @@ rl_result rl_is_char(rl_result x) { return rl_ok_bool(x.tag == RL_TAG_CHAR); }
 rl_result rl_is_byte(rl_result x) { return rl_ok_bool(x.tag == RL_TAG_I64); }
 // Return ok bool true when result is an error.
 rl_result rl_is_error(rl_result x) { return rl_ok_bool(!x.is_ok); }
+// Return ok bool true when payload tag is array.
+rl_result rl_is_array(rl_result x) { return rl_ok_bool(x.tag == RL_TAG_ARR); }
+// Return ok bool true when payload tag is map.
+rl_result rl_is_map(rl_result x) { return rl_ok_bool(x.tag == RL_TAG_MAP); }
+// Return ok bool true when payload tag is set.
+rl_result rl_is_set(rl_result x) { return rl_ok_bool(x.tag == RL_TAG_SET); }
+// Tuples never travel boxed; always false at runtime (literals fold).
+rl_result rl_is_tuple(rl_result x) { (void)x; return rl_ok_bool(false); }
+// Return ok bool true when payload is a closure.
+rl_result rl_is_function(rl_result x) { return rl_ok_bool(x.tag == RL_TAG_CLOSURE); }
+// Narrow ints erase to I64 at runtime; literals fold statically.
+rl_result rl_is_uint(rl_result x) { return rl_ok_bool(x.tag == RL_TAG_I64); }
+// Narrow ints erase to I64 at runtime; literals fold statically.
+rl_result rl_is_sbyte(rl_result x) { return rl_ok_bool(x.tag == RL_TAG_I64); }
+// Narrow ints erase to I64 at runtime; literals fold statically.
+rl_result rl_is_bsbyte(rl_result x) { return rl_ok_bool(x.tag == RL_TAG_I64); }
+// Narrow ints erase to I64 at runtime; literals fold statically.
+rl_result rl_is_bbyte(rl_result x) { return rl_ok_bool(x.tag == RL_TAG_I64); }
+// Narrow ints erase to I64 at runtime; literals fold statically.
+rl_result rl_is_sint(rl_result x) { return rl_ok_bool(x.tag == RL_TAG_I64); }
+// Narrow ints erase to I64 at runtime; literals fold statically.
+rl_result rl_is_suint(rl_result x) { return rl_ok_bool(x.tag == RL_TAG_I64); }
+// Small float erases to F64 at runtime; literals fold statically.
+rl_result rl_is_sfloat(rl_result x) { return rl_ok_bool(x.tag == RL_TAG_F64); }
+
+// Handle kind range check used by the is_*_handle testers below.
+static bool _rl_id_in_range(int64_t id, int64_t base, int count) {
+    return id >= base && id < base + (int64_t)count;
+}
 
 // Abort instead of returning (RL never type).
 rl_never rl_never_fn(void) {
     fprintf(stderr, "error: reached unreachable code\n");
-    abort();
+                _rl_abort();
 }
 
 // ---- std::c (FFI) ----
@@ -4525,22 +8762,29 @@ rl_never rl_never_fn(void) {
 static struct { void *handle; } rl_c_handles[RL_C_MAX_HANDLES];
 static int rl_c_handle_count = 0;
 
-// Allocate a handle id for a dlopen pointer.
+// Allocate a tagged handle id for a dlopen pointer.
 static rl_result rl_c_new_handle(void *h) {
     if (rl_c_handle_count >= RL_C_MAX_HANDLES) {
         return rl_err_msg(rl_str_literal("c: too many open handles", 24));
     }
-    int id = rl_c_handle_count++;
-    rl_c_handles[id].handle = h;
-    return rl_ok_i64(id);
+    int idx = rl_c_handle_count++;
+    rl_c_handles[idx].handle = h;
+    return rl_ok_i64(RL_HANDLE_C_BASE + (int64_t)idx);
+}
+
+// Decode a tagged id to a table index, or -1 when out of range.
+static int64_t _rl_c_idx(int64_t tagged) {
+    int64_t idx = tagged - RL_HANDLE_C_BASE;
+    if (idx < 0 || idx >= rl_c_handle_count) return -1;
+    return idx;
 }
 
 // Look up dlopen pointer by handle id (NULL when unknown).
 static void *rl_c_get_handle(rl_result r) {
     if (r.tag != RL_TAG_I64) return NULL;
-    int64_t id = r.data.i64;
-    if (id < 0 || id >= rl_c_handle_count) return NULL;
-    return rl_c_handles[id].handle;
+    int64_t idx = _rl_c_idx(r.data.i64);
+    if (idx < 0) return NULL;
+    return rl_c_handles[idx].handle;
 }
 
 // Copy RL string into NUL-terminated C string (caller owns).
@@ -4603,8 +8847,9 @@ rl_result rl_c_load(rl_string path) {
 // True (as a result) when the handle exports `fn_name`.
 rl_result rl_c_has_symbol(int64_t handle_id, rl_string fn_name) {
     void *h = NULL;
-    if (handle_id >= 0 && handle_id < rl_c_handle_count) {
-        h = rl_c_handles[handle_id].handle;
+    int64_t idx = _rl_c_idx(handle_id);
+    if (idx >= 0) {
+        h = rl_c_handles[idx].handle;
     }
     if (!h) return rl_err_msg(rl_str_literal("c: invalid handle", 17));
     char *name = rl_string_to_cstr(fn_name);
@@ -4616,13 +8861,14 @@ rl_result rl_c_has_symbol(int64_t handle_id, rl_string fn_name) {
 // Unload the handle (no-op for unknown ids).
 rl_result rl_c_close(int64_t handle_id) {
     void *h = NULL;
-    if (handle_id >= 0 && handle_id < rl_c_handle_count) {
-        h = rl_c_handles[handle_id].handle;
+    int64_t idx = _rl_c_idx(handle_id);
+    if (idx >= 0) {
+        h = rl_c_handles[idx].handle;
     }
     if (!h) return rl_err_msg(rl_str_literal("c: invalid handle", 17));
     dlclose(h);
-    if (handle_id >= 0 && handle_id < rl_c_handle_count) {
-        rl_c_handles[handle_id].handle = NULL;
+    if (idx >= 0) {
+        rl_c_handles[idx].handle = NULL;
     }
     return rl_ok_null();
 }
@@ -4647,8 +8893,9 @@ rl_result rl_c_clear_cache(void) {
 // "f64", "str", ...), converting to `ret_type` on return.
 rl_result rl_c_call(int64_t handle_id, rl_string fn_name, int64_t argc, void **argv, const char **arg_types, rl_string ret_type) {
     void *h = NULL;
-    if (handle_id >= 0 && handle_id < rl_c_handle_count) {
-        h = rl_c_handles[handle_id].handle;
+    int64_t cidx = _rl_c_idx(handle_id);
+    if (cidx >= 0) {
+        h = rl_c_handles[cidx].handle;
     }
     if (!h) return rl_err_msg(rl_str_literal("c::call: invalid handle", 23));
 
@@ -4766,22 +9013,30 @@ static struct {
 } rl_net_handles[RL_NET_MAX_HANDLES];
 static int rl_net_handle_count = 0;
 
-// Allocate a socket handle id for fd and kind.
+// Allocate a tagged socket handle id for fd and kind.
 static rl_result rl_net_new_handle(int fd, enum rl_net_handle_kind kind) {
     if (rl_net_handle_count >= RL_NET_MAX_HANDLES) {
         return rl_err(-1);
     }
-    int id = rl_net_handle_count++;
-    rl_net_handles[id].kind = kind;
-    rl_net_handles[id].fd = fd;
-    return rl_ok_i64(id);
+    int idx = rl_net_handle_count++;
+    rl_net_handles[idx].kind = kind;
+    rl_net_handles[idx].fd = fd;
+    return rl_ok_i64(RL_HANDLE_NET_BASE + (int64_t)idx);
+}
+
+// Decode a tagged id to a table index, or -1 when out of range.
+static int64_t _rl_net_idx(int64_t tagged) {
+    int64_t idx = tagged - RL_HANDLE_NET_BASE;
+    if (idx < 0 || idx >= rl_net_handle_count) return -1;
+    return idx;
 }
 
 // Look up fd by handle id, or -1 when kind mismatches.
 static int rl_net_get_fd(int64_t handle_id, enum rl_net_handle_kind expected) {
-    if (handle_id < 0 || handle_id >= rl_net_handle_count) return -1;
-    if (rl_net_handles[handle_id].kind != expected) return -1;
-    return rl_net_handles[handle_id].fd;
+    int64_t idx = _rl_net_idx(handle_id);
+    if (idx < 0) return -1;
+    if (rl_net_handles[idx].kind != expected) return -1;
+    return rl_net_handles[idx].fd;
 }
 
 // Parse ip:port text into sockaddr_in (0 on success).
@@ -4798,6 +9053,7 @@ static int rl_net_resolve_addr(const char *addr_str, struct sockaddr_in *out) {
 
 // Bind and listen; result holds the listener handle id.
 rl_result rl_net_tcp_listen(rl_string address) {
+    if (address.data == NULL) return rl_err(-1);
     char addr_buf[256];
     int len = address.len < 255 ? (int)address.len : 255;
     memcpy(addr_buf, address.data, len);
@@ -4848,6 +9104,7 @@ rl_result rl_net_tcp_accept(int64_t handle_id) {
 
 // Connect; result holds the connection handle id.
 rl_result rl_net_tcp_connect(rl_string address) {
+    if (address.data == NULL) return rl_err(-1);
     char addr_buf[256];
     int len = address.len < 255 ? (int)address.len : 255;
     memcpy(addr_buf, address.data, len);
@@ -4899,6 +9156,7 @@ rl_result rl_net_tcp_read(int64_t handle_id, int64_t max_bytes) {
 rl_result rl_net_tcp_write(int64_t handle_id, rl_string data) {
     int fd = rl_net_get_fd(handle_id, RL_NET_TCP_STREAM);
     if (fd < 0) return rl_err(-1);
+    if (data.data == NULL) return rl_err(-1);
 
     ssize_t n = write(fd, data.data, data.len);
     if (n < 0) return rl_err(-1);
@@ -4989,19 +9247,21 @@ rl_result rl_net_tcp_shutdown(int64_t handle_id, rl_string mode) {
 
 // Close the socket.
 rl_result rl_net_tcp_close(int64_t handle_id) {
-    if (handle_id < 0 || handle_id >= rl_net_handle_count) return rl_err(-1);
+    int64_t idx = _rl_net_idx(handle_id);
+    if (idx < 0) return rl_err(-1);
 
-    enum rl_net_handle_kind kind = rl_net_handles[handle_id].kind;
+    enum rl_net_handle_kind kind = rl_net_handles[idx].kind;
     if (kind != RL_NET_TCP_LISTENER && kind != RL_NET_TCP_STREAM) return rl_err(-1);
 
-    close(rl_net_handles[handle_id].fd);
-    rl_net_handles[handle_id].fd = -1;
+    close(rl_net_handles[idx].fd);
+    rl_net_handles[idx].fd = -1;
 
     return rl_ok_null();
 }
 
 // Bind a UDP socket; result holds its handle id.
 rl_result rl_net_udp_bind(rl_string address) {
+    if (address.data == NULL) return rl_err(-1);
     char addr_buf[256];
     int len = address.len < 255 ? (int)address.len : 255;
     memcpy(addr_buf, address.data, len);
@@ -5032,6 +9292,7 @@ rl_result rl_net_udp_bind(rl_string address) {
 rl_result rl_net_udp_connect(int64_t handle_id, rl_string address) {
     int fd = rl_net_get_fd(handle_id, RL_NET_UDP_SOCKET);
     if (fd < 0) return rl_err(-1);
+    if (address.data == NULL) return rl_err(-1);
 
     char addr_buf[256];
     int len = address.len < 255 ? (int)address.len : 255;
@@ -5057,6 +9318,7 @@ rl_result rl_net_udp_connect(int64_t handle_id, rl_string address) {
 rl_result rl_net_udp_send(int64_t handle_id, rl_string data) {
     int fd = rl_net_get_fd(handle_id, RL_NET_UDP_SOCKET);
     if (fd < 0) return rl_err(-1);
+    if (data.data == NULL) return rl_err(-1);
 
     ssize_t n = send(fd, data.data, data.len, 0);
     if (n < 0) return rl_err(-1);
@@ -5068,6 +9330,8 @@ rl_result rl_net_udp_send(int64_t handle_id, rl_string data) {
 rl_result rl_net_udp_send_to(int64_t handle_id, rl_string data, rl_string address) {
     int fd = rl_net_get_fd(handle_id, RL_NET_UDP_SOCKET);
     if (fd < 0) return rl_err(-1);
+    if (data.data == NULL) return rl_err(-1);
+    if (address.data == NULL) return rl_err(-1);
 
     char addr_buf[256];
     int len = address.len < 255 ? (int)address.len : 255;
@@ -5090,7 +9354,44 @@ rl_result rl_net_udp_send_to(int64_t handle_id, rl_string data, rl_string addres
     return rl_ok_i64(n);
 }
 
-// Receive one datagram / datagram plus sender address as a two-map.
+// Canonical 2-tuple layouts used for single-tuple results. These match
+// the program generated `rl_tuple_2` structs field for field:
+// (int, string) for HTTP responses, (string, string) for UDP sender
+// pairs and HTTP header pairs.
+typedef struct { int64_t field_0; rl_string field_1; } _rl_tuple_is;
+typedef struct { rl_string field_0; rl_string field_1; } _rl_tuple_ss;
+
+// Wrap one (int, string) tuple as a single element array result.
+// Uses I64 tag like rl_arr_zip_t so generic array printing does not
+// mistake the bytes for nested arrays.
+static rl_result _rl_ok_tuple_is(int64_t f0, char *bdata, uint64_t blen) {
+    _rl_tuple_is *slot = malloc(sizeof(_rl_tuple_is));
+    slot->field_0 = f0;
+    slot->field_1 = (rl_string){ .data = bdata, .len = blen, .rc = 1 };
+    rl_array out;
+    out.data = slot;
+    out.len = 1;
+    out.cap = 1;
+    out.elem_size = (int32_t)sizeof(_rl_tuple_is);
+    out.type_tag = RL_TAG_I64;
+    return rl_ok_arr(out);
+}
+
+// Wrap one (string, string) tuple as a single element array result.
+static rl_result _rl_ok_tuple_ss(char *adata, uint64_t alen, char *bdata, uint64_t blen) {
+    _rl_tuple_ss *slot = malloc(sizeof(_rl_tuple_ss));
+    slot->field_0 = (rl_string){ .data = adata, .len = alen, .rc = 1 };
+    slot->field_1 = (rl_string){ .data = bdata, .len = blen, .rc = 1 };
+    rl_array out;
+    out.data = slot;
+    out.len = 1;
+    out.cap = 1;
+    out.elem_size = (int32_t)sizeof(_rl_tuple_ss);
+    out.type_tag = RL_TAG_I64;
+    return rl_ok_arr(out);
+}
+
+// Receive one datagram / datagram plus sender address as a 2-tuple.
 rl_result rl_net_udp_recv(int64_t handle_id, int64_t max_bytes) {
     int fd = rl_net_get_fd(handle_id, RL_NET_UDP_SOCKET);
     if (fd < 0) return rl_err(-1);
@@ -5103,21 +9404,34 @@ rl_result rl_net_udp_recv(int64_t handle_id, int64_t max_bytes) {
     return rl_ok_str(rl_str_literal(buf, n));
 }
 
-// Receive one datagram / datagram plus sender address as a two-map.
+// Receive one datagram plus sender address as a 2-tuple
+// (data string, sender "ip:port" string).
 rl_result rl_net_udp_recv_from(int64_t handle_id, int64_t max_bytes) {
     int fd = rl_net_get_fd(handle_id, RL_NET_UDP_SOCKET);
     if (fd < 0) return rl_err(-1);
 
     int buf_size = max_bytes > 0 ? (int)max_bytes : RL_NET_BUF_SIZE;
-    char *buf = malloc(buf_size);
+    char *buf = malloc(buf_size + 1);
     struct sockaddr_in sender;
     socklen_t sender_len = sizeof(sender);
 
     ssize_t n = recvfrom(fd, buf, buf_size, 0, (struct sockaddr *)&sender, &sender_len);
     if (n < 0) { free(buf); return rl_err(-1); }
+    if (n == 0) {
+        char *empty = malloc(1);
+        empty[0] = '\0';
+        char addr_str[64];
+        snprintf(addr_str, sizeof(addr_str), "%s:%d", inet_ntoa(sender.sin_addr), ntohs(sender.sin_port));
+        uint64_t addr_len = strlen(addr_str);
+        char *addr_dup = malloc(addr_len + 1);
+        memcpy(addr_dup, addr_str, addr_len + 1);
+        free(buf);
+        return _rl_ok_tuple_ss(empty, 0, addr_dup, addr_len);
+    }
 
-    char *data = malloc(n);
-    memcpy(data, buf, n);
+    char *data = malloc((uint64_t)n + 1);
+    memcpy(data, buf, (uint64_t)n);
+    data[n] = '\0';
     free(buf);
 
     char addr_str[64];
@@ -5126,46 +9440,58 @@ rl_result rl_net_udp_recv_from(int64_t handle_id, int64_t max_bytes) {
     char *addr_dup = malloc(addr_len + 1);
     memcpy(addr_dup, addr_str, addr_len + 1);
 
-    // Return 2-element array: [data_string, sender_addr_string]
-    // Arrays store element pointers as int64_t (intptr_t)
-    int64_t ptrs[2];
-    ptrs[0] = (int64_t)(intptr_t)data;
-    ptrs[1] = (int64_t)(intptr_t)addr_dup;
-    rl_array result_arr = rl_arr_from_vals(ptrs, 2, sizeof(int64_t));
-
-    return rl_ok_arr(result_arr);
+    return _rl_ok_tuple_ss(data, (uint64_t)n, addr_dup, addr_len);
 }
 
 // Close the socket.
 rl_result rl_net_udp_close(int64_t handle_id) {
-    if (handle_id < 0 || handle_id >= rl_net_handle_count) return rl_err(-1);
-    if (rl_net_handles[handle_id].kind != RL_NET_UDP_SOCKET) return rl_err(-1);
+    int64_t idx = _rl_net_idx(handle_id);
+    if (idx < 0) return rl_err(-1);
+    if (rl_net_handles[idx].kind != RL_NET_UDP_SOCKET) return rl_err(-1);
 
-    close(rl_net_handles[handle_id].fd);
-    rl_net_handles[handle_id].fd = -1;
+    close(rl_net_handles[idx].fd);
+    rl_net_handles[idx].fd = -1;
 
     return rl_ok_null();
 }
 
-// DNS lookup of `"host:port"`; result holds an array of `"ip:port"` strings.
+// DNS lookup of `"host:port"`; result holds an array of `"ip"` strings.
 rl_result rl_net_resolve(rl_string host_port) {
+    if (host_port.data == NULL) return rl_err(-1);
     char buf[256];
     int len = host_port.len < 255 ? (int)host_port.len : 255;
     memcpy(buf, host_port.data, len);
     buf[len] = '\0';
 
+    // Split "host:port" like the VM's to_socket_addrs does; the port is
+    // only used to validate the shape, the output is IP strings.
+    char *colon = strrchr(buf, ':');
+    char *host = buf;
+    char *port = NULL;
+    if (colon) {
+        *colon = '\0';
+        host = buf;
+        port = colon + 1;
+        if (*host == '\0' || *port == '\0') return rl_err(-1);
+    }
+
     struct addrinfo hints = {0}, *res;
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
 
-    int rc = getaddrinfo(buf, NULL, &hints, &res);
+    int rc = getaddrinfo(host, port, &hints, &res);
     if (rc != 0) return rl_err(-1);
 
-    // count results first
     int count = 0;
     for (struct addrinfo *p = res; p != NULL; p = p->ai_next) count++;
+    if (count == 0) {
+        freeaddrinfo(res);
+        rl_array empty = { .data = NULL, .len = 0, .cap = 0,
+            .elem_size = sizeof(rl_string), .type_tag = RL_TAG_STR };
+        return rl_ok_arr(empty);
+    }
 
-    int64_t *ptrs = malloc(count * sizeof(int64_t));
+    rl_string *items = malloc((uint64_t)count * sizeof(rl_string));
     int i = 0;
     for (struct addrinfo *p = res; p != NULL; p = p->ai_next) {
         struct sockaddr_in *addr = (struct sockaddr_in *)p->ai_addr;
@@ -5174,13 +9500,17 @@ rl_result rl_net_resolve(rl_string host_port) {
         uint64_t ip_len = strlen(ip);
         char *ip_dup = malloc(ip_len + 1);
         memcpy(ip_dup, ip, ip_len + 1);
-        ptrs[i++] = (int64_t)(intptr_t)ip_dup;
+        items[i++] = (rl_string){ .data = ip_dup, .len = ip_len, .rc = 1 };
     }
 
     freeaddrinfo(res);
-    rl_array result_arr = rl_arr_from_vals(ptrs, count, sizeof(int64_t));
-    free(ptrs);
-    return rl_ok_arr(result_arr);
+    rl_array out;
+    out.data = items;
+    out.len = (uint64_t)count;
+    out.cap = (uint64_t)count;
+    out.elem_size = (int32_t)sizeof(rl_string);
+    out.type_tag = RL_TAG_STR;
+    return rl_ok_arr(out);
 }
 
 // ---- std::http (server + client via POSIX sockets + libcurl) ----
@@ -5217,23 +9547,31 @@ static struct {
 } rl_http_handles[RL_HTTP_MAX_HANDLES];
 static int rl_http_handle_count = 0;
 
-// Allocate an HTTP handle id for a table entry.
+// Allocate a tagged HTTP handle id for a table entry.
 static rl_result rl_http_new_handle(void *ptr, enum rl_http_handle_kind kind) {
     if (rl_http_handle_count >= RL_HTTP_MAX_HANDLES) return rl_err(-1);
-    int id = rl_http_handle_count++;
-    rl_http_handles[id].kind = kind;
+    int idx = rl_http_handle_count++;
+    rl_http_handles[idx].kind = kind;
     if (kind == RL_HTTP_SERVER) {
-        rl_http_handles[id].data.server_fd = *(int *)ptr;
+        rl_http_handles[idx].data.server_fd = *(int *)ptr;
     } else {
-        rl_http_handles[id].data.request = (struct rl_http_request_data *)ptr;
+        rl_http_handles[idx].data.request = (struct rl_http_request_data *)ptr;
     }
-    return rl_ok_i64(id);
+    return rl_ok_i64(RL_HANDLE_HTTP_BASE + (int64_t)idx);
+}
+
+// Decode a tagged id to a table index, or -1 when out of range.
+static int64_t _rl_http_idx(int64_t tagged) {
+    int64_t idx = tagged - RL_HANDLE_HTTP_BASE;
+    if (idx < 0 || idx >= rl_http_handle_count) return -1;
+    return idx;
 }
 
 // minimal HTTP/1.1 server: bind, listen, accept, parse request, return handle
 
 // Start listening on addr; result holds the server id.
 rl_result rl_http_server_start(rl_string addr) {
+    if (addr.data == NULL) return rl_err(-1);
     char buf[256];
     int len = addr.len < 255 ? (int)addr.len : 255;
     memcpy(buf, addr.data, len);
@@ -5276,10 +9614,11 @@ static int rl_http_read_line(int fd, char *buf, int max) {
 
 // Block for the next request / poll without blocking (error when none); result holds the request id.
 rl_result rl_http_server_recv(int64_t handle_id) {
-    if (handle_id < 0 || handle_id >= rl_http_handle_count) return rl_err(-1);
-    if (rl_http_handles[handle_id].kind != RL_HTTP_SERVER) return rl_err(-1);
+    int64_t hidx = _rl_http_idx(handle_id);
+    if (hidx < 0) return rl_err(-1);
+    if (rl_http_handles[hidx].kind != RL_HTTP_SERVER) return rl_err(-1);
 
-    int server_fd = rl_http_handles[handle_id].data.server_fd;
+    int server_fd = rl_http_handles[hidx].data.server_fd;
     struct sockaddr_in client_addr;
     socklen_t addr_len = sizeof(client_addr);
     int client_fd = accept(server_fd, (struct sockaddr *)&client_addr, &addr_len);
@@ -5349,10 +9688,11 @@ rl_result rl_http_server_recv(int64_t handle_id) {
 
 // Block for the next request / poll without blocking (error when none); result holds the request id.
 rl_result rl_http_server_try_recv(int64_t handle_id) {
-    if (handle_id < 0 || handle_id >= rl_http_handle_count) return rl_err(-1);
-    if (rl_http_handles[handle_id].kind != RL_HTTP_SERVER) return rl_err(-1);
+    int64_t hidx = _rl_http_idx(handle_id);
+    if (hidx < 0) return rl_err(-1);
+    if (rl_http_handles[hidx].kind != RL_HTTP_SERVER) return rl_err(-1);
 
-    int server_fd = rl_http_handles[handle_id].data.server_fd;
+    int server_fd = rl_http_handles[hidx].data.server_fd;
 
     struct pollfd pfd = { .fd = server_fd, .events = POLLIN };
     int ret = poll(&pfd, 1, 0);
@@ -5363,20 +9703,22 @@ rl_result rl_http_server_try_recv(int64_t handle_id) {
 
 // Stop the server and drop pending requests.
 rl_result rl_http_server_stop(int64_t handle_id) {
-    if (handle_id < 0 || handle_id >= rl_http_handle_count) return rl_err(-1);
-    if (rl_http_handles[handle_id].kind != RL_HTTP_SERVER) return rl_err(-1);
+    int64_t hidx = _rl_http_idx(handle_id);
+    if (hidx < 0) return rl_err(-1);
+    if (rl_http_handles[hidx].kind != RL_HTTP_SERVER) return rl_err(-1);
 
-    close(rl_http_handles[handle_id].data.server_fd);
-    rl_http_handles[handle_id].data.server_fd = -1;
+    close(rl_http_handles[hidx].data.server_fd);
+    rl_http_handles[hidx].data.server_fd = -1;
     return rl_ok_null();
 }
 
 // Method ("GET", ...) / path+query / one header / full body of a request.
 rl_result rl_http_request_method(int64_t handle_id) {
-    if (handle_id < 0 || handle_id >= rl_http_handle_count) return rl_err(-1);
-    if (rl_http_handles[handle_id].kind != RL_HTTP_REQUEST) return rl_err(-1);
+    int64_t hidx = _rl_http_idx(handle_id);
+    if (hidx < 0) return rl_err(-1);
+    if (rl_http_handles[hidx].kind != RL_HTTP_REQUEST) return rl_err(-1);
 
-    struct rl_http_request_data *req = rl_http_handles[handle_id].data.request;
+    struct rl_http_request_data *req = rl_http_handles[hidx].data.request;
     uint64_t slen = strlen(req->method);
     char *dup = malloc(slen + 1);
     memcpy(dup, req->method, slen + 1);
@@ -5385,10 +9727,11 @@ rl_result rl_http_request_method(int64_t handle_id) {
 
 // Method ("GET", ...) / path+query / one header / full body of a request.
 rl_result rl_http_request_url(int64_t handle_id) {
-    if (handle_id < 0 || handle_id >= rl_http_handle_count) return rl_err(-1);
-    if (rl_http_handles[handle_id].kind != RL_HTTP_REQUEST) return rl_err(-1);
+    int64_t hidx = _rl_http_idx(handle_id);
+    if (hidx < 0) return rl_err(-1);
+    if (rl_http_handles[hidx].kind != RL_HTTP_REQUEST) return rl_err(-1);
 
-    struct rl_http_request_data *req = rl_http_handles[handle_id].data.request;
+    struct rl_http_request_data *req = rl_http_handles[hidx].data.request;
     uint64_t slen = strlen(req->url);
     char *dup = malloc(slen + 1);
     memcpy(dup, req->url, slen + 1);
@@ -5397,10 +9740,12 @@ rl_result rl_http_request_url(int64_t handle_id) {
 
 // Method ("GET", ...) / path+query / one header / full body of a request.
 rl_result rl_http_request_header(int64_t handle_id, rl_string name) {
-    if (handle_id < 0 || handle_id >= rl_http_handle_count) return rl_err(-1);
-    if (rl_http_handles[handle_id].kind != RL_HTTP_REQUEST) return rl_err(-1);
+    int64_t hidx = _rl_http_idx(handle_id);
+    if (hidx < 0) return rl_err(-1);
+    if (rl_http_handles[hidx].kind != RL_HTTP_REQUEST) return rl_err(-1);
+    if (name.data == NULL) return rl_err(-1);
 
-    struct rl_http_request_data *req = rl_http_handles[handle_id].data.request;
+    struct rl_http_request_data *req = rl_http_handles[hidx].data.request;
 
     // search headers_raw for "Name: value"
     char needle[512];
@@ -5431,10 +9776,11 @@ rl_result rl_http_request_header(int64_t handle_id, rl_string name) {
 
 // Method ("GET", ...) / path+query / one header / full body of a request.
 rl_result rl_http_request_body(int64_t handle_id) {
-    if (handle_id < 0 || handle_id >= rl_http_handle_count) return rl_err(-1);
-    if (rl_http_handles[handle_id].kind != RL_HTTP_REQUEST) return rl_err(-1);
+    int64_t hidx = _rl_http_idx(handle_id);
+    if (hidx < 0) return rl_err(-1);
+    if (rl_http_handles[hidx].kind != RL_HTTP_REQUEST) return rl_err(-1);
 
-    struct rl_http_request_data *req = rl_http_handles[handle_id].data.request;
+    struct rl_http_request_data *req = rl_http_handles[hidx].data.request;
     uint64_t slen = req->body_len;
     char *dup = malloc(slen + 1);
     memcpy(dup, req->body, slen);
@@ -5444,10 +9790,14 @@ rl_result rl_http_request_body(int64_t handle_id) {
 
 // Answer a request and close it; pass `has_content_type` 0 to omit.
 rl_result rl_http_respond(int64_t handle_id, int64_t status, rl_string body, rl_string content_type, int has_content_type) {
-    if (handle_id < 0 || handle_id >= rl_http_handle_count) return rl_err(-1);
-    if (rl_http_handles[handle_id].kind != RL_HTTP_REQUEST) return rl_err(-1);
+    int64_t hidx = _rl_http_idx(handle_id);
+    if (hidx < 0) return rl_err(-1);
+    if (rl_http_handles[hidx].kind != RL_HTTP_REQUEST) return rl_err(-1);
+    if (status < 100 || status > 599) return rl_err(-1);
+    if (body.data == NULL) return rl_err(-1);
+    if (has_content_type && content_type.data == NULL) return rl_err(-1);
 
-    struct rl_http_request_data *req = rl_http_handles[handle_id].data.request;
+    struct rl_http_request_data *req = rl_http_handles[hidx].data.request;
     int fd = req->client_fd;
 
     const char *status_text = "OK";
@@ -5483,8 +9833,8 @@ rl_result rl_http_respond(int64_t handle_id, int64_t status, rl_string body, rl_
     // clean up request handle
     free(req->body);
     free(req);
-    rl_http_handles[handle_id].kind = RL_HTTP_SERVER; // mark as consumed
-    rl_http_handles[handle_id].data.server_fd = -1;
+    rl_http_handles[hidx].kind = RL_HTTP_SERVER; // mark as consumed
+    rl_http_handles[hidx].data.server_fd = -1;
 
     return rl_ok_null();
 }
@@ -5512,7 +9862,7 @@ static size_t rl_http_curl_write_cb(void *ptr, size_t size, size_t nmemb, void *
     return size * nmemb;
 }
 
-// Run a curl request and wrap the body or error as a result.
+// Run a curl request and wrap (status, body) as a 2-tuple result.
 static rl_result rl_http_curl_perform(CURL *curl) {
     struct rl_http_curl_buf resp = {0};
     resp.cap = 4096;
@@ -5521,8 +9871,6 @@ static rl_result rl_http_curl_perform(CURL *curl) {
     long status = 0;
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, rl_http_curl_write_cb);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &resp);
-    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, rl_http_curl_write_cb);
-    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &resp);
 
     CURLcode res = curl_easy_perform(curl);
     if (res != CURLE_OK) {
@@ -5531,35 +9879,20 @@ static rl_result rl_http_curl_perform(CURL *curl) {
     }
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
 
-    // find body after \r\n\r\n
-    char *body_start = memmem(resp.data, resp.len, "\r\n\r\n", 4);
-    size_t body_len;
-    char *body_data;
-    if (body_start) {
-        body_data = body_start + 4;
-        body_len = resp.len - (size_t)(body_data - resp.data);
-    } else {
-        body_data = resp.data;
-        body_len = resp.len;
-    }
-
-    // copy body to stable memory
+    // body is exactly what curl wrote
+    size_t body_len = resp.len;
     char *body_copy = malloc(body_len + 1);
-    memcpy(body_copy, body_data, body_len);
+    if (body_len > 0) memcpy(body_copy, resp.data, body_len);
     body_copy[body_len] = '\0';
 
-    // return tuple (status, body) as 2-element int64 array of pointers
-    int64_t ptrs[2];
-    ptrs[0] = (int64_t)(intptr_t)(int64_t)status;
-    ptrs[1] = (int64_t)(intptr_t)body_copy;
-    rl_array result_arr = rl_arr_from_vals(ptrs, 2, sizeof(int64_t));
-
+    rl_result out = _rl_ok_tuple_is((int64_t)status, body_copy, (uint64_t)body_len);
     free(resp.data);
-    return rl_ok_arr(result_arr);
+    return out;
 }
 
-// GET / POST shorthand; result holds the response body as a string.
+// GET shorthand; result holds a 2-tuple (status int, body string).
 rl_result rl_http_get(rl_string url) {
+    if (url.data == NULL) return rl_err(-1);
     char url_buf[2048];
     int ulen = url.len < 2047 ? (int)url.len : 2047;
     memcpy(url_buf, url.data, ulen);
@@ -5577,8 +9910,11 @@ rl_result rl_http_get(rl_string url) {
     return result;
 }
 
-// GET / POST shorthand; result holds the response body as a string.
+// POST shorthand; result holds a 2-tuple (status int, body string).
 rl_result rl_http_post(rl_string url, rl_string body, rl_string content_type, int has_content_type) {
+    if (url.data == NULL) return rl_err(-1);
+    if (body.data == NULL) return rl_err(-1);
+    if (has_content_type && content_type.data == NULL) return rl_err(-1);
     char url_buf[2048];
     int ulen = url.len < 2047 ? (int)url.len : 2047;
     memcpy(url_buf, url.data, ulen);
@@ -5614,8 +9950,12 @@ rl_result rl_http_post(rl_string url, rl_string body, rl_string content_type, in
     return result;
 }
 
-// Pass `has_body` / `has_headers` 0 to skip those parts.
-rl_result rl_http_request(rl_string method, rl_string url, rl_string body, int has_body, rl_string headers_json, int has_headers) {
+// Full client request; result holds a 2-tuple (status int, body string).
+// `headers` is an array of (name string, value string) 2-tuples.
+rl_result rl_http_request(rl_string method, rl_string url, rl_string body, int has_body, rl_array headers, int has_headers) {
+    if (method.data == NULL) return rl_err(-1);
+    if (url.data == NULL) return rl_err(-1);
+    if (has_body && body.data == NULL) return rl_err(-1);
     char url_buf[2048];
     int ulen = url.len < 2047 ? (int)url.len : 2047;
     memcpy(url_buf, url.data, ulen);
@@ -5629,7 +9969,6 @@ rl_result rl_http_request(rl_string method, rl_string url, rl_string body, int h
     CURL *curl = curl_easy_init();
     if (!curl) return rl_err(-1);
 
-    CURL *ehandle = curl;
     curl_easy_setopt(curl, CURLOPT_URL, url_buf);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
@@ -5637,30 +9976,50 @@ rl_result rl_http_request(rl_string method, rl_string url, rl_string body, int h
     // set custom method
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, method_buf);
 
-    if (has_body) {
-        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.data);
+    // keep body bytes alive until after perform
+    char *body_buf = NULL;
+    if (has_body && body.len > 0) {
+        body_buf = malloc(body.len);
+        memcpy(body_buf, body.data, body.len);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body_buf);
         curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long)body.len);
+    } else if (has_body) {
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "");
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, 0L);
     }
 
-    // parse simple headers: each line is "Name: Value\n"
     struct curl_slist *hdr_list = NULL;
-    if (has_headers && headers_json.len > 0) {
-        char *hdr_buf = malloc(headers_json.len + 1);
-        memcpy(hdr_buf, headers_json.data, headers_json.len);
-        hdr_buf[headers_json.len] = '\0';
-
-        char *line = strtok(hdr_buf, "\n");
-        while (line) {
-            while (*line == ' ') line++;
-            if (*line) hdr_list = curl_slist_append(hdr_list, line);
-            line = strtok(NULL, "\n");
+    if (has_headers && headers.data != NULL && headers.len > 0) {
+        if (headers.elem_size != (int32_t)sizeof(_rl_tuple_ss)) {
+            if (body_buf) free(body_buf);
+            curl_easy_cleanup(curl);
+            return rl_err(-1);
         }
-        free(hdr_buf);
+        _rl_tuple_ss *pairs = (_rl_tuple_ss *)headers.data;
+        for (uint64_t i = 0; i < headers.len; i++) {
+            rl_string k = pairs[i].field_0;
+            rl_string v = pairs[i].field_1;
+            if (k.data == NULL || v.data == NULL) {
+                if (body_buf) free(body_buf);
+                curl_slist_free_all(hdr_list);
+                curl_easy_cleanup(curl);
+                return rl_err(-1);
+            }
+            char *line = malloc(k.len + v.len + 4);
+            memcpy(line, k.data, k.len);
+            line[k.len] = ':';
+            line[k.len + 1] = ' ';
+            memcpy(line + k.len + 2, v.data, v.len);
+            line[k.len + 2 + v.len] = '\0';
+            hdr_list = curl_slist_append(hdr_list, line);
+            free(line);
+        }
         if (hdr_list) curl_easy_setopt(curl, CURLOPT_HTTPHEADER, hdr_list);
     }
 
     rl_result result = rl_http_curl_perform(curl);
     if (hdr_list) curl_slist_free_all(hdr_list);
+    if (body_buf) free(body_buf);
     curl_easy_cleanup(curl);
     return result;
 }
@@ -5670,9 +10029,39 @@ rl_result rl_http_request(rl_string method, rl_string url, rl_string body, int h
 // stubs when libcurl is not available
 // Stub GET shorthand; returns an error when libcurl is unavailable.
 rl_result rl_http_get(rl_string url) { (void)url; return rl_err(-1); }
-// GET / POST shorthand; result holds the response body as a string.
+// Stub POST shorthand; returns an error when libcurl is unavailable.
 rl_result rl_http_post(rl_string url, rl_string body, rl_string ct, int h) { (void)url; (void)body; (void)ct; (void)h; return rl_err(-1); }
-// Pass `has_body` / `has_headers` 0 to skip those parts.
-rl_result rl_http_request(rl_string m, rl_string u, rl_string b, int hb, rl_string h, int hh) { (void)m; (void)u; (void)b; (void)hb; (void)h; (void)hh; return rl_err(-1); }
+// Stub full request; returns an error when libcurl is unavailable.
+rl_result rl_http_request(rl_string m, rl_string u, rl_string b, int hb, rl_array h, int hh) { (void)m; (void)u; (void)b; (void)hb; (void)h; (void)hh; return rl_err(-1); }
 
 #endif
+
+// ---- handle kind testers ----
+
+// True only for ok I64 ids ever issued by that domain. Errors, other
+// tags, bare small ints and other domains are false. Audio and gui have
+// no C backend and always return false.
+rl_result rl_is_c_handle(rl_result x) {
+    if (!x.is_ok || x.tag != RL_TAG_I64) return rl_ok_bool(false);
+    return rl_ok_bool(_rl_id_in_range(x.data.i64, RL_HANDLE_C_BASE, rl_c_handle_count));
+}
+rl_result rl_is_net_handle(rl_result x) {
+    if (!x.is_ok || x.tag != RL_TAG_I64) return rl_ok_bool(false);
+    return rl_ok_bool(_rl_id_in_range(x.data.i64, RL_HANDLE_NET_BASE, rl_net_handle_count));
+}
+rl_result rl_is_http_handle(rl_result x) {
+    if (!x.is_ok || x.tag != RL_TAG_I64) return rl_ok_bool(false);
+    return rl_ok_bool(_rl_id_in_range(x.data.i64, RL_HANDLE_HTTP_BASE, rl_http_handle_count));
+}
+rl_result rl_is_audio_handle(rl_result x) {
+    (void)x;
+    return rl_ok_bool(false);
+}
+rl_result rl_is_gui_handle(rl_result x) {
+    (void)x;
+    return rl_ok_bool(false);
+}
+rl_result rl_is_file_handle(rl_result x) {
+    if (!x.is_ok || x.tag != RL_TAG_I64) return rl_ok_bool(false);
+    return rl_ok_bool(_rl_id_in_range(x.data.i64, RL_HANDLE_FILE_BASE, _rl_fs_handle_count));
+}

@@ -101,15 +101,35 @@ impl<'a> CCodegen<'a> {
                     self.writer.write(")");
                     return Ok(());
                 }
+                // Comparisons and logic yield RL bools: cast to C `bool`
+                // so generic printing says `true`, not `1`.
+                let is_bool_op = matches!(
+                    operator,
+                    TokenType::Compare
+                        | TokenType::BangEqual
+                        | TokenType::Less
+                        | TokenType::LessEqual
+                        | TokenType::Greater
+                        | TokenType::GreaterEqual
+                        | TokenType::And
+                        | TokenType::Or
+                );
+                if is_bool_op {
+                    self.writer.write("(bool)(");
+                }
                 self.compile_expr(*left)?;
                 self.writer.write(&format!(" {} ", token_to_c_op(operator)?));
                 self.compile_expr(*right)?;
+                if is_bool_op {
+                    self.writer.write(")");
+                }
             }
             ExpressionKind::Unary { operator, operand } => {
                 match operator {
                     TokenType::Minus => self.writer.write("-"),
-                    // Parenthesized: `!(a == b)` must not become `!a == b`.
-                    TokenType::Bang => self.writer.write("!("),
+                    // Parenthesized bool: `!(a == b)` keeps grouping and
+                    // yields an RL bool for printing.
+                    TokenType::Bang => self.writer.write("(bool)(!("),
                     _ => {
                         return Err(Error::at(
                             Reason::Compile,
@@ -120,7 +140,7 @@ impl<'a> CCodegen<'a> {
                 }
                 self.compile_expr(*operand)?;
                 if matches!(operator, TokenType::Bang) {
-                    self.writer.write(")");
+                    self.writer.write("))");
                 }
             }
             ExpressionKind::ResolvedIdentifier { name, .. } => {
@@ -277,7 +297,16 @@ impl<'a> CCodegen<'a> {
                 self.writer.write(")");
             }
             ExpressionKind::ErrLiteral(inner) => {
-                self.writer.write("rl_err(");
+                // String messages wrap with rl_err_msg, codes with rl_err.
+                let is_string = matches!(
+                    self.inferred_expr_type(*inner).as_ref(),
+                    Some(TypeAnnotation::String) | Some(TypeAnnotation::CString)
+                );
+                self.writer.write(if is_string {
+                    "rl_err_msg("
+                } else {
+                    "rl_err("
+                });
                 self.compile_expr(*inner)?;
                 self.writer.write(")");
             }
@@ -292,6 +321,14 @@ impl<'a> CCodegen<'a> {
                 // error like the checked unwraps do. Statement-level `?`
                 // (declarations, bare `?;`, `return ?`) keeps precise
                 // early-return propagation in its own arms above.
+                // Tuple payloads travel as one element arrays.
+                if let Some(fields) = self.tuple_payload_fields(*inner) {
+                    let tname = self.ensure_tuple_type(fields);
+                    self.writer.write(&format!("(({0}*)rl_result_unwrap_arr(", tname));
+                    self.compile_expr(*inner)?;
+                    self.writer.write(").data)[0]");
+                    return Ok(());
+                }
                 let unwrap_fn = self.unwrap_fn_for_result(*inner);
                 self.writer.write(&format!("{unwrap_fn}("));
                 self.compile_expr(*inner)?;
@@ -301,6 +338,8 @@ impl<'a> CCodegen<'a> {
                 // Element type: first element wins, else the contextual
                 // hint (e.g. `dec arr[string] x = []`), else int64. The
                 // payload tag travels along so later ops dispatch right.
+                // Tuple elements use the specific struct name so mixed
+                // layouts (e.g. headers vs responses) do not collide.
                 let mut elem_ta = elems
                     .first()
                     .and_then(|e| self.inferred_expr_type(*e))
@@ -309,7 +348,12 @@ impl<'a> CCodegen<'a> {
                 if Self::needs_inference(&elem_ta) {
                     elem_ta = TypeAnnotation::Int;
                 }
-                let c_elem = type_to_c(&elem_ta);
+                let c_elem = match &elem_ta {
+                    TypeAnnotation::Tuple(fields) | TypeAnnotation::CTuple(fields) => {
+                        self.ensure_tuple_type(fields.as_ref().clone())
+                    }
+                    _ => type_to_c(&elem_ta),
+                };
                 let tag = Self::array_elem_tag_from_type(&elem_ta);
                 self.writer.write(&format!("rl_arr_from_vals_tag(&({}[]){{", c_elem));
                 for (i, elem) in elems.iter().enumerate() {
@@ -663,6 +707,9 @@ impl<'a> CCodegen<'a> {
             "eprint" => return self::io::compile_eprint(self, args),
             "eprintln" => return self::io::compile_eprintln(self, args),
             "isatty" => return self::io::compile_isatty(self),
+            "read_all_stdin" => return self::io::compile_read_all_stdin(self),
+            "decode_utf8" => return self::io::compile_decode_utf8(self, args),
+            "encode_utf8" => return self::io::compile_encode_utf8(self, args),
             "to_upper" => return self::string::compile_to_upper(self, args),
             "to_lower" => return self::string::compile_to_lower(self, args),
             "trim" => return self::string::compile_trim(self, args),
@@ -687,6 +734,19 @@ impl<'a> CCodegen<'a> {
             "concat" => return self::string::compile_concat(self, args),
             "format" => return self::string::compile_format(self, args),
             "string_is_empty" | "is_empty" => return self::string::compile_is_empty(self, args),
+            "strip_prefix" => return self::string::compile_strip_prefix(self, args),
+            "strip_suffix" => return self::string::compile_strip_suffix(self, args),
+            "last_index_of" => return self::string::compile_last_index_of(self, args),
+            "split_once" => return self::string::compile_split_once(self, args),
+            "lines" => return self::string::compile_lines(self, args),
+            "wrap" => return self::string::compile_wrap(self, args),
+            "indent" => return self::string::compile_indent(self, args),
+            "dedent" => return self::string::compile_dedent(self, args),
+            "diff_lines" => return self::string::compile_diff_lines(self, args),
+            "is_alpha" => return self::string::compile_is_alpha(self, args),
+            "is_numeric" => return self::string::compile_is_numeric(self, args),
+            "is_whitespace" => return self::string::compile_is_whitespace(self, args),
+            "unicode_category" => return self::string::compile_unicode_category(self, args),
             "sin" | "cos" | "tan" | "asin" | "acos" | "atan" | "exp" => return self::math::compile_trig(self, func_name, args),
             "sqrt" | "log2" | "log10" | "ceil" | "floor" | "round" => return self::math::compile_single_ok(self, func_name, args),
             "abs" => return self::math::compile_abs(self, args),
@@ -703,6 +763,7 @@ impl<'a> CCodegen<'a> {
             "max" | "min" | "clamp" => return self::math::compile_min_max_clamp(self, func_name, args),
             "factorial" | "gcd" | "lcm" | "is_prime" | "fibonacci" => return self::math::compile_math_runtime(self, func_name, args),
             "bit_and" | "bit_or" | "bit_xor" | "bit_not" | "bit_shift_left" | "bit_shift_right" => return self::math::compile_bitwise(self, func_name, args),
+            "rotate_left" | "rotate_right" | "bit_set" | "bit_clear" | "bit_toggle" | "bit_is_set" => return self::math::compile_bitwise(self, func_name, args),
             "count_bits" => return self::math::compile_count_bits(self, args),
             "leading_zeros" => return self::math::compile_leading_zeros(self, args),
             "trailing_zeros" => return self::math::compile_trailing_zeros(self, args),
@@ -739,6 +800,24 @@ impl<'a> CCodegen<'a> {
             "with_exec" => return self::process::compile_with_exec(self, args),
             "with_exec_code" => return self::process::compile_with_exec_code(self, args),
             "with_exec_lines" => return self::process::compile_with_exec_lines(self, args),
+            "set_env" => return self::process::compile_set_env(self, args),
+            "remove_env" => return self::process::compile_remove_env(self, args),
+            "env_keys" => return self::process::compile_env_keys(self),
+            "arch" => return self::process::compile_arch(self),
+            "num_cpus" => return self::process::compile_num_cpus(self),
+            "parent_pid" => return self::process::compile_parent_pid(self),
+            "process_exists" => return self::process::compile_process_exists(self, args),
+            "with_exec_fg" => return self::process::compile_with_exec_fg(self, args),
+            "exec_with_stdin" => return self::process::compile_exec_with_stdin(self, args),
+            "with_exec_with_stdin" => return self::process::compile_with_exec_with_stdin(self, args),
+            "exec_with_env" => return self::process::compile_exec_with_env(self, args),
+            "with_exec_with_env" => return self::process::compile_with_exec_with_env(self, args),
+            "exec_with_cwd" => return self::process::compile_exec_with_cwd(self, args),
+            "with_exec_with_cwd" => return self::process::compile_with_exec_with_cwd(self, args),
+            "exec_with_timeout" => return self::process::compile_exec_with_timeout(self, args),
+            "with_exec_background" => return self::process::compile_with_exec_background(self, args),
+            "pipe" => return self::process::compile_pipe(self, args),
+            "pipe_all" => return self::process::compile_pipe_all(self, args),
             "args" => return self::process::compile_args(self),
             "time_now" => return self::process::compile_time_now(self),
             "time_now_ms" => return self::process::compile_time_now_ms(self),
@@ -748,6 +827,7 @@ impl<'a> CCodegen<'a> {
             "format_date_str" => return self::process::compile_format_date_str(self, args),
             "format_time_str" => return self::process::compile_format_time_str(self, args),
             "time_parts" => return self::process::compile_time_parts(self, args),
+            "monotonic_now" => return self::process::compile_monotonic_now(self),
             "path_exists" => return self::process::compile_path_exists(self, args),
             "path_extension" => return self::process::compile_path_extension(self, args),
             "path_filename" => return self::process::compile_path_filename(self, args),
@@ -758,6 +838,20 @@ impl<'a> CCodegen<'a> {
             "path_set_extension" => return self::process::compile_path_set_extension(self, args),
             "path_is_dir" => return self::process::compile_path_is_dir(self, args),
             "path_is_file" => return self::process::compile_path_is_file(self, args),
+            "path_is_absolute" => return self::process::compile_path_is_absolute(self, args),
+            "path_is_relative" => return self::process::compile_path_is_relative(self, args),
+            "path_starts_with" => return self::process::compile_path_starts_with(self, args),
+            "path_ends_with" => return self::process::compile_path_ends_with(self, args),
+            "path_normalize" => return self::process::compile_path_normalize(self, args),
+            "path_absolute" => return self::process::compile_path_absolute(self, args),
+            "path_canonicalize" => return self::process::compile_path_canonicalize(self, args),
+            "path_expand_home" => return self::process::compile_path_expand_home(self, args),
+            "path_split" => return self::process::compile_path_split(self, args),
+            "path_split_extension" => return self::process::compile_path_split_extension(self, args),
+            "path_components" => return self::process::compile_path_components(self, args),
+            "path_with_file_name" => return self::process::compile_path_with_file_name(self, args),
+            "path_relative" => return self::process::compile_path_relative(self, args),
+            "path_join_many" => return self::process::compile_path_join_many(self, args),
             "mkdir" => return self::process::compile_mkdir(self, args),
             "rmdir" => return self::process::compile_rmdir(self, args),
             "move_file" => return self::process::compile_move_file(self, args),
@@ -771,6 +865,31 @@ impl<'a> CCodegen<'a> {
             "mkdir_all" => return self::process::compile_mkdir_all(self, args),
             "rmdir_all" => return self::process::compile_rmdir_all(self, args),
             "list_dir" => return self::process::compile_list_dir(self, args),
+            "list_dir_names" => return self::process::compile_list_dir_names(self, args),
+            "file_accessed" => return self::process::compile_file_accessed(self, args),
+            "file_permissions" => return self::process::compile_file_permissions(self, args),
+            "set_permissions" => return self::process::compile_set_permissions(self, args),
+            "temp_file" => return self::process::compile_temp_file(self),
+            "temp_file_in" => return self::process::compile_temp_file_in(self, args),
+            "truncate_file" => return self::process::compile_truncate_file(self, args),
+            "glob" => return self::process::compile_glob(self, args),
+            "walk_dir" => return self::process::compile_walk_dir(self, args),
+            "symlink" => return self::process::compile_symlink(self, args),
+            "readlink" => return self::process::compile_readlink(self, args),
+            "hardlink" => return self::process::compile_hardlink(self, args),
+            "realpath" => return self::process::compile_realpath(self, args),
+            "lock_file" => return self::process::compile_lock_file(self, args),
+            "unlock_file" => return self::process::compile_unlock_file(self, args),
+            "copy_dir" => return self::process::compile_copy_dir(self, args),
+            "dir_size" => return self::process::compile_dir_size(self, args),
+            "is_symlink" => return self::process::compile_is_symlink(self, args),
+            "open" => return self::process::compile_open(self, args),
+            "read_handle" => return self::process::compile_read_handle(self, args),
+            "write_handle" => return self::process::compile_write_handle(self, args),
+            "seek" => return self::process::compile_seek(self, args),
+            "flush" => return self::process::compile_flush(self, args),
+            "read_all" => return self::process::compile_read_all(self, args),
+            "readline" => return self::process::compile_readline(self, args),
             "rand_int" | "rand_float" | "rand_bool" | "rand_char" | "rand_byte" => return self::random::compile_rand_simple(self, func_name),
             "rand_bool_weighted" => return self::random::compile_rand_bool_weighted(self, args),
             "rand_int_range" | "rand_float_range" | "rand_dice" | "rand_range" => return self::random::compile_rand_range(self, func_name, args),
@@ -778,10 +897,12 @@ impl<'a> CCodegen<'a> {
             "rand_string" => return self::random::compile_rand_string(self, args),
             "rand_dices" | "rand_bytes" | "rand_choice" | "rand_shuffle" => return self::random::compile_rand_collection(self, func_name, args),
             "rand_choices" | "rand_sample" => return self::random::compile_rand_multi(self, func_name, args),
+            "rand_seed" => return self::random::compile_rand_seed(self, args),
             "term_enter" | "term_leave" | "term_clear" | "term_clear_line" | "term_save_cursor" | "term_restore_cursor" | "term_hide_cursor" | "term_show_cursor" | "term_flush" | "term_reset_color" | "term_bold" | "term_dim" | "term_italic" | "term_underline" | "term_blink" | "term_reverse" | "term_crossed_out" | "term_reset_attr" | "term_enable_wrap" | "term_disable_wrap" | "term_begin_sync" | "term_end_sync" | "term_enable_mouse" | "term_disable_mouse" => return self::terminal::compile_term_no_args(self, func_name),
             "term_move" | "term_set_fg" | "term_set_bg" | "term_fg" | "term_bg" | "term_move_to_col" | "term_move_to_row" | "term_move_up" | "term_move_down" | "term_move_left" | "term_move_right" | "term_next_line" | "term_prev_line" | "term_scroll_up" | "term_scroll_down" | "term_set_size" | "term_poll" => return self::terminal::compile_term_with_args(self, func_name, args),
             "term_set_title" | "term_print" => return self::terminal::compile_term_str(self, func_name, args),
             "term_get_size" => return self::terminal::compile_term_get_size(self),
+            "term_get_cursor_pos" => return self::terminal::compile_term_get_cursor_pos(self),
             "term_read_key" => return self::terminal::compile_term_read_key(self),
             "set_add" | "set_remove" | "set_contains" => return self::collections::compile_set_ops(self, func_name, args),
             "set_to_array" => return self::collections::compile_set_to_array(self, args),
@@ -804,12 +925,26 @@ impl<'a> CCodegen<'a> {
             "arr_zip" => return self::collections::compile_arr_zip(self, args),
             "arr_push" | "arr_pop" | "arr_insert" | "arr_remove" => return self::collections::compile_arr_mut(self, func_name, args),
             "arr_filter" | "arr_map" | "arr_find" | "arr_reduce" | "arr_find_index" | "arr_all" | "arr_any" | "arr_for_each" | "arr_flat_map" | "arr_sort_by" => return self::closure::compile_arr_closure(self, func_name, args),
+            "arr_chunk" | "arr_windows" => return self::collections::compile_arr_chunk_windows(self, func_name, args),
+            "arr_swap" => return self::collections::compile_arr_swap(self, args),
+            "arr_cycle_take" => return self::collections::compile_arr_cycle_take(self, args),
+            "arr_partition" | "arr_max_by" | "arr_min_by" => return self::collections::compile_arr_partition_closure(self, func_name, args),
+            "arr_zip_longest" => return self::collections::compile_arr_zip_longest(self, args),
+            "set_union" | "set_intersection" | "set_difference" | "set_symmetric_difference" => return self::collections::compile_set_algebra(self, func_name, args),
+            "set_is_subset" | "set_is_superset" => return self::collections::compile_set_subset(self, func_name, args),
+            "map_get_or" | "map_get_or_insert" => return self::collections::compile_map_get_or(self, func_name, args),
+            "heap_push" => return self::collections::compile_heap_push(self, args),
+            "heap_pop" | "heap_peek" => return self::collections::compile_heap_pop_peek(self, func_name, args),
+            "deque_push_front" => return self::collections::compile_deque_push(self, args),
+            "deque_pop_front" => return self::collections::compile_deque_pop(self, args),
+            "bisect_left" | "bisect_right" => return self::collections::compile_bisect(self, func_name, args),
+            "sorted_insert" => return self::collections::compile_sorted_insert(self, args),
             "result_map" | "result_map_err" => return self::closure::compile_result_closure(self, func_name, args),
             "bench" if args.len() >= 2 => return self::closure::compile_bench(self, args),
             "to_string" | "to_bin" | "to_hex" | "to_oct" => return self::types::compile_to_string_bin_hex_oct(self, func_name, args),
             "to_int" | "to_float" | "to_bool" | "to_byte" | "to_char" => return self::types::compile_to_primitive(self, func_name, args),
             "error_unwrap" => return self::types::compile_error_unwrap(self, args),
-            "is_bool" | "is_int" | "is_float" | "is_string" | "is_null" | "is_char" | "is_byte" | "is_error" => return self::types::compile_type_check(self, func_name, args),
+            "is_bool" | "is_int" | "is_float" | "is_string" | "is_null" | "is_char" | "is_byte" | "is_error" | "is_array" | "is_map" | "is_set" | "is_tuple" | "is_function" | "is_uint" | "is_sbyte" | "is_bsbyte" | "is_bbyte" | "is_sint" | "is_suint" | "is_sfloat" | "is_c_handle" | "is_net_handle" | "is_http_handle" | "is_audio_handle" | "is_gui_handle" | "is_file_handle" => return self::types::compile_type_check(self, func_name, args),
             "type_of" => return self::types::compile_type_of(self, args),
             "dbg" => return self::types::compile_dbg(self, args),
             "assert" => return self::assert::compile_assert(self, args),
@@ -818,6 +953,8 @@ impl<'a> CCodegen<'a> {
             "panic" => return self::assert::compile_panic(self, args),
             "unreachable" => return self::assert::compile_unreachable(self),
             "todo" => return self::assert::compile_todo(self),
+            "warn" => return self::assert::compile_warn(self, args),
+            "stack_trace" => return self::assert::compile_stack_trace(self),
             "tcp_listen" if self.std_net_imports.contains("tcp_listen") => return self::network::compile_tcp_listen(self, args),
             "tcp_accept" if self.std_net_imports.contains("tcp_accept") => return self::network::compile_tcp_accept(self, args),
             "tcp_connect" if self.std_net_imports.contains("tcp_connect") => return self::network::compile_tcp_connect(self, args),
@@ -852,7 +989,37 @@ impl<'a> CCodegen<'a> {
             "compile" if self.std_c_imports.contains("compile") => return self::c_ffi::compile_c_compile(self, args),
             "load" if self.std_c_imports.contains("load") => return self::c_ffi::compile_c_load(self, args),
             "has_symbol" if self.std_c_imports.contains("has_symbol") => return self::c_ffi::compile_c_has_symbol(self, args),
-            "close" if self.std_c_imports.contains("close") => return self::c_ffi::compile_c_close(self, args),
+            "close" => {
+                // Qualified dispatch wins over imports.
+                if path.len() >= 3 && path[0] == "std" && path[1] == "fs" {
+                    return self::process::compile_fs_close(self, args);
+                }
+                if path.len() >= 3 && path[0] == "std" && path[1] == "c" {
+                    return self::c_ffi::compile_c_close(self, args);
+                }
+                // Bare call: later import wins like the VM.
+                if let Some((ns, _)) = self.resolve_std_name("close") {
+                    if ns == "std::fs" {
+                        return self::process::compile_fs_close(self, args);
+                    }
+                    if ns == "std::c" {
+                        return self::c_ffi::compile_c_close(self, args);
+                    }
+                }
+                let want_c = self.std_c_imports.contains("close")
+                    || self.std_c_imports.contains("*");
+                let want_fs = self.std_fs_imports.contains("close")
+                    || self.std_fs_imports.contains("*");
+                if want_fs && !want_c {
+                    return self::process::compile_fs_close(self, args);
+                }
+                if want_c && !want_fs {
+                    return self::c_ffi::compile_c_close(self, args);
+                }
+                if want_fs && want_c {
+                    return self::process::compile_fs_close(self, args);
+                }
+            }
             "clear_cache" if self.std_c_imports.contains("clear_cache") => return self::c_ffi::compile_c_clear_cache(self),
             "call" if self.std_c_imports.contains("call") => return self::c_ffi::compile_c_call(self, args),
             _ => {}

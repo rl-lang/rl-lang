@@ -88,6 +88,12 @@ impl<'a> CCodegen<'a> {
                     .unwrap_or(TypeAnnotation::Infer);
                 Some(TypeAnnotation::Result(Box::new(payload)))
             }
+            ExpressionKind::ErrLiteral(inner) | ExpressionKind::ErrorLiteral(inner) => {
+                let payload = self
+                    .inferred_expr_type(*inner)
+                    .unwrap_or(TypeAnnotation::Infer);
+                Some(TypeAnnotation::Result(Box::new(payload)))
+            }
             ExpressionKind::Propagate(inner) => {
                 // `x?` unwraps one Result layer when the shape is known.
                 match self.inferred_expr_type(*inner)? {
@@ -118,13 +124,25 @@ impl<'a> CCodegen<'a> {
                         )));
                     }
                 }
+                // Padded zip builds the same tuple array as plain zip.
+                if name == "arr_zip_longest" && args.len() >= 2 {
+                    let ea = self.array_arg_elem(args[0]);
+                    let eb = self.array_arg_elem(args[1]);
+                    if let (Some(ea), Some(eb)) = (ea, eb) {
+                        return Some(TypeAnnotation::Result(Box::new(
+                            TypeAnnotation::Array(Box::new(TypeAnnotation::Tuple(
+                                std::rc::Rc::new(vec![ea, eb]),
+                            ))),
+                        )));
+                    }
+                }
                 // Generic array returns refine from the array argument:
                 // `first`/`last`/`find` give the element, `filter` the
                 // array, `contains`/`all`/`any` a bool, `find_index` an int.
                 if !args.is_empty() {
                     let elem = self.array_arg_elem(args[0]);
                     match name {
-                        "arr_first" | "arr_last" | "arr_find" => {
+                        "arr_first" | "arr_last" | "arr_find" | "arr_max_by" | "arr_min_by" | "heap_peek" => {
                             if let Some(e) = elem {
                                 return Some(TypeAnnotation::Result(Box::new(e)));
                             }
@@ -137,6 +155,14 @@ impl<'a> CCodegen<'a> {
                             }
                         }
                         _ => {}
+                    }
+                }
+                // Map default lookup returns the default's type.
+                if (name == "map_get_or" || name == "map_get_or_insert") && args.len() >= 3 {
+                    if let Some(ta) = self.inferred_expr_type(args[2]) {
+                        if !Self::needs_inference(&ta) {
+                            return Some(TypeAnnotation::Result(Box::new(ta)));
+                        }
                     }
                 }
                 // `result_unwrap(x)` returns the ok payload.
@@ -212,6 +238,20 @@ impl<'a> CCodegen<'a> {
                                 )));
                             }
                         }
+                        // Padded zip mirrors plain zip for method calls.
+                        if original == "arr_zip_longest" && !args.is_empty() {
+                            let ea = self.array_arg_elem(*caller);
+                            let eb = self.array_arg_elem(args[0]);
+                            if let (Some(ea), Some(eb)) = (ea, eb) {
+                                return Some(TypeAnnotation::Result(Box::new(
+                                    TypeAnnotation::Array(Box::new(
+                                        TypeAnnotation::Tuple(std::rc::Rc::new(vec![
+                                            ea, eb,
+                                        ])),
+                                    )),
+                                )));
+                            }
+                        }
                         // Unwrap family on the receiver: payload type out,
                         // mirroring the plain-call arms above.
                         match original.as_str() {
@@ -244,7 +284,7 @@ impl<'a> CCodegen<'a> {
                         // Same generic-array refinement as plain calls,
                         // but the array is the receiver here.
                         match original.as_str() {
-                            "arr_first" | "arr_last" | "arr_find" => {
+                            "arr_first" | "arr_last" | "arr_find" | "arr_max_by" | "arr_min_by" | "heap_peek" => {
                                 if let Some(e) = self.array_arg_elem(*caller) {
                                     return Some(TypeAnnotation::Result(Box::new(e)));
                                 }
@@ -490,8 +530,9 @@ impl<'a> CCodegen<'a> {
     /// Effective storage annotation for a declaration: the annotation
     /// itself, unless it is `Infer`/`Generic`, in which case the
     /// initializer shape (and the checker's stdlib signatures) decide.
-    /// Falls back to `Result(Infer)` - most dynamic values in generated
-    /// code are results.
+    /// A bare `handle` (HandleInfer) refines to the initializer handle
+    /// kind like the checker does. Falls back to `Result(Infer)` - most
+    /// dynamic values in generated code are results.
     pub fn effective_decl_type(
         &self,
         annotation: &TypeAnnotation,
@@ -502,8 +543,90 @@ impl<'a> CCodegen<'a> {
                 Some(ta) if !Self::needs_inference(&ta) => ta,
                 _ => TypeAnnotation::Result(Box::new(TypeAnnotation::Infer)),
             }
+        } else if matches!(annotation, TypeAnnotation::HandleInfer) {
+            match self.inferred_expr_type(value) {
+                Some(TypeAnnotation::Handle(kind)) => TypeAnnotation::Handle(kind),
+                _ => annotation.clone(),
+            }
         } else {
             annotation.clone()
+        }
+    }
+
+    /// Static `is_*` answer for an expression, matching the VM exactly.
+    /// Results (including ok/err wrappers) are never their payload, so
+    /// they fold to false; concrete bare types compare directly. None
+    /// means dynamic and needs the runtime tag check.
+    pub fn static_is_truth(&self, func_name: &str, id: ExprId) -> Option<bool> {
+        use rl_ast::statements::TypeAnnotation as T;
+        if let Some(ta) = self.inferred_expr_type(id) {
+            match &ta {
+                T::Result(_) | T::CResult(_) => return Some(false),
+                T::Infer | T::Generic(_) | T::HandleInfer => {}
+                other => return Some(Self::is_truth_for_type(func_name, other)),
+            }
+        }
+        let kind = &self.ast.exprs.get(id).kind;
+        match kind {
+            ExpressionKind::Null => Some(func_name == "is_null"),
+            ExpressionKind::OkLiteral(_) | ExpressionKind::ErrLiteral(_) => {
+                Some(false)
+            }
+            ExpressionKind::ErrorLiteral(_) => Some(func_name == "is_error"),
+            ExpressionKind::StructLiteral { .. } => Some(false),
+            ExpressionKind::TupleLiteral(_) => Some(func_name == "is_tuple"),
+            ExpressionKind::ArrayLiteral(_) => Some(func_name == "is_array"),
+            ExpressionKind::MapLiteral(_) => Some(func_name == "is_map"),
+            ExpressionKind::SetLiteral(_) => Some(func_name == "is_set"),
+            ExpressionKind::ResolvedLambda { .. } => {
+                Some(func_name == "is_function")
+            }
+            ExpressionKind::EnumVariant { .. } => Some(false),
+            // Bare user function names are C function pointers with no
+            // _Generic arm; they are always functions in RL too.
+            ExpressionKind::ResolvedIdentifier { name, .. }
+            | ExpressionKind::Identifier(name) => {
+                if self.user_fns.contains(name) {
+                    Some(func_name == "is_function")
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// True when `func_name` predicate holds for concrete type `ta`.
+    fn is_truth_for_type(func_name: &str, ta: &TypeAnnotation) -> bool {
+        use rl_ast::statements::{HandleKind, TypeAnnotation as T};
+        match func_name {
+            "is_bool" => matches!(ta, T::Bool | T::CBool),
+            "is_int" => matches!(ta, T::Int | T::CInt),
+            "is_float" => matches!(ta, T::Float | T::CFloat),
+            "is_string" => matches!(ta, T::String | T::CString),
+            "is_null" => matches!(ta, T::Null),
+            "is_char" => matches!(ta, T::Char | T::CChar),
+            "is_byte" => matches!(ta, T::Byte | T::CByte),
+            "is_error" => matches!(ta, T::Error | T::CError),
+            "is_array" => matches!(ta, T::Array(_) | T::CArray(_)),
+            "is_map" => matches!(ta, T::Map(_, _) | T::CMap(_, _)),
+            "is_set" => matches!(ta, T::Set(_) | T::CSet(_)),
+            "is_tuple" => matches!(ta, T::Tuple(_) | T::CTuple(_)),
+            "is_function" => matches!(ta, T::Fn | T::Callback(_, _)),
+            "is_uint" => matches!(ta, T::UInt | T::CUInt),
+            "is_sbyte" => matches!(ta, T::SByte | T::CSByte),
+            "is_bsbyte" => matches!(ta, T::BSByte | T::CBSByte),
+            "is_bbyte" => matches!(ta, T::BByte | T::CBByte),
+            "is_sint" => matches!(ta, T::SInt | T::CSInt),
+            "is_suint" => matches!(ta, T::SUInt | T::CSUInt),
+            "is_sfloat" => matches!(ta, T::SFloat | T::CSFloat),
+            "is_c_handle" => matches!(ta, T::Handle(HandleKind::C)),
+            "is_net_handle" => matches!(ta, T::Handle(HandleKind::Net)),
+            "is_http_handle" => matches!(ta, T::Handle(HandleKind::Http)),
+            "is_audio_handle" => matches!(ta, T::Handle(HandleKind::Audio)),
+            "is_gui_handle" => matches!(ta, T::Handle(HandleKind::Gui)),
+            "is_file_handle" => matches!(ta, T::Handle(HandleKind::File)),
+            _ => false,
         }
     }
 
@@ -572,8 +695,29 @@ impl<'a> CCodegen<'a> {
         }
     }
 
+    /// Tuple fields of a `result_unwrap(x)` payload, when it is a tuple.
+    /// Single tuple results (HTTP responses, UDP sender pairs) travel as
+    /// one element arrays; callers deref element zero into the program
+    /// tuple struct.
+    pub fn tuple_payload_fields(&self, arg_id: ExprId) -> Option<Vec<TypeAnnotation>> {
+        use TypeAnnotation as T;
+        let payload = match self.inferred_expr_type(arg_id) {
+            Some(T::Result(inner)) | Some(T::CResult(inner)) => Some(*inner),
+            Some(other) => Some(other),
+            None => None,
+        };
+        match payload.as_ref() {
+            Some(T::Tuple(fields)) | Some(T::CTuple(fields)) => {
+                Some(fields.as_ref().clone())
+            }
+            _ => None,
+        }
+    }
+
     /// Checked-unwrap function for a `result_unwrap(x)` argument, chosen
     /// from the payload type. Defaults to i64 for fully dynamic values.
+    /// Tuples need struct deref instead; callers check
+    /// `tuple_payload_fields` first.
     pub fn unwrap_fn_for_result(&self, arg_id: ExprId) -> &'static str {
         use TypeAnnotation as T;
         let payload = match self.inferred_expr_type(arg_id) {

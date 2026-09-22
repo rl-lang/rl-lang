@@ -23,12 +23,17 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <sys/file.h>
+#include <fcntl.h>
+#include <fnmatch.h>
+#include <glob.h>
 #include <termios.h>
 #include <errno.h>
 #include <time.h>
 #include <ctype.h>
 #include <dlfcn.h>
 #include <dirent.h>
+#include <limits.h>
 
 // ---- string type ----
 // RL `string`: a borrowed byte buffer with an explicit length plus a
@@ -429,10 +434,24 @@ int64_t rl_math_gcd(int64_t a, int64_t b);
 int64_t rl_math_lcm(int64_t a, int64_t b);
 bool rl_math_is_prime(int64_t n);
 int64_t rl_math_fibonacci(int64_t n);
+// Rotate `a` left by `shift` bits (64-bit, shift mod 64).
+rl_result rl_bitwise_rotate_left(int64_t a, int64_t shift);
+// Rotate `a` right by `shift` bits (64-bit, shift mod 64).
+rl_result rl_bitwise_rotate_right(int64_t a, int64_t shift);
+// Copy of `a` with bit `n` set.
+rl_result rl_bitwise_bit_set(int64_t a, int64_t n);
+// Copy of `a` with bit `n` cleared.
+rl_result rl_bitwise_bit_clear(int64_t a, int64_t n);
+// Copy of `a` with bit `n` flipped.
+rl_result rl_bitwise_bit_toggle(int64_t a, int64_t n);
+// True when bit `n` of `a` is set.
+rl_result rl_bitwise_bit_is_set(int64_t a, int64_t n);
 
 // ---- time ----
 // Wall-clock time in milliseconds since the Unix epoch.
 int64_t rl_time_now_ms(void);
+// Monotonic nanos since first call (RL monotonic_now).
+int64_t rl_time_monotonic_now(void);
 
 // ---- fs ----
 // Create a single directory; the result is an error when it fails.
@@ -475,8 +494,36 @@ rl_array rl_str_chars(rl_string s);
 char rl_str_char_at(rl_string s, int64_t index);
 // Join an array of strings with `delim` between elements.
 rl_string rl_str_join(rl_array arr, rl_string delim);
+// Join an array of any element type with `delim` by tag.
+rl_string rl_str_join_t(rl_array arr, rl_string delim, int32_t tag);
 // Split on `delim` into an array of strings.
 rl_array rl_str_split(rl_string s, rl_string delim);
+// Remainder after `prefix`, or an error when missing.
+rl_result rl_str_strip_prefix(rl_string s, rl_string prefix);
+// Remainder without `suffix`, or an error when missing.
+rl_result rl_str_strip_suffix(rl_string s, rl_string suffix);
+// Char index of the last `needle` hit, or -1 when absent.
+int64_t rl_str_last_index_of(rl_string s, rl_string needle);
+// Split on the first `sep` into [before, after], or an error.
+rl_result rl_str_split_once(rl_string s, rl_string sep);
+// One element per line (handles \n and \r\n).
+rl_array rl_str_lines(rl_string s);
+// Word-wrap to `width` bytes (copy when `width <= 0`).
+rl_string rl_str_wrap(rl_string s, int64_t width);
+// Prefix every line with `prefix`.
+rl_string rl_str_indent(rl_string s, rl_string prefix);
+// Remove the common leading indent.
+rl_string rl_str_dedent(rl_string s);
+// Line diff as [(text, -1|0|1)], always ok.
+rl_result rl_str_diff_lines(rl_string a, rl_string b);
+// True when non-empty and all chars are alphabetic.
+bool rl_str_is_alpha(rl_string s);
+// True when non-empty and all chars are ASCII digits.
+bool rl_str_is_numeric(rl_string s);
+// True when non-empty and all chars are whitespace.
+bool rl_str_is_whitespace(rl_string s);
+// Two-letter category of the first char, or an error when empty.
+rl_result rl_str_unicode_category(rl_string s);
 
 // ---- debug ----
 // Abort with message (RL `panic`); aborts as unreachable / unimplemented.
@@ -494,6 +541,10 @@ int64_t rl_dbg_int64(int64_t v);
 double rl_dbg_float64(double v);
 bool rl_dbg_bool(bool v);
 rl_string rl_dbg_str(rl_string v);
+// Print a yellow warning to stderr (RL warn).
+void rl_debug_warn(rl_string msg);
+// Capture a backtrace (RL stack_trace); bare string, empty when unsupported.
+rl_string rl_debug_stack_trace(void);
 
 // ---- path ----
 // Pure path parsing (no filesystem access except the `is_*` checks).
@@ -510,6 +561,34 @@ rl_string rl_path_set_extension(rl_string path, rl_string ext);
 // Filesystem checks: true when the path exists and is a dir / file.
 bool rl_path_is_dir(rl_string path);
 bool rl_path_is_file(rl_string path);
+// True when `path` starts with `/`.
+bool rl_path_is_absolute(rl_string path);
+// True when `path` does not start with `/`.
+bool rl_path_is_relative(rl_string path);
+// True when `path` starts with `base` at a component boundary.
+bool rl_path_starts_with(rl_string path, rl_string base);
+// True when `path` ends with `child` at a component boundary.
+bool rl_path_ends_with(rl_string path, rl_string child);
+// Lexically clean `.` and duplicate separators (keeps `..`).
+rl_string rl_path_normalize(rl_string path);
+// Absolute form via cwd when relative, or an error.
+rl_result rl_path_absolute(rl_string path);
+// Canonical form via realpath, or an error.
+rl_result rl_path_canonicalize(rl_string path);
+// Replace a leading `~` with $HOME (copy when unset).
+rl_string rl_path_expand_home(rl_string path);
+// [parent, file] pair for `path`.
+rl_array rl_path_split(rl_string path);
+// [stem, extension-with-dot] pair for `path`.
+rl_array rl_path_split_extension(rl_string path);
+// One element per path component (`/` first when absolute).
+rl_array rl_path_components(rl_string path);
+// Replace the file name with `name`.
+rl_string rl_path_with_file_name(rl_string path, rl_string name);
+// Relative route from `from` to `to`, or an error.
+rl_result rl_path_relative(rl_string from, rl_string to);
+// Join all `parts` (absolute parts reset the base).
+rl_string rl_path_join_many(rl_array parts);
 
 // ---- fs ----
 // File metadata and operations; sizes are bytes, times are Unix seconds.
@@ -533,6 +612,58 @@ rl_result rl_fs_move_file(rl_string src, rl_string dst);
 rl_result rl_fs_rmdir_all(rl_string path);
 // Full paths of entries in the directory at `path`, or an error.
 rl_result rl_fs_list_dir(rl_string path);
+// File names of entries in the directory at `path`, or an error.
+rl_result rl_fs_list_dir_names(rl_string path);
+// Last-accessed time of the file at `path`, or an error.
+rl_result rl_fs_file_accessed(rl_string path);
+// Raw mode bits of the file at `path`, or an error.
+rl_result rl_fs_file_permissions(rl_string path);
+// Set permission bits on `path`; ok null on success, or an error.
+rl_result rl_fs_set_permissions(rl_string path, int64_t mode);
+// Fresh temp file path; ok with the path, or an error.
+rl_result rl_fs_temp_file(void);
+// Fresh temp file path inside `dir`; ok with the path, or an error.
+rl_result rl_fs_temp_file_in(rl_string dir);
+// Truncate `path` to `len` bytes; ok null on success, or an error.
+rl_result rl_fs_truncate_file(rl_string path, int64_t len);
+// Paths matching `pattern` (`*`, `**`, `?`, `[...]`); ok with the list.
+rl_result rl_fs_glob(rl_string pattern);
+// All paths under `path` depth-first; ok with the list, or an error.
+rl_result rl_fs_walk_dir(rl_string path);
+// Create a symlink from `src` to `dst`; ok null on success, or an error.
+rl_result rl_fs_symlink(rl_string src, rl_string dst);
+// Target of the symlink at `path`, or an error.
+rl_result rl_fs_readlink(rl_string path);
+// Create a hard link from `src` to `dst`; ok null on success, or an error.
+rl_result rl_fs_hardlink(rl_string src, rl_string dst);
+// Canonical path of `path`; ok with the path, or an error.
+rl_result rl_fs_realpath(rl_string path);
+// Advisory exclusive lock on `path`; ok null on success, or an error.
+rl_result rl_fs_lock_file(rl_string path);
+// Release the advisory lock on `path`; ok null on success, or an error.
+rl_result rl_fs_unlock_file(rl_string path);
+// Copy the directory tree at `src` to `dst`; ok null, or an error.
+rl_result rl_fs_copy_dir(rl_string src, rl_string dst);
+// Total byte size under `path`; ok with the sum, or an error.
+rl_result rl_fs_dir_size(rl_string path);
+// True when `path` is a symlink; ok with the bool, or an error.
+rl_result rl_fs_is_symlink(rl_string path);
+// Open `file` with `mode` (`r`, `w`, `a`, `r+`, `w+`, `a+`).
+rl_result rl_fs_open(rl_string file, rl_string mode);
+// Close a file handle id; ok null on success, or an error.
+rl_result rl_fs_close(int64_t handle_id);
+// Read up to `n` bytes from a handle; ok with the text, or an error.
+rl_result rl_fs_read_handle(int64_t handle_id, int64_t n);
+// Write `data` to a handle; ok with the byte count, or an error.
+rl_result rl_fs_write_handle(int64_t handle_id, rl_string data);
+// Seek a handle; ok with the new position, or an error.
+rl_result rl_fs_seek(int64_t handle_id, int64_t offset, int64_t whence);
+// Flush a writable handle; ok null on success, or an error.
+rl_result rl_fs_flush(int64_t handle_id);
+// Read from a handle to EOF; ok with the text, or an error.
+rl_result rl_fs_read_all(int64_t handle_id);
+// Read one line from a handle; ok with the line, or an error.
+rl_result rl_fs_readline(int64_t handle_id);
 // Rename to `new_name` in the same directory; ok with the new full path,
 // or an error.
 rl_result rl_fs_rename_file(rl_string path, rl_string new_name);
@@ -570,6 +701,42 @@ rl_result rl_process_exec_lines(rl_string cmd);
 rl_result rl_process_with_exec(rl_string env, rl_string cmd);
 rl_result rl_process_with_exec_code(rl_string env, rl_string cmd);
 rl_result rl_process_with_exec_lines(rl_string env, rl_string cmd);
+// Set an environment variable; ok null on success, or an error.
+rl_result rl_process_set_env(rl_string key, rl_string value);
+// Remove an environment variable; ok null on success, or an error.
+rl_result rl_process_remove_env(rl_string key);
+// All environment variable names as an array of strings.
+rl_array rl_process_env_keys(void);
+// CPU architecture like Rust consts::ARCH ("x86_64", "aarch64", ...).
+rl_string rl_process_arch(void);
+// Number of available CPUs, or 1 when unknown.
+int64_t rl_process_num_cpus(void);
+// Parent process id.
+int64_t rl_process_parent_pid(void);
+// True when kill(pid, 0) succeeds or reports EPERM.
+bool rl_process_exists(int64_t pid);
+// Run exe plus args in the foreground; ok with the exit code, or an error.
+rl_result rl_process_with_exec_fg(rl_string exe, rl_string cmd);
+// Run cmd with input on stdin; ok with stdout, or an error.
+rl_result rl_process_exec_with_stdin(rl_string cmd, rl_string input);
+// Same with exe plus args and input on stdin; ok with stdout, or an error.
+rl_result rl_process_with_exec_with_stdin(rl_string exe, rl_string cmd, rl_string input);
+// Run cmd with envs pairs; ok with stdout, or an error.
+rl_result rl_process_exec_with_env(rl_string cmd, rl_array envs);
+// Same with exe plus args and envs pairs; ok with stdout, or an error.
+rl_result rl_process_with_exec_with_env(rl_string exe, rl_string cmd, rl_array envs);
+// Run cmd in dir; ok with stdout, or an error.
+rl_result rl_process_exec_with_cwd(rl_string cmd, rl_string dir);
+// Same with exe plus args in dir; ok with stdout, or an error.
+rl_result rl_process_with_exec_with_cwd(rl_string exe, rl_string cmd, rl_string dir);
+// Run cmd with timeout; ok with stdout, or an error on timeout.
+rl_result rl_process_exec_with_timeout(rl_string cmd, int64_t timeout_ms);
+// Spawn exe plus args in the background; ok with pid, or an error.
+rl_result rl_process_with_exec_background(rl_string exe, rl_string cmd);
+// Pipe cmd1 into cmd2; ok with final stdout, or an error.
+rl_result rl_process_pipe(rl_string cmd1, rl_string cmd2);
+// Pipe all cmds; ok with final stdout, or an error.
+rl_result rl_process_pipe_all(rl_array cmds);
 // Command-line arguments (excluding argv[0]) as an array of strings.
 rl_array rl_process_args(void);
 // Snapshot argv at startup; generated `main` calls this first.
@@ -604,6 +771,12 @@ bool rl_io_isatty(void);
 // Write to stderr without / with a trailing newline.
 void rl_io_eprint(rl_string msg);
 void rl_io_eprintln(rl_string msg);
+// Read all of stdin until EOF; ok with the text, or an error.
+rl_result rl_io_read_all_stdin(void);
+// Decode a byte array as UTF-8; ok with the string, or an error.
+rl_result rl_io_decode_utf8(rl_array bytes);
+// Encode a string as UTF-8 bytes; bare array of byte values.
+rl_array rl_io_encode_utf8(rl_string s);
 
 // ---- types ----
 // `to_string` over a result payload: int/float/bool/char/string,
@@ -633,6 +806,8 @@ bool rl_rand_bool_weighted(double weight);
 // Random printable ASCII char / byte in [0, 255].
 char rl_rand_char(void);
 int64_t rl_rand_byte(void);
+// Reseed the C RNG (RL rand_seed); later values are deterministic.
+void rl_rand_seed(int64_t seed);
 // Int in [min, max] / float in [min, max).
 int64_t rl_rand_int_range(int64_t min, int64_t max);
 double rl_rand_float_range(double min, double max);
@@ -664,6 +839,38 @@ rl_array rl_map_values_s(rl_map m);
 rl_map rl_map_merge_s(rl_map a, rl_map b);
 // Array of single-entry maps, one per key.
 rl_array rl_map_to_array_s(rl_map m);
+// Set algebra over boxed values; equality mirrors rl_value_eq.
+// Each returns a fresh set, or ok bool for the subset tests.
+rl_set rl_set_union(rl_set a, rl_set b);
+rl_set rl_set_intersection(rl_set a, rl_set b);
+rl_set rl_set_difference(rl_set a, rl_set b);
+rl_set rl_set_symmetric_difference(rl_set a, rl_set b);
+rl_result rl_set_is_subset(rl_set a, rl_set b);
+rl_result rl_set_is_superset(rl_set a, rl_set b);
+// Lookup with a default value (boxed); ok with the value or the default.
+// The insert variant stores the default when the key is missing and
+// returns the default as ok; both report errors for missing keys.
+rl_result rl_map_get_or_s(rl_map m, rl_string key, rl_value def);
+rl_result rl_map_get_or_insert_s(rl_map *m, rl_string key, rl_value def);
+// Legacy int-default variants for dynamically typed defaults.
+rl_result rl_map_get_or(rl_map m, rl_string key, int64_t def);
+rl_result rl_map_get_or_insert(rl_map *m, rl_string key, int64_t def);
+// Binary heap over arrays (min-heap on ints and floats; other element
+// kinds keep insertion order). Push returns the new heap; pop returns
+// the heap without its root; peek returns the root value.
+rl_result rl_heap_push(rl_array a, int64_t v);
+rl_result rl_heap_push_v(rl_array a, rl_value v);
+rl_result rl_heap_pop(rl_array a);
+rl_result rl_heap_peek(rl_array a);
+rl_result rl_heap_peek_t(rl_array a, int32_t tag);
+// Deque over arrays: push inserts at the front, pop drops the front.
+rl_result rl_deque_push_front(rl_array a, int64_t v);
+rl_result rl_deque_push_front_v(rl_array a, rl_value v);
+rl_result rl_deque_pop_front(rl_array a);
+// Bisect over sorted int arrays; sorted_insert keeps ascending order.
+rl_result rl_bisect_left(rl_array a, int64_t v);
+rl_result rl_bisect_right(rl_array a, int64_t v);
+rl_result rl_sorted_insert(rl_array a, int64_t v);
 
 // ---- array (generic) ----
 // Elementwise array utilities backing the RL `arr_*` functions.
@@ -719,6 +926,18 @@ rl_result rl_arr_zip(rl_array a, rl_array b);
 // Pairwise tuples into a struct layout (`es_tuple` bytes, second field
 // at `off_b`), copying `es_a` / `es_b` bytes per side.
 rl_result rl_arr_zip_t(rl_array a, rl_array b, uint64_t es_tuple, uint64_t off_b, uint64_t es_a, uint64_t es_b);
+// Split into chunks of `size` / sliding windows of `size`; ok with an
+// array of sub-arrays, or an error for a bad size.
+rl_result rl_arr_chunk(rl_array a, int64_t size);
+rl_result rl_arr_windows(rl_array a, int64_t size);
+// Copy with elements `i` and `j` exchanged; error when out of bounds.
+rl_result rl_arr_swap(rl_array a, int64_t i, int64_t j);
+// First `n` elements of the endlessly repeated array; error when negative.
+rl_result rl_arr_cycle_take(rl_array a, int64_t n);
+// Pairwise tuples padded with `fill` up to the longer length.
+rl_result rl_arr_zip_longest_t(rl_array a, rl_array b, rl_value fill, uint64_t es_tuple, uint64_t off_b, uint64_t es_a, uint64_t es_b);
+// Legacy int-fill variant for dynamically typed fills.
+rl_result rl_arr_zip_longest(rl_array a, rl_array b, int64_t fill, uint64_t es_tuple, uint64_t off_b, uint64_t es_a, uint64_t es_b);
 
 // ---- closure-consuming array functions ----
 // Higher-order array ops: each element (boxed as `rl_result` by payload
@@ -742,6 +961,11 @@ rl_result rl_arr_for_each_closure(rl_array arr, rl_closure fn, int32_t tag);
 rl_result rl_arr_flat_map_closure(rl_array arr, rl_closure fn, int32_t tag);
 // Sort using `cmp(a, b)` returning negative / zero / positive.
 rl_result rl_arr_sort_by_closure(rl_array arr, rl_closure cmp, int32_t tag);
+// Split into matching and rest by predicate; ok with the pair.
+rl_result rl_arr_partition_closure(rl_array arr, rl_closure pred, int32_t tag);
+// Element with the greatest / smallest mapped key.
+rl_result rl_arr_max_by_closure(rl_array arr, rl_closure fn, int32_t tag);
+rl_result rl_arr_min_by_closure(rl_array arr, rl_closure fn, int32_t tag);
 
 // ---- closure-consuming result functions ----
 // Apply `fn` to the payload of an ok result (passes errors through).
@@ -783,6 +1007,8 @@ rl_result rl_term_show_cursor(void);
 rl_result rl_term_get_size(int64_t *out_cols, int64_t *out_rows);
 // Ok with `[cols, rows]`, or an error when the size is unknown.
 rl_result rl_term_size(void);
+// Query cursor via DSR; ok with [x, y] or an error on timeout/non-tty.
+rl_result rl_term_get_cursor_pos(void);
 // Request a terminal size (may be ignored by the emulator).
 rl_result rl_term_set_size(int64_t cols, int64_t rows);
 // Set the window title to `title`.
@@ -841,6 +1067,11 @@ rl_map rl_result_unwrap_map(rl_result r);
 rl_set rl_result_unwrap_set(rl_result r);
 // Checked unwrap of a boxed closure payload; aborts on error like the rest.
 rl_closure rl_result_unwrap_closure(rl_result r);
+// Unwrap an error payload; aborts when given an ok value.
+rl_string rl_result_unwrap_err_str(rl_result r);
+int64_t rl_result_unwrap_err_i64(rl_result r);
+double rl_result_unwrap_err_f64(rl_result r);
+bool rl_result_unwrap_err_bool(rl_result r);
 // Checked unwrap of the i64 payload (generic fallback used by codegen).
 rl_result rl_result_unwrap_auto(rl_result r);
 // Length of a string/array/map/set result payload, or an error.
@@ -862,6 +1093,39 @@ rl_result rl_is_null(rl_result x);
 rl_result rl_is_char(rl_result x);
 rl_result rl_is_byte(rl_result x);
 rl_result rl_is_error(rl_result x);
+// Return ok bool true when payload tag is array.
+rl_result rl_is_array(rl_result x);
+// Return ok bool true when payload tag is map.
+rl_result rl_is_map(rl_result x);
+// Return ok bool true when payload tag is set.
+rl_result rl_is_set(rl_result x);
+// Tuples never travel boxed; always false at runtime (literals fold).
+rl_result rl_is_tuple(rl_result x);
+// Return ok bool true when payload is a closure.
+rl_result rl_is_function(rl_result x);
+// Narrow ints erase to I64 at runtime; literals fold statically.
+rl_result rl_is_uint(rl_result x);
+// Narrow ints erase to I64 at runtime; literals fold statically.
+rl_result rl_is_sbyte(rl_result x);
+// Narrow ints erase to I64 at runtime; literals fold statically.
+rl_result rl_is_bsbyte(rl_result x);
+// Narrow ints erase to I64 at runtime; literals fold statically.
+rl_result rl_is_bbyte(rl_result x);
+// Narrow ints erase to I64 at runtime; literals fold statically.
+rl_result rl_is_sint(rl_result x);
+// Narrow ints erase to I64 at runtime; literals fold statically.
+rl_result rl_is_suint(rl_result x);
+// Small float erases to F64 at runtime; literals fold statically.
+rl_result rl_is_sfloat(rl_result x);
+// Handle kind testers: true only for live ids of that kind. Bare ints
+// and other payloads are always false. Audio and gui have no C backend
+// and always return false.
+rl_result rl_is_c_handle(rl_result x);
+rl_result rl_is_net_handle(rl_result x);
+rl_result rl_is_http_handle(rl_result x);
+rl_result rl_is_audio_handle(rl_result x);
+rl_result rl_is_gui_handle(rl_result x);
+rl_result rl_is_file_handle(rl_result x);
 
 // ---- io ----
 // Read the whole file as an array of byte values (error when unreadable).
@@ -888,8 +1152,10 @@ rl_result rl_rand_shuffle(rl_array arr);
 
 // ---- std::c (FFI) ----
 // Minimal C interop: compile snippets with the system compiler, dlopen
-// shared objects, and call their symbols. Handles are small integer ids
+// shared objects, and call their symbols. Handles are tagged integer ids
 // into an internal table (`rl_c_handle` is the raw dlopen pointer type).
+// Each domain uses its own base so kinds never overlap and small bare
+// ints never collide with real handles.
 typedef void *rl_c_handle;
 // Compile C `source` to a cached shared object; result holds its path.
 rl_result rl_c_compile(rl_string source);
@@ -907,7 +1173,7 @@ rl_result rl_c_call(int64_t handle_id, rl_string fn_name, int64_t argc, void **a
 
 // ---- std::net (TCP/UDP) ----
 // Blocking socket helpers backing `std::net`. Addresses look like
-// `"127.0.0.1:8080"`. Each open socket is a handle id; results hold
+// `"127.0.0.1:8080"`. Each open socket is a tagged handle id; results hold
 // either the id / data or an RL error.
 // Bind and listen; result holds the listener handle id.
 rl_result rl_net_tcp_listen(rl_string address);
@@ -926,7 +1192,7 @@ rl_result rl_net_tcp_local_addr(int64_t handle_id);
 rl_result rl_net_tcp_set_timeout(int64_t handle_id, int64_t millis);
 // Toggle non-blocking mode.
 rl_result rl_net_tcp_set_nonblocking(int64_t handle_id, bool flag);
-// Half-close the read side, write side, or both ("r" / "w" / "rw").
+// Half-close the read side, write side, or both ("read" / "write" / "both").
 rl_result rl_net_tcp_shutdown(int64_t handle_id, rl_string mode);
 // Close the socket.
 rl_result rl_net_tcp_close(int64_t handle_id);
@@ -937,12 +1203,13 @@ rl_result rl_net_udp_connect(int64_t handle_id, rl_string address);
 // Send to the default peer / to an explicit address; result holds bytes sent.
 rl_result rl_net_udp_send(int64_t handle_id, rl_string data);
 rl_result rl_net_udp_send_to(int64_t handle_id, rl_string data, rl_string address);
-// Receive one datagram / datagram plus sender address as a two-map.
+// Receive one datagram / datagram plus sender address as a 2-tuple
+// (data string, sender "ip:port" string) in a single element array.
 rl_result rl_net_udp_recv(int64_t handle_id, int64_t max_bytes);
 rl_result rl_net_udp_recv_from(int64_t handle_id, int64_t max_bytes);
 // Close the socket.
 rl_result rl_net_udp_close(int64_t handle_id);
-// DNS lookup of `"host:port"`; result holds an array of `"ip:port"` strings.
+// DNS lookup of `"host:port"`; result holds an array of `"ip"` strings.
 rl_result rl_net_resolve(rl_string host_port);
 
 // ---- std::http (server + client) ----
@@ -964,11 +1231,13 @@ rl_result rl_http_request_header(int64_t handle_id, rl_string name);
 rl_result rl_http_request_body(int64_t handle_id);
 // Answer a request and close it; pass `has_content_type` 0 to omit.
 rl_result rl_http_respond(int64_t handle_id, int64_t status, rl_string body, rl_string content_type, int has_content_type);
-// GET / POST shorthand; result holds the response body as a string.
+// GET / POST shorthand; result holds a 2-tuple (status int, body string)
+// in a single element array. Non-2xx statuses are still ok.
 rl_result rl_http_get(rl_string url);
 rl_result rl_http_post(rl_string url, rl_string body, rl_string content_type, int has_content_type);
-// Full client request; result holds a map with `status`, `headers`,
-// and `body`. Pass `has_body` / `has_headers` 0 to skip those parts.
-rl_result rl_http_request(rl_string method, rl_string url, rl_string body, int has_body, rl_string headers_json, int has_headers);
+// Full client request; result holds a 2-tuple (status int, body string)
+// in a single element array. `headers` is an array of 2-tuples
+// (name string, value string). Pass `has_body` / `has_headers` 0 to skip.
+rl_result rl_http_request(rl_string method, rl_string url, rl_string body, int has_body, rl_array headers, int has_headers);
 
 #endif
