@@ -50,7 +50,23 @@ pub(crate) fn declare_global_map_set(
     name: &str,
     type_annotation: &TypeAnnotation,
 ) {
-    declare_global_collection(cc, name, type_annotation.clone());
+    // Resolved sets carry only the element type while maps carry the
+    // full Map(K, V); wrap a bare element into Set so storage is rl_set.
+    match type_annotation {
+        TypeAnnotation::Map(_, _)
+        | TypeAnnotation::CMap(_, _)
+        | TypeAnnotation::Set(_)
+        | TypeAnnotation::CSet(_) => {
+            declare_global_collection(cc, name, type_annotation.clone());
+        }
+        other => {
+            declare_global_collection(
+                cc,
+                name,
+                TypeAnnotation::Set(Box::new(other.clone())),
+            );
+        }
+    }
 }
 
 /// `x = [items]` — binds the evaluated array. `is_const` selects a
@@ -180,7 +196,8 @@ pub(super) fn compile_set_decl(
     if let ExpressionKind::SetLiteral(items) = &set_expr.kind {
         let elem_type = match type_annotation {
             TypeAnnotation::Set(et) | TypeAnnotation::CSet(et) => (**et).clone(),
-            _ => TypeAnnotation::Int,
+            // Resolved sets carry only the element type.
+            other => other.clone(),
         };
         for item_id in items {
             cc.writer.write_indent();

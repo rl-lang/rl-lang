@@ -47,6 +47,7 @@ pub struct CCodegen<'a> {
     pub std_c_imports: HashSet<String>,
     pub std_net_imports: HashSet<String>,
     pub std_http_imports: HashSet<String>,
+    pub std_fs_imports: HashSet<String>,
     pub std_imports: Vec<StdImport>,
     /// Lambdas that return a closure literal, mapped to the inner
     /// lambda's return type (`dec mk = fn(k) { return fn(x)->int... }`
@@ -119,6 +120,7 @@ impl<'a> CCodegen<'a> {
             globals_code: String::new(),
             std_net_imports: HashSet::new(),
             std_http_imports: HashSet::new(),
+            std_fs_imports: HashSet::new(),
         }
     }
 
@@ -172,6 +174,15 @@ impl<'a> CCodegen<'a> {
             } else {
                 for (name, _alias) in names {
                     self.std_http_imports.insert(name.clone());
+                }
+            }
+        }
+        if path.len() >= 2 && path[1] == "fs" {
+            if wildcard {
+                self.std_fs_imports.insert("*".to_string());
+            } else {
+                for (name, _alias) in names {
+                    self.std_fs_imports.insert(name.clone());
                 }
             }
         }
