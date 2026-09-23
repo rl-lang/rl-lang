@@ -5,6 +5,7 @@ pub mod bitwise;
 pub mod c;
 pub mod cli;
 pub mod collections;
+pub mod core;
 pub mod crypto;
 pub mod debug;
 pub mod fs;

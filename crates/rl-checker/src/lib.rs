@@ -341,10 +341,15 @@ impl TypeChecker {
         };
 
         let text = match find_fn_doc(module, fn_name).or_else(|| find_fn_doc(None, fn_name)) {
-            Some((std_entry, func)) => format!(
-                "```rl\nstd::{}::{}\n```\n{}",
-                std_entry.name, func.signature, func.description
-            ),
+            Some((std_entry, func)) => {
+                // `core` is top-level, not under `std::`.
+                let path = if std_entry.name == "core" {
+                    format!("core::{}", func.signature)
+                } else {
+                    format!("std::{}::{}", std_entry.name, func.signature)
+                };
+                format!("```rl\n{}\n```\n{}", path, func.description)
+            }
             None => format!("```rl\nfn {}(..)\n```\nstdlib function", fn_name),
         };
 

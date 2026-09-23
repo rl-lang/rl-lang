@@ -67,5 +67,11 @@ pub fn root() -> Module {
     std = std.with_module(Module::from_std("time", rl_std::time::handles::<VmRuntime>()));
     std = std.with_module(Module::from_std("types", rl_std::types::handles::<VmRuntime>()));
 
-    Module::new("root").with_module(std)
+    // Top-level `core::` intrinsics live beside `std`, not inside it.
+    let mut root = Module::new("root").with_module(std);
+    #[cfg(any(feature = "std-core", feature = "impls"))]
+    {
+        root = root.with_module(Module::from_std("core", rl_std::core::handles::<VmRuntime>()));
+    }
+    root
 }

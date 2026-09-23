@@ -15,6 +15,7 @@ pub fn stdlib_entries() -> Vec<&'static StdEntry> {
         &stdlib::c::C,
         &stdlib::cli::CLI,
         &stdlib::collections::COLLECTIONS,
+        &stdlib::core::CORE,
         &stdlib::crypto::CRYPTO,
         &stdlib::debug::DEBUG,
         &stdlib::fs::FS,

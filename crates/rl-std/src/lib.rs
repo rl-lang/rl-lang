@@ -40,6 +40,8 @@ pub mod c;
 pub mod cli;
 #[cfg(any(feature = "std-collections", feature = "impls"))]
 pub mod collections;
+#[cfg(any(feature = "std-core", feature = "impls"))]
+pub mod core;
 #[cfg(any(feature = "std-crypto", feature = "impls"))]
 pub mod crypto;
 #[cfg(any(feature = "std-debug", feature = "impls"))]
@@ -94,6 +96,10 @@ pub fn signatures() -> rl_std_core::ModuleNames {
     { m = m.with_module(cli::signatures()); }
     #[cfg(any(feature = "std-collections", feature = "impls"))]
     { m = m.with_module(collections::signatures()); }
+    #[cfg(any(feature = "std-core", feature = "impls"))]
+    { m = m.with_module(core::signatures()); }
+    #[cfg(any(feature = "std-core", feature = "impls"))]
+    { m = m.with_module(core::signatures()); }
     #[cfg(any(feature = "std-crypto", feature = "impls"))]
     { m = m.with_module(crypto::signatures()); }
     #[cfg(any(feature = "std-debug", feature = "impls"))]
