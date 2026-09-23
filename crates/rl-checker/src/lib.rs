@@ -326,10 +326,28 @@ impl TypeChecker {
     /// Emits a warning only if the given `lint` is not suppressed by an
     /// enclosing `!#[allow(...)]` attribute.
     pub fn warn_lint(&mut self, lint: Lint, message: impl Into<String>, span: Span) {
+        self.warn_lint_at(lint, message, span, None);
+    }
+
+    /// Like [`TypeChecker::warn_lint`], but the diagnostic is attributed
+    /// to `origin` instead of the current file. Used for deferred
+    /// diagnostics (e.g. unused bindings) declared in another file.
+    pub fn warn_lint_at(
+        &mut self,
+        lint: Lint,
+        message: impl Into<String>,
+        span: Span,
+        origin: Option<&SourceFile>,
+    ) {
         let suppressed = self.allow_stack.iter().any(|set| set.contains(&lint));
-        if !suppressed {
-            self.warn(message, span);
+        if suppressed {
+            return;
         }
+        let mut err = self.err(message.into(), span);
+        if let Some(file) = origin {
+            err = err.with_source_file(file);
+        }
+        self.warnings.push(err.as_warning());
     }
 
     // transforms arguments into Error type

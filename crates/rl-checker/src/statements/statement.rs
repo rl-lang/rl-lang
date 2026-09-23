@@ -1005,7 +1005,7 @@ impl TypeChecker {
             return;
         };
 
-        let Ok((imported_ast, stmts)) = Parser::parse(tokens, source_file) else {
+        let Ok((imported_ast, stmts)) = Parser::parse(tokens, source_file.clone()) else {
             self.error(
                 format!(
                     "module `{}` has syntax error and could not be parsed",
@@ -1019,6 +1019,10 @@ impl TypeChecker {
         self.importing.push(canonical.clone());
 
         let prev_ast = std::mem::replace(&mut self.ast_arena, imported_ast);
+        // Errors raised while checking the imported file must carry its
+        // name and text (spans are relative to it), not the importer's.
+        // Restored next to `ast_arena` below; nesting-safe (strict scope).
+        let prev_source = std::mem::replace(&mut self.source_file, Some(source_file));
 
         for stmt in &stmts {
             match &stmt.kind {
@@ -1190,6 +1194,7 @@ impl TypeChecker {
         }
 
         self.ast_arena = prev_ast;
+        self.source_file = prev_source;
         self.importing.pop();
         self.imported.insert(canonical, new_cache_entry);
     }

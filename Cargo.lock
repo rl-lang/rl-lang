@@ -4000,6 +4000,7 @@ dependencies = [
  "rl-lexer",
  "rl-parser",
  "rl-utils",
+ "tempfile",
  "tokio",
  "tower-lsp",
 ]

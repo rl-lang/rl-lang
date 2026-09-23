@@ -92,6 +92,11 @@ pub struct ScopeItem {
     pub is_const: bool,
     pub decl_span: Span,
     pub used: bool,
+    /// File the binding was declared in. Captured at declare time so
+    /// deferred diagnostics (e.g. unused warnings, emitted after an
+    /// import's `source_file` was restored) still route to the right
+    /// file. `None` predates the field; treat as the current file.
+    pub decl_file: Option<SourceFile>,
     /// Lints suppressed for this binding (e.g. `!#[allow(unused)]`).
     pub suppressed_lints: HashSet<Lint>,
     /// Deprecation message, if declared with `!#[deprecated("msg")]`.

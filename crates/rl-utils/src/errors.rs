@@ -277,6 +277,20 @@ impl Error {
     pub fn span(&self) -> Option<crate::span::Span> {
         self.detail.as_ref().map(|d| d.primary.0)
     }
+
+    /// The source text this error's span is relative to, if attached.
+    /// Import-checked files attach their own text, so consumers (e.g.
+    /// the LSP) must map offsets with this, not the open document.
+    pub fn source_text(&self) -> Option<&Arc<String>> {
+        self.detail.as_ref().and_then(|d| d.source.as_ref())
+    }
+
+    /// The file name this error belongs to, if attached.
+    pub fn source_name(&self) -> Option<&str> {
+        self.detail
+            .as_ref()
+            .and_then(|d| d.source_name.as_deref())
+    }
 }
 
 impl ErrorReason {

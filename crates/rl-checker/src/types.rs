@@ -25,6 +25,7 @@ impl ScopeItem {
             unit,
             is_const,
             decl_span,
+            decl_file: None,
             used: false,
             suppressed_lints: HashSet::new(),
             deprecated: None,
