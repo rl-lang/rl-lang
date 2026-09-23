@@ -212,12 +212,17 @@ impl TypeChecker {
 
     // runs check on every ast statement in the list and returns errors as list
     pub fn check(&mut self, statements: &[Statement]) -> &[Error] {
-        for ProgramAttribute::Convert {
-            symbol,
-            factor,
-            base_symbol,
-        } in &self.ast_arena.program_attributes
-        {
+        for attr in &self.ast_arena.program_attributes {
+            // Custom `define` markers need no checker setup; only unit
+            // conversions register here.
+            let ProgramAttribute::Convert {
+                symbol,
+                factor,
+                base_symbol,
+            } = attr
+            else {
+                continue;
+            };
             self.conversions.insert(symbol, *factor, base_symbol);
         }
         for statement in statements {

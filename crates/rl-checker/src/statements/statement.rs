@@ -24,6 +24,8 @@ impl TypeChecker {
             match attr {
                 ItemAttribute::Allow(lints_vec) => lints.extend(lints_vec),
                 ItemAttribute::Deprecated(msg) => deprecated = msg.clone(),
+                // Custom markers carry no lint meaning; queried directly.
+                ItemAttribute::Custom { .. } => {}
             }
         }
         (lints, deprecated)

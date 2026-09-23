@@ -142,6 +142,7 @@ pub enum TokenType {
     Map,
     Set,
     Handle,
+    Type,
 
     // -- type modifiers --
     Big,

@@ -296,6 +296,17 @@ impl Parser {
                     let msg = self.parse_optional_string_arg()?.or_else(|| Some(String::new()));
                     item_attrs.push(ItemAttribute::Deprecated(msg));
                 }
+                // custom markers from `#![define(name)]`: bare or with
+                // string args. Anything else is still a typo error.
+                TokenType::Identifier(name) => {
+                    let name = name.clone();
+                    if !self.custom_attr_defined(&name) {
+                        return Err(self.err("expected valid attribute", self.peek_span()));
+                    }
+                    self.advance();
+                    let args = self.parse_string_list_arg()?;
+                    item_attrs.push(ItemAttribute::Custom { name, args });
+                }
                 _ => return Err(self.err("expected valid attribute", self.peek_span())),
             }
 
@@ -442,5 +453,42 @@ impl Parser {
             }
             _ => Err(self.err("expected a number after `=`", self.peek_span())),
         }
+    }
+
+    /// True when `name` was declared by a `#![define(name)]` seen so far.
+    /// Defines are declare-before-use like values: a use above its
+    /// `#![define]` is an unknown attribute, not a forward reference.
+    fn custom_attr_defined(&self, name: &str) -> bool {
+        use rl_ast::statements::ProgramAttribute;
+        self.ast_arena.program_attributes.iter().any(|attr| {
+            matches!(attr, ProgramAttribute::Define { name: prev } if prev == name)
+        })
+    }
+
+    /// Parses `("a", "b")` or nothing, for custom `!#[name]` markers.
+    fn parse_string_list_arg(&mut self) -> Result<Vec<String>, Error> {
+        if !self.match_type(&[TokenType::LeftParen]) {
+            return Ok(Vec::new());
+        }
+        let mut args = Vec::new();
+        loop {
+            while self.match_type(&[TokenType::Newline]) {}
+            match self.peek() {
+                TokenType::StringLiteral(s) => {
+                    args.push(s.clone());
+                    self.advance();
+                }
+                _ => return Err(self.err("expected a string literal", self.peek_span())),
+            }
+            while self.match_type(&[TokenType::Newline]) {}
+            if self.match_type(&[TokenType::Comma]) {
+                continue;
+            }
+            break;
+        }
+        if !self.match_type(&[TokenType::RightParen]) {
+            return Err(self.err("expected `)`", self.peek_span()));
+        }
+        Ok(args)
     }
 }

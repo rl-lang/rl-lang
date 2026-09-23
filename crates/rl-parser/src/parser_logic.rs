@@ -78,7 +78,7 @@ impl Parser {
                     && matches!(parser.tokens[parser.current + 1].token, TokenType::LeftBracket)
                     && matches!(
                         &parser.tokens[parser.current + 2].token,
-                        TokenType::Identifier(s) if s == "convert"
+                        TokenType::Identifier(s) if s == "convert" || s == "define"
                     );
                 if is_program_attr {
                     parser.advance();
