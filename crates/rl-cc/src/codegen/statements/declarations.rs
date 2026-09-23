@@ -258,6 +258,63 @@ pub(super) fn compile_var_decl(
             cc.writer.write("rl_result_unwrap_closure(rl_ok(");
             cc.compile_expr(value)?;
             cc.writer.write("))");
+        } else if let Some(msg) = cc.abort_message_arg(value) {
+            // `__abort` never returns: panic, then feed storage an
+            // unreachable dummy so the `-> T` contract typechecks.
+            let default: Option<String> = match &effective {
+                TypeAnnotation::Int
+                | TypeAnnotation::CInt
+                | TypeAnnotation::UInt
+                | TypeAnnotation::CUInt
+                | TypeAnnotation::SInt
+                | TypeAnnotation::CSInt
+                | TypeAnnotation::SUInt
+                | TypeAnnotation::CSUInt
+                | TypeAnnotation::Byte
+                | TypeAnnotation::CByte
+                | TypeAnnotation::SByte
+                | TypeAnnotation::CSByte
+                | TypeAnnotation::BByte
+                | TypeAnnotation::CBByte
+                | TypeAnnotation::BSByte
+                | TypeAnnotation::CBSByte => Some("0".to_string()),
+                TypeAnnotation::Float
+                | TypeAnnotation::CFloat
+                | TypeAnnotation::SFloat
+                | TypeAnnotation::CSFloat => Some("0.0".to_string()),
+                TypeAnnotation::Bool | TypeAnnotation::CBool => Some("false".to_string()),
+                TypeAnnotation::String | TypeAnnotation::CString => {
+                    Some("rl_str_literal(\"\", 0)".to_string())
+                }
+                TypeAnnotation::Array(inner) | TypeAnnotation::CArray(inner) => {
+                    Some(format!("rl_arr_new((int32_t)sizeof({}))", type_to_c(inner)))
+                }
+                TypeAnnotation::Map(_, _) | TypeAnnotation::CMap(_, _) => {
+                    Some("rl_map_new()".to_string())
+                }
+                TypeAnnotation::Set(_) | TypeAnnotation::CSet(_) => {
+                    Some("rl_set_new()".to_string())
+                }
+                TypeAnnotation::Result(_)
+                | TypeAnnotation::CResult(_)
+                | TypeAnnotation::Error
+                | TypeAnnotation::CError => Some("rl_ok_null()".to_string()),
+                _ => None,
+            };
+            match default {
+                Some(dummy) => {
+                    cc.writer.write("(rl_panic(");
+                    cc.compile_expr(msg)?;
+                    cc.writer.write(&format!("), {})", dummy));
+                }
+                None => {
+                    return Err(Error::at(
+                        Reason::Compile,
+                        "dec cannot hold __abort in this storage type",
+                        Span::dummy(),
+                    ));
+                }
+            }
         } else if let Some(unwrap_fn) = dyn_unwrap {
             cc.writer.write(&format!("{unwrap_fn}("));
             // A bare `result_unwrap(x)` compiles its inner call directly:
@@ -267,6 +324,38 @@ pub(super) fn compile_var_decl(
                 None => cc.compile_expr(value)?,
             }
             cc.writer.write(")");
+        } else if cc.core_get_needs_boxing(value) {
+            // `__arr_get` / `__map_get` over unknown layouts yield a
+            // boxed value; unbox or rewrap by storage type so the
+            // payload stays well-typed (mirrors dyn_unwrap above).
+            let wrap = match &effective {
+                TypeAnnotation::Int | TypeAnnotation::CInt => Some("rl_unbox_i64"),
+                TypeAnnotation::Float | TypeAnnotation::CFloat => Some("rl_unbox_f64"),
+                TypeAnnotation::Bool | TypeAnnotation::CBool => Some("rl_unbox_bool"),
+                TypeAnnotation::String | TypeAnnotation::CString => Some("rl_unbox_str"),
+                TypeAnnotation::Array(_) | TypeAnnotation::CArray(_) => Some("rl_unbox_arr"),
+                TypeAnnotation::Map(_, _) | TypeAnnotation::CMap(_, _) => Some("rl_unbox_map"),
+                TypeAnnotation::Result(inner) | TypeAnnotation::CResult(inner)
+                    if CCodegen::needs_inference(inner) =>
+                {
+                    Some("rl_value_to_result")
+                }
+                _ => None,
+            };
+            match wrap {
+                Some(wrap_fn) => {
+                    cc.writer.write(&format!("{wrap_fn}("));
+                    cc.compile_expr(value)?;
+                    cc.writer.write(")");
+                }
+                None => {
+                    return Err(Error::at(
+                        Reason::Compile,
+                        "dec needs an explicit type for dynamically-typed core get",
+                        Span::dummy(),
+                    ));
+                }
+            }
         } else {
             cc.compile_expr(value)?;
         }

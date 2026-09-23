@@ -26,6 +26,34 @@ pub fn namespace_provides(namespace: &str, name: &str) -> bool {
                 | "progress_bar"
                 | "spinner_tick"
         ),
+        "core" => matches!(
+            name,
+            "__arr_new"
+                | "__arr_push"
+                | "__arr_get"
+                | "__arr_set"
+                | "__arr_remove"
+                | "__arr_len"
+                | "__map_new"
+                | "__map_get"
+                | "__map_set"
+                | "__map_remove"
+                | "__map_has"
+                | "__map_keys"
+                | "__map_len"
+                | "__set_new"
+                | "__set_add"
+                | "__set_has"
+                | "__set_remove"
+                | "__set_len"
+                | "__str_len"
+                | "__str_get_byte"
+                | "__str_slice"
+                | "__str_concat"
+                | "__syscall6"
+                | "__abort"
+                | "__type_of"
+        ),
         "std::crypto" => matches!(
             name,
             "sha256"

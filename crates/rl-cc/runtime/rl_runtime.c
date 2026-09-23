@@ -13,7 +13,7 @@
 static const char *_rl_tag_name(enum rl_type_tag tag);
 static char *_rl_trim_copy(rl_string s, uint64_t *out_len);
 static bool _rl_utf8_decode(const char *s, uint64_t len, uint32_t *code, uint64_t *used);
-static void _rl_abort(void);
+void _rl_abort(void);
 
 // Tagged handle ids: each domain adds its base to a small index so
 // kinds never overlap and small bare ints never collide with handles.
@@ -47,7 +47,7 @@ rl_closure rl_closure_new_heap(rl_closure_fn fn, rl_result *captures, uint64_t c
 
 // Abort loud failures only after flushing pending output, so earlier
 // prints are never lost when stdout is block-buffered (pipes).
-static void _rl_abort(void) {
+void _rl_abort(void) {
     fflush(stdout);
     fflush(stderr);
     abort();
@@ -662,6 +662,10 @@ static void _rl_print_value(rl_value v) {
         default: printf("<value>"); break;
     }
 }
+
+// Public wrappers for printing boxed dynamic values.
+void rl_print_rl_value(rl_value v) { _rl_print_value(v); }
+void rl_println_rl_value(rl_value v) { _rl_print_value(v); printf("\n"); }
 
 // Print map in RL literal syntax ({k: v}).
 void rl_print_rl_map(rl_map v) {
@@ -9433,6 +9437,515 @@ rl_result rl_cli_spinner_tick(int64_t frame) {
     fprintf(stderr, "\r%c", frames[idx]);
     fflush(stderr);
     return rl_ok_null();
+}
+
+// ---- core ----
+// Mirrors `core::` intrinsics: container primitives with abort-on-misuse
+// semantics (missing keys, out-of-bounds, mistyped values all abort like
+// the VM's loud runtime errors). String keys only for maps (C maps key
+// on `char *`; int-keyed maps abort, a documented transpiler limit).
+
+rl_array rl_core_arr_new(void) {
+    return rl_arr_new(sizeof(int64_t));
+}
+
+// Appends a boxed value, converting to the array's element layout or
+// aborting on mismatch (mirrors the VM's element-type enforcement).
+rl_array rl_core_arr_push(rl_array a, rl_value v) {
+    uint64_t es = a.elem_size ? (uint64_t)a.elem_size : sizeof(int64_t);
+    uint64_t new_len = a.len + 1;
+    char *buf = malloc(new_len * es);
+    if (a.data && a.len > 0) memcpy(buf, a.data, a.len * es);
+    char *slot = buf + a.len * es;
+    memset(slot, 0, es);
+    if (es == sizeof(int64_t) && a.type_tag == RL_TAG_I64) {
+        if (v.tag != RL_VTAG_I64) {
+            free(buf);
+            fprintf(stderr, "error: __arr_push: value type mismatches array element type\n");
+            _rl_abort();
+        }
+        ((int64_t *)slot)[0] = v.data.i64;
+    } else if (es == sizeof(double) && a.type_tag == RL_TAG_F64) {
+        if (v.tag == RL_VTAG_F64) ((double *)slot)[0] = v.data.f64;
+        else if (v.tag == RL_VTAG_I64) ((double *)slot)[0] = (double)v.data.i64;
+        else {
+            free(buf);
+            fprintf(stderr, "error: __arr_push: value type mismatches array element type\n");
+            _rl_abort();
+        }
+    } else if (es == sizeof(rl_string)) {
+        if (v.tag != RL_VTAG_STR) {
+            free(buf);
+            fprintf(stderr, "error: __arr_push: value type mismatches array element type\n");
+            _rl_abort();
+        }
+        ((rl_string *)slot)[0] = v.data.str;
+    } else if (es == sizeof(rl_map)) {
+        if (v.tag != RL_VTAG_MAP) {
+            free(buf);
+            fprintf(stderr, "error: __arr_push: value type mismatches array element type\n");
+            _rl_abort();
+        }
+        ((rl_map *)slot)[0] = *v.data.map;
+        free(v.data.map);
+    } else if (es == sizeof(rl_array)) {
+        if (v.tag != RL_VTAG_ARR) {
+            free(buf);
+            fprintf(stderr, "error: __arr_push: value type mismatches array element type\n");
+            _rl_abort();
+        }
+        ((rl_array *)slot)[0] = v.data.arr;
+    } else if (es == sizeof(bool)) {
+        if (v.tag != RL_VTAG_BOOL) {
+            free(buf);
+            fprintf(stderr, "error: __arr_push: value type mismatches array element type\n");
+            _rl_abort();
+        }
+        ((bool *)slot)[0] = v.data.boolean;
+    } else if (es == sizeof(rl_value)) {
+        ((rl_value *)slot)[0] = v;
+    } else {
+        free(buf);
+        fprintf(stderr, "error: __arr_push: unsupported array element layout\n");
+        _rl_abort();
+    }
+    rl_array out = { .data = buf, .len = new_len, .cap = new_len,
+        .elem_size = a.elem_size, .type_tag = a.type_tag };
+    return out;
+}
+
+// Reads one element by layout, aborting out-of-bounds. Typed getters
+// below select the payload; the boxed form serves dynamic containers.
+static rl_value _rl_core_arr_read(rl_array a, int64_t i) {
+    if (i < 0 || (uint64_t)i >= a.len) {
+        fprintf(stderr, "error: __arr_get: index %lld out of bounds (len %llu)\n",
+            (long long)i, (unsigned long long)a.len);
+        _rl_abort();
+    }
+    rl_value v;
+    memset(&v, 0, sizeof(v));
+    uint64_t es = a.elem_size ? (uint64_t)a.elem_size : sizeof(int64_t);
+    const char *slot = (const char *)a.data + (uint64_t)i * es;
+    if (es == sizeof(int64_t) && a.type_tag != RL_TAG_F64) {
+        v.tag = RL_VTAG_I64;
+        v.data.i64 = *(const int64_t *)slot;
+    } else if (es == sizeof(double)) {
+        v.tag = RL_VTAG_F64;
+        v.data.f64 = *(const double *)slot;
+    } else if (es == sizeof(rl_string)) {
+        v.tag = RL_VTAG_STR;
+        v.data.str = *(const rl_string *)slot;
+    } else if (es == sizeof(rl_map)) {
+        v.tag = RL_VTAG_MAP;
+        rl_map *mp = malloc(sizeof(rl_map));
+        *mp = *(const rl_map *)slot;
+        v.data.map = mp;
+    } else if (es == sizeof(rl_array)) {
+        v.tag = RL_VTAG_ARR;
+        v.data.arr = *(const rl_array *)slot;
+    } else if (es == sizeof(bool)) {
+        v.tag = RL_VTAG_BOOL;
+        v.data.boolean = *(const bool *)slot;
+    } else if (es == sizeof(rl_value)) {
+        v = *(const rl_value *)slot;
+    } else {
+        fprintf(stderr, "error: __arr_get: unsupported array element layout\n");
+        _rl_abort();
+    }
+    return v;
+}
+
+rl_value rl_core_arr_get_boxed(rl_array a, int64_t i) {
+    return _rl_core_arr_read(a, i);
+}
+
+int64_t rl_core_arr_get_i64(rl_array a, int64_t i) {
+    rl_value v = _rl_core_arr_read(a, i);
+    if (v.tag != RL_VTAG_I64) {
+        fprintf(stderr, "error: __arr_get: expected int element\n");
+        _rl_abort();
+    }
+    return v.data.i64;
+}
+
+double rl_core_arr_get_f64(rl_array a, int64_t i) {
+    rl_value v = _rl_core_arr_read(a, i);
+    if (v.tag == RL_VTAG_F64) return v.data.f64;
+    if (v.tag == RL_VTAG_I64) return (double)v.data.i64;
+    fprintf(stderr, "error: __arr_get: expected float element\n");
+    _rl_abort();
+    return 0;
+}
+
+bool rl_core_arr_get_bool(rl_array a, int64_t i) {
+    rl_value v = _rl_core_arr_read(a, i);
+    if (v.tag != RL_VTAG_BOOL) {
+        fprintf(stderr, "error: __arr_get: expected bool element\n");
+        _rl_abort();
+    }
+    return v.data.boolean;
+}
+
+rl_string rl_core_arr_get_str(rl_array a, int64_t i) {
+    rl_value v = _rl_core_arr_read(a, i);
+    if (v.tag != RL_VTAG_STR) {
+        fprintf(stderr, "error: __arr_get: expected string element\n");
+        _rl_abort();
+    }
+    return v.data.str;
+}
+
+rl_array rl_core_arr_get_arr(rl_array a, int64_t i) {
+    rl_value v = _rl_core_arr_read(a, i);
+    if (v.tag != RL_VTAG_ARR) {
+        fprintf(stderr, "error: __arr_get: expected array element\n");
+        _rl_abort();
+    }
+    return v.data.arr;
+}
+
+rl_map rl_core_arr_get_map(rl_array a, int64_t i) {
+    rl_value v = _rl_core_arr_read(a, i);
+    if (v.tag != RL_VTAG_MAP) {
+        fprintf(stderr, "error: __arr_get: expected map element\n");
+        _rl_abort();
+    }
+    rl_map m = *v.data.map;
+    free(v.data.map);
+    return m;
+}
+
+// Replaces one element, preserving layout; aborts out-of-bounds or on
+// element-type mismatch like push.
+rl_array rl_core_arr_set(rl_array a, int64_t i, rl_value v) {
+    if (i < 0 || (uint64_t)i >= a.len) {
+        fprintf(stderr, "error: __arr_set: index %lld out of bounds (len %llu)\n",
+            (long long)i, (unsigned long long)a.len);
+        _rl_abort();
+    }
+    uint64_t es = a.elem_size ? (uint64_t)a.elem_size : sizeof(int64_t);
+    char *buf = malloc((a.len > 0 ? a.len : 1) * es);
+    if (a.data && a.len > 0) memcpy(buf, a.data, a.len * es);
+    char *slot = buf + (uint64_t)i * es;
+    if (es == sizeof(int64_t) && a.type_tag == RL_TAG_I64) {
+        if (v.tag != RL_VTAG_I64) {
+            free(buf);
+            fprintf(stderr, "error: __arr_set: value type mismatches array element type\n");
+            _rl_abort();
+        }
+        ((int64_t *)slot)[0] = v.data.i64;
+    } else if (es == sizeof(double) && a.type_tag == RL_TAG_F64) {
+        if (v.tag == RL_VTAG_F64) ((double *)slot)[0] = v.data.f64;
+        else if (v.tag == RL_VTAG_I64) ((double *)slot)[0] = (double)v.data.i64;
+        else {
+            free(buf);
+            fprintf(stderr, "error: __arr_set: value type mismatches array element type\n");
+            _rl_abort();
+        }
+    } else if (es == sizeof(rl_string)) {
+        if (v.tag != RL_VTAG_STR) {
+            free(buf);
+            fprintf(stderr, "error: __arr_set: value type mismatches array element type\n");
+            _rl_abort();
+        }
+        ((rl_string *)slot)[0] = v.data.str;
+    } else if (es == sizeof(rl_map)) {
+        if (v.tag != RL_VTAG_MAP) {
+            free(buf);
+            fprintf(stderr, "error: __arr_set: value type mismatches array element type\n");
+            _rl_abort();
+        }
+        ((rl_map *)slot)[0] = *v.data.map;
+        free(v.data.map);
+    } else if (es == sizeof(rl_array)) {
+        if (v.tag != RL_VTAG_ARR) {
+            free(buf);
+            fprintf(stderr, "error: __arr_set: value type mismatches array element type\n");
+            _rl_abort();
+        }
+        ((rl_array *)slot)[0] = v.data.arr;
+    } else if (es == sizeof(bool)) {
+        if (v.tag != RL_VTAG_BOOL) {
+            free(buf);
+            fprintf(stderr, "error: __arr_set: value type mismatches array element type\n");
+            _rl_abort();
+        }
+        ((bool *)slot)[0] = v.data.boolean;
+    } else if (es == sizeof(rl_value)) {
+        ((rl_value *)slot)[0] = v;
+    } else {
+        free(buf);
+        fprintf(stderr, "error: __arr_set: unsupported array element layout\n");
+        _rl_abort();
+    }
+    rl_array out = { .data = buf, .len = a.len, .cap = a.len,
+        .elem_size = a.elem_size, .type_tag = a.type_tag };
+    return out;
+}
+
+rl_value rl_core_map_get_boxed(rl_map m, rl_string k) {
+    char *key = malloc(k.len + 1);
+    if (k.len > 0 && k.data != NULL) memcpy(key, k.data, k.len);
+    key[k.len] = '\0';
+    rl_value *found = NULL;
+    for (uint64_t i = 0; i < m.len; i++) {
+        if (!strcmp(m.entries[i].key, key)) {
+            found = &m.entries[i].value;
+            break;
+        }
+    }
+    free(key);
+    if (found == NULL) {
+        fprintf(stderr, "error: __map_get: key not found in map\n");
+        _rl_abort();
+    }
+    return *found;
+}
+
+// Typed map getters abort on missing keys and mistyped values.
+int64_t rl_core_map_get_i64(rl_map m, rl_string k) {
+    rl_value v = rl_core_map_get_boxed(m, k);
+    if (v.tag != RL_VTAG_I64) {
+        fprintf(stderr, "error: __map_get: expected int value\n");
+        _rl_abort();
+    }
+    return v.data.i64;
+}
+
+double rl_core_map_get_f64(rl_map m, rl_string k) {
+    rl_value v = rl_core_map_get_boxed(m, k);
+    if (v.tag == RL_VTAG_F64) return v.data.f64;
+    if (v.tag == RL_VTAG_I64) return (double)v.data.i64;
+    fprintf(stderr, "error: __map_get: expected float value\n");
+    _rl_abort();
+    return 0;
+}
+
+bool rl_core_map_get_bool(rl_map m, rl_string k) {
+    rl_value v = rl_core_map_get_boxed(m, k);
+    if (v.tag != RL_VTAG_BOOL) {
+        fprintf(stderr, "error: __map_get: expected bool value\n");
+        _rl_abort();
+    }
+    return v.data.boolean;
+}
+
+rl_string rl_core_map_get_str(rl_map m, rl_string k) {
+    rl_value v = rl_core_map_get_boxed(m, k);
+    if (v.tag != RL_VTAG_STR) {
+        fprintf(stderr, "error: __map_get: expected string value\n");
+        _rl_abort();
+    }
+    return v.data.str;
+}
+
+rl_array rl_core_map_get_arr(rl_map m, rl_string k) {
+    rl_value v = rl_core_map_get_boxed(m, k);
+    if (v.tag != RL_VTAG_ARR) {
+        fprintf(stderr, "error: __map_get: expected array value\n");
+        _rl_abort();
+    }
+    return v.data.arr;
+}
+
+rl_map rl_core_map_get_map(rl_map m, rl_string k) {
+    rl_value v = rl_core_map_get_boxed(m, k);
+    if (v.tag != RL_VTAG_MAP) {
+        fprintf(stderr, "error: __map_get: expected map value\n");
+        _rl_abort();
+    }
+    return *v.data.map;
+}
+
+rl_map rl_core_map_set(rl_map m, rl_string k, rl_value v) {
+    char *key = malloc(k.len + 1);
+    if (k.len > 0 && k.data != NULL) memcpy(key, k.data, k.len);
+    key[k.len] = '\0';
+    rl_map_set(&m, key, v);
+    free(key);
+    return m;
+}
+
+rl_array rl_core_map_keys(rl_map m) {
+    rl_string *buf = malloc((m.len > 0 ? m.len : 1) * sizeof(rl_string));
+    for (uint64_t i = 0; i < m.len; i++) {
+        uint64_t n = strlen(m.entries[i].key);
+        char *dup = malloc(n + 1);
+        memcpy(dup, m.entries[i].key, n + 1);
+        buf[i].data = dup;
+        buf[i].len = n;
+    }
+    rl_array arr = { .data = buf, .len = m.len, .cap = m.len,
+        .elem_size = (int32_t)sizeof(rl_string), .type_tag = RL_TAG_STR };
+    return arr;
+}
+
+// VM hashability mirrored: ints, bytes-as-ints, bools, chars and strings.
+// Floats, arrays, maps, sets, closures and null abort like the VM.
+static int _rl_core_hashable(rl_value v) {
+    return v.tag == RL_VTAG_I64 || v.tag == RL_VTAG_BOOL
+        || v.tag == RL_VTAG_CHAR || v.tag == RL_VTAG_STR;
+}
+
+rl_set rl_core_set_add(rl_set s, rl_value v) {
+    if (!_rl_core_hashable(v)) {
+        fprintf(stderr, "error: __set_add: value is not hashable\n");
+        _rl_abort();
+    }
+    rl_set_add(&s, v);
+    return s;
+}
+
+bool rl_core_set_has(rl_set s, rl_value v) {
+    if (!_rl_core_hashable(v)) {
+        fprintf(stderr, "error: __set_has: value is not hashable\n");
+        _rl_abort();
+    }
+    return rl_set_contains(s, v);
+}
+
+rl_string rl_core_type_of(rl_result v) {
+    const char *name = "unknown";
+    if (!v.is_ok) {
+        name = "error";
+    } else {
+        switch (v.tag) {
+            case RL_TAG_NULL: name = "null"; break;
+            case RL_TAG_I64: name = "int"; break;
+            case RL_TAG_F64: name = "float"; break;
+            case RL_TAG_BOOL: name = "bool"; break;
+            case RL_TAG_CHAR: name = "char"; break;
+            case RL_TAG_STR: name = "string"; break;
+            case RL_TAG_ARR: name = "array"; break;
+            case RL_TAG_MAP: name = "map"; break;
+            case RL_TAG_SET: name = "set"; break;
+            case RL_TAG_CLOSURE: name = "function"; break;
+            default: name = "unknown"; break;
+        }
+    }
+    rl_string s = { .data = name, .len = strlen(name) };
+    return s;
+}
+
+// ---- core removes/lengths/strings/syscall ----
+
+rl_array rl_core_arr_remove(rl_array a, int64_t i) {
+    if (i < 0 || (uint64_t)i >= a.len) {
+        fprintf(stderr, "error: __arr_remove: index %lld out of bounds (len %llu)\n",
+            (long long)i, (unsigned long long)a.len);
+        _rl_abort();
+    }
+    uint64_t es = a.elem_size ? (uint64_t)a.elem_size : sizeof(int64_t);
+    char *buf = malloc((a.len > 1 ? a.len - 1 : 1) * es);
+    uint64_t idx = (uint64_t)i;
+    if (idx > 0) memcpy(buf, a.data, idx * es);
+    if (idx + 1 < a.len) memcpy(buf + idx * es, (const char *)a.data + (idx + 1) * es, (a.len - idx - 1) * es);
+    rl_array out = { .data = buf, .len = a.len - 1, .cap = a.len - 1,
+        .elem_size = a.elem_size, .type_tag = a.type_tag };
+    return out;
+}
+
+rl_map rl_core_map_remove(rl_map m, rl_string k) {
+    char *key = malloc(k.len + 1);
+    if (k.len > 0 && k.data != NULL) memcpy(key, k.data, k.len);
+    key[k.len] = '\0';
+    if (!rl_map_contains(m, key)) {
+        free(key);
+        fprintf(stderr, "error: __map_remove: key not found in map\n");
+        _rl_abort();
+    }
+    rl_map_remove(&m, key);
+    free(key);
+    return m;
+}
+
+bool rl_core_map_has(rl_map m, rl_string k) {
+    char *key = malloc(k.len + 1);
+    if (k.len > 0 && k.data != NULL) memcpy(key, k.data, k.len);
+    key[k.len] = '\0';
+    bool hit = rl_map_contains(m, key);
+    free(key);
+    return hit;
+}
+
+rl_set rl_core_set_remove(rl_set s, rl_value v) {
+    if (!_rl_core_hashable(v)) {
+        fprintf(stderr, "error: __set_remove: value is not hashable\n");
+        _rl_abort();
+    }
+    if (!rl_set_contains(s, v)) {
+        fprintf(stderr, "error: __set_remove: value not in set\n");
+        _rl_abort();
+    }
+    rl_set_remove(&s, v);
+    return s;
+}
+
+int64_t rl_core_arr_len(rl_array a) {
+    return (int64_t)a.len;
+}
+
+int64_t rl_core_map_len(rl_map m) {
+    return (int64_t)rl_map_len(m);
+}
+
+int64_t rl_core_set_len(rl_set s) {
+    return (int64_t)rl_set_len(s);
+}
+
+int64_t rl_core_str_len(rl_string s) {
+    return (int64_t)s.len;
+}
+
+uint8_t rl_core_str_get_byte(rl_string s, int64_t i) {
+    if (i < 0 || (uint64_t)i >= s.len || s.data == NULL) {
+        fprintf(stderr, "error: __str_get_byte: index %lld out of bounds (len %llu)\n",
+            (long long)i, (unsigned long long)s.len);
+        _rl_abort();
+    }
+    return (uint8_t)s.data[(uint64_t)i];
+}
+
+static int _rl_core_is_continuation(unsigned char c) {
+    return (c & 0xc0) == 0x80;
+}
+
+rl_string rl_core_str_slice(rl_string s, int64_t start, int64_t end) {
+    int64_t len = (int64_t)s.len;
+    if (start < 0 || end < start || end > len) {
+        fprintf(stderr, "error: __str_slice: bad range %lld..%lld for len %lld\n",
+            (long long)start, (long long)end, (long long)len);
+        _rl_abort();
+    }
+    const unsigned char *d = (const unsigned char *)s.data;
+    // Byte slicing must not split a UTF-8 codepoint.
+    if ((start > 0 && start < len && _rl_core_is_continuation(d[start]))
+        || (end > 0 && end < len && _rl_core_is_continuation(d[end]))) {
+        fprintf(stderr, "error: __str_slice: range splits a UTF-8 codepoint\n");
+        _rl_abort();
+    }
+    uint64_t n = (uint64_t)(end - start);
+    char *dup = malloc(n + 1);
+    if (n > 0) memcpy(dup, s.data + start, n);
+    dup[n] = '\0';
+    rl_string out = { .data = dup, .len = n };
+    return out;
+}
+
+rl_string rl_core_str_concat(rl_string a, rl_string b) {
+    uint64_t n = a.len + b.len;
+    char *dup = malloc(n + 1);
+    if (a.len > 0 && a.data != NULL) memcpy(dup, a.data, a.len);
+    if (b.len > 0 && b.data != NULL) memcpy(dup + a.len, b.data, b.len);
+    dup[n] = '\0';
+    rl_string out = { .data = dup, .len = n };
+    return out;
+}
+
+int64_t rl_core_syscall6(int64_t nr, int64_t a1, int64_t a2, int64_t a3,
+        int64_t a4, int64_t a5, int64_t a6) {
+    long ret = syscall((long)nr, (long)a1, (long)a2, (long)a3, (long)a4, (long)a5, (long)a6);
+    return (int64_t)ret;
 }
 
 // ---- time ----

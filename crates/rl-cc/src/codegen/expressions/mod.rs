@@ -4,6 +4,7 @@ mod c_ffi;
 mod cli;
 mod closure;
 mod collections;
+mod core;
 mod crypto;
 mod http;
 mod io;
@@ -856,6 +857,31 @@ impl<'a> CCodegen<'a> {
             "read_line_with_history" => return self::cli::compile_read_line_with_history(self, args),
             "progress_bar" => return self::cli::compile_progress_bar(self, args),
             "spinner_tick" => return self::cli::compile_spinner_tick(self, args),
+            "__arr_new" => return self::core::compile_arr_new(self),
+            "__arr_push" => return self::core::compile_arr_push(self, args),
+            "__arr_get" => return self::core::compile_arr_get(self, args),
+            "__arr_set" => return self::core::compile_arr_set(self, args),
+            "__map_new" => return self::core::compile_map_new(self),
+            "__map_get" => return self::core::compile_map_get(self, args),
+            "__map_set" => return self::core::compile_map_set(self, args),
+            "__map_keys" => return self::core::compile_map_keys(self, args),
+            "__set_new" => return self::core::compile_set_new(self),
+            "__set_add" => return self::core::compile_set_add(self, args),
+            "__set_has" => return self::core::compile_set_has(self, args),
+            "__abort" => return self::core::compile_abort(self, args),
+            "__arr_remove" => return self::core::compile_arr_remove(self, args),
+            "__map_remove" => return self::core::compile_map_remove(self, args),
+            "__map_has" => return self::core::compile_map_has(self, args),
+            "__set_remove" => return self::core::compile_set_remove(self, args),
+            "__arr_len" => return self::core::compile_arr_len(self, args),
+            "__map_len" => return self::core::compile_map_len(self, args),
+            "__set_len" => return self::core::compile_set_len(self, args),
+            "__str_len" => return self::core::compile_str_len(self, args),
+            "__str_get_byte" => return self::core::compile_str_get_byte(self, args),
+            "__str_slice" => return self::core::compile_str_slice(self, args),
+            "__str_concat" => return self::core::compile_str_concat(self, args),
+            "__syscall6" => return self::core::compile_syscall6(self, args),
+            "__type_of" => return self::core::compile_type_of(self, args),
             "sha256" => return self::crypto::compile_sha256(self, args),
             "sha512" => return self::crypto::compile_sha512(self, args),
             "sha1" => return self::crypto::compile_sha1(self, args),

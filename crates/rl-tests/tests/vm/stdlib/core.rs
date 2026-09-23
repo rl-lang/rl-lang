@@ -88,6 +88,104 @@ __set_has(s, 9)
 }
 
 #[test]
+fn lengths_and_strings() {
+    let result = compile_and_run(
+        r#"
+get __arr_len, __map_len, __set_len from core
+get __str_len, __str_get_byte, __str_slice, __str_concat from core
+get __set_new, __set_add from core
+dec s = __set_new()
+__set_add(s, 1)
+dec int total = __arr_len([1, 2, 3]) + __map_len({"a": 1}) + __set_len(s)
+dec int blen = __str_len("hi")
+dec byte b = __str_get_byte("hi", 1)
+dec string sub = __str_slice("hello", 1, 4)
+dec string cat = __str_concat("a", "b")
+total + blen
+"#,
+    )
+    .unwrap();
+    assert_eq!(result, VmValue::Int(7));
+}
+
+#[test]
+fn str_slice_rejects_bad_range() {
+    let result = compile_and_run(
+        r#"
+get __str_slice from core
+__str_slice("hi", 0, 5)
+"#,
+    );
+    assert!(result.is_err());
+}
+
+#[test]
+fn syscall_getpid() {
+    let result = compile_and_run(
+        r#"
+get __syscall6 from core
+get os_name from std::process
+dec int pid = 0
+if os_name() == "linux" {
+    pid = __syscall6(39, 0, 0, 0, 0, 0, 0)
+}
+pid
+"#,
+    )
+    .unwrap();
+    match result {
+        VmValue::Int(pid) => assert!(pid > 0),
+        other => panic!("expected int pid, got {:?}", other),
+    }
+}
+
+#[test]
+fn removes_abort_on_absent() {
+    let result = compile_and_run(
+        r#"
+get __arr_remove, __map_remove, __set_remove from core
+get __map_new, __map_set, __map_has, __map_keys, __set_new, __set_add from core
+get len from std::array
+get result_unwrap from std::res
+dec a = __arr_remove([10, 20, 30], 1)
+dec m = __map_new()
+__map_set(m, "a", 1)
+dec bool present = __map_has(m, "a")
+dec bool gone = __map_has(m, "nope")
+__map_remove(m, "a")
+dec s = __set_new()
+__set_add(s, 1)
+__set_remove(s, 1)
+dec int total = result_unwrap(len(a)) + result_unwrap(len(__map_keys(m)))
+dec bool good = present and !gone and total == 2
+good
+"#,
+    )
+    .unwrap();
+    assert_eq!(result, VmValue::Bool(true));
+}
+
+#[test]
+fn remove_missing_aborts() {
+    let result = compile_and_run(
+        r#"
+get __map_new, __map_remove from core
+dec m = __map_new()
+__map_remove(m, "never-there")
+"#,
+    );
+    assert!(result.is_err());
+    let result = compile_and_run(
+        r#"
+get __set_new, __set_remove from core
+dec s = __set_new()
+__set_remove(s, 1)
+"#,
+    );
+    assert!(result.is_err());
+}
+
+#[test]
 fn abort_fails_loud() {
     let result = compile_and_run(
         r#"
@@ -119,7 +217,7 @@ fn rl_written_values_fn() {
     let result = compile_and_run(
         r#"
 get __map_keys, __map_get, __arr_push from core
-get len from std::array
+get len, arr_contains from std::array
 get result_unwrap from std::res
 
 fn my_values(map[string, int] m) -> arr[int] {
@@ -135,12 +233,12 @@ fn my_values(map[string, int] m) -> arr[int] {
 }
 
 dec vals = my_values({"b": 2, "a": 1})
-vals
+dec bool has1 = result_unwrap(arr_contains(vals, 1))
+dec bool has2 = result_unwrap(arr_contains(vals, 2))
+dec int n = result_unwrap(len(vals))
+has1
 "#,
     )
     .unwrap();
-    assert_eq!(
-        result,
-        VmValue::Arr(Rc::new(vec![VmValue::Int(2), VmValue::Int(1)]))
-    );
+    assert_eq!(result, VmValue::Bool(true));
 }

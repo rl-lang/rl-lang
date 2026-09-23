@@ -586,6 +586,66 @@ impl<'a> CCodegen<'a> {
             _ => None,
         }
     }
+    /// True for `__arr_get` / `__map_get` (function or method form)
+    /// whose container layout is statically unknown, so the emitter
+    /// takes the boxed form. Declarations over these get storage-driven
+    /// unboxing; anything else would mistype the payload.
+    pub fn core_get_needs_boxing(&self, id: ExprId) -> bool {
+        let expr = self.ast.exprs.get(id);
+        let (name, container) = match &expr.kind {
+            ExpressionKind::Call { path, args } => {
+                let name = path.last().map(|s| s.as_str()).unwrap_or("");
+                if name != "__arr_get" && name != "__map_get" {
+                    return false;
+                }
+                (name, args.first().copied())
+            }
+            ExpressionKind::MethodCall { caller, method, .. } => {
+                let name = method.last().map(|s| s.as_str()).unwrap_or("");
+                if name != "__arr_get" && name != "__map_get" {
+                    return false;
+                }
+                (name, Some(*caller))
+            }
+            _ => return false,
+        };
+        let Some(cid) = container else {
+            return true;
+        };
+        if name == "__arr_get" {
+            // Known element type takes the typed getter.
+            self.array_arg_elem(cid).is_none()
+        } else {
+            match self.inferred_expr_type(cid) {
+                Some(TypeAnnotation::Map(_, vt)) | Some(TypeAnnotation::CMap(_, vt)) => {
+                    Self::needs_inference(&vt)
+                }
+                // Unknown container entirely: box it.
+                _ => true,
+            }
+        }
+    }
+    /// The message argument of an `__abort(...)` call, if `id` is one.
+    /// Lets declarations panic first and feed storage an unreachable
+    /// dummy, so abort's `-> T` contract holds in generated code too.
+    pub fn abort_message_arg(&self, id: ExprId) -> Option<ExprId> {
+        let expr = self.ast.exprs.get(id);
+        match &expr.kind {
+            ExpressionKind::Call { path, args } => {
+                if path.last().map(|s| s.as_str()) != Some("__abort") {
+                    return None;
+                }
+                args.first().copied()
+            }
+            ExpressionKind::MethodCall { method, args, .. } => {
+                if method.last().map(|s| s.as_str()) != Some("__abort") {
+                    return None;
+                }
+                args.first().copied()
+            }
+            _ => None,
+        }
+    }
     /// Effective storage annotation for a declaration: the annotation
     /// itself, unless it is `Infer`/`Generic`, in which case the
     /// initializer shape (and the checker's stdlib signatures) decide.

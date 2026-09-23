@@ -20,7 +20,7 @@ One flat `core::` module of `__`-prefixed intrinsics, in three layers:
 
 Flat on purpose (the module is the namespace), `__` on purpose (reads as "compiler magic, think twice"), and the resolver owns the name `core` so nobody can shadow or redefine it. Missing keys and bad indexes abort - primitives don't do soft errors, matching `m[k]` rather than `map_get`. RL code that wants `result` builds it on top.
 
-Starting set, nothing more: `__arr_new/push/get/set`, `__map_new/get/set/keys`, `__set_new/add/has`, `__abort`, `__type_of`, `__syscall6`. Missing keys, bad indexes, non-sets and unhashable values abort - primitives don't do soft errors, matching `m[k]` rather than `map_get`. Strings and the rest follow the same shape once this slice proves itself.
+Starting set, nothing more: `__arr_new/push/get/set/remove/len`, `__map_new/get/set/remove/has/keys/len`, `__set_new/add/has/remove/len`, `__str_len/get_byte/slice/concat`, `__syscall6`, `__abort`, `__type_of` (25 total). Missing keys, bad indexes, non-sets and unhashable values abort - primitives don't do soft errors, matching `m[k]` rather than `map_get`. RL code that wants `result` builds it on top. Deliberately excluded: numeric casts (the `as` operator owns them), string equality (`==` covers it), string concat via `+` (rejected by the checker, hence the intrinsic).
 
 `__syscall6(nr, a1..a6) -> int` is specified now, not later: raw return register, `-errno` is the caller's problem, Linux-only and proud of it. VM lowers it through `libc::syscall`, CC through `syscall(2)`, x86 through the real trap (`rdi rsi rdx r10 r8 r9` - `r10`, not `rcx`, that's the syscall ABI, don't get cute). Portable code keeps using `std::fs`/`std::io`; this exists for the day there's no libc to call.
 
