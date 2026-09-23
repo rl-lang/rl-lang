@@ -103,8 +103,21 @@ impl Parser {
                 let name = path.pop().unwrap();
 
                 // --- struct literal: Name { field: value, ... } ---
-                if self.record_names.contains(&name) && self.peek() == TokenType::LeftBrace {
-                    return self.parse_struct_literal(name, start);
+                // Allman allows the `{` on following lines: peek past
+                // newlines without consuming (a bare `P` stays an rvalue).
+                if self.record_names.contains(&name) {
+                    let mut k = self.current;
+                    while k < self.tokens.len()
+                        && self.tokens[k].token == TokenType::Newline
+                    {
+                        k += 1;
+                    }
+                    if k < self.tokens.len()
+                        && self.tokens[k].token == TokenType::LeftBrace
+                    {
+                        while self.match_type(&[TokenType::Newline]) {}
+                        return self.parse_struct_literal(name, start);
+                    }
                 }
 
                 // --- enum variant reference: Name.Variant ---

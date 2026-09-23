@@ -67,6 +67,7 @@ impl Parser {
                 Some(Box::new(self.parse_if(elif_start)?))
             } else {
                 // plain `else { … }` - condition is None
+                while self.match_type(&[TokenType::Newline]) {}
                 let else_body = self.parse_block()?;
                 let span = branch_start.join(self.previous_span());
                 Some(Box::new(Statement::new(

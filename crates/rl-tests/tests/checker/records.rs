@@ -42,3 +42,9 @@ fn field_assign_unknown_field_errors() {
         "record `P` has no field `y`",
     );
 }
+
+#[test]
+fn struct_literal_brace_on_next_line() {
+    // Allman layout: newline between the record name and `{` parses
+    assert_checker_clean("record P { int x, int y }\ndec P p = P\n{\nx: 1,\ny: 2,\n}");
+}
