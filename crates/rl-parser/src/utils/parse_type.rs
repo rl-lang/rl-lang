@@ -177,8 +177,17 @@ impl Parser {
                     TypeAnnotation::HandleInfer
                 }
                 TokenType::Identifier(name) => {
+                    let use_span = self.peek_span();
                     self.advance();
-                    if self.tag_names.contains(&name) {
+                    // Type aliases substitute eagerly: the table is
+                    // complete for everything declared above, the target
+                    // is stored resolved, and the use is recorded for
+                    // deprecation warnings. Nothing alias-flavored flows
+                    // downstream - backends only ever see concrete types.
+                    if let Some(target) = self.ast_arena.type_aliases.get(&name).cloned() {
+                        self.ast_arena.alias_uses.push((name.clone(), use_span));
+                        target
+                    } else if self.tag_names.contains(&name) {
                         TypeAnnotation::Enum(name)
                     } else {
                         TypeAnnotation::Record(name)
@@ -334,8 +343,12 @@ impl Parser {
                     TypeAnnotation::CError
                 }
                 TokenType::Identifier(name) => {
+                    let use_span = self.peek_span();
                     self.advance();
-                    if self.tag_names.contains(&name) {
+                    if let Some(target) = self.ast_arena.type_aliases.get(&name).cloned() {
+                        self.ast_arena.alias_uses.push((name.clone(), use_span));
+                        target
+                    } else if self.tag_names.contains(&name) {
                         TypeAnnotation::CEnum(name)
                     } else {
                         TypeAnnotation::CRecord(name)

@@ -313,6 +313,14 @@ pub enum StatementKind {
         path: Vec<String>,
         names: Vec<String>,
     },
+    /// A type alias: `type Name Target`. Compile-time only; the target
+    /// is stored resolved in the `Ast` alias table, and uses vanish
+    /// before codegen. Carries item attributes (`!#[deprecated]`).
+    TypeAlias {
+        name: String,
+        target: TypeAnnotation,
+        item_attributes: Vec<ItemAttribute>,
+    },
 
     DestructureDeclaration {
         bindings: Vec<(TypeAnnotation, String)>,

@@ -709,25 +709,38 @@ impl<'a> CCodegen<'a> {
         }
         self.tuple_names = new_tuple_names;
         for (fields, name) in self.tuple_names.clone() {
-            self.writer.write("typedef struct { ");
+            // Buffer into tuple_defs (file scope, ahead of globals):
+            // self.writer content lands after the file_scope insert.
+            if self
+                .tuple_defs
+                .contains(&format!("void rl_print_{}(", name))
+            {
+                continue;
+            }
+            let mut def = String::new();
+            def.push_str("typedef struct { ");
             for (i, field_type) in fields.iter().enumerate() {
                 let c_type = type_to_c(field_type);
-                self.writer.write(&format!("{} field_{}; ", c_type, i));
+                def.push_str(&format!("{} field_{}; ", c_type, i));
             }
-            self.writer
-                .writeln(&format!("}} {};", name));
+            def.push_str(&format!("}} {};\n", name));
             // Generate print function for tuple
-            self.writer.write(&format!("void rl_print_{}({} v) {{ ", name, name));
-            self.writer.writeln("printf(\"(\");");
+            def.push_str(&format!("void rl_print_{}({} v) {{ ", name, name));
+            def.push_str("printf(\"(\");\n");
+            // Render field printers into a side buffer via writer swap.
+            let saved = std::mem::take(&mut self.writer);
             for (i, field_type) in fields.iter().enumerate() {
                 if i > 0 {
                     self.writer.writeln("printf(\", \");");
                 }
                 self.emit_field_print(field_type, &format!("v.field_{}", i));
             }
-            self.writer.writeln("printf(\")\");");
-            self.writer.writeln("}");
-            self.writer.write(&format!("void rl_println_{}({} v) {{ rl_print_{}(v); printf(\"\\n\"); }}\n", name, name, name));
+            let rendered = std::mem::replace(&mut self.writer, saved).into_source();
+            def.push_str(&rendered);
+            def.push_str("printf(\")\");\n");
+            def.push_str("}\n");
+            def.push_str(&format!("void rl_println_{}({} v) {{ rl_print_{}(v); printf(\"\\n\"); }}\n", name, name, name));
+            self.tuple_defs.push_str(&def);
         }
         if !tuple_types.is_empty() {
             self.writer.blank_line();

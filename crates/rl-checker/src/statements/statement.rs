@@ -701,6 +701,10 @@ impl TypeChecker {
             StatementKind::ImportFileNamed { path, names } => {
                 self.import_module(path, Some(names), statement.span);
             }
+            // Type aliases are fully resolved at parse time; uses were
+            // substituted inline and warnings come from the alias_uses
+            // pass. Nothing to check here.
+            StatementKind::TypeAlias { .. } => {}
             StatementKind::Import { names, wildcard, path } => {
                 let module_path = path.join("::");
                 let mut module = &self.root_module;

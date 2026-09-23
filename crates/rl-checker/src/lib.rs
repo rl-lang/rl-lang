@@ -282,6 +282,35 @@ impl TypeChecker {
         for statement in statements {
             self.check_statement(statement);
         }
+        // Deprecation warnings for type alias uses, recorded by the
+        // parser as it substituted. Honors `!#[allow(deprecated)]`
+        // like every other deprecation site. Cloned first: warnings
+        // need `&mut self` while the table is borrowed.
+        let alias_uses = self.ast_arena.alias_uses.clone();
+        let alias_attrs = self.ast_arena.type_alias_attrs.clone();
+        for (name, span) in &alias_uses {
+            let deprecated = alias_attrs.get(name).and_then(|attrs| {
+                attrs.iter().find_map(|attr| match attr {
+                    rl_ast::statements::ItemAttribute::Deprecated(msg) => Some(msg.clone()),
+                    _ => None,
+                })
+            });
+            if let Some(msg) = deprecated {
+                let text = match msg.as_deref() {
+                    Some(m) if !m.is_empty() => {
+                        format!("type alias `{name}` is deprecated: {m}")
+                    }
+                    _ => format!("type alias `{name}` is deprecated"),
+                };
+                if !self
+                    .allow_stack
+                    .last()
+                    .is_some_and(|s| s.contains(&rl_ast::statements::Lint::Deprecated))
+                {
+                    self.warn_lint(rl_ast::statements::Lint::Deprecated, text, *span);
+                }
+            }
+        }
         self.report_unused_in_root_scope();
         &self.errors
     }

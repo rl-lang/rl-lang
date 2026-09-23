@@ -113,6 +113,8 @@ fn stmt_summary(kind: &StatementKind, arena: &Arena<Expression>) -> String {
         }
         StatementKind::TagDeclaration { name, variants } =>
             format!("tag {} {{ {} }}", name, variants.join(", ")),
+        StatementKind::TypeAlias { name, target, .. } =>
+            format!("type {} {:?}", name, target),
         StatementKind::ImplBlock { record, .. } =>
             format!("impl {}", record),
         StatementKind::ResolvedImplBlock { record, .. } =>

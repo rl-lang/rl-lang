@@ -715,6 +715,10 @@ impl<'a> Compiler<'a> {
                 Ok(())
             }
 
+            // Type aliases are compile-time only: the parser already
+            // substituted every use, so there is nothing to emit.
+            StatementKind::TypeAlias { .. } => Ok(()),
+
             other => Err(self.err(
                 format!("statement kind not yet supported by the vm compiler: {other:?}"),
                 span,

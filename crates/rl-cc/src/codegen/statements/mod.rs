@@ -150,6 +150,9 @@ impl<'a> CCodegen<'a> {
                 Ok(())
             }
             StatementKind::ImportFile { .. } | StatementKind::ImportFileNamed { .. } => Ok(()),
+            // Type aliases vanish before codegen; uses were substituted
+            // at parse time.
+            StatementKind::TypeAlias { .. } => Ok(()),
             // Record and tag declarations emit their C types in the header.
             StatementKind::RecordDeclaration { .. } | StatementKind::TagDeclaration { .. } => Ok(()),
             other => Err(Error::at(
