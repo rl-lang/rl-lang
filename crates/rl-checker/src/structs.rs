@@ -26,6 +26,17 @@ pub struct TypeChecker {
     pub warnings: Vec<Error>,
     /// Stack of expected return types, pushed/popped on function and lambda entry/exit.
     pub return_type_stack: Vec<TypeAnnotation>,
+    /// Parallel stack collecting the actual types of `return` statements per
+    /// function/lambda body, used to infer undeclared return types.
+    pub inferred_return_stack: Vec<Vec<CheckType>>,
+    /// Type of the most recently checked expression statement, used for
+    /// trailing-expression return inference. Read only when the last body
+    /// statement is itself an expression.
+    pub last_expr_type: Option<CheckType>,
+    /// Whether the current function/lambda body contains a `?`
+    /// (propagate). A body using `?` can return `err`, so inference
+    /// wraps the unwrapped type in `Result`, mirroring `-> result[T]`.
+    pub saw_propagate: bool,
     /// Nesting depth of loops - used to validate `break` and `continue`.
     pub loop_depth: u32,
     /// Flat map of all stdlib function names to their (possibly-untyped)

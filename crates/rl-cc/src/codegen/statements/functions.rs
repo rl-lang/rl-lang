@@ -3,6 +3,7 @@ use crate::codegen::CCodegen;
 use crate::name_mangle::mangle;
 use crate::types::type_to_c;
 use rl_ast::statements::{Param, Statement, StatementKind, TypeAnnotation};
+use rl_checker::structs::CheckType;
 use rl_utils::errors::Error;
 
 /// Compiles a function body: like the VM, a trailing expression is the
@@ -90,6 +91,18 @@ pub(super) fn compile_impl_block(
             ..
         } = &m.kind
         {
+            // Prefer the checker-inferred method return over `Null`.
+            let mut effective = return_type.clone();
+            if effective == TypeAnnotation::Null {
+                if let Some(CheckType::Function { return_type, .. }) =
+                    cc.checker.methods.get(&(record.to_string(), name.clone()))
+                {
+                    if *return_type != TypeAnnotation::Null {
+                        effective = return_type.clone();
+                    }
+                }
+            }
+            let return_type = &effective;
             let c_ret = type_to_c(return_type);
             let c_fn_name = format!("impl_{}_{}", record, name);
             cc.writer.write_indent();

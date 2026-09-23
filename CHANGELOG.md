@@ -28,6 +28,8 @@ All notable changes to the rl-lang toolchain are documented here. The format is 
 - **`rl new --lib`** - generates `src/lib.rl` with `[dependencies]` section in rl.toml
 - **`rl dev` dependency warning** - warns if rl.toml is missing a `[dependencies]` section
 - **`scripts/build-local.sh`** - local build script with `--release`/`--nightly`/`--dev` profiles, `-j` for parallel jobs, `--clean` to wipe target, outputs to `target-bins/`
+- **`handle` in function signatures** - `handle` now parses as a param type and `->` return (also inside `result[handle]`), matching any concrete handle kind in either direction, so handles flow through user functions on the VM and `rl-cc` alike
+- **Undeclared return-type inference** - functions without `->` infer their return from the body (explicit `return`s win, else the trailing expression); all candidates must agree on one concrete type. A body using `?` infers `result[T]`, mirroring a `-> result[T]` annotation, and `?` is allowed inside undeclared bodies. `rl-cc` definitions consult the inferred type so trailing expressions actually return
 - **`scripts/install-local.sh`** - install locally built binaries from `target-bins/` to `~/.local/bin/`, with interactive binary picker and `--force` overwrite
 - **rl-docs concepts** - new documentation entries for package manager and toolchain manager
 - **`rl-cli` lib target** - shared pipeline module (lex, parse, vm, cc) for binary targets
@@ -93,6 +95,7 @@ All notable changes to the rl-lang toolchain are documented here. The format is 
 ### Fixed
 
 - **`styled_text`/`paint_bg` gated** - now properly gated behind `#[cfg(feature = "impls")]` in gui.rs
+- **rl-cc record typedefs buffer to file scope** - record struct definitions and printers emitted during the header scan now buffer ahead of top-level globals (same ordering fix as tuples), so annotated record declarations and record-returning functions transpile
 - **rl-cc correctness fixes** - `arr_insert` argument order was swapped; `==`/`!=` on strings now compares contents; comparisons yield RL bools printing `true`/`false`; `env` returns a bare string or null; `to_int`/`to_float`/`to_bool`/`to_string`/`to_bin`/`to_hex`/`to_oct` dispatch on payload tags with VM error messages; `format`/`concat` render `ok(...)` for wrapped arguments; `http`/`term`/`process`/`fs` functions return the shapes the VM returns (`result[...]` vs bare); terminal input uses crossterm-style key names with raw mode and coordinate validation; `term_get_size` returns an array and `term_set_title` takes a string; aborts flush stdout first; non-TTY stdout is line-buffered like Rust; array runtime is element-width generic (`push`, `contains`, `sort`, `reverse`, `zip` builds real tuples); tuple types buffer to file scope; non-ASCII identifiers hex-escape in name mangling; `print`/`println` are variadic; `std::gui::*` and `std::rl::eval`/`lex`/`check` fail at transpile time with clear errors.
 
 ### Removed

@@ -2,7 +2,7 @@ use crate::writer::CWriter;
 use crate::name_mangle::mangle;
 use crate::types::type_to_c;
 use rl_ast::{Ast, statements::*};
-use rl_checker::structs::TypeChecker;
+use rl_checker::structs::{CheckType, TypeChecker};
 use rl_utils::errors::{Error, Reason};
 use rl_utils::span::Span;
 use std::collections::{HashMap, HashSet};
@@ -85,6 +85,7 @@ pub struct CCodegen<'a> {
     pub globals_code: String,
     /// File-scope tuple typedefs, emitted before globals.
     pub tuple_defs: String,
+    pub record_defs: String,
     /// Statement-shaped literal temps hoisted before the current
     /// statement (`dec m = {...}`, arrays holding map/set literals).
     /// `compile_expr` emits the recorded temp instead of rebuilding.
@@ -115,6 +116,7 @@ impl<'a> CCodegen<'a> {
             user_fn_returns: HashMap::new(),
             global_names: HashSet::new(),
             tuple_defs: String::new(),
+            record_defs: String::new(),
             in_global_init: false,
             in_lambda_body: false,
             fn_return: None,
@@ -455,14 +457,35 @@ impl<'a> CCodegen<'a> {
         // Collect top-level user function names for the method-call fallback
         // (`x.double()` calls user `fn double(x)`), mirroring the VM's
         // `user_methods` table, plus their return types for inference.
+        // Unannotated (`Null`) returns come from the checker's body
+        // inference, which patched precise types into the root scope.
         for stmt in statements {
             if let StatementKind::ResolvedFunctionDeclaration {
                 name, return_type, ..
             } = &stmt.kind
             {
                 self.user_fns.insert(name.clone());
+                let mut resolved_return = return_type.clone();
+                if resolved_return == TypeAnnotation::Null {
+                    if let Some(inferred) = self
+                        .checker
+                        .scopes
+                        .first()
+                        .and_then(|scope| scope.get(name))
+                        .and_then(|item| match &item.type_annotation {
+                            CheckType::Function { return_type, .. }
+                                if *return_type != TypeAnnotation::Null =>
+                            {
+                                Some(return_type.clone())
+                            }
+                            _ => None,
+                        })
+                    {
+                        resolved_return = inferred;
+                    }
+                }
                 self.user_fn_returns
-                    .insert(name.clone(), return_type.clone());
+                    .insert(name.clone(), resolved_return);
             }
         }
 
@@ -577,6 +600,9 @@ impl<'a> CCodegen<'a> {
         // functions at file scope, in that order.
         let mut output = self.writer.source().to_string();
         let mut file_scope = String::new();
+        if !self.record_defs.is_empty() {
+            file_scope.push_str(&format!("\n/* record types */\n{}\n", self.record_defs));
+        }
         if !self.tuple_defs.is_empty() {
             file_scope.push_str(&format!("\n/* tuple types */\n{}\n", self.tuple_defs));
         }
@@ -622,17 +648,31 @@ impl<'a> CCodegen<'a> {
         self.writer.writeln("#include \"rl_runtime.h\"");
         self.writer.blank_line();
 
-        // Emit record typedefs and print functions
-        for (name, fields) in &self.checker.records {
-            self.writer.write("typedef struct { ");
+        // Emit record typedefs and print functions into record_defs
+        // (file scope, ahead of globals): self.writer content lands
+        // after the file_scope insert.
+        for (name, fields) in &self.checker.records.clone() {
+            if self
+                .record_defs
+                .contains(&format!("}} rl_Record_{};", name))
+            {
+                continue;
+            }
+            let mut def = String::new();
+            def.push_str("typedef struct { ");
             for (field_name, field_type) in fields {
                 let c_type = type_to_c(field_type);
-                self.writer.write(&format!("{} {}; ", c_type, field_name));
+                def.push_str(&format!("{} {}; ", c_type, field_name));
             }
-            self.writer.write(&format!("}} rl_Record_{};\n", name));
+            def.push_str(&format!("}} rl_Record_{};\n", name));
             // Generate print function
-            self.writer.write(&format!("void rl_print_rl_Record_{}(rl_Record_{} v) {{ ", name, name));
-            self.writer.writeln("printf(\"Record(\");");
+            def.push_str(&format!(
+                "void rl_print_rl_Record_{}(rl_Record_{} v) {{ ",
+                name, name
+            ));
+            def.push_str("printf(\"Record(\");\n");
+            // Render field printers into a side buffer via writer swap.
+            let saved = std::mem::take(&mut self.writer);
             for (i, (field_name, field_type)) in fields.iter().enumerate() {
                 if i > 0 {
                     self.writer.writeln("printf(\", \");");
@@ -641,9 +681,12 @@ impl<'a> CCodegen<'a> {
                 self.writer.write(&format!("printf(\"{}: \");\n", field_name));
                 self.emit_field_print(field_type, &format!("v.{}", field_name));
             }
-            self.writer.writeln("printf(\")\");");
-            self.writer.writeln("}");
-            self.writer.write(&format!("void rl_println_rl_Record_{}(rl_Record_{} v) {{ rl_print_rl_Record_{}(v); printf(\"\\n\"); }}\n", name, name, name));
+            let rendered = std::mem::replace(&mut self.writer, saved).into_source();
+            def.push_str(&rendered);
+            def.push_str("printf(\")\");\n");
+            def.push_str("}\n");
+            def.push_str(&format!("void rl_println_rl_Record_{}(rl_Record_{} v) {{ rl_print_rl_Record_{}(v); printf(\"\\n\"); }}\n", name, name, name));
+            self.record_defs.push_str(&def);
         }
         if !self.checker.records.is_empty() {
             self.writer.blank_line();

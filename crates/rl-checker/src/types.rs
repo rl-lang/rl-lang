@@ -151,11 +151,19 @@ fn null_array_elision(a: &TypeAnnotation, b: &TypeAnnotation) -> bool {
     }
 }
 
-/// Returns `true` if `a` and `b` are handles from the same module.
+/// Returns `true` if two handle types are compatible: same-kind handles
+/// match, and the `handle` placeholder (`HandleInfer`, from an explicit
+/// `handle` annotation) matches any concrete kind in either position.
+/// Runtime stores reject a wrong-kind id with an error, so this is safe.
 fn handle_matches(a: &TypeAnnotation, b: &TypeAnnotation) -> bool {
     matches!(
         (a, b),
         (TypeAnnotation::Handle(x), TypeAnnotation::Handle(y)) if x == y
+    ) || matches!(
+        (a, b),
+        (TypeAnnotation::HandleInfer, TypeAnnotation::Handle(_))
+            | (TypeAnnotation::Handle(_), TypeAnnotation::HandleInfer)
+            | (TypeAnnotation::HandleInfer, TypeAnnotation::HandleInfer)
     )
 }
 

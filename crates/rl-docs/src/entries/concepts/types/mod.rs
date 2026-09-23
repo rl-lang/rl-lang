@@ -82,14 +82,14 @@ pub static TYPES: ConceptEntry = ConceptEntry {
         DescriptionEntry {
             kind: DescriptionKind::Note,
             title: Some("handle"),
-            description: "`handle` is an opaque, module-scoped type returned by several stdlib modules (`std::gui`, `std::net`, `std::audio`, `std::c`, `std::http`) instead of an `int`. You can only obtain a handle from the function that creates it and hand it back to that same module's functions - `dec handle x = ...` is valid, but there's no way to construct or compare handles yourself. Printing one works, though it only shows the kind and id, e.g. `<Gui handle #1>`",
+            description: "`handle` is an opaque, module-scoped type returned by several stdlib modules (`std::gui`, `std::net`, `std::audio`, `std::c`, `std::http`) instead of an `int`. You can only obtain a handle from the function that creates it and hand it back to that same module's functions - `dec handle x = ...` is valid, but there's no way to construct or compare handles yourself. `handle` also works in function signatures (`fn shut(handle h)` / `-> result[handle]`), matching any concrete kind. Printing one works, though it only shows the kind and id, e.g. `<Gui handle #1>`",
             examples: &["dec handle window = result_unwrap(gui_window(\"My App\", 400, 300))"],
             expected_output: &[],
         },
     ],
     pitfalls: &[
         "a bare integer literal is always `int`, never `byte`, no matter how small - `dec byte b = 10` without `as byte` is a compile-time type mismatch",
-        "`handle` cannot be used as a parameter type in functions - `fn f(handle h) { }` is a parse error, so handles can only be passed around as values between stdlib calls, not through user-defined function signatures",
+        "`handle` in an annotation matches any concrete handle kind in either direction - `fn shut(handle h) { close(h) }` accepts a file handle, and `-> result[handle]` returns flow through `?` like any other result",
     ],
     related: &["byte", "casting", "variables"],
     related_stdlib: &["types"],

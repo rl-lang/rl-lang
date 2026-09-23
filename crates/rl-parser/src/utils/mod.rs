@@ -213,6 +213,12 @@ impl Parser {
                 self.advance();
                 Ok(TypeAnnotation::Null)
             }
+            // `handle` placeholder, mirroring `parse_type`: unifies with
+            // any concrete `Handle(kind)` at check time.
+            TokenType::Handle => {
+                self.advance();
+                Ok(TypeAnnotation::HandleInfer)
+            }
 
             TokenType::Identifier(name) => {
                 self.advance();

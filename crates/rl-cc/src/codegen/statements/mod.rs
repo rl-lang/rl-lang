@@ -35,7 +35,18 @@ impl<'a> CCodegen<'a> {
                 return_type,
                 body,
                 ..
-            } => functions::compile_function_decl(self, name, params, return_type, body),
+            } => {
+                // Prefer the inferred return (checker-patched via
+                // `user_fn_returns`) over the unresolved `Null` default so
+                // definitions agree with call sites and trailing-expr
+                // bodies actually `return` the value.
+                let inferred = self.user_fn_returns.get(name).cloned();
+                let effective = match &inferred {
+                    Some(rt) if *return_type == TypeAnnotation::Null => rt,
+                    _ => return_type,
+                };
+                functions::compile_function_decl(self, name, params, effective, body)
+            }
             StatementKind::Expression(expr_id) => control::compile_expr_stmt(self, *expr_id),
             StatementKind::Return(ret) => control::compile_return(self, *ret),
             StatementKind::Conditional {

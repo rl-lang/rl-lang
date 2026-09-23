@@ -415,7 +415,10 @@ impl TypeChecker {
 
             // offloads to expression checker
             StatementKind::Expression(expr) => {
-                self.check_expression(*expr);
+                let ty = self.check_expression(*expr);
+                // candidate trailing-expression return; read only when the
+                // enclosing body actually ends with this statement
+                self.last_expr_type = Some(ty);
             }
 
             // loops checker
@@ -597,6 +600,7 @@ impl TypeChecker {
 
             // functions and lambdas
             StatementKind::FunctionDeclaration {
+                name,
                 params,
                 return_type,
                 body,
@@ -612,11 +616,44 @@ impl TypeChecker {
                     );
                 }
                 self.push_return_type(return_type.clone());
+                let saved_propagate = std::mem::replace(&mut self.saw_propagate, false);
                 for stmt in body {
                     self.check_statement(stmt);
                 }
-                self.pop_return_type();
+                let returned = self.pop_return_type();
+                let body_propagated = std::mem::replace(&mut self.saw_propagate, saved_propagate);
                 self.pop_scope();
+                // No `->` annotation (`Null` default): infer the return
+                // type from the body so results/handles flow through calls.
+                // Conservative: all `return`s (or the trailing expression)
+                // must agree on one concrete type, else keep `Null`.
+                if *return_type == TypeAnnotation::Null {
+                    let ends_with_expr = matches!(
+                        body.last().map(|s| &s.kind),
+                        Some(StatementKind::Expression(_))
+                    );
+                    let trailing = if ends_with_expr {
+                        self.last_expr_type.clone()
+                    } else {
+                        None
+                    };
+                    if let Some(inferred) =
+                        Self::infer_fn_return(returned, trailing, ends_with_expr, body_propagated)
+                    {
+                        self.declare(
+                            name.clone(),
+                            CheckType::Function {
+                                params: params
+                                    .iter()
+                                    .map(|p| p.param_type.clone())
+                                    .collect(),
+                                return_type: inferred,
+                            },
+                            false,
+                            statement.span,
+                        );
+                    }
+                }
             }
 
             StatementKind::ImplBlock { record, methods } => {
@@ -625,6 +662,7 @@ impl TypeChecker {
                 }
                 for m in methods {
                     let StatementKind::FunctionDeclaration {
+                        name,
                         params,
                         return_type,
                         body,
@@ -643,11 +681,39 @@ impl TypeChecker {
                         );
                     }
                     self.push_return_type(return_type.clone());
+                    let saved_propagate = std::mem::replace(&mut self.saw_propagate, false);
                     for stmt in body {
                         self.check_statement(stmt);
                     }
-                    self.pop_return_type();
+                    let returned = self.pop_return_type();
+                    let body_propagated =
+                        std::mem::replace(&mut self.saw_propagate, saved_propagate);
                     self.pop_scope();
+                    if *return_type == TypeAnnotation::Null {
+                        let ends_with_expr = matches!(
+                            body.last().map(|s| &s.kind),
+                            Some(StatementKind::Expression(_))
+                        );
+                        let trailing = if ends_with_expr {
+                            self.last_expr_type.clone()
+                        } else {
+                            None
+                        };
+                        if let Some(inferred) =
+                            Self::infer_fn_return(returned, trailing, ends_with_expr, body_propagated)
+                        {
+                            self.methods.insert(
+                                (record.clone(), name.clone()),
+                                CheckType::Function {
+                                    params: params
+                                        .iter()
+                                        .map(|p| p.param_type.clone())
+                                        .collect(),
+                                    return_type: inferred,
+                                },
+                            );
+                        }
+                    }
                 }
             }
             StatementKind::Return(expr) => {
@@ -656,6 +722,10 @@ impl TypeChecker {
                     Some(e) => self.check_expression(*e),
                     None => CheckType::Known(TypeAnnotation::Null),
                 };
+                // record for undeclared-return inference (ignored when annotated)
+                if let Some(top) = self.inferred_return_stack.last_mut() {
+                    top.push(actual_type.clone());
+                }
                 // is the actual type same as the expected return one?
                 if let Some(expected) = self.current_return_type().cloned() {
                     let widens = matches!(

@@ -4,7 +4,7 @@ mod expression;
 mod statement;
 
 use crate::{TypeChecker, structs::CheckType};
-use rl_ast::statements::{Statement, TypeAnnotation};
+use rl_ast::statements::{Statement, StatementKind, TypeAnnotation};
 use rl_utils::span::Span;
 
 impl TypeChecker {
@@ -15,10 +15,54 @@ impl TypeChecker {
     /// Pushes `ty` as the expected return type when entering a function or lambda body.
     pub fn push_return_type(&mut self, ty: TypeAnnotation) {
         self.return_type_stack.push(ty);
+        self.inferred_return_stack.push(Vec::new());
     }
-    /// Pops the expected return type when exiting a function or lambda body.
-    pub fn pop_return_type(&mut self) {
+    /// Pops the expected return type when exiting a function or lambda body,
+    /// returning the `return`-statement types collected for inference.
+    pub fn pop_return_type(&mut self) -> Vec<CheckType> {
         self.return_type_stack.pop();
+        self.inferred_return_stack.pop().unwrap_or_default()
+    }
+
+    /// Infers an undeclared function return type: explicit `return`s win,
+    /// else the trailing-expression type when the body ends with one.
+    /// Returns `None` unless every candidate agrees on one concrete type.
+    /// When the body uses `?` (`propagated`), the unwrapped type is
+    /// wrapped in `Result`, mirroring a `-> result[T]` annotation.
+    pub fn infer_fn_return(
+        returned: Vec<CheckType>,
+        trailing: Option<CheckType>,
+        body_ends_with_expr: bool,
+        propagated: bool,
+    ) -> Option<TypeAnnotation> {
+        let candidates: Vec<CheckType> = if returned.is_empty() {
+            match (body_ends_with_expr, trailing) {
+                (true, Some(ty)) => vec![ty],
+                _ => return None,
+            }
+        } else {
+            returned
+        };
+        let mut tys = candidates.into_iter();
+        let first = match tys.next() {
+            Some(CheckType::Known(ty)) => ty,
+            _ => return None,
+        };
+        for ty in tys {
+            match ty {
+                CheckType::Known(other) if other == first => {}
+                _ => return None,
+            }
+        }
+        if propagated
+            && !matches!(
+                first,
+                TypeAnnotation::Result(_) | TypeAnnotation::CResult(_)
+            )
+        {
+            return Some(TypeAnnotation::Result(Box::new(first)));
+        }
+        Some(first)
     }
 
     // functions for loops to track `break` and similiar

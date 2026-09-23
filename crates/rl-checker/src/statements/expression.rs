@@ -376,12 +376,15 @@ impl TypeChecker {
                 }
                 // add the resolved return type as the expected return
                 self.push_return_type(resolved_return.clone());
+                // isolate `?` tracking: a lambda's propagate is its own
+                let saved_propagate = std::mem::replace(&mut self.saw_propagate, false);
                 // is the body correct?
                 for statement in &body {
                     self.check_statement(statement);
                 }
                 // removes return type
-                self.pop_return_type();
+                let _ = self.pop_return_type();
+                self.saw_propagate = saved_propagate;
                 // remove scope level
                 self.pop_scope();
 
@@ -474,6 +477,9 @@ impl TypeChecker {
             }
 
             ExpressionKind::Propagate(inner) => {
+                // A body using `?` can return `err`: inference wraps.
+                // Saved/restored per function/lambda by the caller arms.
+                self.saw_propagate = true;
                 let inner_typed = self.check_expression_typed(inner);
                 let result = match inner_typed.ty {
                     CheckType::Known(
@@ -482,7 +488,11 @@ impl TypeChecker {
                         if let Some(return_ty) = self.current_return_type()
                             && !matches!(
                                 return_ty,
-                                TypeAnnotation::Result(_) | TypeAnnotation::CResult(_)
+                                // `Null` = undeclared: inference decides
+                                // from the unwrapped type
+                                TypeAnnotation::Null
+                                | TypeAnnotation::Result(_)
+                                | TypeAnnotation::CResult(_)
                             )
                         {
                             self.error(

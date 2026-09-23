@@ -28,6 +28,42 @@ fn non_callable_errors() {
 }
 
 #[test]
+fn unannotated_result_return_flows_through_propagate() {
+    assert_checker_clean(
+        "get read_file from std::fs\nfn grab(string p) { read_file(p) }\ndec s = grab(\"x\")?\n",
+    );
+}
+
+#[test]
+fn propagate_inside_unannotated_fn_is_allowed() {
+    assert_checker_clean(
+        "get read_file from std::fs\nfn grab(string p) { read_file(p)? }\ndec s = grab(\"x\")?\n",
+    );
+}
+
+#[test]
+fn propagate_inside_declared_non_result_still_errors() {
+    assert_checker_msg(
+        "get read_file from std::fs\nfn grab(string p) -> string { read_file(p)? }",
+        "`?` cannot be used in a function that does not return a result",
+    );
+}
+
+#[test]
+fn handle_param_accepts_concrete_handle() {
+    assert_checker_clean(
+        "get open, close from std::fs\nfn shut(handle h) { close(h) }\ndec f = open(\"x\", \"r\")?\nshut(f)\n",
+    );
+}
+
+#[test]
+fn annotated_result_handle_return_flows() {
+    assert_checker_clean(
+        "get open, close from std::fs\nfn grab(string p) -> result[handle] { open(p, \"r\") }\ndec h = grab(\"x\")?\nclose(h)\n",
+    );
+}
+
+#[test]
 fn stdlib_typed_arity_errors() {
     assert_checker_msg(
         "get pow from std::math\npow(2)",
