@@ -83,29 +83,3 @@ pub fn run_rlc_file(path: &std::path::Path) {
 
     run_rlc_bytes(&bytes, &path.display().to_string());
 }
-
-#[cfg(all(feature = "cranelift", feature = "vm"))]
-pub fn cranelift_loop(source: SourceFile, ast: Ast, statements: Vec<Statement>) {
-    use rl_vm::Compiler;
-
-    let (_arena, resolved) = resolve(&source, ast, statements);
-
-    let chunk = match Compiler::new(&_arena)
-        .with_source_file(source.clone())
-        .compile(&resolved)
-    {
-        Ok(c) => c,
-        Err(e) => {
-            e.report_to_stderr();
-            std::process::exit(1);
-        }
-    };
-
-    match rl_cranelift::run_chunk(&chunk) {
-        Ok(val) => println!("{}", val),
-        Err(e) => {
-            eprintln!("cranelift error: {}", e.0);
-            std::process::exit(1);
-        }
-    }
-}
