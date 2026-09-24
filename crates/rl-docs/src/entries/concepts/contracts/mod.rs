@@ -33,6 +33,15 @@ pub static CONTRACTS: ConceptEntry = ConceptEntry {
         },
         DescriptionEntry {
             kind: DescriptionKind::Explanation,
+            title: Some("static proving for literal arguments"),
+            description: "calls with constant arguments prove refinements and `requires` at compile time: violations are errors, satisfied predicates stay silent, and anything non-constant falls through to the runtime guards. Proving never rejects a program the runtime would accept. `ensures` stays runtime-only (it needs body analysis, not call-site values)",
+            examples: &[
+                "fn withdraw(int amt: >0, int balance) -> result[int] {\n    return ok(balance - amt)\n}\nwithdraw(0, 100)  // error: contract violation (proven at compile time)",
+            ],
+            expected_output: &[],
+        },
+        DescriptionEntry {
+            kind: DescriptionKind::Explanation,
             title: Some("contracts as properties"),
             description: "the `cases(N)` generator reads the same annotations as its input spec, so one annotation serves checking and generation: refined `int` parameters generate in-bounds values instead of generate-then-filter",
             examples: &[

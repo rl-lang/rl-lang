@@ -247,3 +247,41 @@ result_unwrap_err(m(500))
     .unwrap();
     assert_eq!(result, rl_vm::VmValue::Str("small".into()));
 }
+
+#[test]
+fn contracts_proven_refinement_violation_errors() {
+    assert_checker_msg(
+        "fn withdraw(int amt: >0, int balance) -> result[int] {\n    return ok(balance - amt)\n}\nwithdraw(0, 100)",
+        "contract violation (proven at compile time): refinement failed: amt > 0",
+    );
+}
+
+#[test]
+fn contracts_proven_requires_violation_uses_message() {
+    assert_checker_msg(
+        "fn withdraw(int amt, int balance) -> result[int]\n    requires amt > 0, \"positive\"\n{\n    return ok(balance - amt)\n}\nwithdraw(0, 100)",
+        "contract violation (proven at compile time): positive",
+    );
+}
+
+#[test]
+fn contracts_proven_cross_param_violation_errors() {
+    assert_checker_msg(
+        "fn withdraw(int amt, int balance: >=amt) -> result[int] {\n    return ok(balance - amt)\n}\nwithdraw(50, 10)",
+        "refinement failed: balance >= amt",
+    );
+}
+
+#[test]
+fn contracts_satisfied_call_is_clean() {
+    assert_checker_clean(
+        "fn withdraw(int amt: >0, int balance) -> result[int] {\n    return ok(balance - amt)\n}\nwithdraw(30, 100)",
+    );
+}
+
+#[test]
+fn contracts_dynamic_args_stay_silent() {
+    assert_checker_clean(
+        "fn withdraw(int amt: >0, int balance) -> result[int] {\n    return ok(balance - amt)\n}\ndec int n = 0\nwithdraw(n, 100)",
+    );
+}

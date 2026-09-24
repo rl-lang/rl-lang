@@ -755,6 +755,9 @@ impl TypeChecker {
                         item.used = true;
                     }
                 }
+                // Contracts for call-site proving (phase 2): refinements
+                // plus `requires` travel with the declaration.
+                self.record_fn_contracts(name, params, requires);
                 self.push_return_type(return_type.clone());
                 let saved_propagate = std::mem::replace(&mut self.saw_propagate, false);
                 for stmt in body {

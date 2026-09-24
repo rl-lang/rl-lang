@@ -24,6 +24,7 @@ pub mod statements;
 pub mod structs;
 pub mod types;
 pub mod units;
+pub mod contracts;
 
 use crate::structs::CheckType;
 use rl_ast::{
@@ -81,6 +82,7 @@ impl TypeChecker {
             allow_stack: Vec::new(),
             has_explicit_entry: false,
             deprecated_stdlib: Self::build_deprecated_stdlib_map(),
+            fn_contracts: HashMap::new(),
         }
     }
 
