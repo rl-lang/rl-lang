@@ -118,7 +118,7 @@ pub(super) fn compile_request(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), 
         cc.compile_expr(args[3])?;
         cc.writer.write(", 1");
     } else {
-        cc.writer.write(", rl_str_literal(\"\", 0), 0");
+        cc.writer.write(", (rl_array){0}, 0");
     }
     cc.writer.write(")");
     Ok(())

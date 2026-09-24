@@ -180,7 +180,11 @@ impl<'a> CCodegen<'a> {
 
 /// Maps an RL value's C type to the `rl_result.data` union field holding it.
 /// Used to unwrap a propagated `rl_result` into a plain C value.
+/// Single tuple results travel as one element arrays; deref element zero.
 pub(super) fn result_field_access(c_type: &str, temp: &str) -> String {
+    if c_type.starts_with("rl_tuple_") {
+        return format!("(({0}*){1}.data.arr.data)[0]", c_type, temp);
+    }
     match c_type {
         "int64_t" | "uint64_t" | "int32_t" | "uint32_t" | "int16_t" | "uint16_t" | "int8_t"
         | "uint8_t" | "char" => format!("{}.data.i64", temp),
