@@ -35,6 +35,7 @@ pub(super) fn compile_test_fn(cc: &mut CCodegen, func_name: &str, args: &[ExprId
         "test_skip_if" => "rl_test_skip_if",
         "test_assert_panics" => "rl_test_assert_panics",
         "test_assert_no_panic" => "rl_test_assert_no_panic",
+        "test_run_registered" => "rl_test_run_registered",
         _ => unreachable!(),
     };
     cc.writer.write(c_fn);

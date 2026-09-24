@@ -103,7 +103,7 @@ fn transpile_demo_compiles_and_runs() {
 fn transpile_test_mode_compiles_and_runs() {
     let source = r#"
 get println from std::io
-get test_assert_eq, test_skip from std::test
+get test_assert_eq, test_skip, test_run_registered from std::test
 
 !#[test]
 fn addition() {
@@ -118,6 +118,17 @@ fn skipped_case() {
 !#[test]
 fn failing() {
     test_assert_eq(1, 2, "boom")
+}
+
+!#[test(register("inner"))]
+fn inner_case() {
+    test_assert_eq(1, 1, "in")
+}
+
+!#[test]
+fn outer() {
+    dec int f = test_run_registered("inner")
+    test_assert_eq(f, 0, "lookup")
 }
 "#;
     let file = SourceFile::new("cc_test_mode.rl", source.to_string());
@@ -174,5 +185,7 @@ fn failing() {
     assert!(out.contains("ok addition"));
     assert!(out.contains("SKIP [skipped_case] skipped: later"));
     assert!(out.contains("FAIL failing"));
-    assert!(out.contains("ran 3 tests: 1 ok, 1 failed, 1 skipped"));
+    assert!(out.contains("ok inner_case"));
+    assert!(out.contains("ok outer"));
+    assert!(out.contains("ran 5 tests: 3 ok, 1 failed, 1 skipped"));
 }

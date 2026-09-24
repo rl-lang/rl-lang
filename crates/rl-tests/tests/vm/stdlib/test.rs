@@ -67,3 +67,75 @@ test_assert_no_panic(fn() {
     .unwrap();
     assert_eq!(result, VmValue::Null);
 }
+
+#[test]
+fn lookup_runs_registered_case() {
+    let result = compile_and_run(
+        r#"
+get test_assert_eq, test_run_registered from std::test
+
+!#[test(register("math"))]
+fn addition() {
+    test_assert_eq(1 + 1, 2, "math")
+}
+
+test_run_registered("math")
+"#,
+    )
+    .unwrap();
+    assert_eq!(result, VmValue::Int(0));
+}
+
+#[test]
+fn lookup_counts_failures() {
+    let result = compile_and_run(
+        r#"
+get test_assert_eq, test_run_registered from std::test
+
+!#[test(register("m"))]
+fn bad() {
+    test_assert_eq(1, 2, "boom")
+}
+
+test_run_registered("m")
+"#,
+    )
+    .unwrap();
+    assert_eq!(result, VmValue::Int(1));
+}
+
+#[test]
+fn lookup_unknown_registry_raises() {
+    let result = compile_and_run(
+        r#"
+get test_run_registered from std::test
+test_run_registered("nope")
+"#,
+    );
+    assert!(result.is_err());
+}
+
+#[test]
+fn lookup_runs_setup_around_case() {
+    let result = compile_and_run(
+        r#"
+get test_assert_eq, test_run_registered from std::test
+
+dec int calls = 0
+
+!#[setup]
+fn before() {
+    calls = calls + 1
+}
+
+!#[test(register("m"))]
+fn check() {
+    test_assert_eq(calls, 1, "setup ran")
+}
+
+test_run_registered("m")
+"#,
+    )
+    .unwrap();
+    assert_eq!(result, VmValue::Int(0));
+}

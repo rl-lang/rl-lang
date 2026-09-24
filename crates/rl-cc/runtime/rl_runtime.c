@@ -15628,3 +15628,125 @@ rl_result rl_test_assert_no_panic(rl_closure f) {
     rl_test_record(1, "");
     return rl_ok_null();
 }
+
+// ---- test registry (`test_run_registered`, `rlt --test` drivers) ---------
+
+typedef void (*rl_test_fn_t)(void);
+
+typedef struct {
+    char *kind;
+    char *name;
+    char *group;
+    char *reg;
+    rl_test_fn_t fn;
+} rl_test_entry_t;
+
+#define RL_TEST_MAX_ENTRIES 512
+
+static rl_test_entry_t rl_test_entries[RL_TEST_MAX_ENTRIES];
+static size_t rl_test_entry_count = 0;
+
+void rl_test_register(const char *kind, const char *name, const char *group, const char *reg, rl_test_fn_t fn) {
+    if (rl_test_entry_count >= RL_TEST_MAX_ENTRIES) {
+        fprintf(stderr, "error: too many registered tests (max %d)\n", RL_TEST_MAX_ENTRIES);
+        _rl_abort();
+    }
+    rl_test_entry_t *e = &rl_test_entries[rl_test_entry_count++];
+    e->kind = strdup(kind ? kind : "");
+    e->name = strdup(name ? name : "");
+    e->group = strdup(group ? group : "");
+    e->reg = strdup(reg ? reg : "");
+    e->fn = fn;
+    if (!e->kind || !e->name || !e->group || !e->reg) {
+        fprintf(stderr, "error: out of memory in test registry\n");
+        _rl_abort();
+    }
+}
+
+// Runs one registered entry under abort capture: 0 ok, 1 failed, 2 skipped.
+static int rl_test_invoke(rl_test_entry_t *e) {
+    uint64_t f0 = rl_test_state.failed;
+    size_t s0 = rl_test_state.skipped_len;
+    size_t name_len = strlen(e->name);
+    size_t glen = strlen(e->group);
+    char *full = malloc(name_len + glen + 3);
+    if (!full) {
+        fprintf(stderr, "error: out of memory in test registry\n");
+        _rl_abort();
+    }
+    if (glen > 0) {
+        snprintf(full, name_len + glen + 3, "%s::%s", e->group, e->name);
+    } else {
+        snprintf(full, name_len + glen + 3, "%s", e->name);
+    }
+    rl_test_state.current = full;
+    int code = setjmp(rl_abort_frames[rl_abort_depth++]);
+    if (code == 2) {
+        free(full);
+        rl_test_state.current = NULL;
+        return 2;
+    }
+    if (code != 0) {
+        // Aborted: the site already printed its diagnostic; record the
+        // failure (attributed to the current case) so verdicts and
+        // deltas observe it.
+        rl_test_record(0, "aborted (see error above)");
+        free(full);
+        rl_test_state.current = NULL;
+        return 1;
+    }
+    e->fn();
+    rl_abort_depth--;
+    int verdict = 0;
+    if (rl_test_state.skipped_len > s0) {
+        verdict = 2;
+    } else if (rl_test_state.failed > f0) {
+        verdict = 1;
+    }
+    free(full);
+    rl_test_state.current = NULL;
+    return verdict;
+}
+
+int64_t rl_test_run_registered(rl_string reg) {
+    // Collect matching cases first: invocation may register nothing new,
+    // but setups run per case below exactly like the runner.
+    size_t matched[RL_TEST_MAX_ENTRIES];
+    size_t matched_count = 0;
+    for (size_t i = 0; i < rl_test_entry_count; i++) {
+        if (strcmp(rl_test_entries[i].kind, "case") != 0) {
+            continue;
+        }
+        if (strlen(rl_test_entries[i].reg) == (size_t)reg.len
+            && memcmp(rl_test_entries[i].reg, reg.data, (size_t)reg.len) == 0) {
+            matched[matched_count++] = i;
+        }
+    }
+    if (matched_count == 0) {
+        fprintf(stderr, "error: test_run_registered: unknown registry `%.*s`\n",
+            (int)reg.len, reg.data);
+        _rl_abort();
+        return 0;
+    }
+    uint64_t failed_before = rl_test_state.failed;
+    for (size_t m = 0; m < matched_count; m++) {
+        int setup_failed = 0;
+        for (size_t i = 0; i < rl_test_entry_count; i++) {
+            if (strcmp(rl_test_entries[i].kind, "setup") == 0
+                && rl_test_invoke(&rl_test_entries[i]) == 1) {
+                setup_failed = 1;
+                break;
+            }
+        }
+        if (!setup_failed) {
+            rl_test_invoke(&rl_test_entries[matched[m]]);
+            for (size_t i = 0; i < rl_test_entry_count; i++) {
+                if (strcmp(rl_test_entries[i].kind, "teardown") == 0
+                    && rl_test_invoke(&rl_test_entries[i]) == 1) {
+                    break;
+                }
+            }
+        }
+    }
+    return (int64_t)(rl_test_state.failed - failed_before);
+}

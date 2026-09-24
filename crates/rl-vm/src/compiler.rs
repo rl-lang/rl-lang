@@ -496,6 +496,46 @@ impl<'a> Compiler<'a> {
         Ok(std::mem::take(&mut self.chunk))
     }
 
+    /// Emits a `__test_register` call recording a top-level test, setup,
+    /// or teardown function into the `std::test` registry. Silently skips
+    /// when the native is unavailable (builds without `impls`).
+    fn emit_test_registration(
+        &mut self,
+        name: &str,
+        attribute: &Option<FunctionAttribute>,
+        slot: u16,
+        span: Span,
+    ) -> Result<(), CompileError> {
+        let (kind, group, register) = match attribute {
+            Some(FunctionAttribute::Test(params)) => (
+                "case",
+                params.group.clone().unwrap_or_default(),
+                params.register.clone().unwrap_or_default(),
+            ),
+            Some(FunctionAttribute::Setup) => ("setup", String::new(), String::new()),
+            Some(FunctionAttribute::Teardown) => ("teardown", String::new(), String::new()),
+            _ => return Ok(()),
+        };
+        let Some(native) = self
+            .stdlib
+            .resolve(&["std".to_string(), "test".to_string(), "__test_register".to_string()])
+        else {
+            return Ok(());
+        };
+        self.emit_const(VmValue::Native(native), span);
+        for s in [kind, name, group.as_str(), register.as_str()] {
+            let idx = self.chunk.add_constant(VmValue::Str(Rc::from(s)));
+            self.chunk.write_op(OpCode::Const, span);
+            self.chunk.write_u16(idx, span);
+        }
+        self.chunk.write_op(OpCode::GetGlobal, span);
+        self.chunk.write_u16(slot, span);
+        self.chunk.write_op(OpCode::Call, span);
+        self.chunk.write_u16(5, span);
+        self.chunk.write_op(OpCode::Pop, span);
+        Ok(())
+    }
+
     /// Emits a zero-argument call to the function stored at global `slot`,
     /// optionally popping its (discarded) result off the stack.
     fn emit_entry_call(        &mut self,
@@ -829,7 +869,7 @@ impl<'a> Compiler<'a> {
             }
 
             StatementKind::ResolvedFunctionDeclaration {
-                name, params, body, ..
+                name, params, body, attribute, ..
             } => {
                 let func_chunk = Self::compile_function_chunk(
                     self.ast,
@@ -859,6 +899,13 @@ impl<'a> Compiler<'a> {
                 self.chunk.write_op(OpCode::RegisterUserMethod, span);
                 self.chunk.write_u16(key_idx, span);
                 self.chunk.write_u16(func_idx, span);
+                // Top-level test functions register into the `std::test`
+                // registry so `test_run_registered` finds them under
+                // `rl run` too (the `rl test` runner invokes by slot and
+                // never consults the registry).
+                if self.scope_bases.is_empty() {
+                    self.emit_test_registration(name, attribute, slot, span)?;
+                }
                 Ok(())
             }
 

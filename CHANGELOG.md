@@ -10,6 +10,7 @@ All notable changes to the rl-lang toolchain are documented here. The format is 
 - **Contracts (`requires`/`ensures`/refinements)** - runtime-checked contracts: parameter refinements (`int amt: >0`, cross-parameter like `balance: >=amt`), `requires` preconditions with messages, `ensures` postconditions over `ret` (inner value for `result[T]`, skipped on `Err`). Violations return `Err` for `result` functions and abort otherwise. Desugared pre-resolution, so VM and C backends enforce identically.
 - **Property tests (`cases(N)`)** - type-directed generators (bounded ints narrowed by refinements, floats, bools, strings, arrays; maps/sets/tuples/records/chars fail cleanly as out of scope), deterministic fixed-seed replay, greedy shrinking to minimal failing inputs reported by the runner.
 - **Static contract proving (phase 2)** - parameter refinements and `requires` clauses with constant arguments prove at compile time: violations are errors, satisfied and unknown predicates stay silent for the runtime guards. Literals only; `ensures` stays runtime-only.
+- **Registry lookup (`test_run_registered`)** - runs one named registry in-program (re-run semantics, no cached verdicts) with setup/teardown hooks, returning the failure count. The compiler records every test/setup/teardown as definitions execute, so lookup works under `rl run` too; `rlt --test` drivers and C programs share the same registry.
 
 ### Removed
 

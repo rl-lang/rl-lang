@@ -285,3 +285,96 @@ fn contracts_dynamic_args_stay_silent() {
         "fn withdraw(int amt: >0, int balance) -> result[int] {\n    return ok(balance - amt)\n}\ndec int n = 0\nwithdraw(n, 100)",
     );
 }
+
+#[test]
+fn contracts_proven_arithmetic_requires() {
+    assert_checker_msg(
+        "fn f(int a, int b) -> int\n    requires a + b > 10, \"sum\"\n{\n    return a\n}\nf(3, 4)",
+        "contract violation (proven at compile time): sum",
+    );
+}
+
+#[test]
+fn contracts_proven_float_refinement() {
+    assert_checker_msg(
+        "fn f(float x: >0) -> float { return x }\nf(-1.5)",
+        "refinement failed",
+    );
+}
+
+#[test]
+fn contracts_proven_string_eq() {
+    assert_checker_msg(
+        "fn f(string s: ==\"hi\") -> string { return s }\nf(\"bye\")",
+        "refinement failed",
+    );
+}
+
+#[test]
+fn contracts_proven_bool_eq() {
+    assert_checker_msg(
+        "fn f(bool b: ==true) -> bool { return b }\nf(false)",
+        "refinement failed",
+    );
+}
+
+#[test]
+fn contracts_proven_ne_operator() {
+    assert_checker_msg(
+        "fn f(int x: !=0) -> int { return x }\nf(0)",
+        "refinement failed: x != 0",
+    );
+}
+
+#[test]
+fn contracts_cross_param_bails_when_late() {
+    assert_checker_clean(
+        "fn f(int a, int b: >=a) -> int { return b }\ndec int n = 1\nf(n, 5)",
+    );
+}
+
+#[test]
+fn contracts_ret_in_requires_errors() {
+    assert_checker_msg(
+        "fn f(int x) -> int\n    requires ret > 0\n{\n    return x\n}\nf(1)",
+        "undefined variable",
+    );
+}
+
+#[test]
+fn contracts_division_by_zero_stays_silent() {
+    assert_checker_clean(
+        "fn f(int x) -> int\n    requires 1 / (x - x) > 0\n{\n    return x\n}\nf(5)",
+    );
+}
+
+#[test]
+fn contracts_proven_through_alias() {
+    assert_checker_msg(
+        "fn withdraw(int amt: >0) -> int { return amt }\ndec f = withdraw\nf(0)",
+        "refinement failed: amt > 0",
+    );
+}
+
+#[test]
+fn contracts_multiple_violations_all_reported() {
+    let msgs = crate::common::checker_messages(
+        "fn f(int a: >0, int b: >0) -> int { return a }\nf(0, 0)",
+    );
+    let hits = msgs.iter().filter(|m| m.contains("refinement failed")).count();
+    assert_eq!(hits, 2, "expected both violations, got: {msgs:?}");
+}
+
+#[test]
+fn contracts_logical_shapes_stay_silent() {
+    assert_checker_clean(
+        "fn f(bool a, bool b) -> bool\n    requires a and b\n{\n    return a\n}\nf(true, false)",
+    );
+}
+
+#[test]
+fn contracts_plain_calls_unaffected() {
+    assert_checker_clean(
+        "fn f(int x) -> int { return x }\nf(0)",
+    );
+}

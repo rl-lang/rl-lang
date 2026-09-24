@@ -806,7 +806,7 @@ impl<'a> CCodegen<'a> {
 
         match func_name {
             "println" | "print" => return self::io::compile_print(self, func_name, args),
-            "test_skip" | "test_skip_if" | "test_assert_eq" | "test_assert_ne" | "test_assert_panics" | "test_assert_no_panic" => {
+            "test_skip" | "test_skip_if" | "test_assert_eq" | "test_assert_ne" | "test_assert_panics" | "test_assert_no_panic" | "test_run_registered" => {
                 return self::test::compile_test_fn(self, func_name, args)
             }
             "read_file" => return self::io::compile_read_file(self, args),

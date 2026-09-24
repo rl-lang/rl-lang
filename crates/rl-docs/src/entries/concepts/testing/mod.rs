@@ -30,7 +30,7 @@ pub static TESTING: ConceptEntry = ConceptEntry {
         DescriptionEntry {
             kind: DescriptionKind::Explanation,
             title: Some("running tests"),
-            description: "`rl test` discovers `!#[test]` functions, runs setup, cases (inits/finals keep their semantics), teardown, and reports pass/fail/skip with a non-zero exit on failure. `rl test --match <pattern>` filters by group/register name. Tests never run under `rl run`. `rlt --test` builds the same runner as a C binary",
+            description: "`rl test` discovers `!#[test]` functions, runs setup, cases (inits/finals keep their semantics), teardown, and reports pass/fail/skip with a non-zero exit on failure. `rl test --match <pattern>` filters by group/register name. Tests never run under `rl run`. `rlt --test` builds the same runner as a C binary. Inside a program, `test_run_registered(\"name\")` re-runs one named registry (no cached verdicts) and returns its failure count",
             examples: &[
                 "rl test tests.rl",
                 "rl test tests.rl --match money",

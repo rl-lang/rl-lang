@@ -261,6 +261,12 @@ rl_result rl_test_assert_eq(rl_result a, rl_result b, rl_string msg);
 rl_result rl_test_assert_ne(rl_result a, rl_result b, rl_string msg);
 rl_result rl_test_assert_panics(rl_closure f);
 rl_result rl_test_assert_no_panic(rl_closure f);
+// Test registry for `test_run_registered` and `rlt --test` drivers.
+// `fn` is a zero-argument test/setup/teardown function; only zero-arg
+// functions are registered (parameterized ones cannot be invoked).
+typedef void (*rl_test_fn_t)(void);
+void rl_test_register(const char *kind, const char *name, const char *group, const char *reg, rl_test_fn_t fn);
+int64_t rl_test_run_registered(rl_string name);
 
 // Unwrap helpers - extract the inner C value from a successful
 // `rl_result`. Callers must have checked `is_ok` (or `?`) first;

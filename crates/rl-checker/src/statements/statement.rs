@@ -4,6 +4,7 @@
 use std::{collections::HashSet, path::PathBuf};
 
 use crate::{TypeChecker, structs::CheckType, units::Unit};
+use rl_ast::nodes::ExpressionKind;
 use rl_ast::statements::{ItemAttribute, Lint, MatchPattern, RefineOperand, Statement, StatementKind, TypeAnnotation};
 use rl_lexer::tokenizer::Tokenizer;
 use rl_parser::parser_logic::Parser;
@@ -74,6 +75,19 @@ impl TypeChecker {
                 value,
                 item_attributes: _,
             } => {
+                // `dec alias = contracted_fn` inherits the callee's
+                // contracts so proving works through the alias.
+                // Reassignment is not tracked (declaration only).
+                let aliased = match &self.ast_arena.exprs.get(*value).kind {
+                    ExpressionKind::Identifier(target)
+                    | ExpressionKind::ResolvedIdentifier { name: target, .. } => {
+                        self.fn_contracts.get(target).cloned()
+                    }
+                    _ => None,
+                };
+                if let Some(contracts) = aliased {
+                    self.fn_contracts.insert(name.clone(), contracts);
+                }
                 let declared_unit = unit_annotation.as_ref().map(Unit::from_annotation);
                 let value_typed = self.check_expression_typed(*value);
 

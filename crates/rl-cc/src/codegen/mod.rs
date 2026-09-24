@@ -1,5 +1,5 @@
 use crate::writer::CWriter;
-use crate::name_mangle::mangle;
+use crate::name_mangle::{escape_c_string, mangle};
 use crate::types::type_to_c;
 use rl_ast::{Ast, statements::*};
 use rl_checker::structs::{CheckType, TypeChecker};
@@ -38,8 +38,8 @@ pub struct ScannedTest {
 pub struct ScannedEntry {
     pub entry: Option<String>,
     pub tests: Vec<ScannedTest>,
-    pub setups: Vec<String>,
-    pub teardowns: Vec<String>,
+    pub setups: Vec<ScannedTest>,
+    pub teardowns: Vec<ScannedTest>,
     pub inits: Vec<String>,
     pub finals: Vec<String>,
 }
@@ -428,8 +428,8 @@ impl<'a> CCodegen<'a> {
         let mut explicit_entry: Option<String> = None;
         let mut main_entry: Option<String> = None;
         let mut tests: Vec<ScannedTest> = Vec::new();
-        let mut setups: Vec<String> = Vec::new();
-        let mut teardowns: Vec<String> = Vec::new();
+        let mut setups: Vec<ScannedTest> = Vec::new();
+        let mut teardowns: Vec<ScannedTest> = Vec::new();
         let mut inits: Vec<(String, Option<u32>, usize)> = Vec::new();
         let mut finals: Vec<(String, Option<u32>, usize)> = Vec::new();
 
@@ -459,8 +459,16 @@ impl<'a> CCodegen<'a> {
                     params: test_params.clone(),
                     param_count: params.len(),
                 }),
-                Some(FunctionAttribute::Setup) => setups.push(name.clone()),
-                Some(FunctionAttribute::Teardown) => teardowns.push(name.clone()),
+                Some(FunctionAttribute::Setup) => setups.push(ScannedTest {
+                    name: name.clone(),
+                    params: rl_ast::statements::TestParams::default(),
+                    param_count: params.len(),
+                }),
+                Some(FunctionAttribute::Teardown) => teardowns.push(ScannedTest {
+                    name: name.clone(),
+                    params: rl_ast::statements::TestParams::default(),
+                    param_count: params.len(),
+                }),
                 Some(FunctionAttribute::Init(priority)) => {
                     inits.push((name.clone(), *priority, order));
                 }
@@ -488,6 +496,49 @@ impl<'a> CCodegen<'a> {
         })
     }
 
+    /// Emits registry population for `test_run_registered` (all modes):
+    /// every zero-arg test/setup/teardown registers its address. Parameterized
+    /// functions are skipped (they cannot be invoked without arguments).
+    fn emit_test_registrations(&mut self, entry: &ScannedEntry) {
+        for test in &entry.tests {
+            if test.param_count > 0 {
+                continue;
+            }
+            let group = test.params.group.as_deref().unwrap_or_default();
+            let register = test.params.register.as_deref().unwrap_or_default();
+            self.writer.write_indent();
+            self.writer.write(&format!(
+                "rl_test_register(\"case\", \"{}\", \"{}\", \"{}\", {});\n",
+                escape_c_string(&test.name),
+                escape_c_string(group),
+                escape_c_string(register),
+                mangle(&test.name)
+            ));
+        }
+        for hook in &entry.setups {
+            if hook.param_count > 0 {
+                continue;
+            }
+            self.writer.write_indent();
+            self.writer.write(&format!(
+                "rl_test_register(\"setup\", \"{}\", \"\", \"\", {});\n",
+                escape_c_string(&hook.name),
+                mangle(&hook.name)
+            ));
+        }
+        for hook in &entry.teardowns {
+            if hook.param_count > 0 {
+                continue;
+            }
+            self.writer.write_indent();
+            self.writer.write(&format!(
+                "rl_test_register(\"teardown\", \"{}\", \"\", \"\", {});\n",
+                escape_c_string(&hook.name),
+                mangle(&hook.name)
+            ));
+        }
+    }
+
     /// Emits the `rlt --test` driver main: setup statements, inits, then    /// one setjmp-guarded block per test (setups, test, teardowns),
     /// finals, a summary, and a non-zero exit on failure. Property cases
     /// (`cases(N)`) report a runtime skip (generation lives in `rl test`);
@@ -507,6 +558,8 @@ impl<'a> CCodegen<'a> {
         self.writer.write("int main(int argc, char **argv) {\n");
         self.writer.indent();
         self.writer.writeln("rl_store_args(argc, argv);");
+        // Test registry for `test_run_registered`.
+        self.emit_test_registrations(entry);
         for stmt in statements {
             if Self::is_entry_setup(&stmt.kind) {
                 self.compile_top_level(stmt)?;
@@ -553,15 +606,15 @@ impl<'a> CCodegen<'a> {
             self.writer.writeln("int code = setjmp(rl_abort_frames[rl_abort_depth++]);");
             self.writer.writeln("if (code == 0) {");
             self.writer.indent();
-            for name in &entry.setups {
+            for hook in &entry.setups {
                 self.writer.write_indent();
-                self.writer.write(&format!("{}();\n", mangle(name)));
+                self.writer.write(&format!("{}();\n", mangle(&hook.name)));
             }
             self.writer.write_indent();
             self.writer.write(&format!("{c_name}();\n"));
-            for name in &entry.teardowns {
+            for hook in &entry.teardowns {
                 self.writer.write_indent();
-                self.writer.write(&format!("{}();\n", mangle(name)));
+                self.writer.write(&format!("{}();\n", mangle(&hook.name)));
             }
             self.writer.writeln("rl_abort_depth--;");
             self.writer.dedent();
@@ -715,6 +768,8 @@ impl<'a> CCodegen<'a> {
             self.writer.write("int main(int argc, char **argv) {\n");
             self.writer.indent();
             self.writer.writeln("rl_store_args(argc, argv);");
+            // Test registry for `test_run_registered`.
+            self.emit_test_registrations(&entry);
             for stmt in statements {
                 if Self::is_entry_setup(&stmt.kind) {
                     self.compile_top_level(stmt)?;
@@ -757,6 +812,8 @@ impl<'a> CCodegen<'a> {
             self.writer.write("int main(int argc, char **argv) {\n");
             self.writer.indent();
             self.writer.writeln("rl_store_args(argc, argv);");
+            // Test registry for `test_run_registered`.
+            self.emit_test_registrations(&entry);
 
             for stmt in statements {
                 if !matches!(&stmt.kind,
