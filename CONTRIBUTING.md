@@ -47,22 +47,33 @@ If you're adding a brand-new module (not just a new function in an existing one)
 
 ## Deprecating a stdlib function
 
-When renaming or moving a stdlib function (e.g. `std::array::len` -> `std::len`), you need to keep the old path working while warning users to switch. Three places to touch:
+When renaming or moving a stdlib function (e.g. `std::old::foo` -> `std::new::foo`), you need to keep the old path working while warning users to switch. Three places to touch:
 
-1. **Signature tree** (`crates/rl-std/src/lib.rs`) -- add the function name to the new module's `signatures()` (e.g. `.with_functions(&["len"])` on the root `std`), and keep it in the old module too so both paths resolve.
+1. **Signature tree** (`crates/rl-std/src/lib.rs`) -- add the function name to the new module's `signatures()` (e.g. `.with_functions(&["foo"])` on the new module), and keep it in the old module too so both paths resolve.
 
-2. **VM runtime tree** (`crates/rl-vm/src/stdlib/mod.rs`) -- register the function under its new path in `root()`, and keep it under the old path too. Both `.with_function("len", ...)` calls use the same implementation.
+2. **VM runtime tree** (`crates/rl-vm/src/stdlib/mod.rs`) -- register the function under its new path in `root()`, and keep it under the old path too. Both registrations use the same implementation.
 
 3. **Deprecation map** (`crates/rl-checker/src/lib.rs`) -- add an entry to `build_deprecated_stdlib_map()`:
    ```rust
    m.insert(
-       vec!["std".into(), "array".into(), "len".into()],
-       "use std::len instead".into(),
+       vec!["std".into(), "old".into(), "foo".into()],
+       "use std::new::foo instead".into(),
    );
    ```
-   The checker looks up the full path (`["std", "array", "len"]`) and emits a yellow `Warning: 'std::array::len' is deprecated: use std::len instead` whenever it's called. Users can suppress it with `!#[allow(deprecated)]`.
+   The checker looks up the full path (`["std", "old", "foo"]`) and emits a yellow `Warning: 'std::old::foo' is deprecated: use std::new::foo instead` whenever it's called. Users can suppress it with `!#[allow(deprecated)]`.
 
 After adding the entry, run `cargo test` -- existing tests that call the old path should still pass (the function still works), and the checker will now emit a deprecation warning for new code.
+
+## Removing a deprecated stdlib function
+
+Once callers have migrated, delete the old path completely:
+
+1. Delete the old `#[native_fn]` impl and its entry in the module's `native_module!` `funcs` list (`crates/rl-std/src/*.rs`).
+2. Delete its entry from `build_deprecated_stdlib_map()`.
+3. Move or delete its docs entries under `crates/rl-docs/src/entries/stdlib/` (move them if the canonical path has no entry yet, otherwise delete) and update the three `mod.rs` registries.
+4. Migrate every in-repo caller (examples, tests, docs snippets) to the canonical path, and rewrite any tests that asserted the deprecation warning.
+
+After removal, the old path fails with `undefined function` -- verify with `rl check` on both the old and the canonical path.
 
 ## AI usage
 

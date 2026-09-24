@@ -188,11 +188,18 @@ fn array_arr_push_takes_array_t_and_t_returns_result_array_t() {
 }
 
 #[test]
-fn array_len_resolves_as_an_untyped_legacy_function() {
+fn array_len_removed_in_favor_of_top_level_len() {
     let tree = stdlib_names();
     let path = vec!["std".to_string(), "array".to_string(), "len".to_string()];
-    let f = tree.resolve(&path).expect("array len should resolve");
-    assert!(f.signatures.is_empty());
+    assert!(
+        tree.resolve(&path).is_none(),
+        "array::len should not resolve; use std::len"
+    );
+    let top = vec!["std".to_string(), "len".to_string()];
+    assert!(
+        tree.resolve(&top).is_some(),
+        "top-level std::len should resolve"
+    );
 }
 
 #[test]

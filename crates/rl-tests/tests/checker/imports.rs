@@ -128,47 +128,47 @@ fn mixed_alias_and_plain_passes() {
 #[test]
 fn deprecated_bare_call_warns() {
     assert_checker_warns(
-        "get read_file from std::io\nread_file(\"x\")",
-        "'std::io::read_file' is deprecated: use std::fs::read_file instead",
+        "get eval from std::rl\neval(\"1\")",
+        "'std::rl::eval' is deprecated",
     );
 }
 
 #[test]
 fn deprecated_qualified_call_warns() {
     assert_checker_warns(
-        "std::io::read_file(\"x\")",
-        "'std::io::read_file' is deprecated",
+        "std::rl::eval(\"1\")",
+        "'std::rl::eval' is deprecated",
     );
 }
 
 #[test]
 fn deprecated_alias_warns_with_canonical_path() {
     assert_checker_warns(
-        "get read_file as rf from std::io\nrf(\"x\")",
-        "'std::io::read_file' is deprecated",
+        "get eval as ev from std::rl\nev(\"1\")",
+        "'std::rl::eval' is deprecated",
     );
 }
 
 #[test]
 fn deprecated_wildcard_warns() {
     assert_checker_warns(
-        "get * from std::io\nread_file(\"x\")",
-        "'std::io::read_file' is deprecated",
+        "get * from std::rl\neval(\"1\")",
+        "'std::rl::eval' is deprecated",
     );
 }
 
 #[test]
 fn deprecated_method_call_warns() {
     assert_checker_warns(
-        "get read_file from std::io\ndec string p = \"x\"\nread_file(p)",
-        "'std::io::read_file' is deprecated",
+        "get eval from std::rl\ndec string p = \"1\"\neval(p)",
+        "'std::rl::eval' is deprecated",
     );
 }
 
 #[test]
 fn deprecated_allow_suppresses() {
     let checker = crate::common::check(
-        "get read_file from std::io\n!#[allow(deprecated)]\nfn demo() -> null {\n    read_file(\"x\")\n}",
+        "get eval from std::rl\n!#[allow(deprecated)]\nfn demo() -> null {\n    eval(\"1\")\n}",
     );
     let warnings: Vec<String> = checker
         .warnings
@@ -195,9 +195,6 @@ fn deprecated_std_rl_warns() {
 }
 
 #[test]
-fn deprecated_path_fn_warns() {
-    assert_checker_warns(
-        "get path_exists from std::path\npath_exists(\"x\")",
-        "'std::path::path_exists' is deprecated",
-    );
+fn canonical_fs_path_silent() {
+    assert_no_warnings("get path_exists from std::fs\npath_exists(\"x\")");
 }

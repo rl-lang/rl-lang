@@ -266,7 +266,7 @@ fn set_to_array_empty() {
     let result = compile_and_run(
         r#"
 get set_to_array from std::collections
-get len from std::array
+get len from std
 dec set[int] s = {}
 dec arr[int] a = set_to_array(s)?
 dec int n = len(a)?
