@@ -24,7 +24,7 @@ fn compile_fn_body(cc: &mut CCodegen, c_ret: &str, body: &[Statement]) -> Result
     Ok(())
 }
 
-/// `fn name(params): Ret { body }` — emits a top-level C function.
+/// `fn name(params): Ret { body }` - emits a top-level C function.
 /// Parameters are mangled and declared in a fresh scope for the body.
 pub(super) fn compile_function_decl(
     cc: &mut CCodegen,
@@ -77,7 +77,7 @@ pub(super) fn compile_function_decl(
     Ok(())
 }
 
-/// `impl Record { fn method(...) { ... } }` — emits each method as a
+/// `impl Record { fn method(...) { ... } }` - emits each method as a
 /// top-level `impl_Record_method` C function.
 pub(super) fn compile_impl_block(
     cc: &mut CCodegen,

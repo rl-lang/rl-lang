@@ -212,12 +212,12 @@ rl-lang
 |   +-- [TODO] better: add --optimize flag for release builds (-O2/-O3)
 |   +-- [TODO] better: support multiple output formats (C, LLVM IR, WASM)
 |   +-- [TODO] better: add rl cc command for direct compilation without transpile step
-|   +-- [TODO] len() only works on strings — fails on arrays/maps/sets
+|   +-- [TODO] len() only works on strings - fails on arrays/maps/sets
 |   +-- [TODO] Map literals silently drop non-string keys
-|   +-- [TODO] arr_filter/arr_map/etc. fallthrough — named function args generate wrong C name
-|   +-- [TODO] Lambda body compilation incomplete — missing While, Match, ForEach, Break, Continue
+|   +-- [TODO] arr_filter/arr_map/etc. fallthrough - named function args generate wrong C name
+|   +-- [TODO] Lambda body compilation incomplete - missing While, Match, ForEach, Break, Continue
 |   +-- [TODO] Lambda capture collection misses While, Match, ForEach bodies
-|   +-- [TODO] Nested arrays coerce to int64 — ArrayLiteral hardcodes element type
+|   +-- [TODO] Nested arrays coerce to int64 - ArrayLiteral hardcodes element type
 |   +-- [TODO] tagged union dispatch for match on enums
 |   +-- [DONE] std::http module (http_get, http_post, http_request, http_server_start/recv/try_recv/respond/stop)
 |   +-- [DONE] multi-file / module transpilation

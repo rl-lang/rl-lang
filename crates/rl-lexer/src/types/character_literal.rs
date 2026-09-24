@@ -24,7 +24,7 @@ impl Tokenizer {
     /// | `\f`       | form feed            |
     /// | `\v`       | vertical tab         |
     /// | `\e`       | escape (ESC)         |
-    /// | `\xHH`     | hex byte (1–2 digits)|
+    /// | `\xHH`     | hex byte (1-2 digits)|
     /// | `\uHHHH`   | unicode (4 digits)   |
     /// | `\u{HHHH}` | unicode (braced)     |
     ///

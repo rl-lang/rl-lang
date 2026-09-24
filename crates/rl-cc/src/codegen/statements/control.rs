@@ -101,7 +101,7 @@ pub(super) fn compile_return(cc: &mut CCodegen, ret: Option<ExprId>) -> Result<(
     Ok(())
 }
 
-/// `while cond { body }` — maps directly onto a C `while` loop.
+/// `while cond { body }` - maps directly onto a C `while` loop.
 pub(super) fn compile_while(
     cc: &mut CCodegen,
     condition: ExprId,
@@ -130,7 +130,7 @@ pub(super) fn compile_while(
     Ok(())
 }
 
-/// `for [init, cond, incr] { body }` — maps onto a C `for` loop.
+/// `for [init, cond, incr] { body }` - maps onto a C `for` loop.
 pub(super) fn compile_for(
     cc: &mut CCodegen,
     initializer: &Statement,
@@ -176,7 +176,7 @@ fn compile_for_init(cc: &mut CCodegen, stmt: &Statement) -> Result<(), Error> {
     Ok(())
 }
 
-/// `loop { body }` — an infinite `while (1)` loop, exited via `break`.
+/// `loop { body }` - an infinite `while (1)` loop, exited via `break`.
 pub(super) fn compile_loop(cc: &mut CCodegen, body: &[Statement]) -> Result<(), Error> {
     cc.writer.write_indent();
     cc.writer.write("while (1) {\n");

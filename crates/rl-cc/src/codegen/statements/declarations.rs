@@ -12,15 +12,28 @@ use rl_utils::span::Span;
 /// File-scope storage for one global plus scope registration. The
 /// initializer runs later inside `main` (see the `in_global_init` paths
 /// below). `const` is dropped: C file-scope initializers must be constant.
+/// A `null` initializer stores an `rl_result` to preserve the null tag,
+/// matching the local path and every nullable read site.
 fn declare_global(
     cc: &mut CCodegen,
     name: &str,
     effective: &TypeAnnotation,
+    value: Option<ExprId>,
 ) {
     if cc.global_names.contains(name) {
         return;
     }
-    let c_type = type_to_c(effective);
+    let null_init = value.is_some_and(|v| {
+        matches!(
+            cc.ast.exprs.get(v).kind,
+            ExpressionKind::Null
+        )
+    });
+    let c_type = if null_init {
+        "rl_result".to_string()
+    } else {
+        type_to_c(effective)
+    };
     let c_name = mangle(name);
     cc.globals_code.push_str(&format!("{} {};\n", c_type, c_name));
     cc.declare(name, &c_name);
@@ -83,7 +96,7 @@ pub(crate) fn declare_global_var(
     value: ExprId,
 ) {
     let effective = cc.effective_decl_type(type_annotation, value);
-    declare_global(cc, name, &effective);
+    declare_global(cc, name, &effective, Some(value));
     track_initializer(cc, name, value);
 }
 
@@ -103,11 +116,11 @@ pub(crate) fn declare_global_destructure(
     bindings: &[(TypeAnnotation, String)],
 ) {
     for (type_annotation, name) in bindings {
-        declare_global(cc, name, type_annotation);
+        declare_global(cc, name, type_annotation, None);
     }
 }
 
-/// `x: T = value` — declares a mutable C local and tracks its RL type.
+/// `x: T = value` - declares a mutable C local and tracks its RL type.
 /// A `null` initializer is stored as `rl_result` to preserve the null tag;
 /// a `?expr` initializer emits the early-return guard before unwrapping.
 /// During global init the storage already exists: only assign.
@@ -365,7 +378,7 @@ pub(super) fn compile_var_decl(
     Ok(())
 }
 
-/// `const x: T = value` — like a variable declaration but the C local
+/// `const x: T = value` - like a variable declaration but the C local
 /// is `const`. `?expr` initializers get the same early-return guard.
 /// Global consts lose `const` at file scope (see `declare_global`).
 pub(super) fn compile_const_decl(
@@ -428,7 +441,7 @@ pub(super) fn compile_const_decl(
     Ok(())
 }
 
-/// `(a, b) = tuple_expr` — evaluates the tuple once into a temp, then
+/// `(a, b) = tuple_expr` - evaluates the tuple once into a temp, then
 /// binds each `.field_N` to a fresh C local. During global init the
 /// temp is main-local and each global is assigned.
 pub(super) fn compile_destructure(

@@ -7647,14 +7647,14 @@ static void _rl_ser_toml_emit_table(rl_map *m, const char *prefix,
             int own = _rl_ser_array_elem(a, k, &e);
             if (!own || e.tag != RL_VTAG_MAP) all_maps = 0;
             if (own == 2) {
-                // Keep; freed below per element is complex — tables are
+                // Keep; freed below per element is complex - tables are
                 // borrowed views, free only the wrapper.
                 free(e.data.map);
             }
             if (!all_maps) break;
         }
         if (!all_maps) {
-            // Plain arrays already emitted above? No — arrays were
+            // Plain arrays already emitted above? No - arrays were
             // skipped in the scalar pass; emit inline here.
             // (Reaching this means a mixed/scalar array: emit inline.)
             _rl_ser_buf_add(buf, len, cap, m->entries[i].key, strlen(m->entries[i].key));
@@ -9175,7 +9175,7 @@ rl_result rl_serialize_csv_parse(rl_string s) {
     rl_string **rows = _rl_ser_csv_parse(data, s.len, ',', &lens, &nrows);
     if (rows == NULL && s.len > 0) {
         // Empty input parses to zero rows; NULL means malformed.
-        // Distinguish: re-scan is overkill — treat NULL with len>0 as
+        // Distinguish: re-scan is overkill - treat NULL with len>0 as
         // error only when a quote was left open. The parser returns
         // NULL solely on unterminated quotes or OOM.
         return _rl_cli_err("csv_parse: unterminated quote");

@@ -5,15 +5,15 @@
 //! the source nesting naturally:
 //!
 //! ```text
-//! if (a) { … } else if (b) { … } else { … }
+//! if (a) { ... } else if (b) { ... } else { ... }
 //! ```
 //! becomes:
 //! ```text
 //! Conditional {
-//!     if_branch:   ConditionalBranch { condition: Some(a), body: […] }
+//!     if_branch:   ConditionalBranch { condition: Some(a), body: [...] }
 //!     else_branch: Some(Conditional {
-//!         if_branch:   ConditionalBranch { condition: Some(b), body: […] }
-//!         else_branch: Some(ConditionalBranch { condition: None, body: […] })
+//!         if_branch:   ConditionalBranch { condition: Some(b), body: [...] }
+//!         else_branch: Some(ConditionalBranch { condition: None, body: [...] })
 //!     })
 //! }
 //! ```
@@ -31,7 +31,7 @@ impl Parser {
     /// 1. The condition expression.
     /// 2. The `{`-delimited if-body via [`parse_block`].
     /// 3. An optional `else` tail - either another `if` (recursed) or a plain
-    ///    `else { … }` block (condition is `None`).
+    ///    `else { ... }` block (condition is `None`).
     ///
     /// Blank lines between the closing `}` and `else` are skipped.
     ///
@@ -66,7 +66,7 @@ impl Parser {
                 self.advance();
                 Some(Box::new(self.parse_if(elif_start)?))
             } else {
-                // plain `else { … }` - condition is None
+                // plain `else { ... }` - condition is None
                 while self.match_type(&[TokenType::Newline]) {}
                 let else_body = self.parse_block()?;
                 let span = branch_start.join(self.previous_span());

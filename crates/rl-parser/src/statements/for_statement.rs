@@ -4,13 +4,13 @@
 //!
 //! ```text
 //! // 1. C-style: initializer, condition, increment inside brackets
-//! for [int i = 0, i < 10, i += 1] { … }
+//! for [int i = 0, i < 10, i += 1] { ... }
 //!
 //! // 2. Range iteration: integer variable over a literal range
-//! for x in 0..10 { … }
+//! for x in 0..10 { ... }
 //!
 //! // 3. Foreach: variable over an array variable or expression
-//! for item in my_array { … }
+//! for item in my_array { ... }
 //! ```
 //!
 //! The leading token after `for` disambiguates the form:
@@ -45,7 +45,7 @@ impl Parser {
     /// commas in C-style headers, or unrecognised `for` syntax.
     pub fn parse_for(&mut self, start: Span) -> Result<Statement, Error> {
         if matches!(self.peek(), TokenType::LeftBracket) {
-            // C-style: for [T i = init, cond, incr] { … }
+            // C-style: for [T i = init, cond, incr] { ... }
             self.advance();
             while self.match_type(&[TokenType::Newline]) {}
             let init_start = self.peek_span();
@@ -75,7 +75,7 @@ impl Parser {
                 span,
             ))
         } else if matches!(self.peek(), TokenType::Identifier(_)) {
-            // range or foreach: for <ident> in …
+            // range or foreach: for <ident> in ...
             while self.match_type(&[TokenType::Newline]) {}
             let ident_expr = self.parse_expression()?;
             let ident_id = self.ast_arena.exprs.get(ident_expr).clone();

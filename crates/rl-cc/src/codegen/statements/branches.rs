@@ -2,7 +2,7 @@ use crate::codegen::CCodegen;
 use rl_ast::statements::Statement;
 use rl_utils::errors::Error;
 
-/// `if cond { body } [else ...]` — emits the `if` head and opening brace,
+/// `if cond { body } [else ...]` - emits the `if` head and opening brace,
 /// leaving the `}` dance to the caller so `else` can chain on one line.
 pub(super) fn write_conditional(
     cc: &mut CCodegen,

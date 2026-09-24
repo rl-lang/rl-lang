@@ -28,7 +28,7 @@ rl transpile file.rl -lm                # extra cc flags
 ## Architecture
 
 ```
-rl source → rl-lexer → rl-parser → rl-resolver → rl-checker → rl-cc codegen → .c file
+rl source -> rl-lexer -> rl-parser -> rl-resolver -> rl-checker -> rl-cc codegen -> .c file
 ```
 
 The generated C code includes `rl_runtime.h` and `rl_runtime.c` (the C runtime), which provides all the type representations, print functions, and stdlib implementations.

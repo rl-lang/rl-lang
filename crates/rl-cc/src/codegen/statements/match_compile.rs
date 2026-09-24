@@ -3,7 +3,7 @@ use rl_ast::statements::MatchPattern;
 use rl_ast::ExprId;
 use rl_utils::errors::Error;
 
-/// `match value { lit => ..., _ => ... }` — lowers to an `if / else if /
+/// `match value { lit => ..., _ => ... }` - lowers to an `if / else if /
 /// else` chain comparing the value against each literal arm.
 pub(super) fn compile_match(
     cc: &mut CCodegen,

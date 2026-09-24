@@ -102,7 +102,7 @@ impl Parser {
     /// - **`get mod`** (no `::`, no `from`) - single-segment file import.
     ///   Produces [`StatementKind::ImportFile`]`{ path: [mod] }`.
     ///
-    /// - **`get mod::sub::…`** - multi-segment path. If the first segment is
+    /// - **`get mod::sub::...`** - multi-segment path. If the first segment is
     ///   `std`, the last segment is treated as the function name and the rest
     ///   as the namespace path -> [`StatementKind::Import`]. Otherwise the whole
     ///   path is a file module -> [`StatementKind::ImportFile`].
@@ -195,7 +195,7 @@ impl Parser {
             return Ok(Statement::new(StatementKind::ImportFile { path }, span));
         }
 
-        // named imports: get add, sub from …  (with optional `as alias`)
+        // named imports: get add, sub from ...  (with optional `as alias`)
         // `first` is already consumed as the first name.
         let first_entry = self.parse_name_entry(first)?;
         let mut names = vec![first_entry];

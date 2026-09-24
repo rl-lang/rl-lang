@@ -6,7 +6,7 @@ use rl_ast::ExprId;
 use rl_utils::errors::{Error, Reason};
 use rl_utils::span::Span;
 
-/// `for item in array_expr { body }` — lowers to an index loop over the
+/// `for item in array_expr { body }` - lowers to an index loop over the
 /// array's `.data` buffer. The element type is inferred from the iterable:
 /// a known array variable's element type, an array literal's first item,
 /// or `int` as a fallback.
@@ -133,7 +133,7 @@ pub(super) fn compile_foreach(
     Ok(())
 }
 
-/// `for i in N..M { body }` — the parser pre-evaluates the range into a
+/// `for i in N..M { body }` - the parser pre-evaluates the range into a
 /// `Range(items)` statement; emits `for (int64_t i = first; i < last+1; i++)`.
 pub(super) fn compile_for_range(
     cc: &mut CCodegen,

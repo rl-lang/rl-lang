@@ -69,7 +69,7 @@ pub(crate) fn declare_global_map_set(
     }
 }
 
-/// `x = [items]` — binds the evaluated array. `is_const` selects a
+/// `x = [items]` - binds the evaluated array. `is_const` selects a
 /// `const rl_array` binding and records a `CArray` element type.
 /// During global init the storage already exists: only assign.
 pub(super) fn compile_array_decl(
@@ -110,7 +110,7 @@ pub(super) fn compile_array_decl(
     Ok(())
 }
 
-/// `x = {k: v, ...}` — creates an empty map, then inserts each
+/// `x = {k: v, ...}` - creates an empty map, then inserts each
 /// string-keyed literal entry with value wrapping for the value type.
 /// During global init the storage already exists: only assign.
 pub(super) fn compile_map_decl(
@@ -166,7 +166,7 @@ pub(super) fn compile_map_decl(
     Ok(())
 }
 
-/// `x = set{items}` — creates an empty set, then adds each literal
+/// `x = set{items}` - creates an empty set, then adds each literal
 /// item with element-type wrapping. During global init only assign.
 pub(super) fn compile_set_decl(
     cc: &mut CCodegen,

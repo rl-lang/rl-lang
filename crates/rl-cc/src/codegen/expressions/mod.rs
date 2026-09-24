@@ -1531,14 +1531,83 @@ impl<'a> CCodegen<'a> {
     /// Compiles a lambda body with trailing-expression value semantics.
     /// Params and captures are declared in a dedicated scope so body
     /// statements resolve names and types through the normal paths.
+    /// True for free `print`/`println` calls and the `.print()` /
+    /// `.println()` methods. Both emit comma expressions that cannot
+    /// nest inside `rl_ok(...)`, so lambda/fn returns of one emit it
+    /// as a statement and yield null, mirroring the VM where print
+    /// returns null. Mirrors `compile_func_call` name resolution: user
+    /// functions shadow stdlib, aliased imports use the canonical path,
+    /// and record impl methods win over the builtin printer.
+    fn is_print_call(&self, id: ExprId) -> bool {
+        enum Probe {
+            Path(Vec<String>),
+            Method(ExprId, Vec<String>),
+        }
+        let probe = match &self.ast.exprs.get(id).kind {
+            ExpressionKind::Call { path, .. } => Probe::Path(path.clone()),
+            ExpressionKind::CallExpr { callee, .. } => {
+                match &self.ast.exprs.get(*callee).kind {
+                    ExpressionKind::ResolvedIdentifier { name, .. } => {
+                        Probe::Path(vec![name.clone()])
+                    }
+                    _ => return false,
+                }
+            }
+            ExpressionKind::MethodCall { caller, method, .. } => {
+                Probe::Method(*caller, method.clone())
+            }
+            _ => return false,
+        };
+        let mut probe_path = match &probe {
+            Probe::Path(path) => path.clone(),
+            Probe::Method(_, method) => method.clone(),
+        };
+        if probe_path.len() == 1 {
+            if self.user_fns.contains(probe_path[0].as_str()) {
+                return false;
+            }
+            if let Some((namespace, original)) = self.resolve_std_name(&probe_path[0])
+                && original != probe_path[0]
+            {
+                probe_path = namespace.split("::").map(|s| s.to_string()).collect();
+                probe_path.push(original);
+            }
+        }
+        if !matches!(
+            probe_path.last().map(|s| s.as_str()),
+            Some("print" | "println")
+        ) {
+            return false;
+        }
+        // A record's own `println` method wins over the builtin printer
+        // exactly like the VM: only the builtin shape is statement-like.
+        if let Probe::Method(caller, _) = &probe {
+            let caller_expr = self.ast.exprs.get(*caller);
+            if let ExpressionKind::ResolvedIdentifier { name, .. } = &caller_expr.kind
+                && let Some(ta) = self.var_types.get(name)
+            {
+                let is_record_method = matches!(
+                    ta,
+                    TypeAnnotation::Record(_)
+                        | TypeAnnotation::CRecord(_)
+                        | TypeAnnotation::Enum(_)
+                        | TypeAnnotation::CEnum(_)
+                );
+                if is_record_method {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+
     fn compile_lambda_body(
         &mut self,
         params: &[rl_ast::statements::Param],
         captured: &[(String, TypeAnnotation)],
         body: &[rl_ast::statements::Statement],
         func_code: &mut String,
-    ) -> Result<(), Error> {
-        use rl_ast::statements::StatementKind;
+    ) -> Result<(), Error> {        use rl_ast::statements::StatementKind;
         self.push_scope();
         let saved_types = self.var_types.clone();
         let saved_nullable = self.nullable_vars.clone();
@@ -1570,10 +1639,21 @@ impl<'a> CCodegen<'a> {
         }
         if result.is_ok() {
             if let Some(expr_id) = trailing_expr {
-                func_code.push_str("    return rl_ok(");
-                result = self.compile_expr_to_string(expr_id, func_code);
-                if result.is_ok() {
-                    func_code.push_str(");\n");
+                // `println` emits a comma expression that cannot nest
+                // inside `rl_ok(...)`: run it as a statement and yield
+                // null, mirroring the VM where print returns null.
+                if self.is_print_call(expr_id) {
+                    func_code.push_str("    ");
+                    result = self.compile_expr_to_string(expr_id, func_code);
+                    if result.is_ok() {
+                        func_code.push_str(";\n    return rl_ok_null();\n");
+                    }
+                } else {
+                    func_code.push_str("    return rl_ok(");
+                    result = self.compile_expr_to_string(expr_id, func_code);
+                    if result.is_ok() {
+                        func_code.push_str(");\n");
+                    }
                 }
             } else {
                 func_code.push_str("    return rl_ok_null();\n");
@@ -1602,6 +1682,10 @@ impl<'a> CCodegen<'a> {
                     func_code.push_str(";\n");
                     func_code.push_str(&format!("    if (!{}.is_ok) {{ return {}; }}\n", temp, temp));
                     func_code.push_str(&format!("    return {};\n", temp));
+                } else if self.is_print_call(*expr_id) {
+                    func_code.push_str("    ");
+                    self.compile_expr_to_string(*expr_id, func_code)?;
+                    func_code.push_str(";\n    return rl_ok_null();\n");
                 } else {
                     func_code.push_str("    return rl_ok(");
                     self.compile_expr_to_string(*expr_id, func_code)?;
