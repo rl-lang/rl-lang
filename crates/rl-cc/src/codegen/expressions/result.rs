@@ -51,15 +51,14 @@ pub(super) fn compile_unwrap(cc: &mut CCodegen, func_name: &str, args: &[ExprId]
     // result_unwrap_err extracts the error payload and aborts on ok
     // values (mirroring the VM); result_unwrap does the inverse.
     // Tuple payloads travel as one element arrays; deref element zero.
-    if func_name == "result_unwrap" && !args.is_empty() {
-        if let Some(fields) = cc.tuple_payload_fields(args[0]) {
+    if func_name == "result_unwrap" && !args.is_empty()
+        && let Some(fields) = cc.tuple_payload_fields(args[0]) {
             let tname = cc.ensure_tuple_type(fields);
             cc.writer.write(&format!("(({0}*)rl_result_unwrap_arr(", tname));
             cc.compile_expr(args[0])?;
             cc.writer.write(").data)[0]");
             return Ok(());
         }
-    }
     let unwrap_fn = if func_name == "result_unwrap_err" {
         match cc.unwrap_fn_for_result(args[0]) {
             "rl_result_unwrap_str" => "rl_result_unwrap_err_str",
@@ -77,8 +76,8 @@ pub(super) fn compile_unwrap(cc: &mut CCodegen, func_name: &str, args: &[ExprId]
 }
 
 pub(super) fn compile_unwrap_or(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
-    if !args.is_empty() {
-        if let Some(fields) = cc.tuple_payload_fields(args[0]) {
+    if !args.is_empty()
+        && let Some(fields) = cc.tuple_payload_fields(args[0]) {
             let tname = cc.ensure_tuple_type(fields);
             cc.writer.write("(");
             cc.compile_expr(args[0])?;
@@ -89,7 +88,6 @@ pub(super) fn compile_unwrap_or(cc: &mut CCodegen, args: &[ExprId]) -> Result<()
             cc.writer.write(")");
             return Ok(());
         }
-    }
     let unwrap_fn = cc.unwrap_fn_for_result(args[0]);
     cc.writer.write("(");
     cc.compile_expr(args[0])?;

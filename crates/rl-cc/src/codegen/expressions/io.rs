@@ -24,7 +24,7 @@ fn print_one(cc: &mut CCodegen, is_ln: bool, arg: ExprId) -> Result<(), Error> {
                     match arr_inner.as_ref() {
                         TypeAnnotation::Tuple(elems) | TypeAnnotation::CTuple(elems) => {
                             let elems: Vec<TypeAnnotation> = elems.as_ref().clone();
-                            if elems.iter().any(|t| crate::codegen::CCodegen::needs_inference(t)) {
+                            if elems.iter().any(crate::codegen::CCodegen::needs_inference) {
                                 let c_fn = if is_ln { "rl_println" } else { "rl_print" };
                                 cc.writer.write(&format!("{}(", c_fn));
                                 cc.compile_expr(arg)?;
@@ -61,7 +61,7 @@ fn print_one(cc: &mut CCodegen, is_ln: bool, arg: ExprId) -> Result<(), Error> {
                 TypeAnnotation::Tuple(elems) | TypeAnnotation::CTuple(elems) => {
                     let elems: Vec<TypeAnnotation> = elems.as_ref().clone();
                     // Generic fields cannot shape a printer; fall back.
-                    if elems.iter().any(|t| crate::codegen::CCodegen::needs_inference(t)) {
+                    if elems.iter().any(crate::codegen::CCodegen::needs_inference) {
                         let c_fn = if is_ln { "rl_println" } else { "rl_print" };
                         cc.writer.write(&format!("{}(", c_fn));
                         cc.compile_expr(arg)?;

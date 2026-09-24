@@ -162,13 +162,11 @@ impl<'a> CCodegen<'a> {
                     }
                 }
                 // Map default lookup returns the default's type.
-                if (name == "map_get_or" || name == "map_get_or_insert") && args.len() >= 3 {
-                    if let Some(ta) = self.inferred_expr_type(args[2]) {
-                        if !Self::needs_inference(&ta) {
+                if (name == "map_get_or" || name == "map_get_or_insert") && args.len() >= 3
+                    && let Some(ta) = self.inferred_expr_type(args[2])
+                        && !Self::needs_inference(&ta) {
                             return Some(TypeAnnotation::Result(Box::new(ta)));
                         }
-                    }
-                }
                 // `result_unwrap(x)` returns the ok payload.
                 if name == "result_unwrap" && !args.is_empty() {
                     if let Some(TypeAnnotation::Result(payload)) =
@@ -351,14 +349,12 @@ impl<'a> CCodegen<'a> {
             .imported_std_fns
             .get(name)
             .or_else(|| self.checker.stdlib_fn_names.get(name))
-        {
-            if let Some((_, ret)) = std_fn.signatures.first() {
+            && let Some((_, ret)) = std_fn.signatures.first() {
                 let ret = ret.clone();
                 if !Self::needs_inference(&ret) {
                     return Some(ret);
                 }
             }
-        }
         // Untyped in the checker but behaviorally fixed (verified against
         // the VM).
         match name {

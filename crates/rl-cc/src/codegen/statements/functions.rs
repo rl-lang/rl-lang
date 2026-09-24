@@ -17,11 +17,10 @@ fn compile_fn_body(cc: &mut CCodegen, c_ret: &str, body: &[Statement]) -> Result
     for s in main {
         cc.compile_statement(s)?;
     }
-    if trailing {
-        if let Some(StatementKind::Expression(expr_id)) = body.last().map(|s| &s.kind) {
+    if trailing
+        && let Some(StatementKind::Expression(expr_id)) = body.last().map(|s| &s.kind) {
             compile_return(cc, Some(*expr_id))?;
         }
-    }
     Ok(())
 }
 
@@ -108,15 +107,12 @@ fn compile_impl_block_inner(
         {
             // Prefer the checker-inferred method return over `Null`.
             let mut effective = return_type.clone();
-            if effective == TypeAnnotation::Null {
-                if let Some(CheckType::Function { return_type, .. }) =
+            if effective == TypeAnnotation::Null
+                && let Some(CheckType::Function { return_type, .. }) =
                     cc.checker.methods.get(&(record.to_string(), name.clone()))
-                {
-                    if *return_type != TypeAnnotation::Null {
+                    && *return_type != TypeAnnotation::Null {
                         effective = return_type.clone();
                     }
-                }
-            }
             let return_type = &effective;
             let c_ret = type_to_c(return_type);
             let c_fn_name = format!("impl_{}_{}", record, name);

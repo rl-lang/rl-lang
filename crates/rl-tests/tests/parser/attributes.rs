@@ -83,7 +83,7 @@ fn define_custom_attribute() {
 
 #[test]
 fn custom_attribute_on_function() {
-    use rl_ast::statements::{ItemAttribute, StatementKind};
+    use rl_ast::statements::ItemAttribute;
 
     let (_, statements) =
         parse("#![define(route)]\n!#[route(\"/hi\")]\nfn hello() {\n}");

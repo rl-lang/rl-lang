@@ -587,8 +587,8 @@ impl Parser {
                     }
                     // `as <alias>`: no constant folding (targets are
                     // arbitrary); emit a regular checked cast instead.
-                    if let TokenType::Identifier(alias) = self.peek() {
-                        if let Some(target) =
+                    if let TokenType::Identifier(alias) = self.peek()
+                        && let Some(target) =
                             self.ast_arena.type_aliases.get(&alias).cloned()
                         {
                             self.advance();
@@ -608,7 +608,6 @@ impl Parser {
                             );
                             return self.parse_postfix(expr, start);
                         }
-                    }
                     return Err(self.err("expected type after `as`", self.previous_span()));
                 }
                 // ---- cast end ----
@@ -799,8 +798,8 @@ impl Parser {
                     }
                     // `as <alias>`: no constant folding; regular
                     // checked cast over an integer value node.
-                    if let TokenType::Identifier(alias) = self.peek() {
-                        if let Some(target) =
+                    if let TokenType::Identifier(alias) = self.peek()
+                        && let Some(target) =
                             self.ast_arena.type_aliases.get(&alias).cloned()
                         {
                             self.advance();
@@ -826,7 +825,6 @@ impl Parser {
                             );
                             return self.parse_postfix(expr, start);
                         }
-                    }
                     return Err(self.err("expected type after `as`", self.previous_span()));
                 }
                 // ---- cast end ----
@@ -1054,8 +1052,8 @@ impl Parser {
                         }
                     }
                     // `as <alias>`: regular checked cast over a float node.
-                    if let TokenType::Identifier(alias) = self.peek() {
-                        if let Some(target) =
+                    if let TokenType::Identifier(alias) = self.peek()
+                        && let Some(target) =
                             self.ast_arena.type_aliases.get(&alias).cloned()
                         {
                             self.advance();
@@ -1075,7 +1073,6 @@ impl Parser {
                             );
                             return self.parse_postfix(expr, start);
                         }
-                    }
                     return Err(self.err("expected type after `as`", span));
                 }
                 // ---- cast end ----
@@ -1262,8 +1259,8 @@ impl Parser {
                         }
                     }
                     // `as <alias>`: regular checked cast over a byte node.
-                    if let TokenType::Identifier(alias) = self.peek() {
-                        if let Some(target) =
+                    if let TokenType::Identifier(alias) = self.peek()
+                        && let Some(target) =
                             self.ast_arena.type_aliases.get(&alias).cloned()
                         {
                             self.advance();
@@ -1283,7 +1280,6 @@ impl Parser {
                             );
                             return self.parse_postfix(expr, start);
                         }
-                    }
                     return Err(self.err("expected type after `as`", self.previous_span()));
                 }
                 // ---- cast end ----

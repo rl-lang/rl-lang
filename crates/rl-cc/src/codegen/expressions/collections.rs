@@ -84,7 +84,7 @@ pub(super) fn compile_set_ops(cc: &mut CCodegen, func_name: &str, args: &[ExprId
     match func_name {
         "set_add" => {
             cc.writer.write("rl_ok(rl_set_add_s(");
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
             cc.writer.write(", ");
             if args.len() >= 2 {
                 let expr = cc.ast.exprs.get(args[1]);
@@ -95,7 +95,7 @@ pub(super) fn compile_set_ops(cc: &mut CCodegen, func_name: &str, args: &[ExprId
         }
         "set_remove" => {
             cc.writer.write("rl_ok(rl_set_remove_s(");
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
             cc.writer.write(", ");
             if args.len() >= 2 {
                 let expr = cc.ast.exprs.get(args[1]);
@@ -106,7 +106,7 @@ pub(super) fn compile_set_ops(cc: &mut CCodegen, func_name: &str, args: &[ExprId
         }
         "set_contains" => {
             cc.writer.write("rl_set_contains_s(");
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
             cc.writer.write(", ");
             if args.len() >= 2 {
                 let expr = cc.ast.exprs.get(args[1]);
@@ -131,14 +131,14 @@ pub(super) fn compile_map_ops(cc: &mut CCodegen, func_name: &str, args: &[ExprId
     match func_name {
         "map_contains" => {
             cc.writer.write("rl_map_contains_s(");
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
             cc.writer.write(", ");
             if args.len() >= 2 { cc.compile_expr(args[1])?; }
             cc.writer.write(")");
         }
         "map_remove" => {
             cc.writer.write("rl_ok(rl_map_remove_s(");
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
             cc.writer.write(", ");
             if args.len() >= 2 { cc.compile_expr(args[1])?; }
             cc.writer.write("))");
@@ -193,7 +193,7 @@ pub(super) fn compile_map_ops(cc: &mut CCodegen, func_name: &str, args: &[ExprId
                 cc.writer.write("))");
             } else {
                 cc.writer.write("rl_ok(rl_map_get_s(");
-                if args.len() >= 1 {
+                if !args.is_empty() {
                     cc.compile_expr(args[0])?;
                 }
                 cc.writer.write(", ");
@@ -234,7 +234,7 @@ pub(super) fn compile_map_clear(cc: &mut CCodegen, args: &[ExprId]) -> Result<()
 
 pub(super) fn compile_map_merge(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
     cc.writer.write("rl_map_merge(");
-    if args.len() >= 1 { cc.compile_expr(args[0])?; }
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(", ");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
     cc.writer.write(")");
@@ -270,7 +270,7 @@ pub(super) fn compile_arr_first_last(cc: &mut CCodegen, func_name: &str, args: &
         "arr_first" => {
             if let Some(elem) = args.first().and_then(|id| array_arg_elem(cc, id)) {
                 cc.writer
-                    .write(&format!("rl_arr_first_t("));
+                    .write("rl_arr_first_t(");
                 if !args.is_empty() { cc.compile_expr(args[0])?; }
                 cc.writer.write(&format!(", {})", elem_tag(&elem)));
             } else {
@@ -300,7 +300,7 @@ pub(super) fn compile_arr_contains(cc: &mut CCodegen, func_name: &str, args: &[E
         "arr_contains" => {
             if let Some(elem) = args.first().and_then(|id| array_arg_elem(cc, id)) {
                 cc.writer.write("rl_arr_contains_v(");
-                if args.len() >= 1 { cc.compile_expr(args[0])?; }
+                if !args.is_empty() { cc.compile_expr(args[0])?; }
                 cc.writer.write(", ");
                 if args.len() >= 2 {
                     cc.emit_value_wrapping(&elem, args[1])?;
@@ -308,7 +308,7 @@ pub(super) fn compile_arr_contains(cc: &mut CCodegen, func_name: &str, args: &[E
                 cc.writer.write(")");
             } else {
                 cc.writer.write("rl_arr_contains(");
-                if args.len() >= 1 { cc.compile_expr(args[0])?; }
+                if !args.is_empty() { cc.compile_expr(args[0])?; }
                 cc.writer.write(", ");
                 if args.len() >= 2 { cc.compile_expr(args[1])?; }
                 cc.writer.write(")");
@@ -317,7 +317,7 @@ pub(super) fn compile_arr_contains(cc: &mut CCodegen, func_name: &str, args: &[E
         "arr_index_of" => {
             if let Some(elem) = args.first().and_then(|id| array_arg_elem(cc, id)) {
                 cc.writer.write("rl_arr_index_of_v(");
-                if args.len() >= 1 { cc.compile_expr(args[0])?; }
+                if !args.is_empty() { cc.compile_expr(args[0])?; }
                 cc.writer.write(", ");
                 if args.len() >= 2 {
                     cc.emit_value_wrapping(&elem, args[1])?;
@@ -325,7 +325,7 @@ pub(super) fn compile_arr_contains(cc: &mut CCodegen, func_name: &str, args: &[E
                 cc.writer.write(")");
             } else {
                 cc.writer.write("rl_arr_index_of(");
-                if args.len() >= 1 { cc.compile_expr(args[0])?; }
+                if !args.is_empty() { cc.compile_expr(args[0])?; }
                 cc.writer.write(", ");
                 if args.len() >= 2 { cc.compile_expr(args[1])?; }
                 cc.writer.write(")");
@@ -345,7 +345,7 @@ pub(super) fn compile_arr_reverse(cc: &mut CCodegen, args: &[ExprId]) -> Result<
 
 pub(super) fn compile_arr_concat(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
     cc.writer.write("rl_ok(rl_arr_concat(");
-    if args.len() >= 1 { cc.compile_expr(args[0])?; }
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(", ");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
     cc.writer.write("))");
@@ -367,7 +367,7 @@ pub(super) fn compile_arr_unique(cc: &mut CCodegen, args: &[ExprId]) -> Result<(
 
 pub(super) fn compile_arr_slice(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
     cc.writer.write("rl_ok(rl_arr_slice(");
-    if args.len() >= 1 { cc.compile_expr(args[0])?; }
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(", ");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
     cc.writer.write(", ");
@@ -394,7 +394,7 @@ pub(super) fn compile_arr_fill(cc: &mut CCodegen, args: &[ExprId]) -> Result<(),
         cc.writer.write(")");
     } else {
         cc.writer.write("rl_arr_fill(");
-        if args.len() >= 1 { cc.compile_expr(args[0])?; }
+        if !args.is_empty() { cc.compile_expr(args[0])?; }
         cc.writer.write(", ");
         if args.len() >= 2 { cc.compile_expr(args[1])?; }
         cc.writer.write(")");
@@ -404,7 +404,7 @@ pub(super) fn compile_arr_fill(cc: &mut CCodegen, args: &[ExprId]) -> Result<(),
 
 pub(super) fn compile_arr_range(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
     cc.writer.write("rl_arr_range(");
-    if args.len() >= 1 { cc.compile_expr(args[0])?; }
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(", ");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
     cc.writer.write(", ");
@@ -532,7 +532,7 @@ pub(super) fn compile_arr_mut(cc: &mut CCodegen, func_name: &str, args: &[ExprId
             match elem {
                 Some(elem_ta) => {
                     cc.writer.write("rl_arr_push_v(");
-                    if args.len() >= 1 { cc.compile_expr(args[0])?; }
+                    if !args.is_empty() { cc.compile_expr(args[0])?; }
                     cc.writer.write(", ");
                     if args.len() >= 2 {
                         cc.emit_value_wrapping(&elem_ta, args[1])?;
@@ -541,7 +541,7 @@ pub(super) fn compile_arr_mut(cc: &mut CCodegen, func_name: &str, args: &[ExprId
                 }
                 None => {
                     cc.writer.write("rl_arr_push(");
-                    if args.len() >= 1 { cc.compile_expr(args[0])?; }
+                    if !args.is_empty() { cc.compile_expr(args[0])?; }
                     cc.writer.write(", ");
                     if args.len() >= 2 { cc.compile_expr(args[1])?; }
                     cc.writer.write(")");
@@ -559,7 +559,7 @@ pub(super) fn compile_arr_mut(cc: &mut CCodegen, func_name: &str, args: &[ExprId
             let elem = args.first().and_then(|id| cc.array_arg_elem(*id));
             if let Some(elem_ta) = elem {
                 cc.writer.write("rl_arr_insert_v(");
-                if args.len() >= 1 { cc.compile_expr(args[0])?; }
+                if !args.is_empty() { cc.compile_expr(args[0])?; }
                 cc.writer.write(", ");
                 if args.len() >= 3 { cc.compile_expr(args[2])?; }
                 cc.writer.write(", ");
@@ -569,7 +569,7 @@ pub(super) fn compile_arr_mut(cc: &mut CCodegen, func_name: &str, args: &[ExprId
                 cc.writer.write(")");
             } else {
                 cc.writer.write("rl_arr_insert(");
-                if args.len() >= 1 { cc.compile_expr(args[0])?; }
+                if !args.is_empty() { cc.compile_expr(args[0])?; }
                 cc.writer.write(", ");
                 if args.len() >= 3 { cc.compile_expr(args[2])?; }
                 cc.writer.write(", ");
@@ -579,7 +579,7 @@ pub(super) fn compile_arr_mut(cc: &mut CCodegen, func_name: &str, args: &[ExprId
         }
         "arr_remove" => {
             cc.writer.write("rl_arr_remove(");
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
             cc.writer.write(", ");
             if args.len() >= 2 { cc.compile_expr(args[1])?; }
             cc.writer.write(")");
@@ -597,7 +597,7 @@ pub(super) fn compile_arr_chunk_windows(cc: &mut CCodegen, func_name: &str, args
         _ => return Ok(()),
     };
     cc.writer.write(c_func);
-    if args.len() >= 1 { cc.compile_expr(args[0])?; }
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(", ");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
     cc.writer.write(")");
@@ -607,7 +607,7 @@ pub(super) fn compile_arr_chunk_windows(cc: &mut CCodegen, func_name: &str, args
 pub(super) fn compile_arr_swap(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
     // RL order matches C order: (array, i, j).
     cc.writer.write("rl_arr_swap(");
-    if args.len() >= 1 { cc.compile_expr(args[0])?; }
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(", ");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
     cc.writer.write(", ");
@@ -618,7 +618,7 @@ pub(super) fn compile_arr_swap(cc: &mut CCodegen, args: &[ExprId]) -> Result<(),
 
 pub(super) fn compile_arr_cycle_take(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
     cc.writer.write("rl_arr_cycle_take(");
-    if args.len() >= 1 { cc.compile_expr(args[0])?; }
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(", ");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
     cc.writer.write(")");
@@ -628,7 +628,7 @@ pub(super) fn compile_arr_cycle_take(cc: &mut CCodegen, args: &[ExprId]) -> Resu
 pub(super) fn compile_arr_partition_closure(cc: &mut CCodegen, func_name: &str, args: &[ExprId]) -> Result<(), Error> {
     // Same shape as the other closure fns: (array, closure, tag).
     cc.writer.write(&format!("rl_{func_name}_closure("));
-    if args.len() >= 1 { cc.compile_expr(args[0])?; }
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(", ");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
     cc.writer.write(", ");
@@ -692,7 +692,7 @@ pub(super) fn compile_arr_zip_longest(cc: &mut CCodegen, args: &[ExprId]) -> Res
         return Ok(());
     }
     cc.writer.write("rl_arr_zip_longest_t(");
-    if args.len() >= 1 { cc.compile_expr(args[0])?; }
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(", ");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
     cc.writer.write(", (rl_value){ .tag = RL_VTAG_I64, .data.i64 = 0 }, sizeof(rl_tuple_2), offsetof(rl_tuple_2, field_1), sizeof(int64_t), sizeof(int64_t))");
@@ -710,7 +710,7 @@ pub(super) fn compile_set_algebra(cc: &mut CCodegen, func_name: &str, args: &[Ex
     };
     cc.writer.write("rl_ok(");
     cc.writer.write(c_func);
-    if args.len() >= 1 { cc.compile_expr(args[0])?; }
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(", ");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
     cc.writer.write("))");
@@ -724,7 +724,7 @@ pub(super) fn compile_set_subset(cc: &mut CCodegen, func_name: &str, args: &[Exp
         _ => return Ok(()),
     };
     cc.writer.write(c_func);
-    if args.len() >= 1 { cc.compile_expr(args[0])?; }
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(", ");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
     cc.writer.write(")");
@@ -756,9 +756,9 @@ pub(super) fn compile_map_get_or(cc: &mut CCodegen, func_name: &str, args: &[Exp
         // Insert mutates the caller's map, so pass its address.
         if func_name == "map_get_or_insert" {
             cc.writer.write("&(");
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
             cc.writer.write(")");
-        } else if args.len() >= 1 {
+        } else if !args.is_empty() {
             cc.compile_expr(args[0])?;
         }
         cc.writer.write(", ");
@@ -770,9 +770,9 @@ pub(super) fn compile_map_get_or(cc: &mut CCodegen, func_name: &str, args: &[Exp
         cc.writer.write(c_legacy);
         if func_name == "map_get_or_insert" {
             cc.writer.write("&(");
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
             cc.writer.write(")");
-        } else if args.len() >= 1 {
+        } else if !args.is_empty() {
             cc.compile_expr(args[0])?;
         }
         cc.writer.write(", ");
@@ -790,7 +790,7 @@ pub(super) fn compile_heap_push(cc: &mut CCodegen, args: &[ExprId]) -> Result<()
     match elem {
         Some(elem_ta) => {
             cc.writer.write("rl_heap_push_v(");
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
             cc.writer.write(", ");
             if args.len() >= 2 {
                 cc.emit_value_wrapping(&elem_ta, args[1])?;
@@ -799,7 +799,7 @@ pub(super) fn compile_heap_push(cc: &mut CCodegen, args: &[ExprId]) -> Result<()
         }
         None => {
             cc.writer.write("rl_heap_push(");
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
             cc.writer.write(", ");
             if args.len() >= 2 { cc.compile_expr(args[1])?; }
             cc.writer.write(")");
@@ -836,7 +836,7 @@ pub(super) fn compile_deque_push(cc: &mut CCodegen, args: &[ExprId]) -> Result<(
     match elem {
         Some(elem_ta) => {
             cc.writer.write("rl_deque_push_front_v(");
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
             cc.writer.write(", ");
             if args.len() >= 2 {
                 cc.emit_value_wrapping(&elem_ta, args[1])?;
@@ -845,7 +845,7 @@ pub(super) fn compile_deque_push(cc: &mut CCodegen, args: &[ExprId]) -> Result<(
         }
         None => {
             cc.writer.write("rl_deque_push_front(");
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
             cc.writer.write(", ");
             if args.len() >= 2 { cc.compile_expr(args[1])?; }
             cc.writer.write(")");
@@ -868,7 +868,7 @@ pub(super) fn compile_bisect(cc: &mut CCodegen, func_name: &str, args: &[ExprId]
         _ => return Ok(()),
     };
     cc.writer.write(c_func);
-    if args.len() >= 1 { cc.compile_expr(args[0])?; }
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(", ");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
     cc.writer.write(")");
@@ -877,7 +877,7 @@ pub(super) fn compile_bisect(cc: &mut CCodegen, func_name: &str, args: &[ExprId]
 
 pub(super) fn compile_sorted_insert(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
     cc.writer.write("rl_sorted_insert(");
-    if args.len() >= 1 { cc.compile_expr(args[0])?; }
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(", ");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
     cc.writer.write(")");

@@ -342,7 +342,7 @@ impl TypeChecker {
                     }
                 }
             }
-            ExpressionKind::Unary { operator, operand } if operator == TokenType::Bang => {
+            ExpressionKind::Unary { operator: TokenType::Bang, operand } => {
                 self.branch_refinement(operand, !polarity)
             }
             ExpressionKind::Grouping(inner) => self.branch_refinement(inner, polarity),
@@ -666,7 +666,6 @@ impl TypeChecker {
             | StatementKind::Break
             | StatementKind::Continue
             | StatementKind::Range(_) => false,
-            _ => true,
         }
     }
 
@@ -759,7 +758,6 @@ impl TypeChecker {
             | ExpressionKind::Identifier(_)
             | ExpressionKind::ResolvedIdentifier { .. }
             | ExpressionKind::EnumVariant { .. } => false,
-            _ => true,
         }
     }
 

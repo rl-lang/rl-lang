@@ -99,17 +99,16 @@ pub(super) fn compile_is(
         }
     }
     // 2. union storage: the target must occur in the known members.
-    if let Some(TypeAnnotation::Any(members) | TypeAnnotation::CAny(members)) = &operand {
-        if !members.iter().any(|m| static_eq(m, target)) {
+    if let Some(TypeAnnotation::Any(members) | TypeAnnotation::CAny(members)) = &operand
+        && !members.iter().any(|m| static_eq(m, target)) {
             cc.writer.write("false");
             return Ok(());
         }
-    }
     // 3. runtime tag check over the boxed value (single evaluation
     // inside the call arguments - no temporary needed).
     match tag_of(target) {
         Some(tag) => {
-            cc.writer.write(&format!("rl_value_has_tag("));
+            cc.writer.write("rl_value_has_tag(");
             cc.compile_expr(*value)?;
             cc.writer.write(&format!(", {tag})"));
             Ok(())

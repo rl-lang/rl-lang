@@ -25,7 +25,7 @@ pub(super) fn compile_abs(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Erro
 
 pub(super) fn compile_hypot(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
     cc.writer.write("hypot(");
-    if args.len() >= 1 { cc.compile_expr(args[0])?; }
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(", ");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
     cc.writer.write(")");
@@ -34,7 +34,7 @@ pub(super) fn compile_hypot(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Er
 
 pub(super) fn compile_atan2(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
     cc.writer.write("atan2(");
-    if args.len() >= 1 { cc.compile_expr(args[0])?; }
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(", ");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
     cc.writer.write(")");
@@ -43,7 +43,7 @@ pub(super) fn compile_atan2(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Er
 
 pub(super) fn compile_pow(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
     cc.writer.write("rl_math_pow(rl_ok(");
-    if args.len() >= 1 { cc.compile_expr(args[0])?; }
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write("), rl_ok(");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
     cc.writer.write("))");
@@ -52,7 +52,7 @@ pub(super) fn compile_pow(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Erro
 
 pub(super) fn compile_log(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
     cc.writer.write("rl_ok((log(");
-    if args.len() >= 1 { cc.compile_expr(args[0])?; }
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(") / log(");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
     cc.writer.write(")))");
@@ -84,11 +84,11 @@ pub(super) fn compile_sign(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Err
 
 pub(super) fn compile_lerp(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
     cc.writer.write("(");
-    if args.len() >= 1 { cc.compile_expr(args[0])?; }
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(" + (");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
     cc.writer.write(" - ");
-    if args.len() >= 1 { cc.compile_expr(args[0])?; }
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(") * ");
     if args.len() >= 3 { cc.compile_expr(args[2])?; }
     cc.writer.write(")");
@@ -97,7 +97,7 @@ pub(super) fn compile_lerp(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Err
 
 pub(super) fn compile_map_range(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
     cc.writer.write("(((");
-    if args.len() >= 1 { cc.compile_expr(args[0])?; }
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(" - ");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
     cc.writer.write(") / (");
@@ -116,7 +116,7 @@ pub(super) fn compile_map_range(cc: &mut CCodegen, args: &[ExprId]) -> Result<()
 
 pub(super) fn compile_mod(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
     cc.writer.write("rl_ok(");
-    if args.len() >= 1 { cc.compile_expr(args[0])?; }
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(" % ");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
     cc.writer.write(")");
@@ -127,38 +127,38 @@ pub(super) fn compile_min_max_clamp(cc: &mut CCodegen, func_name: &str, args: &[
     cc.writer.write("rl_ok((");
     match func_name {
         "max" => {
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
             cc.writer.write(" > ");
             if args.len() >= 2 { cc.compile_expr(args[1])?; }
             cc.writer.write(" ? ");
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
             cc.writer.write(" : ");
             if args.len() >= 2 { cc.compile_expr(args[1])?; }
         }
         "min" => {
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
             cc.writer.write(" < ");
             if args.len() >= 2 { cc.compile_expr(args[1])?; }
             cc.writer.write(" ? ");
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
             cc.writer.write(" : ");
             if args.len() >= 2 { cc.compile_expr(args[1])?; }
         }
         "clamp" => {
             // clamp(value, min, max): value < min ? min : value > max ? max : value
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
             cc.writer.write(" < ");
             if args.len() >= 2 { cc.compile_expr(args[1])?; }
             cc.writer.write(" ? ");
             if args.len() >= 2 { cc.compile_expr(args[1])?; }
             cc.writer.write(" : ");
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
             cc.writer.write(" > ");
             if args.len() >= 3 { cc.compile_expr(args[2])?; }
             cc.writer.write(" ? ");
             if args.len() >= 3 { cc.compile_expr(args[2])?; }
             cc.writer.write(" : ");
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
         }
         _ => {}
     }
@@ -180,21 +180,21 @@ pub(super) fn compile_bitwise(cc: &mut CCodegen, func_name: &str, args: &[ExprId
     match func_name {
         "bit_and" => {
             cc.writer.write("rl_ok(");
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
             cc.writer.write(" & ");
             if args.len() >= 2 { cc.compile_expr(args[1])?; }
             cc.writer.write(")");
         }
         "bit_or" => {
             cc.writer.write("rl_ok(");
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
             cc.writer.write(" | ");
             if args.len() >= 2 { cc.compile_expr(args[1])?; }
             cc.writer.write(")");
         }
         "bit_xor" => {
             cc.writer.write("rl_ok(");
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
             cc.writer.write(" ^ ");
             if args.len() >= 2 { cc.compile_expr(args[1])?; }
             cc.writer.write(")");
@@ -206,56 +206,56 @@ pub(super) fn compile_bitwise(cc: &mut CCodegen, func_name: &str, args: &[ExprId
         }
         "bit_shift_left" => {
             cc.writer.write("rl_ok(");
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
             cc.writer.write(" << ");
             if args.len() >= 2 { cc.compile_expr(args[1])?; }
             cc.writer.write(")");
         }
         "bit_shift_right" => {
             cc.writer.write("rl_ok(");
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
             cc.writer.write(" >> ");
             if args.len() >= 2 { cc.compile_expr(args[1])?; }
             cc.writer.write(")");
         }
         "rotate_left" => {
             cc.writer.write("rl_bitwise_rotate_left(");
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
             cc.writer.write(", ");
             if args.len() >= 2 { cc.compile_expr(args[1])?; }
             cc.writer.write(")");
         }
         "rotate_right" => {
             cc.writer.write("rl_bitwise_rotate_right(");
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
             cc.writer.write(", ");
             if args.len() >= 2 { cc.compile_expr(args[1])?; }
             cc.writer.write(")");
         }
         "bit_set" => {
             cc.writer.write("rl_bitwise_bit_set(");
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
             cc.writer.write(", ");
             if args.len() >= 2 { cc.compile_expr(args[1])?; }
             cc.writer.write(")");
         }
         "bit_clear" => {
             cc.writer.write("rl_bitwise_bit_clear(");
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
             cc.writer.write(", ");
             if args.len() >= 2 { cc.compile_expr(args[1])?; }
             cc.writer.write(")");
         }
         "bit_toggle" => {
             cc.writer.write("rl_bitwise_bit_toggle(");
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
             cc.writer.write(", ");
             if args.len() >= 2 { cc.compile_expr(args[1])?; }
             cc.writer.write(")");
         }
         "bit_is_set" => {
             cc.writer.write("rl_bitwise_bit_is_set(");
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
             cc.writer.write(", ");
             if args.len() >= 2 { cc.compile_expr(args[1])?; }
             cc.writer.write(")");

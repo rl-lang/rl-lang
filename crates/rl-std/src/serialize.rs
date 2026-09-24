@@ -279,7 +279,7 @@ pub fn json_get<R: Runtime>(v: R::Value, path: String) -> R::Value {
 // ---- csv ----------------------------------------------------------------------
 
 #[cfg(feature = "impls")]
-fn csv_rows<R: Runtime>(s: &str, delim: u8) -> Result<Vec<Vec<String>>, String> {
+fn csv_rows(s: &str, delim: u8) -> Result<Vec<Vec<String>>, String> {
     let mut reader = csv::ReaderBuilder::new()
         .has_headers(false)
         .delimiter(delim)
@@ -296,7 +296,7 @@ fn csv_rows<R: Runtime>(s: &str, delim: u8) -> Result<Vec<Vec<String>>, String> 
 
 #[native_fn(module = "serialize", sig(string -> result[array[array[string]]]))]
 pub fn csv_parse<R: Runtime>(s: String) -> R::Value {
-    match csv_rows::<R>(&s, b',') {
+    match csv_rows(&s, b',') {
         Ok(rows) => R::ok(R::array(
             rows.into_iter()
                 .map(|r| {
@@ -319,7 +319,7 @@ pub fn csv_parse_with_delimiter<R: Runtime>(s: String, delim: String) -> R::Valu
             "csv_parse_with_delimiter: delimiter must not be empty".to_string(),
         ));
     };
-    match csv_rows::<R>(&s, *d) {
+    match csv_rows(&s, *d) {
         Ok(rows) => R::ok(R::array(
             rows.into_iter()
                 .map(|r| {
@@ -348,7 +348,7 @@ pub fn csv_stringify<R: Runtime>(rows: Vec<Vec<String>>) -> String {
 
 #[native_fn(module = "serialize", sig(string -> result[array[map[string, string]]]))]
 pub fn csv_parse_headers<R: Runtime>(s: String) -> R::Value {
-    match csv_rows::<R>(&s, b',') {
+    match csv_rows(&s, b',') {
         Ok(rows) => {
             let mut iter = rows.into_iter();
             let Some(headers) = iter.next() else {
@@ -528,7 +528,7 @@ pub fn yaml_stringify<R: Runtime>(v: R::Value) -> R::Value {
                 serde_json::Value::Array(items) => serde_yaml::Value::Sequence(
                     items
                         .into_iter()
-                        .map(|item| yaml_from_json(item))
+                        .map(yaml_from_json)
                         .collect(),
                 ),
                 serde_json::Value::Object(map) => serde_yaml::Value::Mapping(

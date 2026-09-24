@@ -663,13 +663,12 @@ impl TypeChecker {
                             ) => self.branch_refinement(*cond, false),
                             _ => None,
                         };
-                    if let Some((name, refined)) = negated {
-                        if let StatementKind::ConditionalBranch { body, .. } = &branch.kind {
+                    if let Some((name, refined)) = negated
+                        && let StatementKind::ConditionalBranch { body, .. } = &branch.kind {
                             let span = statement.span;
                             self.check_block_refined(body, name, refined, span);
                             return;
                         }
-                    }
                     self.check_statement(branch);
                 }
             }
@@ -1098,7 +1097,7 @@ impl TypeChecker {
         // Errors raised while checking the imported file must carry its
         // name and text (spans are relative to it), not the importer's.
         // Restored next to `ast_arena` below; nesting-safe (strict scope).
-        let prev_source = std::mem::replace(&mut self.source_file, Some(source_file));
+        let prev_source = self.source_file.replace(source_file);
 
         for stmt in &stmts {
             match &stmt.kind {

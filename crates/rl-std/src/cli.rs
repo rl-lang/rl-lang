@@ -354,9 +354,9 @@ pub fn prompt_choice<R: Runtime>(msg: String, options: Vec<String>) -> String {
         return String::new();
     }
     loop {
-        print!("{msg}\n");
+        println!("{msg}");
         for (n, o) in options.iter().enumerate() {
-            print!("  {}. {o}\n", n + 1);
+            println!("  {}. {o}", n + 1);
         }
         let _ = std::io::stdout().flush();
         let mut line = String::new();
@@ -373,7 +373,7 @@ pub fn prompt_choice<R: Runtime>(msg: String, options: Vec<String>) -> String {
         if options.iter().any(|o| o == answer) {
             return answer.to_string();
         }
-        print!("pick 1-{} or one of the listed values\n", options.len());
+        println!("pick 1-{} or one of the listed values", options.len());
     }
 }
 

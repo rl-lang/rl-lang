@@ -190,12 +190,11 @@ impl<'a> CCodegen<'a> {
                                 | TypeAnnotation::Generic(_)
                         )
                     );
-                    if dynamic_storage {
-                        if let Some(unbox_fn) = Self::dynamic_unboxer(&refined) {
+                    if dynamic_storage
+                        && let Some(unbox_fn) = Self::dynamic_unboxer(&refined) {
                             self.writer.write(&format!("{unbox_fn}({})", c_name));
                             return Ok(());
                         }
-                    }
                 }
                 if self.nullable_vars.contains(name) {
                     match self.var_types.get(name) {
@@ -461,11 +460,11 @@ impl<'a> CCodegen<'a> {
                 self.writer.write(&format!("}}, {}, (int32_t)sizeof({}), {})", elems.len(), c_elem, tag));
             }
             ExpressionKind::MapLiteral(entries) => {
-                let temp = self.emit_map_lit(&entries)?;
+                let temp = self.emit_map_lit(entries)?;
                 self.writer.write(&temp);
             }
             ExpressionKind::SetLiteral(items) => {
-                let temp = self.emit_set_lit(&items)?;
+                let temp = self.emit_set_lit(items)?;
                 self.writer.write(&temp);
             }
             ExpressionKind::TupleLiteral(elems) => {
@@ -617,7 +616,7 @@ impl<'a> CCodegen<'a> {
                 match self.inferred_expr_type(*target).as_ref() {
                     Some(TypeAnnotation::Array(inner))
                     | Some(TypeAnnotation::CArray(inner)) => {
-                        let c_type = type_to_c(&inner);
+                        let c_type = type_to_c(inner);
                         self.writer.write(&format!("(({}*)(", c_type));
                         self.compile_expr(*target)?;
                         self.writer.write(").data)[");

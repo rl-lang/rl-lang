@@ -32,14 +32,14 @@ pub(super) fn compile_rand_range(
     match func_name {
         "rand_int_range" => {
             cc.writer.write("rl_ok(rl_rand_int_range(");
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
             cc.writer.write(", ");
             if args.len() >= 2 { cc.compile_expr(args[1])?; }
             cc.writer.write("))");
         }
         "rand_float_range" => {
             cc.writer.write("rl_ok(rl_rand_float_range(");
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
             cc.writer.write(", ");
             if args.len() >= 2 { cc.compile_expr(args[1])?; }
             cc.writer.write("))");
@@ -61,7 +61,7 @@ pub(super) fn compile_rand_range(
 
 pub(super) fn compile_rand_range_step(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
     cc.writer.write("rl_ok(rl_rand_range_step(");
-    if args.len() >= 1 { cc.compile_expr(args[0])?; }
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(", ");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
     cc.writer.write(", ");
@@ -87,7 +87,7 @@ pub(super) fn compile_rand_collection(
     match func_name {
         "rand_dices" => {
             cc.writer.write("rl_ok(rl_rand_dices(");
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
             cc.writer.write(", ");
             if args.len() >= 2 { cc.compile_expr(args[1])?; }
             cc.writer.write("))");
@@ -120,14 +120,14 @@ pub(super) fn compile_rand_multi(
     match func_name {
         "rand_choices" => {
             cc.writer.write("rl_ok(rl_rand_choices(");
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
             cc.writer.write(", ");
             if args.len() >= 2 { cc.compile_expr(args[1])?; }
             cc.writer.write("))");
         }
         "rand_sample" => {
             cc.writer.write("rl_ok(rl_rand_sample(");
-            if args.len() >= 1 { cc.compile_expr(args[0])?; }
+            if !args.is_empty() { cc.compile_expr(args[0])?; }
             cc.writer.write(", ");
             if args.len() >= 2 { cc.compile_expr(args[1])?; }
             cc.writer.write("))");

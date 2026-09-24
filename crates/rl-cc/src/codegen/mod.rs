@@ -14,6 +14,17 @@ pub mod scope;
 pub mod statements;
 pub mod stdlib_names;
 
+/// One pushed scope: the flat type maps saved alongside it, restored on pop.
+type ScopeSnapshot = (
+    HashMap<String, TypeAnnotation>,
+    HashSet<String>,
+    HashMap<String, TypeAnnotation>,
+    HashMap<String, TypeAnnotation>,
+);
+
+/// Entry scan result: entry name, tests, inits, finals (each in run order).
+type ScannedEntry = Option<(String, Vec<String>, Vec<String>, Vec<String>)>;
+
 /// One `get ... from std::ns` import record, kept in source order.
 /// Mirrors the VM's `stdlib_methods` table where later imports overwrite
 /// earlier ones on name conflicts.
@@ -81,12 +92,7 @@ pub struct CCodegen<'a> {
     /// Disambiguates shadowed C names (`c`, `c_0`, ...).
     pub shadow_counter: usize,
     /// Scope snapshots for the flat type maps, pushed alongside scopes.
-    pub type_snapshots: Vec<(
-        HashMap<String, TypeAnnotation>,
-        HashSet<String>,
-        HashMap<String, TypeAnnotation>,
-        HashMap<String, TypeAnnotation>,
-    )>,
+    pub type_snapshots: Vec<ScopeSnapshot>,
     /// Expected element type for an empty array literal (`[]`), set by
     /// the surrounding declaration or assignment context.
     pub array_elem_hint: Option<TypeAnnotation>,
@@ -371,17 +377,7 @@ impl<'a> CCodegen<'a> {
     /// or `main`/`__entry__` fallback), tests, inits and finals. Mirrors the
     /// VM's `scan_entry_points`: numbered init/final priorities run first in
     /// ascending order, unnumbered ones last in declaration order.
-    fn scan_entry(
-        statements: &[Statement],
-    ) -> Result<
-        Option<(
-            String,
-            Vec<String>,
-            Vec<String>,
-            Vec<String>,
-        )>,
-        Error,
-    > {
+    fn scan_entry(statements: &[Statement]) -> Result<ScannedEntry, Error> {
         let mut explicit_entry: Option<String> = None;
         let mut main_entry: Option<String> = None;
         let mut tests: Vec<String> = Vec::new();
@@ -484,8 +480,8 @@ impl<'a> CCodegen<'a> {
                     params.iter().map(|p| p.param_type.clone()).collect(),
                 );
                 let mut resolved_return = return_type.clone();
-                if resolved_return == TypeAnnotation::Null {
-                    if let Some(inferred) = self
+                if resolved_return == TypeAnnotation::Null
+                    && let Some(inferred) = self
                         .checker
                         .scopes
                         .first()
@@ -501,7 +497,6 @@ impl<'a> CCodegen<'a> {
                     {
                         resolved_return = inferred;
                     }
-                }
                 self.user_fn_returns
                     .insert(name.clone(), resolved_return);
             }
@@ -1032,8 +1027,7 @@ impl<'a> CCodegen<'a> {
         // they unbox on emission, so the value needs re-boxing below.
         if let ExpressionKind::Identifier(n) | ExpressionKind::ResolvedIdentifier { name: n, .. } =
             &expr.kind
-        {
-            if !self.refined_vars.contains_key(n) && matches!(
+            && !self.refined_vars.contains_key(n) && matches!(
                 self.var_types.get(n),
                 Some(
                     TypeAnnotation::Any(_)
@@ -1044,7 +1038,6 @@ impl<'a> CCodegen<'a> {
             ) {
                 return Ok(false);
             }
-        }
         // name the value for loud errors below (struct literals infer
         // to None, which would otherwise report as `None`)
         let value_desc = match &expr.kind {

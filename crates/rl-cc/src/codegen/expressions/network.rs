@@ -25,7 +25,7 @@ pub(super) fn compile_tcp_connect(cc: &mut CCodegen, args: &[ExprId]) -> Result<
 
 pub(super) fn compile_tcp_read(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
     cc.writer.write("rl_net_tcp_read(");
-    if args.len() >= 1 { cc.compile_expr(args[0])?; }
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(", ");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
     cc.writer.write(")");
@@ -34,7 +34,7 @@ pub(super) fn compile_tcp_read(cc: &mut CCodegen, args: &[ExprId]) -> Result<(),
 
 pub(super) fn compile_tcp_write(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
     cc.writer.write("rl_net_tcp_write(");
-    if args.len() >= 1 { cc.compile_expr(args[0])?; }
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(", ");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
     cc.writer.write(")");
@@ -57,7 +57,7 @@ pub(super) fn compile_tcp_local_addr(cc: &mut CCodegen, args: &[ExprId]) -> Resu
 
 pub(super) fn compile_tcp_set_timeout(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
     cc.writer.write("rl_net_tcp_set_timeout(");
-    if args.len() >= 1 { cc.compile_expr(args[0])?; }
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(", ");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
     cc.writer.write(")");
@@ -66,7 +66,7 @@ pub(super) fn compile_tcp_set_timeout(cc: &mut CCodegen, args: &[ExprId]) -> Res
 
 pub(super) fn compile_tcp_set_nonblocking(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
     cc.writer.write("rl_net_tcp_set_nonblocking(");
-    if args.len() >= 1 { cc.compile_expr(args[0])?; }
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(", ");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
     cc.writer.write(")");
@@ -75,7 +75,7 @@ pub(super) fn compile_tcp_set_nonblocking(cc: &mut CCodegen, args: &[ExprId]) ->
 
 pub(super) fn compile_tcp_shutdown(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
     cc.writer.write("rl_net_tcp_shutdown(");
-    if args.len() >= 1 { cc.compile_expr(args[0])?; }
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(", ");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
     cc.writer.write(")");
@@ -98,7 +98,7 @@ pub(super) fn compile_udp_bind(cc: &mut CCodegen, args: &[ExprId]) -> Result<(),
 
 pub(super) fn compile_udp_connect(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
     cc.writer.write("rl_net_udp_connect(");
-    if args.len() >= 1 { cc.compile_expr(args[0])?; }
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(", ");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
     cc.writer.write(")");
@@ -107,7 +107,7 @@ pub(super) fn compile_udp_connect(cc: &mut CCodegen, args: &[ExprId]) -> Result<
 
 pub(super) fn compile_udp_send(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
     cc.writer.write("rl_net_udp_send(");
-    if args.len() >= 1 { cc.compile_expr(args[0])?; }
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(", ");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
     cc.writer.write(")");
@@ -116,7 +116,7 @@ pub(super) fn compile_udp_send(cc: &mut CCodegen, args: &[ExprId]) -> Result<(),
 
 pub(super) fn compile_udp_send_to(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
     cc.writer.write("rl_net_udp_send_to(");
-    if args.len() >= 1 { cc.compile_expr(args[0])?; }
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(", ");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
     cc.writer.write(", ");
@@ -127,7 +127,7 @@ pub(super) fn compile_udp_send_to(cc: &mut CCodegen, args: &[ExprId]) -> Result<
 
 pub(super) fn compile_udp_recv(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
     cc.writer.write("rl_net_udp_recv(");
-    if args.len() >= 1 { cc.compile_expr(args[0])?; }
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(", ");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
     cc.writer.write(")");
@@ -136,7 +136,7 @@ pub(super) fn compile_udp_recv(cc: &mut CCodegen, args: &[ExprId]) -> Result<(),
 
 pub(super) fn compile_udp_recv_from(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
     cc.writer.write("rl_net_udp_recv_from(");
-    if args.len() >= 1 { cc.compile_expr(args[0])?; }
+    if !args.is_empty() { cc.compile_expr(args[0])?; }
     cc.writer.write(", ");
     if args.len() >= 2 { cc.compile_expr(args[1])?; }
     cc.writer.write(")");

@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use rl_vm::VmValue;
 
 use crate::common::compile_and_run;
