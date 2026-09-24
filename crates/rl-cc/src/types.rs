@@ -29,6 +29,7 @@ pub fn type_to_c(ta: &T) -> String {
         T::HandleInfer => "int64_t".into(),
         T::Infer => "rl_value".into(),
         T::Generic(_) => "rl_value".into(),
+        T::Any(_) | T::CAny(_) => "rl_value".into(),
         T::Callback(_, _) => "rl_closure".into(),
         T::Error | T::CError => "rl_result".into(),
     }

@@ -414,6 +414,10 @@ fn fmt_type(t: &TypeAnnotation) -> String {
         TypeAnnotation::Enum(name) => name.clone(),
         TypeAnnotation::CEnum(name) => name.clone(),
         TypeAnnotation::Generic(name) => format!("<{}>", name),
+        TypeAnnotation::Any(members) | TypeAnnotation::CAny(members) => {
+            let s: Vec<String> = members.iter().map(fmt_type).collect();
+            format!("any[{}]", s.join(", "))
+        }
         TypeAnnotation::Callback(params, ret) => {
             let p: Vec<String> = params.iter().map(fmt_type).collect();
             format!("fn({}) -> {}", p.join(", "), fmt_type(ret))

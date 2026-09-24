@@ -640,8 +640,28 @@ impl<'a> CCodegen<'a> {
             }
             ExpressionKind::Cast { value, target_type } => {
                 let c_type = type_to_c(target_type);
-                self.writer.write(&format!("({})", c_type));
-                self.compile_expr(*value)?;
+                // casts out of dynamic (`any`) storage unbox with numeric
+                // conversion (mirroring the VM's `as`); concrete sources
+                // keep the plain C cast
+                let dynamic_source = matches!(
+                    self.inferred_expr_type(*value),
+                    Some(TypeAnnotation::Any(_) | TypeAnnotation::CAny(_))
+                );
+                if dynamic_source {
+                    use rl_ast::statements::TypeAnnotation as T;
+                    let unboxer = match target_type {
+                        T::Float | T::CFloat | T::SFloat | T::CSFloat => {
+                            "rl_unbox_num_f64"
+                        }
+                        _ => "rl_unbox_num_i64",
+                    };
+                    self.writer.write(&format!("(({}){}(", c_type, unboxer));
+                    self.compile_expr(*value)?;
+                    self.writer.write("))");
+                } else {
+                    self.writer.write(&format!("({})", c_type));
+                    self.compile_expr(*value)?;
+                }
             }
             ExpressionKind::ResolvedLambda { params, return_type, body, .. } => {
                 self.compile_lambda(params, return_type, body)?;

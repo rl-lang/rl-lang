@@ -86,10 +86,18 @@ pub static TYPES: ConceptEntry = ConceptEntry {
             examples: &["dec handle window = result_unwrap(gui_window(\"My App\", 400, 300))"],
             expected_output: &[],
         },
+        DescriptionEntry {
+            kind: DescriptionKind::Explanation,
+            title: Some("union types"),
+            description: "`any[T, ...]` is a union: a value of any one member type. The declared union sticks - `dec any[int, string] a = 1` keeps type `any[int, string]`, so reads must narrow with `match __type_of(a)` or a numeric `as` cast. Operators, indexing, and method calls require every member to resolve, failing loudly otherwise. Members normalize at parse (nested unions flatten, duplicates drop); empty and single-member lists are errors",
+            examples: &["dec any[int, string] a = 1\ndec int b = a as int"],
+            expected_output: &[],
+        },
     ],
     pitfalls: &[
         "a bare integer literal is always `int`, never `byte`, no matter how small - `dec byte b = 10` without `as byte` is a compile-time type mismatch",
         "`handle` in an annotation matches any concrete handle kind in either direction - `fn shut(handle h) { close(h) }` accepts a file handle, and `-> result[handle]` returns flow through `?` like any other result",
+        "a union never narrows implicitly - `dec int b = a` where `a` is `any[int, string]` is a mismatch even when `a` currently holds an int; narrow with `as` (numerics) or `match`",
     ],
     related: &["byte", "casting", "variables"],
     related_stdlib: &["types"],

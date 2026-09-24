@@ -32,6 +32,17 @@ use rl_lexer::tokentypes::TokenType;
 use rl_utils::{errors::Error, span::Span};
 
 impl Parser {
+    /// Whether an identifier after `dec` starts a typed declaration.
+    ///
+    /// Bare identifiers default to inferred bindings (`dec name = value`),
+    /// so known type names opt out: declared records/tags, type aliases,
+    /// and the reserved `any[...]` union (an Identifier, not a keyword).
+    fn is_typed_dec_name(&self, name: &str) -> bool {
+        name == "any"
+            || self.record_names.contains(name)
+            || self.tag_names.contains(name)
+            || self.ast_arena.type_aliases.contains_key(name)
+    }
     /// Dispatches the current token to the appropriate statement sub-parser.
     ///
     /// | Token | Action |
@@ -88,9 +99,7 @@ impl Parser {
                 self.advance();
 
                 let is_inferred = if let TokenType::Identifier(name) = self.peek() {
-                    !self.record_names.contains(&name)
-                        && !self.tag_names.contains(&name)
-                        && !self.ast_arena.type_aliases.contains_key(&name)
+                    !self.is_typed_dec_name(&name)
                 } else {
                     false
                 };
@@ -344,9 +353,7 @@ impl Parser {
             TokenType::Dec => {
                 self.advance();
                 let is_inferred = if let TokenType::Identifier(name) = self.peek() {
-                    !self.record_names.contains(&name)
-                        && !self.tag_names.contains(&name)
-                        && !self.ast_arena.type_aliases.contains_key(&name)
+                    !self.is_typed_dec_name(&name)
                 } else {
                     false
                 };

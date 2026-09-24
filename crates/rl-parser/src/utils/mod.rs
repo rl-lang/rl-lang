@@ -220,6 +220,11 @@ impl Parser {
                 Ok(TypeAnnotation::HandleInfer)
             }
 
+            TokenType::Identifier(name) if name == "any" => {
+                self.advance();
+                let members = self.parse_any_members()?;
+                Ok(TypeAnnotation::Any(Rc::new(members)))
+            }
             TokenType::Identifier(name) => {
                 self.advance();
                 if self.tag_names.contains(&name) {

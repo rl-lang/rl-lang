@@ -67,6 +67,10 @@ impl CheckType {
     /// - `Function { .. }` matches `Known(Fn)` and vice versa
     /// - Two `Function` types match only if params and return type are identical
     /// - Two `Known` types match if equal, or via [`null_array_elision`] or [`const_matches`]
+    /// - A value matches `any[...]` iff it matches some member; `any[...]`
+    ///   matches `any[...]` iff every member matches some expected member
+    ///   (subset); an `any` never matches a bare concrete type (narrow
+    ///   with `as` or `match`)
     pub fn matches(&self, expected: &CheckType) -> bool {
         match (self, expected) {
             // if any side is [`CheckType::Unknown`] returns true
@@ -106,6 +110,7 @@ impl CheckType {
                     || enum_matches(a, b)
                     || set_matches(a, b)
                     || handle_matches(a, b)
+                    || any_matches(a, b)
             }
 
             _ => false,
@@ -166,6 +171,27 @@ fn handle_matches(a: &TypeAnnotation, b: &TypeAnnotation) -> bool {
             | (TypeAnnotation::Handle(_), TypeAnnotation::HandleInfer)
             | (TypeAnnotation::HandleInfer, TypeAnnotation::HandleInfer)
     )
+}
+
+/// Union compatibility: a value matches `any[...]` iff it matches some
+/// member; `any[...]` matches `any[...]` iff every actual member matches
+/// some expected member (subset). An `any` never matches a bare concrete
+/// type - narrowing needs `as` or `match`. Member comparison reuses the
+/// full [`CheckType::matches`] rules, so nesting and const forms compose.
+fn any_matches(a: &TypeAnnotation, b: &TypeAnnotation) -> bool {
+    use TypeAnnotation::*;
+    let member_matches = |m: &TypeAnnotation, e: &TypeAnnotation| {
+        CheckType::Known(m.clone()).matches(&CheckType::Known(e.clone()))
+    };
+    match (a, b) {
+        (Any(actual) | CAny(actual), Any(expected) | CAny(expected)) => actual
+            .iter()
+            .all(|m| expected.iter().any(|e| member_matches(m, e))),
+        (_, Any(expected) | CAny(expected)) => {
+            expected.iter().any(|e| member_matches(a, e))
+        }
+        _ => false,
+    }
 }
 
 fn null_map_elision(a: &TypeAnnotation, b: &TypeAnnotation) -> bool {

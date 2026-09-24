@@ -356,13 +356,95 @@ pub(super) fn compile_var_decl(
                     ));
                 }
             }
-        } else {
+        } else if !box_for_any_storage(cc, &effective, value)? {
             cc.compile_expr(value)?;
         }
         cc.writer.write(";\n");
     }
     register_after(cc, name, &c_name, effective, value, !early);
     Ok(())
+}
+
+/// Box a value into `any` (`rl_value`) storage. Returns `Ok(true)`
+/// when emitted, `Ok(false)` when the storage isn't dynamic (the caller
+/// emits normally). Members with no dynamic box (bytes, chars, records,
+/// tags-as-values, tuples, closures, results) fail loudly instead of
+/// generating mistyped C.
+pub(super) fn box_for_any_storage(
+    cc: &mut CCodegen,
+    effective: &TypeAnnotation,
+    value: ExprId,
+) -> Result<bool, Error> {
+    if !matches!(
+        effective,
+        TypeAnnotation::Any(_) | TypeAnnotation::CAny(_)
+    ) {
+        return Ok(false);
+    }
+    let expr = cc.ast.exprs.get(value);
+    if matches!(&expr.kind, ExpressionKind::Null) {
+        cc.writer.write("rl_value_null()");
+        return Ok(true);
+    }
+    // name the value for loud errors below (struct literals infer to
+    // None, which would otherwise report as `None`)
+    let value_desc = match &expr.kind {
+        ExpressionKind::StructLiteral { name, .. } => format!("record {}", name),
+        _ => format!(
+            "{:?}",
+            cc.inferred_expr_type(value).unwrap_or(TypeAnnotation::Infer)
+        ),
+    };
+    match cc.inferred_expr_type(value) {
+        Some(
+            TypeAnnotation::Int
+            | TypeAnnotation::CInt
+            | TypeAnnotation::UInt
+            | TypeAnnotation::CUInt
+            | TypeAnnotation::SInt
+            | TypeAnnotation::CSInt
+            | TypeAnnotation::SUInt
+            | TypeAnnotation::CSUInt
+            | TypeAnnotation::Float
+            | TypeAnnotation::CFloat
+            | TypeAnnotation::SFloat
+            | TypeAnnotation::CSFloat
+            | TypeAnnotation::Bool
+            | TypeAnnotation::CBool
+            | TypeAnnotation::String
+            | TypeAnnotation::CString
+            | TypeAnnotation::Array(_)
+            | TypeAnnotation::CArray(_)
+            | TypeAnnotation::Map(_, _)
+            | TypeAnnotation::CMap(_, _)
+            | TypeAnnotation::Set(_)
+            | TypeAnnotation::CSet(_)
+            | TypeAnnotation::Handle(_)
+            | TypeAnnotation::HandleInfer
+            | TypeAnnotation::Enum(_)
+            | TypeAnnotation::CEnum(_),
+        ) => {
+            cc.writer.write("rl_box(");
+            cc.compile_expr(value)?;
+            cc.writer.write(")");
+            Ok(true)
+        }
+        // already boxed/dynamic: assign directly
+        Some(
+            TypeAnnotation::Infer
+            | TypeAnnotation::Generic(_)
+            | TypeAnnotation::Any(_)
+            | TypeAnnotation::CAny(_),
+        ) => Ok(false),
+        _ => Err(Error::at(
+            Reason::Compile,
+            format!(
+                "any[...] value cannot be stored on the C backend yet: {}",
+                value_desc
+            ),
+            Span::dummy(),
+        )),
+    }
 }
 
 /// `const x: T = value` — like a variable declaration but the C local
@@ -417,7 +499,7 @@ pub(super) fn compile_const_decl(
             cc.writer.write("rl_result_unwrap_closure(rl_ok(");
             cc.compile_expr(value)?;
             cc.writer.write("))");
-        } else {
+        } else if !box_for_any_storage(cc, &effective, value)? {
             cc.compile_expr(value)?;
         }
         cc.writer.write(";\n");

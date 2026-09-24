@@ -356,6 +356,26 @@ static inline rl_string rl_unbox_str(rl_value v) {
     }
     return v.data.str;
 }
+// Numeric-converting unboxers for `as` casts out of dynamic (`any`)
+// storage, mirroring the VM's `as` (any numeric converts, the rest
+// abort). Narrower C widths cast again at the use site.
+static inline int64_t rl_unbox_num_i64(rl_value v) {
+    if (v.tag == RL_VTAG_I64) return v.data.i64;
+    if (v.tag == RL_VTAG_F64) return (int64_t)v.data.f64;
+    fprintf(stderr, "error: invalid cast to int\n");
+    _rl_abort();
+}
+static inline double rl_unbox_num_f64(rl_value v) {
+    if (v.tag == RL_VTAG_F64) return v.data.f64;
+    if (v.tag == RL_VTAG_I64) return (double)v.data.i64;
+    fprintf(stderr, "error: invalid cast to float\n");
+    _rl_abort();
+}
+// Null dynamic value (unions accept `null`; there is no null literal
+// with a storage type, so declarations emit this directly).
+static inline rl_value rl_value_null(void) {
+    rl_value r; r.tag = RL_VTAG_NULL; return r;
+}
 static inline rl_array rl_unbox_arr(rl_value v) {
     if (v.tag != RL_VTAG_ARR) {
         fprintf(stderr, "error: type mismatch unwrapping value\n");

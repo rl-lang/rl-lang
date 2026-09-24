@@ -500,6 +500,12 @@ pub enum TypeAnnotation {
     Handle(HandleKind),
     /// Placeholder used by `dec handle name = v` bindings.
     HandleInfer,
+    /// Union of member types (`any[int, string]`): a value of any one
+    /// member type. Members are normalized at parse (flattened,
+    /// deduplicated, never empty).
+    Any(Rc<Vec<TypeAnnotation>>),
+    /// Constant union (`const any[int, string] ...`).
+    CAny(Rc<Vec<TypeAnnotation>>),
 }
 
 /// A single function or lambda parameter: a name and its type annotation.
