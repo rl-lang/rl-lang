@@ -5,18 +5,18 @@ C transpiler for the rl programming language. Converts `.rl` source files to C99
 ## Usage
 
 ```bash
-rl transpile file.rl                    # output file.c
-rl transpile file.rl --compile          # output file.c + compile to binary
-rl transpile file.rl --output out       # output out.c
-rl transpile file.rl --opt 2            # compile with -O2
-rl transpile file.rl --runtime          # include the C runtime headers
-rl transpile file.rl -lm                # extra cc flags
+rlt file.rl                    # output file.c
+rlt file.rl --compile          # output file.c + compile to binary
+rlt file.rl -o out             # output out.c
+rlt file.rl --compile --opt 2  # compile the C with -O2
+rlt file.rl --runtime          # also emit rl_runtime.h + rl_runtime.c next to the output
+rlt file.rl --compile -lm      # extra flags are forwarded to cc
 ```
 
 ## Supported Features
 
 - **Types**: int, float, string, bool, char, byte, null, array, map, set, tuple, record/tag (struct/enum), result
-- **Declarations**: dec, const, functions with generics, impl methods on records
+- **Declarations**: dec, const, functions, impl methods on records
 - **Control flow**: if/else, while, for, foreach, forrange, loop, break, continue, match
 - **Expressions**: arithmetic, boolean (and/or/!), comparison, cast, propagate (?), lambda, closures
 - **Imports**: multi-file support via `get X from path::module` - imported code is resolved at resolve time and inlined into the generated C output
