@@ -1,16 +1,10 @@
 use crate::entry::{FnEntry, StdEntry};
 
-mod path_absolute;
 mod path_components;
-mod path_canonicalize;
 mod path_ends_with;
-mod path_exists;
-mod path_expand_home;
 mod path_extension;
 mod path_filename;
 mod path_is_absolute;
-mod path_is_dir;
-mod path_is_file;
 mod path_is_relative;
 mod path_join;
 mod path_join_many;
@@ -18,7 +12,6 @@ mod path_normalize;
 mod path_parent;
 mod path_pop;
 mod path_push;
-mod path_relative;
 mod path_set_extension;
 mod path_split;
 mod path_split_extension;
@@ -35,17 +28,11 @@ pub static PATH: StdEntry = StdEntry {
 };
 
 static FUNCTIONS: &[&FnEntry] = &[
-    &path_absolute::PATH_ABSOLUTE,
-    &path_canonicalize::PATH_CANONICALIZE,
     &path_components::PATH_COMPONENTS,
     &path_ends_with::PATH_ENDS_WITH,
-    &path_exists::PATH_EXISTS,
-    &path_expand_home::PATH_EXPAND_HOME,
     &path_extension::PATH_EXTENSION,
     &path_filename::PATH_FILENAME,
     &path_is_absolute::PATH_IS_ABSOLUTE,
-    &path_is_dir::PATH_IS_DIR,
-    &path_is_file::PATH_IS_FILE,
     &path_is_relative::PATH_IS_RELATIVE,
     &path_join::PATH_JOIN,
     &path_join_many::PATH_JOIN_MANY,
@@ -53,7 +40,6 @@ static FUNCTIONS: &[&FnEntry] = &[
     &path_parent::PATH_PARENT,
     &path_pop::PATH_POP,
     &path_push::PATH_PUSH,
-    &path_relative::PATH_RELATIVE,
     &path_set_extension::PATH_SET_EXTENSION,
     &path_split::PATH_SPLIT,
     &path_split_extension::PATH_SPLIT_EXTENSION,

@@ -61,7 +61,8 @@ z
 fn zip_truncates_to_shorter_left() {
     let result = compile_and_run(
         r#"
-get arr_zip, len from std::array
+get arr_zip from std::array
+get len from std
 dec arr[int] a = [1, 2]
 dec arr[int] b = [10, 20, 30, 40]
 dec arr[(int, int)] z = arr_zip(a, b)
@@ -77,7 +78,8 @@ n
 fn zip_truncates_to_shorter_right() {
     let result = compile_and_run(
         r#"
-get arr_zip, len from std::array
+get arr_zip from std::array
+get len from std
 dec arr[int] a = [1, 2, 3, 4]
 dec arr[int] b = [10, 20]
 dec arr[(int, int)] z = arr_zip(a, b)
@@ -93,7 +95,8 @@ n
 fn zip_empty_left() {
     let result = compile_and_run(
         r#"
-get arr_zip, len from std::array
+get arr_zip from std::array
+get len from std
 dec arr[int] a = []
 dec arr[int] b = [1, 2, 3]
 dec arr[(int, int)] z = arr_zip(a, b)
@@ -109,7 +112,8 @@ n
 fn zip_empty_right() {
     let result = compile_and_run(
         r#"
-get arr_zip, len from std::array
+get arr_zip from std::array
+get len from std
 dec arr[int] a = [1, 2, 3]
 dec arr[int] b = []
 dec arr[(int, int)] z = arr_zip(a, b)
@@ -125,7 +129,8 @@ n
 fn zip_both_empty() {
     let result = compile_and_run(
         r#"
-get arr_zip, len from std::array
+get arr_zip from std::array
+get len from std
 dec arr[int] a = []
 dec arr[int] b = []
 dec arr[(int, int)] z = arr_zip(a, b)
@@ -162,7 +167,8 @@ z
 fn zip_then_map() {
     let result = compile_and_run(
         r#"
-get arr_zip, len from std::array
+get arr_zip from std::array
+get len from std
 dec arr[int] a = [1, 2, 3]
 dec arr[int] b = [4, 5, 6]
 dec arr[(int, int)] z = arr_zip(a, b)

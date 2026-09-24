@@ -223,69 +223,6 @@ pub fn read_float<R: Runtime>(args: Vec<R::Value>) -> R::Value {
     }
 }
 
-// ---- file reading (language `result[T]`) ----------------------------------
-
-#[native_fn(module = "io")]
-pub fn read_file(file: String) -> Result<String, String> {
-    match std::fs::read_to_string(&file) {
-        Ok(d) => Ok(d),
-        Err(e) => Err(format!("read_file: failed to read \"{}\": {}", file, e)),
-    }
-}
-
-#[native_fn(module = "io")]
-pub fn read_lines(file: String) -> Result<Vec<String>, String> {
-    match std::fs::read_to_string(&file) {
-        Ok(d) => Ok(d.lines().map(String::from).collect()),
-        Err(e) => Err(format!("read_lines: failed to read \"{}\": {}", file, e)),
-    }
-}
-
-#[native_fn(module = "io")]
-pub fn read_bytes(file: String) -> Result<Vec<u8>, String> {
-    match std::fs::read(&file) {
-        Ok(d) => Ok(d),
-        Err(e) => Err(format!("read_bytes: failed to read \"{}\": {}", file, e)),
-    }
-}
-
-// ---- file writing (language `result[null]`) -------------------------------
-
-#[native_fn(module = "io")]
-pub fn write_file(file: String, content: String) -> Result<(), String> {
-    match std::fs::write(&file, content) {
-        Ok(_) => Ok(()),
-        Err(e) => Err(format!("write_file: failed to write \"{}\": {}", file, e)),
-    }
-}
-
-#[native_fn(module = "io")]
-pub fn append_file(file: String, content: String) -> Result<(), String> {
-    let mut file_data = match std::fs::OpenOptions::new()
-        .append(true)
-        .create(true)
-        .open(&file)
-    {
-        Ok(fd) => fd,
-        Err(e) => {
-            return Err(format!("append_file: failed to open \"{}\": {}", file, e));
-        }
-    };
-
-    match file_data.write_all(content.as_bytes()) {
-        Ok(_) => Ok(()),
-        Err(e) => Err(format!("append_file: failed to append \"{}\": {}", file, e)),
-    }
-}
-
-#[native_fn(module = "io")]
-pub fn delete_file(file: String) -> Result<(), String> {
-    match std::fs::remove_file(&file) {
-        Ok(_) => Ok(()),
-        Err(e) => Err(format!("delete_file: failed to read \"{}\": {}", file, e)),
-    }
-}
-
 // ---- stdin advanced -------------------------------------------------------
 
 #[native_fn(module = "io")]
@@ -350,8 +287,6 @@ rl_std_core::native_module!("io";
     funcs: [
         print, println,
         read, read_int, read_float,
-        read_file, read_lines, read_bytes,
-        write_file, append_file, delete_file,
         read_all_stdin,
         decode_utf8, encode_utf8,
         isatty,

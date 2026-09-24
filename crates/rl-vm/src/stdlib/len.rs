@@ -1,7 +1,7 @@
-//! `std::array::len` - kept as a legacy per-runtime function because its return
+//! Top-level `std::len` - kept as a per-runtime function because its return
 //! convention diverges between the backends: the VM returns a `result[int]`
 //! (`len(x)?`), while the interpreter returns a bare `int`. The shared `rl-std`
-//! `array` module therefore omits `len`; each runtime registers its own.
+//! root therefore only declares the name; each runtime registers its own.
 
 use crate::{
     Vm,

@@ -22,10 +22,10 @@ pub fn root() -> Module {
         "collections",
         rl_std::collections::handles::<VmRuntime>(),
     ));
-    std = std.with_module(
-        Module::from_std("array", rl_std::array::handles::<VmRuntime>())
-            .with_function("len", len::std_len),
-    );
+    std = std.with_module(Module::from_std(
+        "array",
+        rl_std::array::handles::<VmRuntime>(),
+    ));
     std = std.with_function("len", len::std_len);
 
     #[cfg(any(feature = "std-c", feature = "impls"))]

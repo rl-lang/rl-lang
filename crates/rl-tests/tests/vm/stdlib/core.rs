@@ -32,7 +32,7 @@ fn map_new_set_get_keys() {
     let result = compile_and_run(
         r#"
 get __map_new, __map_set, __map_get, __map_keys from core
-get len from std::array
+get len from std
 get result_unwrap from std::res
 dec m = __map_new()
 __map_set(m, "a", 1)
@@ -143,7 +143,7 @@ fn removes_abort_on_absent() {
         r#"
 get __arr_remove, __map_remove, __set_remove from core
 get __map_new, __map_set, __map_has, __map_keys, __set_new, __set_add from core
-get len from std::array
+get len from std
 get result_unwrap from std::res
 dec a = __arr_remove([10, 20, 30], 1)
 dec m = __map_new()
@@ -263,7 +263,8 @@ fn rl_written_values_fn() {
     let result = compile_and_run(
         r#"
 get __map_keys, __map_get, __arr_push from core
-get len, arr_contains from std::array
+get len from std
+get arr_contains from std::array
 get result_unwrap from std::res
 
 fn my_values(map[string, int] m) -> arr[int] {

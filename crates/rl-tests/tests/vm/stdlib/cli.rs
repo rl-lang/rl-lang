@@ -12,7 +12,7 @@ fn shell_split_basic() {
         r#"
 get shell_split from std::cli
 get result_unwrap from std::res
-get len from std::array
+get len from std
 dec parts = result_unwrap(shell_split("a b \"c d\""))
 result_unwrap(len(parts))
 "#,
@@ -41,7 +41,7 @@ fn shell_join_round_trips() {
         r#"
 get shell_split, shell_join from std::cli
 get result_unwrap from std::res
-get len from std::array
+get len from std
 dec parts = result_unwrap(shell_split(shell_join(["a", "b c"])))
 result_unwrap(len(parts))
 "#,

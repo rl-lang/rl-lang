@@ -296,7 +296,7 @@ x
 fn str_len() {
     let result = compile_and_run(
         r#"
-get len from std::array
+get len from std
 dec int x = len("hello")?
 x
 "#,

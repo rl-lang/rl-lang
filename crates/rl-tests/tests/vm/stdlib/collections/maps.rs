@@ -168,7 +168,7 @@ fn map_to_array_empty() {
     let result = compile_and_run(
         r#"
 get map_to_array from std::collections
-get len from std::array
+get len from std
 dec map[string, int] m = {}
 dec arr[(string, int)] a = map_to_array(m)?
 dec int n = len(a)?

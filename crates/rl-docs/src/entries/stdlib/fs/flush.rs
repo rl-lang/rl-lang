@@ -3,10 +3,10 @@ use crate::entry::FnEntry;
 pub static FLUSH: FnEntry = FnEntry {
     signature: "flush(handle)",
     description: "flushes buffered writes to disk",
-    example: r#"get std::io::open
-get std::io::write
-get std::io::flush
-get std::io::close
+    example: r#"get std::fs::open
+get std::fs::write
+get std::fs::flush
+get std::fs::close
 
 dec file = open("out.txt", "w")?
 write(file, "data")?
@@ -17,6 +17,6 @@ close(file)?"#,
     errors: Some("Will return error if the handle is invalid or not open for writing"),
     see_also: &["write_handle", "close"],
     since: Some("v2.1.0"),
-    deprecated: Some("moved to std::fs::flush"),
+    deprecated: None,
     updated: Some("v2.1.0"),
 };

@@ -87,10 +87,6 @@ impl TypeChecker {
     /// Builds the map of deprecated stdlib function paths to their messages.
     fn build_deprecated_stdlib_map() -> HashMap<Vec<String>, String> {
         let mut m = HashMap::new();
-        m.insert(
-            vec!["std".into(), "array".into(), "len".into()],
-            "use std::len instead".into(),
-        );
         // std::rl metaprogramming is deprecated
         for name in [
             "lex",
@@ -105,93 +101,6 @@ impl TypeChecker {
                 "std::rl is deprecated and may be removed in a future version".into(),
             );
         }
-        // fs reorg: io file ops -> fs
-        m.insert(
-            vec!["std".into(), "io".into(), "read_file".into()],
-            "use std::fs::read_file instead".into(),
-        );
-        m.insert(
-            vec!["std".into(), "io".into(), "read_lines".into()],
-            "use std::fs::read_lines instead".into(),
-        );
-        m.insert(
-            vec!["std".into(), "io".into(), "read_bytes".into()],
-            "use std::fs::read_bytes instead".into(),
-        );
-        m.insert(
-            vec!["std".into(), "io".into(), "write_file".into()],
-            "use std::fs::write_file instead".into(),
-        );
-        m.insert(
-            vec!["std".into(), "io".into(), "append_file".into()],
-            "use std::fs::append_file instead".into(),
-        );
-        m.insert(
-            vec!["std".into(), "io".into(), "delete_file".into()],
-            "use std::fs::delete_file instead".into(),
-        );
-        // fs reorg: path syscall ops -> fs
-        m.insert(
-            vec!["std".into(), "path".into(), "path_exists".into()],
-            "use std::fs::path_exists instead".into(),
-        );
-        m.insert(
-            vec!["std".into(), "path".into(), "path_is_dir".into()],
-            "use std::fs::path_is_dir instead".into(),
-        );
-        m.insert(
-            vec!["std".into(), "path".into(), "path_is_file".into()],
-            "use std::fs::path_is_file instead".into(),
-        );
-        m.insert(
-            vec!["std".into(), "path".into(), "path_canonicalize".into()],
-            "use std::fs::path_canonicalize instead".into(),
-        );
-        m.insert(
-            vec!["std".into(), "path".into(), "path_absolute".into()],
-            "use std::fs::path_absolute instead".into(),
-        );
-        m.insert(
-            vec!["std".into(), "path".into(), "path_expand_home".into()],
-            "use std::fs::path_expand_home instead".into(),
-        );
-        m.insert(
-            vec!["std".into(), "path".into(), "path_relative".into()],
-            "use std::fs::path_relative instead".into(),
-        );
-        // fs reorg: io handle ops -> fs
-        m.insert(
-            vec!["std".into(), "io".into(), "open".into()],
-            "use std::fs::open instead".into(),
-        );
-        m.insert(
-            vec!["std".into(), "io".into(), "close".into()],
-            "use std::fs::close instead".into(),
-        );
-        m.insert(
-            vec!["std".into(), "io".into(), "read_handle".into()],
-            "use std::fs::read_handle instead".into(),
-        );
-        m.insert(
-            vec!["std".into(), "io".into(), "write_handle".into()],
-            "use std::fs::write_handle instead".into(),
-        );
-        m.insert(
-            vec!["std".into(), "io".into(), "seek".into()],
-            "use std::fs::seek instead".into(),
-        );
-        m.insert(
-            vec!["std".into(), "io".into(), "flush".into()],
-            "use std::fs::flush instead".into(),
-        );
-        m.insert(
-            vec!["std".into(), "io".into(), "read_all".into()],
-            "use std::fs::read_all instead".into(),
-        );
-        m.insert(
-            vec!["std".into(), "io".into(), "readline".into()],
-            "use std::fs::readline instead".into(),
-        );
         m
     }
 

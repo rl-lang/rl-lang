@@ -85,7 +85,7 @@ pub fn signatures() -> rl_std_core::ModuleNames {
     let mut m = rl_std_core::ModuleNames::new("std")
         .with_functions(&["len"]);
     #[cfg(any(feature = "std-array", feature = "impls"))]
-    { m = m.with_module(array::signatures().with_functions(&["len"])); }
+    { m = m.with_module(array::signatures()); }
     #[cfg(any(feature = "std-audio", feature = "impls"))]
     { m = m.with_module(audio::signatures()); }
     #[cfg(any(feature = "std-bitwise", feature = "impls"))]

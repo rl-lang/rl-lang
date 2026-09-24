@@ -4,6 +4,12 @@ All notable changes to the rl-lang toolchain are documented here. The format is 
 
 ## [Unreleased]
 
+### Removed
+
+- **Deprecated stdlib dupes** - removed `std::array::len` (use top-level `std::len`), the `std::io` file ops (`read_file`, `read_lines`, `read_bytes`, `write_file`, `append_file`, `delete_file`) and the `std::path` syscall ops (`path_exists`, `path_is_dir`, `path_is_file`, `path_canonicalize`, `path_absolute`, `path_expand_home`, `path_relative`) in favor of their `std::fs` canonical paths. Old paths now fail with `undefined function`; their checker deprecation entries, docs pages, and in-repo callers (including `transpile_demo.rl`) are migrated. `std::rl` deprecations are untouched.
+
+## [2.2.0] - 2026-09-24
+
 ### Added
 
 - **`std::cli`** - command-line interface helpers (VM + `rl-cc` C parity, outputs byte-identical). Hand-rolled `parse_args` over `process::args` with `--name value` / `--name=value` / `-s value` forms, spec as array of string maps (`flag` is string-encoded `"true"`/`"false"` because VM maps are homogeneous), `parse_args_or_exit` (usage + exit 2), `usage_string`, `prompt` / `prompt_password` / `prompt_confirm` / `prompt_choice`, `shell_split` / `shell_join`, rustyline-backed `read_line_editable` / `read_line_with_history`, and hand-rolled `progress_bar` / `spinner_tick` routed through the output buffer for test capture. Drops everything through the first `--` so `rl run prog.rl -- ...` scripts only see their own args.
