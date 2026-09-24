@@ -106,3 +106,84 @@ fn logical_and_keeps_stack_balanced_around_dec() {
 
     assert_eq!(result, VmValue::Int(42));
 }
+
+#[test]
+fn is_tests_primitives() {
+    let result = common::compile_and_run(
+        r#"
+        dec bool a = 1 is int
+        dec bool b = 1 is string
+        dec bool c = 1.5 is float
+        dec bool d = "hi" is string
+        a and c and d and (b == false)
+        "#,
+    )
+    .expect("vm run failed");
+
+    assert_eq!(result, VmValue::Bool(true));
+}
+
+#[test]
+fn is_tests_containers_by_shape() {
+    let result = common::compile_and_run(
+        r#"
+        dec bool a = [1] is arr[int]
+        dec bool b = [1] is map[string, int]
+        dec bool c = (1, 2) is (int, int, int)
+        a and (b == false) and c
+        "#,
+    )
+    .expect("vm run failed");
+
+    assert_eq!(result, VmValue::Bool(true));
+}
+
+#[test]
+fn is_tests_nominal_types() {
+    let result = common::compile_and_run(
+        r#"
+        record P { int x }
+        tag C { Red, Blue }
+        dec P p = P { x: 1 }
+        dec bool a = p is P
+        dec bool b = C.Red is C
+        dec bool c = p is C
+        a and b and (c == false)
+        "#,
+    )
+    .expect("vm run failed");
+
+    assert_eq!(result, VmValue::Bool(true));
+}
+
+#[test]
+fn is_tests_results() {
+    let result = common::compile_and_run(
+        r#"
+        dec bool a = ok(1) is result[int]
+        dec bool b = err("x") is result[int]
+        dec bool c = ok(1) is int
+        a and (b == false) and (c == false)
+        "#,
+    )
+    .expect("vm run failed");
+
+    assert_eq!(result, VmValue::Bool(true));
+}
+
+#[test]
+fn is_refines_branch_reads() {
+    let result = common::compile_and_run(
+        r#"
+        dec any[int, string] x = 21
+        dec int doubled = 0
+        if x is int {
+            doubled = x + x
+        }
+        doubled
+        "#,
+    )
+    .expect("vm run failed");
+
+    assert_eq!(result, VmValue::Int(42));
+}

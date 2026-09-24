@@ -76,7 +76,38 @@ fn sort_entry_calls_by_priority(
 /// the compiler and read by the `Cast` handler in `vm_logic.rs`. Mirrors the
 /// numeric `TypeAnnotation` targets the interpreter's `evaluator.rs` casts to.
 struct CastTarget;
-impl CastTarget {
+
+/// Runtime shape codes for `OpCode::IsKind`, matching the operand read
+/// by the `IsKind` handler in `vm_logic.rs`. Const variants collapse to
+/// their base; containers test shape only (never element types), exactly
+/// like `__type_of` naming.
+struct IsKindTarget;
+impl IsKindTarget {
+    const NULL: u16 = 0;
+    const INT: u16 = 1;
+    const UINT: u16 = 2;
+    const SINT: u16 = 3;
+    const SUINT: u16 = 4;
+    const FLOAT: u16 = 5;
+    const SFLOAT: u16 = 6;
+    const BOOL: u16 = 7;
+    const STRING: u16 = 8;
+    const CHAR: u16 = 9;
+    const BYTE: u16 = 10;
+    const SBYTE: u16 = 11;
+    const BBYTE: u16 = 12;
+    const BSBYTE: u16 = 13;
+    const ARRAY: u16 = 14;
+    const MAP: u16 = 15;
+    const SET: u16 = 16;
+    const TUPLE: u16 = 17;
+    const RECORD: u16 = 18;
+    const ENUM: u16 = 19;
+    const FN: u16 = 20;
+    const HANDLE: u16 = 21;
+    const RESULT: u16 = 22;
+    const ERROR: u16 = 23;
+}impl CastTarget {
     const INT: u16 = 0;
     const FLOAT: u16 = 1;
     const UINT: u16 = 2;
@@ -158,6 +189,66 @@ impl<'a> Compiler<'a> {
             Some(file) => err.with_source_file(file),
             None => err,
         }
+    }
+
+    /// Maps an `is` target type to `IsKind` operands
+    /// `(kind, name, inner_kind, inner_name)`. Const variants collapse;
+    /// containers test shape only. Nominal inner types (e.g.
+    /// `result[Point]`) keep their names; deeper nesting drops them.
+    fn is_kind_operands(
+        target: &TypeAnnotation,
+    ) -> Result<(u16, String, u16, String), String> {
+        use TypeAnnotation as T;
+        // inner mapping for `result[T]` payloads: kind + optional name
+        fn inner_of(inner: &TypeAnnotation) -> (u16, String) {
+            match inner {
+                T::Record(n) | T::CRecord(n) => (IsKindTarget::RECORD, n.clone()),
+                T::Enum(n) | T::CEnum(n) => (IsKindTarget::ENUM, n.clone()),
+                T::Int | T::CInt => (IsKindTarget::INT, String::new()),
+                T::UInt | T::CUInt => (IsKindTarget::UINT, String::new()),
+                T::SInt | T::CSInt => (IsKindTarget::SINT, String::new()),
+                T::SUInt | T::CSUInt => (IsKindTarget::SUINT, String::new()),
+                T::Float | T::CFloat => (IsKindTarget::FLOAT, String::new()),
+                T::SFloat | T::CSFloat => (IsKindTarget::SFLOAT, String::new()),
+                T::Bool | T::CBool => (IsKindTarget::BOOL, String::new()),
+                T::String | T::CString => (IsKindTarget::STRING, String::new()),
+                T::Char | T::CChar => (IsKindTarget::CHAR, String::new()),
+                T::Byte | T::CByte => (IsKindTarget::BYTE, String::new()),
+                T::SByte | T::CSByte => (IsKindTarget::SBYTE, String::new()),
+                T::BByte | T::CBByte => (IsKindTarget::BBYTE, String::new()),
+                T::BSByte | T::CBSByte => (IsKindTarget::BSBYTE, String::new()),
+                T::Array(_) | T::CArray(_) => (IsKindTarget::ARRAY, String::new()),
+                T::Map(_, _) | T::CMap(_, _) => (IsKindTarget::MAP, String::new()),
+                T::Set(_) | T::CSet(_) => (IsKindTarget::SET, String::new()),
+                T::Tuple(_) | T::CTuple(_) => (IsKindTarget::TUPLE, String::new()),
+                T::Fn | T::Callback(_, _) => (IsKindTarget::FN, String::new()),
+                T::Handle(_) | T::HandleInfer => (IsKindTarget::HANDLE, String::new()),
+                T::Null => (IsKindTarget::NULL, String::new()),
+                T::Error | T::CError => (IsKindTarget::ERROR, String::new()),
+                T::Result(_) | T::CResult(_) => (IsKindTarget::RESULT, String::new()),
+                other => (IsKindTarget::NULL, format!("__unmappable:{other:?}")),
+            }
+        }
+        let empty = String::new();
+        let (kind, name) = match target {
+            T::Record(n) | T::CRecord(n) => (IsKindTarget::RECORD, n.clone()),
+            T::Enum(n) | T::CEnum(n) => (IsKindTarget::ENUM, n.clone()),
+            T::Result(inner) | T::CResult(inner) => {
+                let (ik, inode) = inner_of(inner);
+                if inode.starts_with("__unmappable") {
+                    return Err(format!("unsupported `is` target type {target:?}"));
+                }
+                return Ok((IsKindTarget::RESULT, empty, ik, inode));
+            }
+            _ => {
+                let (k, n) = inner_of(target);
+                if n.starts_with("__unmappable") {
+                    return Err(format!("unsupported `is` target type {target:?}"));
+                }
+                return Ok((k, n, IsKindTarget::NULL, empty));
+            }
+        };
+        Ok((kind, name, IsKindTarget::NULL, empty))
     }
 
     fn resolve(&self, depth: usize, slot: usize) -> Option<u16> {
@@ -1188,6 +1279,23 @@ impl<'a> Compiler<'a> {
                 };
                 self.chunk.write_op(OpCode::Cast, span);
                 self.chunk.write_u16(code, span);
+            }
+
+            ExpressionKind::Is { value, target_type } => {
+                self.compile_expr(*value)?;
+                let (kind, name, inner_kind, inner_name) = Self::is_kind_operands(target_type)
+                    .map_err(|msg| self.err(msg, span))?;
+                let name_idx = self
+                    .chunk
+                    .add_constant(VmValue::Str(Rc::from(name.as_str())));
+                let inner_name_idx = self
+                    .chunk
+                    .add_constant(VmValue::Str(Rc::from(inner_name.as_str())));
+                self.chunk.write_op(OpCode::IsKind, span);
+                self.chunk.write_u16(kind, span);
+                self.chunk.write_u16(name_idx, span);
+                self.chunk.write_u16(inner_kind, span);
+                self.chunk.write_u16(inner_name_idx, span);
             }
 
             ExpressionKind::ResolvedLambda {

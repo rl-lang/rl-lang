@@ -441,6 +441,14 @@ impl TypeChecker {
                 }
                 // add loop depth
                 self.enter_loop();
+                // `x is T` refines x to T for the body, dropping
+                // the refinement past any reassignment of x
+                if let Some((name, refined)) = self.branch_refinement(*condition, true) {
+                    let span = statement.span;
+                    self.check_block_refined(body, name, refined, span);
+                    self.exit_loop();
+                    return;
+                }
                 // checks the blocks
                 self.check_block(body);
                 // remove loop depth
@@ -534,6 +542,44 @@ impl TypeChecker {
                     | CheckType::Known(TypeAnnotation::CArray(inner)) => {
                         CheckType::Known((**inner).clone())
                     }
+                    // union of arrays: every member must be an array;
+                    // the item is the union of element types
+                    CheckType::Known(
+                        TypeAnnotation::Any(members) | TypeAnnotation::CAny(members),
+                    ) => {
+                        let mut elems: Vec<TypeAnnotation> = Vec::new();
+                        let mut ok = true;
+                        for m in members.iter() {
+                            match m {
+                                TypeAnnotation::Array(inner)
+                                | TypeAnnotation::CArray(inner) => {
+                                    if !elems.contains(inner) {
+                                        elems.push((**inner).clone());
+                                    }
+                                }
+                                _ => {
+                                    ok = false;
+                                    break;
+                                }
+                            }
+                        }
+                        if !ok {
+                            let iterable_span =
+                                self.ast_arena.exprs.get(*iterable).span;
+                            self.error(
+                                format!(
+                                    "for-each over a union needs every member to be an array, got {}",
+                                    iter_type.info()
+                                ),
+                                iterable_span,
+                            );
+                            CheckType::Unknown
+                        } else if elems.len() == 1 {
+                            CheckType::Known(elems.into_iter().next().unwrap())
+                        } else {
+                            CheckType::Known(TypeAnnotation::Any(std::rc::Rc::new(elems)))
+                        }
+                    }
                     CheckType::Unknown => CheckType::Unknown,
                     other => {
                         let iterable_span = self.ast_arena.exprs.get(*iterable).span;
@@ -581,6 +627,13 @@ impl TypeChecker {
                             cond_span,
                         );
                     }
+                    // `x is T` refines x to T for the body, dropping
+                    // the refinement past any reassignment of x
+                    if let Some((name, refined)) = self.branch_refinement(*cond, true) {
+                        let span = statement.span;
+                        self.check_block_refined(body, name, refined, span);
+                        return;
+                    }
                 }
                 // is the body correect?
                 self.check_block(body);
@@ -594,6 +647,29 @@ impl TypeChecker {
                 self.check_statement(if_branch);
                 // if there is another branch is it correct?
                 if let Some(branch) = else_branch {
+                    // plain `else` refines with the negated if-condition
+                    // (`else if` chains recurse and refine themselves)
+                    let negated: Option<(String, TypeAnnotation)> =
+                        match (&if_branch.kind, &branch.kind) {
+                            (
+                                StatementKind::ConditionalBranch {
+                                    condition: Some(cond),
+                                    ..
+                                },
+                                StatementKind::ConditionalBranch {
+                                    condition: None,
+                                    ..
+                                },
+                            ) => self.branch_refinement(*cond, false),
+                            _ => None,
+                        };
+                    if let Some((name, refined)) = negated {
+                        if let StatementKind::ConditionalBranch { body, .. } = &branch.kind {
+                            let span = statement.span;
+                            self.check_block_refined(body, name, refined, span);
+                            return;
+                        }
+                    }
                     self.check_statement(branch);
                 }
             }

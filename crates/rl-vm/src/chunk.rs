@@ -108,16 +108,22 @@ pub enum OpCode {
     /// interpreter's `fn_names`). Operands: `key_idx` (method name),
     /// `value_idx` (function).
     RegisterUserMethod = 46,
+    /// `value is Type` - pops a value, pushes whether its runtime shape
+    /// matches the encoded kind (see `IsKindTarget` in `compiler.rs`).
+    /// Operands: four u16s - kind code, name const index (nominal types),
+    /// inner kind code, inner name const index (both for `result[T]`
+    /// targets; empty-string constants when unused).
+    IsKind = 47,
 }
 
 impl OpCode {
     /// # Safety
-    /// `byte` must be a valid discriminant (0..=OpCode::RegisterUserMethod)
+    /// `byte` must be a valid discriminant (0..=OpCode::IsKind)
     /// and that's only true for bytecode emitted by this compiler
     #[inline(always)]
     pub fn from_u8_unchecked(byte: u8) -> Self {
         debug_assert!(
-            byte <= OpCode::RegisterUserMethod as u8,
+            byte <= OpCode::IsKind as u8,
             "corrupt bytecode: opcode {byte}"
         );
         unsafe { std::mem::transmute::<u8, OpCode>(byte) }
@@ -174,6 +180,7 @@ impl OpCode {
             44 => OpCode::Cast,
             45 => OpCode::RegisterStdlibMethod,
             46 => OpCode::RegisterUserMethod,
+            47 => OpCode::IsKind,
             other => panic!("corrupt bytecode: unknown opcode byte {other}"),
         }
     }

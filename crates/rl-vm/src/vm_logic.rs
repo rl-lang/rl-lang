@@ -1085,6 +1085,33 @@ impl Vm {
                     let cast = self.cast(value, code)?;
                     self.stack.push(cast);
                 }
+
+                OpCode::IsKind => {
+                    let kind = read_u16!();
+                    ip += 2;
+                    let name_idx = read_u16!() as usize;
+                    ip += 2;
+                    let inner_kind = read_u16!();
+                    ip += 2;
+                    let inner_name_idx = read_u16!() as usize;
+                    ip += 2;
+                    let value = self.pop()?;
+                    let name = match &chunk!().constants[name_idx] {
+                        VmValue::Str(s) => s.clone(),
+                        _ => {
+                            return Err(self.err("corrupt bytecode: is-kind name is not a string"));
+                        }
+                    };
+                    let inner_name = match &chunk!().constants[inner_name_idx] {
+                        VmValue::Str(s) => s.clone(),
+                        _ => {
+                            return Err(self.err("corrupt bytecode: is-kind name is not a string"));
+                        }
+                    };
+                    let matched =
+                        Self::value_is_kind(&value, kind, &name, inner_kind, &inner_name);
+                    self.stack.push(VmValue::Bool(matched));
+                }
             }
         }
     }
@@ -1168,6 +1195,54 @@ impl Vm {
     /// Runs `value as <type>` for the given numeric target `code`
     /// (see `CastTarget` in `compiler.rs`). Sources are widened to `i128`/`f64`,
     /// then narrowed via checked `try_from` into the target type.
+    /// Runtime shape test for `OpCode::IsKind`, mirroring
+    /// [`VmValue::type_name`] exactly (same variant mapping, so `is`
+    /// and `__type_of` can never disagree). Containers test shape only;
+    /// `result[T]` needs an `Ok` payload matching the inner kind.
+    fn value_is_kind(
+        value: &VmValue,
+        kind: u16,
+        name: &str,
+        inner_kind: u16,
+        inner_name: &str,
+    ) -> bool {
+        match kind {
+            0 => matches!(value, VmValue::Null),
+            1 => matches!(value, VmValue::Int(_)),
+            2 => matches!(value, VmValue::UInt(_)),
+            3 => matches!(value, VmValue::SInt(_)),
+            4 => matches!(value, VmValue::SUInt(_)),
+            5 => matches!(value, VmValue::Float(_)),
+            6 => matches!(value, VmValue::SFloat(_)),
+            7 => matches!(value, VmValue::Bool(_)),
+            8 => matches!(value, VmValue::Str(_)),
+            9 => matches!(value, VmValue::Char(_)),
+            10 => matches!(value, VmValue::Byte(_)),
+            11 => matches!(value, VmValue::SByte(_)),
+            12 => matches!(value, VmValue::BByte(_)),
+            13 => matches!(value, VmValue::BSByte(_)),
+            14 => matches!(value, VmValue::Arr(_)),
+            15 => matches!(value, VmValue::Map(_)),
+            16 => matches!(value, VmValue::Set(_)),
+            17 => matches!(value, VmValue::Tuple(_)),
+            18 => matches!(value, VmValue::Record { name: n, .. } if n.as_ref() == name),
+            19 => matches!(value, VmValue::Tag { name: n, .. } if n.as_ref() == name),
+            20 => matches!(
+                value,
+                VmValue::Function(_) | VmValue::Native(_) | VmValue::Closure { .. }
+            ),
+            21 => matches!(value, VmValue::Handle { .. }),
+            22 => match value {
+                VmValue::Ok(inner) => {
+                    Self::value_is_kind(inner, inner_kind, inner_name, 0, "")
+                }
+                _ => false,
+            },
+            23 => matches!(value, VmValue::Error(_)),
+            _ => false,
+        }
+    }
+
     fn cast(&self, value: VmValue, code: usize) -> Result<VmValue, VmError> {
         fn as_i128(v: &VmValue) -> Option<i128> {
             match v {

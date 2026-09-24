@@ -376,6 +376,11 @@ static inline double rl_unbox_num_f64(rl_value v) {
 static inline rl_value rl_value_null(void) {
     rl_value r; r.tag = RL_VTAG_NULL; return r;
 }
+// Tag test for `is` over dynamic (`any`) storage: single evaluation,
+// no temporaries at the use site.
+static inline bool rl_value_has_tag(rl_value v, int tag) {
+    return v.tag == tag;
+}
 static inline rl_array rl_unbox_arr(rl_value v) {
     if (v.tag != RL_VTAG_ARR) {
         fprintf(stderr, "error: type mismatch unwrapping value\n");

@@ -44,6 +44,7 @@ impl Tokenizer {
             "get" | "استورد" => self.add_token(TokenType::Get),
             "from" | "من" => self.add_token(TokenType::From),
             "in" | "في" => self.add_token(TokenType::In),
+            "is" => self.add_token(TokenType::Is),
             "or" | "أو" => self.add_token(TokenType::Or),
             "and" | "و" => self.add_token(TokenType::And),
             "null" | "فارغ" => self.add_token(TokenType::Null),

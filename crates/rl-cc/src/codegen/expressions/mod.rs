@@ -8,6 +8,7 @@ mod core;
 mod crypto;
 mod http;
 mod io;
+mod is_op;
 mod math;
 mod network;
 mod process;
@@ -173,6 +174,54 @@ impl<'a> CCodegen<'a> {
             }
             ExpressionKind::ResolvedIdentifier { name, .. } => {
                 let c_name = self.lookup(name);
+                // `is`-refined reads out of dynamic storage unbox to the
+                // refined type (mirrors the checker's branch refinement,
+                // which gates all programs). Concrete storage needs no
+                // unboxing; unboxable targets fall back to the plain name
+                // (unreachable in checked programs - such values cannot
+                // enter dynamic storage).
+                if let Some(refined) = self.refined_vars.get(name).cloned() {
+                    let dynamic_storage = matches!(
+                        self.var_types.get(name),
+                        Some(
+                            TypeAnnotation::Any(_)
+                                | TypeAnnotation::CAny(_)
+                                | TypeAnnotation::Infer
+                                | TypeAnnotation::Generic(_)
+                        )
+                    );
+                    if dynamic_storage {
+                        let unboxer = match refined {
+                            TypeAnnotation::Int
+                            | TypeAnnotation::CInt
+                            | TypeAnnotation::UInt
+                            | TypeAnnotation::CUInt
+                            | TypeAnnotation::SInt
+                            | TypeAnnotation::CSInt
+                            | TypeAnnotation::SUInt
+                            | TypeAnnotation::CSUInt => Some("rl_unbox_i64"),
+                            TypeAnnotation::Float
+                            | TypeAnnotation::CFloat
+                            | TypeAnnotation::SFloat
+                            | TypeAnnotation::CSFloat => Some("rl_unbox_f64"),
+                            TypeAnnotation::Bool | TypeAnnotation::CBool => {
+                                Some("rl_unbox_bool")
+                            }
+                            TypeAnnotation::String | TypeAnnotation::CString => {
+                                Some("rl_unbox_str")
+                            }
+                            TypeAnnotation::Array(_)
+                            | TypeAnnotation::CArray(_) => Some("rl_unbox_arr"),
+                            TypeAnnotation::Map(_, _)
+                            | TypeAnnotation::CMap(_, _) => Some("rl_unbox_map"),
+                            _ => None,
+                        };
+                        if let Some(unbox_fn) = unboxer {
+                            self.writer.write(&format!("{unbox_fn}({})", c_name));
+                            return Ok(());
+                        }
+                    }
+                }
                 if self.nullable_vars.contains(name) {
                     match self.var_types.get(name) {
                         Some(TypeAnnotation::Int) | Some(TypeAnnotation::CInt) => {
@@ -489,6 +538,10 @@ impl<'a> CCodegen<'a> {
             }
             ExpressionKind::ResolvedAssign { name, value, .. } => {
                 let c_name = self.lookup(name);
+                // reassignment drops any `is`-refinement: the branch-end
+                // restore puts the pre-branch entry back, so nesting stays
+                // correct (mirrors the checker's linear cutoff)
+                self.refined_vars.remove(name);
                 if self.nullable_vars.contains(name) {
                     let value_expr = self.ast.exprs.get(*value);
                     if let ExpressionKind::Null = &value_expr.kind {
@@ -524,16 +577,32 @@ impl<'a> CCodegen<'a> {
                     }
                 } else {
                     self.writer.write(&format!("{} = ", c_name));
-                    // Hint empty literals (`x = []`) with the element type.
-                    let saved_hint = self.array_elem_hint.clone();
-                    if let Some(TypeAnnotation::Array(elem))
-                    | Some(TypeAnnotation::CArray(elem)) =
-                        self.var_types.get(name).cloned()
-                    {
-                        self.array_elem_hint = Some(*elem);
+                    // assignments into union storage box like declarations
+                    // do; anything else emits directly
+                    let storage = self.var_types.get(name).cloned();
+                    match storage {
+                        Some(
+                            TypeAnnotation::Any(_)
+                            | TypeAnnotation::CAny(_),
+                        ) => {
+                            let st = storage.clone().unwrap();
+                            if !self.box_for_any_storage(&st, *value)? {
+                                self.compile_expr(*value)?;
+                            }
+                        }
+                        _ => {
+                            // Hint empty literals (`x = []`) with the element type.
+                            let saved_hint = self.array_elem_hint.clone();
+                            if let Some(TypeAnnotation::Array(elem))
+                            | Some(TypeAnnotation::CArray(elem)) =
+                                self.var_types.get(name).cloned()
+                            {
+                                self.array_elem_hint = Some(*elem);
+                            }
+                            self.compile_expr(*value)?;
+                            self.array_elem_hint = saved_hint;
+                        }
                     }
-                    self.compile_expr(*value)?;
-                    self.array_elem_hint = saved_hint;
                 }
             }
             ExpressionKind::Index { target, index } => {
@@ -662,6 +731,9 @@ impl<'a> CCodegen<'a> {
                     self.writer.write(&format!("({})", c_type));
                     self.compile_expr(*value)?;
                 }
+            }
+            ExpressionKind::Is { value, target_type } => {
+                self::is_op::compile_is(self, value, target_type)?;
             }
             ExpressionKind::ResolvedLambda { params, return_type, body, .. } => {
                 self.compile_lambda(params, return_type, body)?;
@@ -1714,6 +1786,9 @@ impl<'a> CCodegen<'a> {
                 self.collect_captures_from_expr(*inner, param_names, captured);
             }
             ExpressionKind::Cast { value, .. } => {
+                self.collect_captures_from_expr(*value, param_names, captured);
+            }
+            ExpressionKind::Is { value, .. } => {
                 self.collect_captures_from_expr(*value, param_names, captured);
             }
             ExpressionKind::ResolvedAssign { value, .. } => {

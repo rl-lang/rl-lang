@@ -96,3 +96,45 @@ fn any_in_fn_signature() {
         other => panic!("expected fn decl, got {other:?}"),
     }
 }
+
+#[test]
+fn is_parses_with_type_target() {
+    let (ast, statements) = parse("dec bool b = x is int\n");
+    match &statements[0].kind {
+        StatementKind::VariableDeclaration { value, .. } => {
+            match &ast.exprs.get(*value).kind {
+                rl_ast::nodes::ExpressionKind::Is { target_type, .. } => {
+                    assert_eq!(*target_type, TypeAnnotation::Int);
+                }
+                other => panic!("expected Is, got {other:?}"),
+            }
+        }
+        other => panic!("expected dec, got {other:?}"),
+    }
+}
+
+#[test]
+fn is_binds_like_equality() {
+    // `a is int == true` groups as `(a is int) == true`
+    let (ast, statements) = parse("dec bool b = a is int == true\n");
+    match &statements[0].kind {
+        StatementKind::VariableDeclaration { value, .. } => {
+            match &ast.exprs.get(*value).kind {
+                rl_ast::nodes::ExpressionKind::Binary { left, .. } => {
+                    match &ast.exprs.get(*left).kind {
+                        rl_ast::nodes::ExpressionKind::Is { .. } => {}
+                        other => panic!("expected Is on the left, got {other:?}"),
+                    }
+                }
+                other => panic!("expected Binary, got {other:?}"),
+            }
+        }
+        other => panic!("expected dec, got {other:?}"),
+    }
+}
+
+#[test]
+fn is_union_target_rejected() {
+    let msg = parse_assert_err("dec bool b = x is any[int, string]\n");
+    assert!(msg.contains("one concrete type"), "{msg}");
+}

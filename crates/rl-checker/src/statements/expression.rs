@@ -384,6 +384,23 @@ impl TypeChecker {
                 )
             }
 
+            ExpressionKind::Is { value, target_type } => {
+                let value_typed = self.check_expression_typed(value);
+                let value_id = self.ast_arena.exprs.get(value);
+                self.check_is_null(&value_typed.ty, value_id.span);
+                // unions as targets narrow to nothing: test members
+                match target_type {
+                    TypeAnnotation::Any(_) | TypeAnnotation::CAny(_) => {
+                        self.error(
+                            "`is` needs one concrete type - test union members one by one",
+                            expr_span,
+                        );
+                    }
+                    _ => {}
+                }
+                CheckedExpr::new(CheckType::Known(TypeAnnotation::Bool), None)
+            }
+
             ExpressionKind::Cast { value, target_type } => {
                 let value_typed = self.check_expression_typed(value);
                 let value_id = self.ast_arena.exprs.get(value);

@@ -96,3 +96,68 @@ fn union_method_requires_unanimity() {
         "not supported for every member",
     );
 }
+
+#[test]
+fn is_returns_bool() {
+    assert_checker_clean("dec any[int, string] x = 1\ndec bool b = x is int\n");
+}
+
+#[test]
+fn is_refines_true_branch() {
+    assert_checker_clean(
+        "dec any[int, string] x = 1\nif x is int\n{\ndec int y = x + 1\n}\n",
+    );
+}
+
+#[test]
+fn is_refines_else_branch_by_subtraction() {
+    assert_checker_clean(
+        "dec any[int, string] x = 1\nif x is string\n{\n}\nelse\n{\ndec int y = x as int\n}\n",
+    );
+}
+
+#[test]
+fn is_refinement_drops_past_reassignment() {
+    // use-then-reassign: first use refined, later uses see the union
+    assert_checker_clean(
+        "get println from std::io\ndec any[int, string] x = 1\nif x is int\n{\nprintln(x + 1)\nx = \"s\"\nprintln(x)\n}\n",
+    );
+}
+
+#[test]
+fn is_refinement_killed_by_closure() {
+    // a closure in the body may observe a later reassignment
+    assert_checker_msg(
+        "dec any[int, string] x = 1\nif x is int\n{\ndec f = fn() { return 1 }\ndec int y = x + 1\n}\n",
+        "not supported for every member",
+    );
+}
+
+#[test]
+fn is_refines_while_body() {
+    assert_checker_clean(
+        "dec any[int, string] x = 1\nwhile x is int\n{\ndec int y = x + 1\nbreak\n}\n",
+    );
+}
+
+#[test]
+fn is_negation_refines_single_remainder() {
+    assert_checker_clean(
+        "dec any[int, string] x = 1\nif !(x is string)\n{\ndec int y = x + 1\n}\n",
+    );
+}
+
+#[test]
+fn for_in_union_merges_elements() {
+    assert_checker_clean(
+        "dec any[arr[int], arr[string]] a = [1]\nfor x in a\n{\n}\n",
+    );
+}
+
+#[test]
+fn for_in_union_rejects_non_arrays() {
+    assert_checker_msg(
+        "dec any[arr[int], string] a = [1]\nfor x in a\n{\n}\n",
+        "every member to be an array",
+    );
+}

@@ -93,6 +93,13 @@ pub static TYPES: ConceptEntry = ConceptEntry {
             examples: &["dec any[int, string] a = 1\ndec int b = a as int"],
             expected_output: &[],
         },
+        DescriptionEntry {
+            kind: DescriptionKind::Explanation,
+            title: Some("narrowing with is"),
+            description: "`x is T` tests the runtime shape (containers by shape, like `__type_of`) and reads as bool. In `if x is T` the true branch treats a plain-variable `x` as `T`, and `else` treats it as the union minus `T`; `while` bodies refine the same way. Refinement drops past any reassignment of the variable in the body, and never crosses function boundaries - closures see the declared union. Only direct tests refine (`!(x is T)` refines a lone remainder); everything else stays dynamic",
+            examples: &["dec any[int, string] a = 1\nif a is int\n{\nprintln(a + 1)\n}"],
+            expected_output: &[],
+        },
     ],
     pitfalls: &[
         "a bare integer literal is always `int`, never `byte`, no matter how small - `dec byte b = 10` without `as byte` is a compile-time type mismatch",

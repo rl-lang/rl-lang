@@ -190,6 +190,7 @@ fn remap_expr_kind(kind: &mut ExpressionKind, offset: u32, target_arena_id: u32)
             }
         }
         Cast { value, .. } => remap_id(value, offset, target_arena_id),
+        Is { value, .. } => remap_id(value, offset, target_arena_id),
         Lambda { body, .. } | ResolvedLambda { body, .. } => {
             for stmt in body {
                 remap_stmt_kind(&mut stmt.kind, offset, target_arena_id);

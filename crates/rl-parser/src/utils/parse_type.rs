@@ -19,6 +19,9 @@ impl Parser {
             return Err(self.err("`any` needs a member list: any[T, ...]", self.peek_span()));
         }
         let mut members: Vec<TypeAnnotation> = Vec::new();
+        // newlines are fine everywhere: the formatter may break long
+        // member lists vertical, like arrays
+        while self.match_type(&[TokenType::Newline]) {}
         loop {
             if self.peek() == TokenType::RightBracket {
                 break;
@@ -29,9 +32,11 @@ impl Parser {
                 }
                 other => members.push(other),
             }
+            while self.match_type(&[TokenType::Newline]) {}
             if !self.match_type(&[TokenType::Comma]) {
                 break;
             }
+            while self.match_type(&[TokenType::Newline]) {}
         }
         if !self.match_type(&[TokenType::RightBracket]) {
             return Err(self.err("expected `]` after any members", self.peek_span()));

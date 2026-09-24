@@ -277,3 +277,10 @@ dec string o = some_quite_long_function_name("first longish argument here", "sec
     let twice = format_tokens_with(&common::lex(&once), &opts);
     assert_eq!(once, twice, "formatter output changed on second pass:\n{once}");
 }
+
+#[test]
+fn format_is_operator_spaced() {
+    let tokens = common::lex("dec bool b = x  is  int");
+    let out = format_tokens(&tokens);
+    assert_eq!(out, "dec bool b = x is int");
+}

@@ -79,8 +79,15 @@ pub(super) fn compile_while(
     cc.writer.write(") {\n");
     cc.writer.indent();
     cc.push_scope();
+    // `x is T` refines x for the body (mirrors the checker)
+    let saved = cc
+        .detect_is_refinement(condition)
+        .map(|(name, refined)| (name.clone(), cc.refine_var(name, refined)));
     for s in body {
         cc.compile_statement(s)?;
+    }
+    if let Some((name, prev)) = saved {
+        cc.unrefine_var(&name, prev);
     }
     cc.pop_scope();
     cc.writer.dedent();

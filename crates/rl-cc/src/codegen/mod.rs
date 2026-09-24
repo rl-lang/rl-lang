@@ -44,6 +44,12 @@ pub struct CCodegen<'a> {
     pub closure_return_types: HashMap<String, TypeAnnotation>,
     pub tuple_names: Vec<(Vec<TypeAnnotation>, String)>,
     pub nullable_vars: HashSet<String>,
+    /// `is`-refined variable types active in the current branch body
+    /// (`x is int` maps `x` to `Int` until the body ends). Identifier
+    /// emission unboxes `rl_value` storage through these; mirrored from
+    /// the checker's branch refinement (which gates all programs, so an
+    /// entry always reflects a taken test).
+    pub refined_vars: HashMap<String, TypeAnnotation>,
     pub std_c_imports: HashSet<String>,
     pub std_net_imports: HashSet<String>,
     pub std_http_imports: HashSet<String>,
@@ -109,6 +115,7 @@ impl<'a> CCodegen<'a> {
             closure_return_types: HashMap::new(),
             tuple_names: Vec::new(),
             nullable_vars: HashSet::new(),
+            refined_vars: HashMap::new(),
             std_c_imports: HashSet::new(),
             std_imports: Vec::new(),
             closure_factories: HashMap::new(),
@@ -982,6 +989,178 @@ impl<'a> CCodegen<'a> {
             }
         }
         "rl_tuple_2"
+    }
+
+    /// Box a value into `any` (`rl_value`) storage. Returns `Ok(true)`
+    /// when emitted, `Ok(false)` when the storage isn't dynamic (the
+    /// caller emits normally). Members with no dynamic box (bytes,
+    /// chars, records, tags, tuples, closures, results) fail loudly
+    /// instead of generating mistyped C. Shared by declarations and
+    /// assignments into union storage.
+    pub fn box_for_any_storage(
+        &mut self,
+        effective: &TypeAnnotation,
+        value: rl_ast::ExprId,
+    ) -> Result<bool, Error> {
+        use rl_ast::nodes::ExpressionKind;
+        if !matches!(
+            effective,
+            TypeAnnotation::Any(_) | TypeAnnotation::CAny(_)
+        ) {
+            return Ok(false);
+        }
+        let expr = self.ast.exprs.get(value);
+        if matches!(&expr.kind, ExpressionKind::Null) {
+            self.writer.write("rl_value_null()");
+            return Ok(true);
+        }
+        // name the value for loud errors below (struct literals infer
+        // to None, which would otherwise report as `None`)
+        let value_desc = match &expr.kind {
+            ExpressionKind::StructLiteral { name, .. } => format!("record {}", name),
+            _ => format!(
+                "{:?}",
+                self.inferred_expr_type(value).unwrap_or(TypeAnnotation::Infer)
+            ),
+        };
+        match self.inferred_expr_type(value) {
+            Some(
+                TypeAnnotation::Int
+                | TypeAnnotation::CInt
+                | TypeAnnotation::UInt
+                | TypeAnnotation::CUInt
+                | TypeAnnotation::SInt
+                | TypeAnnotation::CSInt
+                | TypeAnnotation::SUInt
+                | TypeAnnotation::CSUInt
+                | TypeAnnotation::Float
+                | TypeAnnotation::CFloat
+                | TypeAnnotation::SFloat
+                | TypeAnnotation::CSFloat
+                | TypeAnnotation::Bool
+                | TypeAnnotation::CBool
+                | TypeAnnotation::String
+                | TypeAnnotation::CString
+                | TypeAnnotation::Array(_)
+                | TypeAnnotation::CArray(_)
+                | TypeAnnotation::Map(_, _)
+                | TypeAnnotation::CMap(_, _)
+                | TypeAnnotation::Set(_)
+                | TypeAnnotation::CSet(_)
+                | TypeAnnotation::Handle(_)
+                | TypeAnnotation::HandleInfer
+                | TypeAnnotation::Enum(_)
+                | TypeAnnotation::CEnum(_),
+            ) => {
+                self.writer.write("rl_box(");
+                self.compile_expr(value)?;
+                self.writer.write(")");
+                Ok(true)
+            }
+            // already boxed/dynamic: assign directly
+            Some(
+                TypeAnnotation::Infer
+                | TypeAnnotation::Generic(_)
+                | TypeAnnotation::Any(_)
+                | TypeAnnotation::CAny(_),
+            ) => Ok(false),
+            _ => Err(Error::at(
+                Reason::Compile,
+                format!(
+                    "any[...] value cannot be stored on the C backend yet: {}",
+                    value_desc
+                ),
+                Span::dummy(),
+            )),
+        }
+    }
+
+    /// Records an `is`-refinement for a branch body, returning the
+    /// previous entry for restore. Mirrors the checker's branch
+    /// refinement (which gates all programs, so an entry always
+    /// reflects a taken test).
+    pub fn refine_var(
+        &mut self,
+        name: String,
+        refined: TypeAnnotation,
+    ) -> Option<TypeAnnotation> {
+        self.refined_vars.insert(name, refined)
+    }
+
+    /// Restores a refinement saved by [`CCodegen::refine_var`].
+    pub fn unrefine_var(&mut self, name: &str, prev: Option<TypeAnnotation>) {
+        match prev {
+            Some(t) => {
+                self.refined_vars.insert(name.to_string(), t);
+            }
+            None => {
+                self.refined_vars.remove(name);
+            }
+        }
+    }
+
+    /// Detects `name is Type` conditions for branch refinement, plus
+    /// `!(name is Type)` when the operand is a union with exactly one
+    /// member left after removing the tested type. Mirrors the
+    /// checker's branch refinement (which gates all programs).
+    /// A `!(name is Type)` test refines when the operand is a union
+    /// with exactly one member left after removing the tested type.
+    pub fn detect_is_refinement(&self, cond: rl_ast::ExprId) -> Option<(String, TypeAnnotation)> {
+        use rl_ast::nodes::ExpressionKind;
+        let expr = self.ast.exprs.get(cond);
+        match &expr.kind {
+            ExpressionKind::Is { value, target_type } => {
+                let v = self.ast.exprs.get(*value);
+                match &v.kind {
+                    ExpressionKind::Identifier(n) | ExpressionKind::ResolvedIdentifier { name: n, .. } => {
+                        Some((n.to_string(), target_type.clone()))
+                    }
+                    _ => None,
+                }
+            }
+            ExpressionKind::Unary { operator, operand } => {
+                use rl_lexer::tokentypes::TokenType;
+                if *operator != TokenType::Bang {
+                    return None;
+                }
+                // peel one grouping layer: `!(x is T)`
+                let inner = self.ast.exprs.get(*operand);
+                let (value, target_type) = match &inner.kind {
+                    ExpressionKind::Is { value, target_type } => (*value, target_type.clone()),
+                    ExpressionKind::Grouping(inner) => {
+                        let g = self.ast.exprs.get(*inner);
+                        match &g.kind {
+                            ExpressionKind::Is { value, target_type } => {
+                                (*value, target_type.clone())
+                            }
+                            _ => return None,
+                        }
+                    }
+                    _ => return None,
+                };
+                let v = self.ast.exprs.get(value);
+                let name = match &v.kind {
+                    ExpressionKind::Identifier(n) | ExpressionKind::ResolvedIdentifier { name: n, .. } => {
+                        n.to_string()
+                    }
+                    _ => return None,
+                };
+                // negate: the remainder must be exactly one member
+                let operand_ty = self.inferred_expr_type(value);
+                match operand_ty {
+                    Some(TypeAnnotation::Any(members) | TypeAnnotation::CAny(members)) => {
+                        let mut rest = members.iter().filter(|m| *m != &target_type);
+                        match (rest.next(), rest.next()) {
+                            (Some(only), None) => Some((name, only.clone())),
+                            _ => None,
+                        }
+                    }
+                    _ => None,
+                }
+            }
+            ExpressionKind::Grouping(inner) => self.detect_is_refinement(*inner),
+            _ => None,
+        }
     }
 
     /// Ensures the element printer plus an array printer looping over it.

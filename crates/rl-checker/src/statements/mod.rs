@@ -4,7 +4,9 @@ mod expression;
 mod statement;
 
 use crate::{TypeChecker, structs::CheckType};
+use rl_ast::nodes::ExpressionKind;
 use rl_ast::statements::{Statement, StatementKind, TypeAnnotation};
+use rl_lexer::tokentypes::TokenType;
 use rl_utils::span::Span;
 
 impl TypeChecker {
@@ -290,6 +292,346 @@ impl TypeChecker {
             }
             1 => CheckType::Known(results.into_iter().next().unwrap()),
             _ => CheckType::Known(TypeAnnotation::Any(std::rc::Rc::new(results))),
+        }
+    }
+
+    /// Detects `name is Type` (or its `!`/grouped negation) in a branch
+    /// condition for type refinement. Returns the binding name and the
+    /// type it takes in the taken branch: the tested type for `if`, the
+    /// union minus the tested type for `else` (unchanged when that would
+    /// empty it). Only plain variable references refine.
+    pub fn branch_refinement(
+        &mut self,
+        cond: rl_ast::ExprId,
+        polarity: bool,
+    ) -> Option<(String, TypeAnnotation)> {
+        let kind = self.ast_arena.exprs.get(cond).kind.clone();
+        match kind {
+            ExpressionKind::Is { value, target_type } => {
+                let v = self.ast_arena.exprs.get(value);
+                let (name, span) = match &v.kind {
+                    ExpressionKind::Identifier(n) => (n.to_string(), v.span),
+                    ExpressionKind::ResolvedIdentifier { name, .. } => (name.to_string(), v.span),
+                    _ => return None,
+                };
+                let current = self.lookup(&name, span);
+                if polarity {
+                    Some((name, target_type))
+                } else {
+                    match &current.ty {
+                        CheckType::Known(
+                            TypeAnnotation::Any(members) | TypeAnnotation::CAny(members),
+                        ) => {
+                            let mut rest: Vec<TypeAnnotation> = members
+                            .iter()
+                            .filter(|m| *m != &target_type)
+                            .cloned()
+                            .collect();
+                        // a lone remainder collapses to the member itself
+                        // (single-member unions only arise from inference)
+                        match rest.len() {
+                            0 => None,
+                            1 => Some((name, rest.pop().unwrap())),
+                            _ => Some((
+                                name,
+                                TypeAnnotation::Any(std::rc::Rc::new(rest)),
+                            )),
+                        }
+                        }
+                        _ => None,
+                    }
+                }
+            }
+            ExpressionKind::Unary { operator, operand } if operator == TokenType::Bang => {
+                self.branch_refinement(operand, !polarity)
+            }
+            ExpressionKind::Grouping(inner) => self.branch_refinement(inner, polarity),
+            _ => None,
+        }
+    }
+
+    /// Whether any statement in `statements` (at any depth, including
+    /// nested function bodies whose closures capture the binding)
+    /// assigns to `name`. Conservative: unknown shapes count as
+    /// assignments, so refinement fails closed rather than unsound.
+    /// Element mutation (`x[0] = v`) never rebinds and is ignored.
+    pub fn body_assigns_name(
+        statements: &[Statement],
+        arena: &rl_ast::arena::Arena<rl_ast::nodes::Expression>,
+        name: &str,
+    ) -> bool {
+        Self::body_assigns_name_inner(statements, arena, name, false)
+    }
+
+    /// Inner assign scan with `count_fns`: when true, any function or
+    /// lambda definition also counts. Closures observe reassignment
+    /// (verified live), so in a body that reassigns the refined binding
+    /// a closure created anywhere may observe the new value.
+    /// Checks `body` with `name` refined to `refined`, dropping the
+    /// refinement (popping its scope) at the first statement assigning
+    /// `name` or defining a function that could observe a later
+    /// reassignment. Linear and order-sensitive: statements before the
+    /// cutoff see the narrow type, statements after see the declared one.
+    pub fn check_block_refined(
+        &mut self,
+        body: &[Statement],
+        name: String,
+        refined: TypeAnnotation,
+        span: Span,
+    ) {
+        self.push_scope();
+        self.declare(name.clone(), CheckType::Known(refined), false, span);
+        // the refinement's "use" was the condition test itself: never
+        // warn it as unused when the body only writes the binding
+        if let Some(scope) = self.scopes.last_mut()
+            && let Some(item) = scope.get_mut(&name)
+        {
+            item.suppressed_lints.insert(rl_ast::statements::Lint::Unused);
+        }
+        let mut active = true;
+        for stmt in body {
+            if active
+                && Self::stmt_assigns_name(stmt, &self.ast_arena.exprs, &name, true)
+            {
+                active = false;
+                self.pop_scope();
+            }
+            self.check_statement(stmt);
+        }
+        if active {
+            self.pop_scope();
+        }
+    }
+
+    pub fn body_assigns_name_inner(
+        statements: &[Statement],
+        arena: &rl_ast::arena::Arena<rl_ast::nodes::Expression>,
+        name: &str,
+        count_fns: bool,
+    ) -> bool {
+        statements
+            .iter()
+            .any(|s| Self::stmt_assigns_name(s, arena, name, count_fns))
+    }
+
+    fn stmt_assigns_name(
+        stmt: &Statement,
+        arena: &rl_ast::arena::Arena<rl_ast::nodes::Expression>,
+        name: &str,
+        count_fns: bool,
+    ) -> bool {
+        match &stmt.kind {
+            StatementKind::VariableDeclaration { value, .. }
+            | StatementKind::ResolvedVariableDeclaration { value, .. }
+            | StatementKind::ConstantDeclaration { value, .. }
+            | StatementKind::ResolvedConstantDeclaration { value, .. }
+            | StatementKind::ResolvedArray { value, .. }
+            | StatementKind::ResolvedConstantArray { value, .. }
+            | StatementKind::ResolvedMap { value, .. }
+            | StatementKind::ResolvedConstantMap { value, .. }
+            | StatementKind::ResolvedSet { value, .. }
+            | StatementKind::ResolvedConstantSet { value, .. }
+            | StatementKind::ResolvedDestructureDeclaration { value, .. } => {
+                Self::expr_assigns_name(arena, *value, name, count_fns)
+            }
+            StatementKind::DestructureDeclaration { bindings, value } => {
+                bindings.iter().any(|(_, n)| n == name)
+                    || Self::expr_assigns_name(arena, *value, name, count_fns)
+            }
+            StatementKind::Array { value, .. } | StatementKind::ConstantArray { value, .. } => {
+                value.iter().any(|id| Self::expr_assigns_name(arena, *id, name, count_fns))
+            }
+            StatementKind::Map { entries, .. } | StatementKind::ConstantMap { entries, .. } => {
+                entries
+                    .iter()
+                    .any(|(k, v)| Self::expr_assigns_name(arena, *k, name, count_fns) || Self::expr_assigns_name(arena, *v, name, count_fns))
+            }
+            StatementKind::Set { items, .. } | StatementKind::ConstantSet { items, .. } => {
+                items.iter().any(|id| Self::expr_assigns_name(arena, *id, name, count_fns))
+            }
+            StatementKind::Expression(id) => Self::expr_assigns_name(arena, *id, name, count_fns),
+            StatementKind::Return(Some(id)) => Self::expr_assigns_name(arena, *id, name, count_fns),
+            StatementKind::While { condition, body } => {
+                Self::expr_assigns_name(arena, *condition, name, count_fns)
+                    || Self::body_assigns_name_inner(body, arena, name, count_fns)
+            }
+            StatementKind::Loop(body) => Self::body_assigns_name_inner(body, arena, name, count_fns),
+            StatementKind::For {
+                initializer,
+                condition,
+                increment,
+                body,
+            }
+            | StatementKind::ResolvedFor {
+                initializer,
+                condition,
+                increment,
+                body,
+            } => {
+                Self::stmt_assigns_name(initializer, arena, name, count_fns)
+                    || Self::expr_assigns_name(arena, *condition, name, count_fns)
+                    || Self::expr_assigns_name(arena, *increment, name, count_fns)
+                    || Self::body_assigns_name_inner(body, arena, name, count_fns)
+            }
+            StatementKind::ForRange {
+                variable, range, body, ..
+            }
+            | StatementKind::ResolvedForRange {
+                variable, range, body, ..
+            } => {
+                variable == name
+                    || Self::stmt_assigns_name(range, arena, name, count_fns)
+                    || Self::body_assigns_name_inner(body, arena, name, count_fns)
+            }
+            StatementKind::ForEach {
+                variable, iterable, body, ..
+            }
+            | StatementKind::ResolvedForEach {
+                variable, iterable, body, ..
+            } => {
+                variable == name
+                    || Self::expr_assigns_name(arena, *iterable, name, count_fns)
+                    || Self::body_assigns_name_inner(body, arena, name, count_fns)
+            }
+            StatementKind::Conditional { if_branch, else_branch } => {
+                Self::stmt_assigns_name(if_branch, arena, name, count_fns)
+                    || else_branch
+                        .as_ref()
+                        .is_some_and(|b| Self::stmt_assigns_name(b, arena, name, count_fns))
+            }
+            StatementKind::ConditionalBranch { condition, body, .. } => {
+                condition.as_ref().is_some_and(|c| Self::expr_assigns_name(arena, *c, name, count_fns))
+                    || Self::body_assigns_name_inner(body, arena, name, count_fns)
+            }
+            StatementKind::FunctionDeclaration { params, body, .. }
+            | StatementKind::ResolvedFunctionDeclaration { params, body, .. } => {
+                count_fns
+                    || params.iter().any(|p| p.param_name == name)
+                    || Self::body_assigns_name_inner(body, arena, name, count_fns)
+            }
+            StatementKind::ImplBlock { methods, .. } | StatementKind::ResolvedImplBlock { methods, .. } => {
+                count_fns
+                    || methods.iter().any(|m| Self::stmt_assigns_name(m, arena, name, count_fns))
+            }
+            StatementKind::Match { value, arms } => {
+                Self::expr_assigns_name(arena, *value, name, count_fns)
+                    || arms.iter().any(|(pat, b)| {
+                        let pat_assigns = match pat {
+                            rl_ast::statements::MatchPattern::Literal(id) => {
+                                Self::expr_assigns_name(arena, *id, name, count_fns)
+                            }
+                            rl_ast::statements::MatchPattern::Wildcard => false,
+                        };
+                        pat_assigns || Self::body_assigns_name_inner(b, arena, name, count_fns)
+                    })
+            }
+            StatementKind::TypeAlias { .. }
+            | StatementKind::RecordDeclaration { .. }
+            | StatementKind::TagDeclaration { .. }
+            | StatementKind::Import { .. }
+            | StatementKind::ImportFile { .. }
+            | StatementKind::ResolvedImportFile { .. }
+            | StatementKind::ImportFileNamed { .. }
+            | StatementKind::Return(None)
+            | StatementKind::Break
+            | StatementKind::Continue
+            | StatementKind::Range(_) => false,
+            _ => true,
+        }
+    }
+
+    fn expr_assigns_name(
+        arena: &rl_ast::arena::Arena<rl_ast::nodes::Expression>,
+        id: rl_ast::ExprId,
+        name: &str,
+        count_fns: bool,
+    ) -> bool {
+        let expr = arena.get(id);
+        match &expr.kind {
+            ExpressionKind::Assign { name: n, value }
+            | ExpressionKind::ResolvedAssign { name: n, value, .. } => {
+                n == name || Self::expr_assigns_name(arena, *value, name, count_fns)
+            }
+            ExpressionKind::Lambda { params, body, .. }
+            | ExpressionKind::ResolvedLambda { params, body, .. } => {
+                count_fns
+                    || params.iter().any(|p| p.param_name == name)
+                    || Self::body_assigns_name_inner(body, arena, name, count_fns)
+            }
+            ExpressionKind::Binary { left, right, .. } => {
+                Self::expr_assigns_name(arena, *left, name, count_fns)
+                    || Self::expr_assigns_name(arena, *right, name, count_fns)
+            }
+            ExpressionKind::Unary { operand, .. }
+            | ExpressionKind::Grouping(operand)
+            | ExpressionKind::Propagate(operand)
+            | ExpressionKind::OkLiteral(operand)
+            | ExpressionKind::ErrLiteral(operand)
+            | ExpressionKind::ErrorLiteral(operand) => Self::expr_assigns_name(arena, *operand, name, count_fns),
+            ExpressionKind::Call { args, .. } => args
+                .iter()
+                .any(|a| Self::expr_assigns_name(arena, *a, name, count_fns)),
+            ExpressionKind::MethodCall { caller, args, .. } => {
+                Self::expr_assigns_name(arena, *caller, name, count_fns)
+                    || args.iter().any(|a| Self::expr_assigns_name(arena, *a, name, count_fns))
+            }
+            ExpressionKind::CallExpr { callee, args } => {
+                Self::expr_assigns_name(arena, *callee, name, count_fns)
+                    || args.iter().any(|a| Self::expr_assigns_name(arena, *a, name, count_fns))
+            }
+            ExpressionKind::FieldAccess { target, .. } => {
+                Self::expr_assigns_name(arena, *target, name, count_fns)
+            }
+            ExpressionKind::Index { target, index } => {
+                Self::expr_assigns_name(arena, *target, name, count_fns)
+                    || Self::expr_assigns_name(arena, *index, name, count_fns)
+            }
+            ExpressionKind::IndexAssign {
+                target,
+                index,
+                value,
+            } => {
+                Self::expr_assigns_name(arena, *target, name, count_fns)
+                    || Self::expr_assigns_name(arena, *index, name, count_fns)
+                    || Self::expr_assigns_name(arena, *value, name, count_fns)
+            }
+            ExpressionKind::FieldAssign { target, value, .. } => {
+                Self::expr_assigns_name(arena, *target, name, count_fns)
+                    || Self::expr_assigns_name(arena, *value, name, count_fns)
+            }
+            ExpressionKind::ArrayLiteral(elems)
+            | ExpressionKind::SetLiteral(elems)
+            | ExpressionKind::TupleLiteral(elems) => {
+                elems.iter().any(|e| Self::expr_assigns_name(arena, *e, name, count_fns))
+            }
+            ExpressionKind::MapLiteral(pairs) => pairs.iter().any(|(k, v)| {
+                Self::expr_assigns_name(arena, *k, name, count_fns) || Self::expr_assigns_name(arena, *v, name, count_fns)
+            }),
+            ExpressionKind::StructLiteral { fields, .. } => fields
+                .iter()
+                .any(|(_, v)| Self::expr_assigns_name(arena, *v, name, count_fns)),
+            ExpressionKind::Cast { value, .. } | ExpressionKind::Is { value, .. } => {
+                Self::expr_assigns_name(arena, *value, name, count_fns)
+            }
+            // leaves never assign
+            ExpressionKind::Null
+            | ExpressionKind::Integer(_)
+            | ExpressionKind::SInt(_)
+            | ExpressionKind::UInt(_)
+            | ExpressionKind::SUInt(_)
+            | ExpressionKind::Float(_)
+            | ExpressionKind::SFloat(_)
+            | ExpressionKind::Bool(_)
+            | ExpressionKind::String(_)
+            | ExpressionKind::Character(_)
+            | ExpressionKind::Byte(_)
+            | ExpressionKind::SByte(_)
+            | ExpressionKind::BByte(_)
+            | ExpressionKind::BSByte(_)
+            | ExpressionKind::Identifier(_)
+            | ExpressionKind::ResolvedIdentifier { .. }
+            | ExpressionKind::EnumVariant { .. } => false,
+            _ => true,
         }
     }
 
