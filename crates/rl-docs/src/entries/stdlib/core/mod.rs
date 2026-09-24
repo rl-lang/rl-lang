@@ -14,6 +14,8 @@ mod map_len;
 mod map_new;
 mod map_remove;
 mod map_set;
+mod result_err_value;
+mod result_ok_value;
 mod set_add;
 mod set_has;
 mod set_len;
@@ -60,4 +62,6 @@ static FUNCTIONS: &[&FnEntry] = &[
     &syscall6::SYSCALL6,
     &abort::ABORT,
     &type_of::TYPE_OF,
+    &result_ok_value::RESULT_OK_VALUE,
+    &result_err_value::RESULT_ERR_VALUE,
 ];

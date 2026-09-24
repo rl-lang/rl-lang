@@ -30,6 +30,7 @@ All notable changes to the rl-lang toolchain are documented here. The format is 
 - **`scripts/build-local.sh`** - local build script with `--release`/`--nightly`/`--dev` profiles, `-j` for parallel jobs, `--clean` to wipe target, outputs to `target-bins/`
 - **`handle` in function signatures** - `handle` now parses as a param type and `->` return (also inside `result[handle]`), matching any concrete handle kind in either direction, so handles flow through user functions on the VM and `rl-cc` alike
 - **Undeclared return-type inference** - functions without `->` infer their return from the body (explicit `return`s win, else the trailing expression); all candidates must agree on one concrete type. A body using `?` infers `result[T]`, mirroring a `-> result[T]` annotation, and `?` is allowed inside undeclared bodies. `rl-cc` definitions consult the inferred type so trailing expressions actually return
+- **`core::__result_ok_value` / `__result_err_value`** - trust-and-verify result assertion: return the ok/err payload with no static questions beyond the `result` shape, abort loudly on the wrong variant or a non-result (VM + `rl-cc` C parity; CC reuses the typed `rl_result_unwrap_*` family, aborting via `_rl_abort`)
 - **`scripts/install-local.sh`** - install locally built binaries from `target-bins/` to `~/.local/bin/`, with interactive binary picker and `--force` overwrite
 - **rl-docs concepts** - new documentation entries for package manager and toolchain manager
 - **`rl-cli` lib target** - shared pipeline module (lex, parse, vm, cc) for binary targets

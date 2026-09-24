@@ -882,6 +882,8 @@ impl<'a> CCodegen<'a> {
             "__str_concat" => return self::core::compile_str_concat(self, args),
             "__syscall6" => return self::core::compile_syscall6(self, args),
             "__type_of" => return self::core::compile_type_of(self, args),
+            "__result_ok_value" => return self::core::compile_result_ok_value(self, args),
+            "__result_err_value" => return self::core::compile_result_err_value(self, args),
             "sha256" => return self::crypto::compile_sha256(self, args),
             "sha512" => return self::crypto::compile_sha512(self, args),
             "sha1" => return self::crypto::compile_sha1(self, args),

@@ -380,3 +380,43 @@ pub(super) fn compile_type_of(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), 
     cc.writer.write("))");
     Ok(())
 }
+
+/// `__result_ok_value(r)`: trust-and-verify unwrap, aborting on err -
+/// mirrors `result_unwrap` (tuple payloads travel as one element arrays).
+pub(super) fn compile_result_ok_value(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    if args.is_empty() {
+        cc.writer.write("rl_result_unwrap_i64(rl_err(-1))");
+        return Ok(());
+    }
+    if let Some(fields) = cc.tuple_payload_fields(args[0]) {
+        let tname = cc.ensure_tuple_type(fields);
+        cc.writer.write(&format!("(({0}*)rl_result_unwrap_arr(", tname));
+        cc.compile_expr(args[0])?;
+        cc.writer.write(").data)[0]");
+        return Ok(());
+    }
+    let unwrap_fn = cc.unwrap_fn_for_result(args[0]);
+    cc.writer.write(&format!("{unwrap_fn}("));
+    cc.compile_expr(args[0])?;
+    cc.writer.write(")");
+    Ok(())
+}
+
+/// `__result_err_value(r)`: the err payload, aborting on ok - mirrors
+/// `result_unwrap_err`'s mapping exactly (including no tuple branch).
+pub(super) fn compile_result_err_value(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    if args.is_empty() {
+        cc.writer.write("rl_result_unwrap_err_i64(rl_ok(0))");
+        return Ok(());
+    }
+    let unwrap_fn = match cc.unwrap_fn_for_result(args[0]) {
+        "rl_result_unwrap_str" => "rl_result_unwrap_err_str",
+        "rl_result_unwrap_f64" => "rl_result_unwrap_err_f64",
+        "rl_result_unwrap_bool" => "rl_result_unwrap_err_bool",
+        _ => "rl_result_unwrap_err_i64",
+    };
+    cc.writer.write(&format!("{unwrap_fn}("));
+    cc.compile_expr(args[0])?;
+    cc.writer.write(")");
+    Ok(())
+}

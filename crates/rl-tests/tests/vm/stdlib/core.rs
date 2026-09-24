@@ -198,6 +198,54 @@ __abort("boom")
 }
 
 #[test]
+fn result_ok_value_unwraps() {
+    let result = compile_and_run(
+        r#"
+get __result_ok_value from core
+__result_ok_value(ok(41)) + 1
+"#,
+    )
+    .unwrap();
+    assert_eq!(result, VmValue::Int(42));
+}
+
+#[test]
+fn result_ok_value_aborts_on_err() {
+    let result = compile_and_run(
+        r#"
+get __result_ok_value from core
+__result_ok_value(err("boom"))
+"#,
+    );
+    let err = result.unwrap_err();
+    assert!(err.message().contains("__result_ok_value"));
+}
+
+#[test]
+fn result_err_value_unwraps() {
+    let result = compile_and_run(
+        r#"
+get __result_err_value from core
+__result_err_value(err("boom"))
+"#,
+    )
+    .unwrap();
+    assert_eq!(result, VmValue::Str("boom".into()));
+}
+
+#[test]
+fn result_err_value_aborts_on_ok() {
+    let result = compile_and_run(
+        r#"
+get __result_err_value from core
+__result_err_value(ok(1))
+"#,
+    );
+    let err = result.unwrap_err();
+    assert!(err.message().contains("__result_err_value"));
+}
+
+#[test]
 fn type_of_names_types() {
     let result = compile_and_run(
         r#"

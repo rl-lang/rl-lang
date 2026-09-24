@@ -502,6 +502,69 @@ pub fn __type_of<R: Runtime>(v: R::Value) -> String {
     R::type_name(&v).to_owned()
 }
 
+// ---- result assertion (trust, but verify by aborting) ------------------------
+// "i am sure this is ok/err, give me its value": no static questions
+// beyond the `result[T]` shape, abort loudly on the wrong variant or a
+// non-result. Mirrors `Index`/`m[k]`, not `map_get`.
+
+#[native_fn(module = "core", sig(result[T] -> T))]
+pub fn __result_ok_value<R: Runtime>(
+    cx: &mut R::Cx,
+    value: R::Value,
+    span: R::Span,
+) -> Result<R::Value, Error> {
+    if let Some(inner) = R::as_ok_inner(&value) {
+        Ok(inner)
+    } else if let Some(inner) = R::as_err_inner(&value) {
+        Err(R::error(
+            cx,
+            format!(
+                "__result_ok_value: called on err({})",
+                R::display(&inner)
+            ),
+            span,
+        ))
+    } else {
+        Err(R::error(
+            cx,
+            format!(
+                "__result_ok_value: expected result, got {}",
+                R::type_name(&value)
+            ),
+            span,
+        ))
+    }
+}
+
+#[native_fn(module = "core", untyped)]
+pub fn __result_err_value<R: Runtime>(
+    cx: &mut R::Cx,
+    value: R::Value,
+    span: R::Span,
+) -> Result<R::Value, Error> {
+    // untyped like `result_unwrap_err`: the `sig` language binds `T` to
+    // the ok payload, but here `T` is the err payload, so the static
+    // type stays dynamic (Unknown propagates silently).
+    if let Some(inner) = R::as_err_inner(&value) {
+        Ok(inner)
+    } else if let Some(inner) = R::as_ok_inner(&value) {
+        Err(R::error(
+            cx,
+            format!("__result_err_value: called on ok({})", R::display(&inner)),
+            span,
+        ))
+    } else {
+        Err(R::error(
+            cx,
+            format!(
+                "__result_err_value: expected result, got {}",
+                R::type_name(&value)
+            ),
+            span,
+        ))
+    }
+}
+
 // ---- module registration --------------------------------------------------
 
 rl_std_core::native_module!("core";
@@ -512,5 +575,6 @@ rl_std_core::native_module!("core";
         __str_len, __str_get_byte, __str_slice, __str_concat,
         __syscall6,
         __abort, __type_of,
+        __result_ok_value, __result_err_value,
     ],
 );
