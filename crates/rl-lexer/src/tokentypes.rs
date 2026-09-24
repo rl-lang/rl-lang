@@ -48,6 +48,9 @@ pub enum TokenType {
     // -- assignment & comparison --
     Assign,
     Compare,
+    /// Type test operator (`x is int`). English only for now; the
+    /// Arabic alias lands separately.
+    Is,
 
     // -- logical --
     Bang,
@@ -142,6 +145,7 @@ pub enum TokenType {
     Map,
     Set,
     Handle,
+    Type,
 
     // -- type modifiers --
     Big,

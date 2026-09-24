@@ -47,7 +47,7 @@ If you're adding a brand-new module (not just a new function in an existing one)
 
 ## Deprecating a stdlib function
 
-When renaming or moving a stdlib function (e.g. `std::array::len` → `std::len`), you need to keep the old path working while warning users to switch. Three places to touch:
+When renaming or moving a stdlib function (e.g. `std::array::len` -> `std::len`), you need to keep the old path working while warning users to switch. Three places to touch:
 
 1. **Signature tree** (`crates/rl-std/src/lib.rs`) -- add the function name to the new module's `signatures()` (e.g. `.with_functions(&["len"])` on the root `std`), and keep it in the old module too so both paths resolve.
 

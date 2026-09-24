@@ -2,7 +2,7 @@ use crate::entry::{ConceptCategory, ConceptEntry, DescriptionEntry, DescriptionK
 
 pub static IMPORTS: ConceptEntry = ConceptEntry {
     name: "imports",
-    summary: "`get` brings stdlib functions or local files into scope - a single fully-qualified stdlib path, a `from`-list for one or more functions, or a bare/`from`-qualified local filename resolved relative to the importing file",
+    summary: "`get` brings stdlib functions or local files into scope - a single fully-qualified stdlib path, a `from`-list for one or more functions, a wildcard to import everything from a module, or aliased imports to rename symbols locally",
     category: ConceptCategory::Modules,
     prerequisites: &["functions"],
     descriptions: &[
@@ -18,6 +18,33 @@ pub static IMPORTS: ConceptEntry = ConceptEntry {
             title: Some("importing multiple stdlib functions"),
             description: "import multiple stdlib functions with `get <fn1>, <fn2> from std::<module>`",
             examples: &["get sin, cos from std::math\n\nsin(0.0)  // 0.0\ncos(0.0)  // 1.0"],
+            expected_output: &[],
+        },
+        DescriptionEntry {
+            kind: DescriptionKind::Syntax,
+            title: Some("importing all functions from a module (wildcard)"),
+            description: "import every function from a stdlib module with `get * from std::<module>` - all public functions in the module become available as bare names",
+            examples: &[
+                "get * from std::math\n\nabs(-5)    // 5\nsqrt(9.0)  // 3.0\nmax(1, 2)  // 2",
+            ],
+            expected_output: &[],
+        },
+        DescriptionEntry {
+            kind: DescriptionKind::Syntax,
+            title: Some("importing with an alias"),
+            description: "rename an imported function with `get <fn> as <alias> from std::<module>` - the alias is used for all subsequent calls",
+            examples: &[
+                "get sin as sine from std::math\nsine(0.0)  // 0.0",
+            ],
+            expected_output: &[],
+        },
+        DescriptionEntry {
+            kind: DescriptionKind::Syntax,
+            title: Some("mixing aliases and plain imports"),
+            description: "combine aliases and plain names in a single import statement - each entry can independently use `as` or not",
+            examples: &[
+                "get sin as sine, cos from std::math\nsine(0.0)  // 0.0\ncos(0.0)    // 1.0",
+            ],
             expected_output: &[],
         },
         DescriptionEntry {
@@ -45,6 +72,15 @@ pub static IMPORTS: ConceptEntry = ConceptEntry {
         },
         DescriptionEntry {
             kind: DescriptionKind::Pitfall,
+            title: Some("wildcard cannot be mixed with named imports"),
+            description: "`get *` imports everything from a module and cannot be combined with individual named imports in the same statement - use `get * from std::math` to get everything, or `get sin, cos from std::math` to cherry-pick",
+            examples: &[
+                "get *, sin from std::math  // not valid\nget * from std::math        // ok - all functions\nget sin, cos from std::math  // ok - specific functions",
+            ],
+            expected_output: &[],
+        },
+        DescriptionEntry {
+            kind: DescriptionKind::Pitfall,
             title: Some("a bare local import pulls in the whole file"),
             description: "`get <filename>` brings in everything that file exposes, with no way to cherry-pick - to import only specific items from a local file, use `get <item> from <path>::<file>` instead",
             examples: &[
@@ -55,6 +91,7 @@ pub static IMPORTS: ConceptEntry = ConceptEntry {
     ],
     pitfalls: &[
         "the direct-path form (`get std::<module>::<function>`) only names a single function - importing more than one from the same module needs the `from` form instead, which also works for just one",
+        "`get *` cannot be combined with named imports in the same statement - use a wildcard or named imports, not both",
         "a bare `get <filename>` imports everything the file exposes, with no way to select individual items - use `get <item> from <path>::<file>` to cherry-pick from a local file",
     ],
     related: &["functions", "tooling"],

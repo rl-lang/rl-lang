@@ -855,6 +855,278 @@ pub fn arr_sort_by<R: Runtime>(
     Ok(R::ok(R::array(items, elem)))
 }
 
+// ---- batch / window / partition / swap / cycle ----------------------------
+
+#[native_fn(module = "array", sig(array[T], int -> result[array[array[T]]]))]
+pub fn arr_chunk<R: Runtime>(_cx: &mut R::Cx, array: R::Value, size: i64) -> R::Value {
+    let Some((slice, elem)) = R::as_array(&array) else {
+        return R::err(R::from_string(format!(
+            "arr_chunk: accepts only arrays, found {}",
+            R::type_name(&array)
+        )));
+    };
+    if size <= 0 {
+        return R::err(R::from_string(format!(
+            "arr_chunk: size must be positive, got {}",
+            size
+        )));
+    }
+    let size = size as usize;
+    let chunks: Vec<R::Value> = slice
+        .chunks(size)
+        .map(|c| R::array(c.to_vec(), elem.clone()))
+        .collect();
+    let inner = TypeAnnotation::Array(Box::new(elem));
+    R::ok(R::array(chunks, inner))
+}
+
+#[native_fn(module = "array", sig(array[T], int -> result[array[array[T]]]))]
+pub fn arr_windows<R: Runtime>(_cx: &mut R::Cx, array: R::Value, size: i64) -> R::Value {
+    let Some((slice, elem)) = R::as_array(&array) else {
+        return R::err(R::from_string(format!(
+            "arr_windows: accepts only arrays, found {}",
+            R::type_name(&array)
+        )));
+    };
+    if size <= 0 {
+        return R::err(R::from_string(format!(
+            "arr_windows: size must be positive, got {}",
+            size
+        )));
+    }
+    let size = size as usize;
+    if size > slice.len() {
+        return R::err(R::from_string(format!(
+            "arr_windows: size {} exceeds array length {}",
+            size,
+            slice.len()
+        )));
+    }
+    let windows: Vec<R::Value> = slice
+        .windows(size)
+        .map(|w| R::array(w.to_vec(), elem.clone()))
+        .collect();
+    let inner = TypeAnnotation::Array(Box::new(elem));
+    R::ok(R::array(windows, inner))
+}
+
+#[native_fn(module = "array", sig(array[T], int, int -> result[array[T]]))]
+pub fn arr_swap<R: Runtime>(_cx: &mut R::Cx, array: R::Value, i: i64, j: i64) -> R::Value {
+    let Some((slice, elem)) = R::as_array(&array) else {
+        return R::err(R::from_string(format!(
+            "arr_swap: accepts only arrays, found {}",
+            R::type_name(&array)
+        )));
+    };
+    if i < 0 || i as usize >= slice.len() || j < 0 || j as usize >= slice.len() {
+        return R::err(R::from_string(format!(
+            "arr_swap: index out of bounds: {} or {} (len {})",
+            i,
+            j,
+            slice.len()
+        )));
+    }
+    let mut items = slice.to_vec();
+    items.swap(i as usize, j as usize);
+    R::ok(R::array(items, elem))
+}
+
+#[native_fn(module = "array", sig(array[T], callback(T -> bool) -> result[array[array[T]]]))]
+pub fn arr_partition<R: Runtime>(
+    cx: &mut R::Cx,
+    array: R::Value,
+    f: R::Value,
+    span: R::Span,
+) -> Result<R::Value, Error> {
+    let Some((slice, elem)) = R::as_array(&array) else {
+        return Ok(R::err(R::from_string(format!(
+            "arr_partition: accepts only arrays, found {}",
+            R::type_name(&array)
+        ))));
+    };
+    if !R::is_callable(&f) {
+        return Ok(R::err(R::from_string(format!(
+            "arr_partition: expected function or lambda, found {}",
+            R::type_name(&f)
+        ))));
+    }
+    let mut matching = Vec::new();
+    let mut rest = Vec::new();
+    for item in slice {
+        let result = R::call_value(cx, &f, std::slice::from_ref(item), span)?;
+        if R::as_bool(&result) == Some(true) {
+            matching.push(item.clone());
+        } else {
+            rest.push(item.clone());
+        }
+    }
+    let inner = TypeAnnotation::Array(Box::new(elem));
+    Ok(R::ok(R::array(
+        vec![
+            R::array(matching, inner.clone()),
+            R::array(rest, inner),
+        ],
+        TypeAnnotation::Infer,
+    )))
+}
+
+#[native_fn(module = "array", sig(array[T], callback(T -> U) -> result[T]))]
+pub fn arr_max_by<R: Runtime>(
+    cx: &mut R::Cx,
+    array: R::Value,
+    f: R::Value,
+    span: R::Span,
+) -> Result<R::Value, Error> {
+    let Some((slice, _)) = R::as_array(&array) else {
+        return Ok(R::err(R::from_string(format!(
+            "arr_max_by: accepts only arrays, found {}",
+            R::type_name(&array)
+        ))));
+    };
+    if !R::is_callable(&f) {
+        return Ok(R::err(R::from_string(format!(
+            "arr_max_by: expected function or lambda, found {}",
+            R::type_name(&f)
+        ))));
+    }
+    if slice.is_empty() {
+        return Ok(R::err(R::from_string(
+            "arr_max_by: called on empty array".to_string(),
+        )));
+    }
+    let mut best = &slice[0];
+    let mut best_key = R::call_value(cx, &f, std::slice::from_ref(best), span)?;
+    for item in &slice[1..] {
+        let key = R::call_value(cx, &f, std::slice::from_ref(item), span)?;
+        let cmp = match (R::as_i64(&best_key), R::as_i64(&key)) {
+            (Some(a), Some(b)) => a.cmp(&b),
+            _ => match (R::as_f64(&best_key), R::as_f64(&key)) {
+                (Some(a), Some(b)) => a.partial_cmp(&b).unwrap_or(std::cmp::Ordering::Equal),
+                _ => match (R::as_str(&best_key), R::as_str(&key)) {
+                    (Some(a), Some(b)) => a.cmp(b),
+                    _ => std::cmp::Ordering::Equal,
+                },
+            },
+        };
+        if cmp == std::cmp::Ordering::Less {
+            best = item;
+            best_key = key;
+        }
+    }
+    Ok(R::ok(best.clone()))
+}
+
+#[native_fn(module = "array", sig(array[T], callback(T -> U) -> result[T]))]
+pub fn arr_min_by<R: Runtime>(
+    cx: &mut R::Cx,
+    array: R::Value,
+    f: R::Value,
+    span: R::Span,
+) -> Result<R::Value, Error> {
+    let Some((slice, _)) = R::as_array(&array) else {
+        return Ok(R::err(R::from_string(format!(
+            "arr_min_by: accepts only arrays, found {}",
+            R::type_name(&array)
+        ))));
+    };
+    if !R::is_callable(&f) {
+        return Ok(R::err(R::from_string(format!(
+            "arr_min_by: expected function or lambda, found {}",
+            R::type_name(&f)
+        ))));
+    }
+    if slice.is_empty() {
+        return Ok(R::err(R::from_string(
+            "arr_min_by: called on empty array".to_string(),
+        )));
+    }
+    let mut best = &slice[0];
+    let mut best_key = R::call_value(cx, &f, std::slice::from_ref(best), span)?;
+    for item in &slice[1..] {
+        let key = R::call_value(cx, &f, std::slice::from_ref(item), span)?;
+        let cmp = match (R::as_i64(&best_key), R::as_i64(&key)) {
+            (Some(a), Some(b)) => a.cmp(&b),
+            _ => match (R::as_f64(&best_key), R::as_f64(&key)) {
+                (Some(a), Some(b)) => a.partial_cmp(&b).unwrap_or(std::cmp::Ordering::Equal),
+                _ => match (R::as_str(&best_key), R::as_str(&key)) {
+                    (Some(a), Some(b)) => a.cmp(b),
+                    _ => std::cmp::Ordering::Equal,
+                },
+            },
+        };
+        if cmp == std::cmp::Ordering::Greater {
+            best = item;
+            best_key = key;
+        }
+    }
+    Ok(R::ok(best.clone()))
+}
+
+#[native_fn(module = "array", sig(array[T], array[T], T -> result[array[tuple[T, T]]]))]
+pub fn arr_zip_longest<R: Runtime>(
+    cx: &mut R::Cx,
+    array1: R::Value,
+    array2: R::Value,
+    fill: R::Value,
+    span: R::Span,
+) -> Result<R::Value, Error> {
+    let (Some((slice1, elem1)), Some((slice2, elem2))) =
+        (R::as_array(&array1), R::as_array(&array2))
+    else {
+        return Err(R::error(
+            cx,
+            format!(
+                "arr_zip_longest: expected two arrays, got {} and {}",
+                R::type_name(&array1),
+                R::type_name(&array2)
+            ),
+            span,
+        ));
+    };
+    let max_len = slice1.len().max(slice2.len());
+    let items: Vec<R::Value> = (0..max_len)
+        .map(|i| {
+            let a = if i < slice1.len() {
+                slice1[i].clone()
+            } else {
+                fill.clone()
+            };
+            let b = if i < slice2.len() {
+                slice2[i].clone()
+            } else {
+                fill.clone()
+            };
+            R::tuple(vec![a, b])
+        })
+        .collect();
+    let tuple_ty = TypeAnnotation::Tuple(std::rc::Rc::new(vec![elem1, elem2]));
+    Ok(R::ok(R::array(items, tuple_ty)))
+}
+
+#[native_fn(module = "array", sig(array[T], int -> result[array[T]]))]
+pub fn arr_cycle_take<R: Runtime>(_cx: &mut R::Cx, array: R::Value, n: i64) -> R::Value {
+    let Some((slice, elem)) = R::as_array(&array) else {
+        return R::err(R::from_string(format!(
+            "arr_cycle_take: accepts only arrays, found {}",
+            R::type_name(&array)
+        )));
+    };
+    if n < 0 {
+        return R::err(R::from_string(format!(
+            "arr_cycle_take: n must be non-negative, got {}",
+            n
+        )));
+    }
+    if slice.is_empty() {
+        return R::ok(R::array(Vec::new(), elem));
+    }
+    let n = n as usize;
+    let items: Vec<R::Value> = (0..n)
+        .map(|i| slice[i % slice.len()].clone())
+        .collect();
+    R::ok(R::array(items, elem))
+}
+
 // ---- local helpers --------------------------------------------------------
 
 /// Whether the value reads as a float but not as an int (i.e. a genuine float
@@ -901,5 +1173,7 @@ rl_std_core::native_module!("array";
         arr_range, arr_flatten, arr_sort, arr_fill, arr_slice,
         arr_map, arr_filter, arr_all, arr_any, arr_find, arr_find_index,
         arr_reduce, arr_sort_by, arr_flat_map, arr_for_each, arr_zip,
+        arr_chunk, arr_windows, arr_swap, arr_partition,
+        arr_max_by, arr_min_by, arr_zip_longest, arr_cycle_take,
     ],
 );

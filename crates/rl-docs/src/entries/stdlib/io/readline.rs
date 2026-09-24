@@ -15,6 +15,6 @@ close(file)?"#,
     errors: Some("Will return error if the handle is invalid or not open for reading"),
     see_also: &["read_handle", "read_all"],
     since: Some("v2.1.0"),
-    deprecated: None,
+    deprecated: Some("moved to std::fs::readline"),
     updated: Some("v2.1.0"),
 };

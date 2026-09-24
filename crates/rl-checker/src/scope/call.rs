@@ -58,6 +58,20 @@ impl TypeChecker {
 
             if let Some(f) = self.imported_std_fns.get(name.as_str()).cloned() {
                 self.push_stdlib_hover(path, span);
+                // Check for deprecated stdlib functions (same as qualified
+                // paths above; the canonical path was recorded at import).
+                if let Some(canonical) = self.imported_std_paths.get(name.as_str())
+                    && let Some(msg) = self.deprecated_stdlib.get(canonical)
+                {
+                    let text = format!("'{}' is deprecated: {}", canonical.join("::"), msg);
+                    if !self
+                        .allow_stack
+                        .last()
+                        .is_some_and(|s| s.contains(&Lint::Deprecated))
+                    {
+                        self.warn_lint(Lint::Deprecated, text, span);
+                    }
+                }
                 return self.check_stdlib_call(&f, arg_types, span);
             }
             if self.stdlib_fn_names.contains_key(name.as_str())
@@ -85,6 +99,8 @@ impl TypeChecker {
                 .chain(keywords::audio::KEYWORDS)
                 .chain(keywords::bitwise::KEYWORDS)
                 .chain(keywords::c::KEYWORDS)
+                .chain(keywords::cli::KEYWORDS)
+                .chain(keywords::crypto::KEYWORDS)
                 .chain(keywords::collections::KEYWORDS)
                 .chain(keywords::debug::KEYWORDS)
                 .chain(keywords::fs::KEYWORDS)
@@ -98,6 +114,7 @@ impl TypeChecker {
                 .chain(keywords::process::KEYWORDS)
                 .chain(keywords::random::KEYWORDS)
                 .chain(keywords::result::KEYWORDS)
+                .chain(keywords::serialize::KEYWORDS)
                 .chain(keywords::rl::KEYWORDS)
                 .chain(keywords::string::KEYWORDS)
                 .chain(keywords::terminal::KEYWORDS)

@@ -32,6 +32,23 @@ A dark, Tokyo-Night-adjacent palette is centralized in `theme.rs` - see that mod
 | `Home` / `End` | Line start / end |
 | `Tab` | Complete word at cursor / cycle candidates |
 
+## Meta-commands
+
+`:`-prefixed commands typed at the prompt (see `:help` in the REPL):
+
+| Command | Action |
+|---|---|
+| `:help` | Print all available commands |
+| `:stdlib` | List all stdlib modules |
+| `:stdlib <mod>` | List all functions in a stdlib module |
+| `:save <file>` | Save submitted lines to a file |
+| `:load <file>` | Print a file's contents into the output |
+| `:attach <file>` | Lex, parse, and evaluate a file into the env |
+| `:detach <file>` | Remove a file from the attached list |
+| `:clear` | Clear the output buffer |
+| `:reset` | Reset the evaluator to a fresh environment |
+| `:exit` | Exit the REPL |
+
 ## Backends
 
 The REPL UI never touches an execution engine directly - it drives a

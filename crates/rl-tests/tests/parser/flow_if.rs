@@ -77,6 +77,17 @@ fn if_else() {
     assert_eq!(statements[0].span, span_whole(source));
 }
 
+#[test]
+fn else_brace_on_next_line() {
+    // Allman layout: newline between `else` and `{` parses
+    let source = "if x\n{\ny = 1\n}\nelse\n{\ny = 2\n}";
+    let (_, statements) = common::parse(source);
+    match &statements[0].kind {
+        StatementKind::Conditional { .. } => {}
+        other => panic!("expected Conditional, got {:?}", other),
+    }
+}
+
 // else if is now a nested Conditional inside else_branch
 #[test]
 fn if_else_if() {

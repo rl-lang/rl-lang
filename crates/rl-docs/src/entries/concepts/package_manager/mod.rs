@@ -1,0 +1,91 @@
+use crate::entry::{ConceptCategory, ConceptEntry, DescriptionEntry, DescriptionKind};
+
+pub static PACKAGE_MANAGER: ConceptEntry = ConceptEntry {
+    name: "package manager",
+    summary: "managing rl project dependencies with `rl pm` - installing, adding, removing, listing, and updating packages from tarball URLs",
+    category: ConceptCategory::Tooling,
+    prerequisites: &["tooling"],
+    descriptions: &[
+        DescriptionEntry {
+            kind: DescriptionKind::Explanation,
+            title: Some("overview"),
+            description: "`rl pm` is the built-in package manager for rl projects. It downloads dependency tarballs, verifies SHA256 checksums, and creates symlinks in a `deps/` directory. Dependencies are declared in `rl.toml` under `[dependencies]`.",
+            examples: &[],
+            expected_output: &[],
+        },
+        DescriptionEntry {
+            kind: DescriptionKind::Syntax,
+            title: Some("rl.toml dependencies"),
+            description: "declare dependencies in `rl.toml` as key-value pairs under `[dependencies]`. Each entry maps a package name to a tarball URL, with an optional `sha256` field for integrity verification.",
+            examples: &["[dependencies]\ncsv = \"https://example.com/csv-0.1.0.tar.gz\"\njson = \"https://example.com/json-0.2.0.tar.gz\""],
+            expected_output: &[],
+        },
+        DescriptionEntry {
+            kind: DescriptionKind::Syntax,
+            title: Some("rl pm install"),
+            description: "`rl pm install` reads all dependencies from `rl.toml` and downloads them into `deps/`. Each package is extracted and symlinked so `import csv from \"csv\"` resolves to `deps/csv/lib.rl`.",
+            examples: &["rl pm install"],
+            expected_output: &[],
+        },
+        DescriptionEntry {
+            kind: DescriptionKind::Syntax,
+            title: Some("rl pm add"),
+            description: "`rl pm add <name> <url>` adds a new dependency to `rl.toml` and downloads it immediately. Use `--sha256` to pin a specific hash for verification.",
+            examples: &[
+                "rl pm add csv https://example.com/csv-0.1.0.tar.gz",
+                "rl pm add json https://example.com/json-0.2.0.tar.gz --sha256 abc123",
+            ],
+            expected_output: &[],
+        },
+        DescriptionEntry {
+            kind: DescriptionKind::Syntax,
+            title: Some("rl pm remove"),
+            description: "`rl pm remove <name>` removes a dependency from `rl.toml` and deletes its symlink from `deps/`.",
+            examples: &["rl pm remove csv"],
+            expected_output: &[],
+        },
+        DescriptionEntry {
+            kind: DescriptionKind::Syntax,
+            title: Some("rl pm list"),
+            description: "`rl pm list` shows all declared dependencies and their installation status (installed or missing).",
+            examples: &["rl pm list"],
+            expected_output: &[],
+        },
+        DescriptionEntry {
+            kind: DescriptionKind::Syntax,
+            title: Some("rl pm update"),
+            description: "`rl pm update` re-downloads all dependencies and verifies their checksums.",
+            examples: &["rl pm update"],
+            expected_output: &[],
+        },
+        DescriptionEntry {
+            kind: DescriptionKind::Syntax,
+            title: Some("rl pm cache"),
+            description: "`rl pm cache clean` clears the download cache at `~/.cache/rlpm/` (or `%LOCALAPPDATA%/rlpm/` on Windows).",
+            examples: &["rl pm cache clean"],
+            expected_output: &[],
+        },
+        DescriptionEntry {
+            kind: DescriptionKind::Note,
+            title: Some("dependency entry point"),
+            description: "each dependency must have a `lib.rl` file at its root. when you `import csv from \"csv\"`, the resolver looks for `deps/csv/lib.rl`.",
+            examples: &[],
+            expected_output: &[],
+        },
+        DescriptionEntry {
+            kind: DescriptionKind::Pitfall,
+            title: Some("sha256 is optional"),
+            description: "the `sha256` field in `rl.toml` is optional. if omitted, the download is accepted without integrity verification. for production use, always pin a hash.",
+            examples: &[],
+            expected_output: &[],
+        },
+    ],
+    pitfalls: &[
+        "each dependency must have a `lib.rl` at its root - the resolver looks for `deps/<name>/lib.rl`",
+        "the `sha256` field is optional - if omitted, no integrity check is performed",
+        "run `rl pm install` after cloning a project to download all declared dependencies",
+    ],
+    related: &["tooling", "imports"],
+    related_stdlib: &[],
+    since: Some("v2.2.0"),
+};

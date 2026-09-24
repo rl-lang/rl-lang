@@ -20,7 +20,7 @@ impl Parser {
             let span = left_id.span.join(right_id.span);
 
             match &right_id.kind {
-                // a |> f(args)  →  a.f(args)
+                // a |> f(args)  ->  a.f(args)
                 ExpressionKind::Call { path, args } => {
                     let method = path.clone();
                     let args = args.clone();
@@ -33,7 +33,7 @@ impl Parser {
                         span,
                     );
                 }
-                // a |> obj.method(args)  →  obj.method(a, args)
+                // a |> obj.method(args)  ->  obj.method(a, args)
                 ExpressionKind::MethodCall {
                     caller,
                     method,

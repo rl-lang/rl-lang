@@ -2,6 +2,7 @@ use crate::entry::{FnEntry, StdEntry};
 
 mod date_str;
 mod format_time;
+mod monotonic_now;
 mod now;
 mod now_ms;
 mod time_add;
@@ -20,6 +21,7 @@ pub static TIME: StdEntry = StdEntry {
 static FUNCTIONS: &[&FnEntry] = &[
     &date_str::DATE_STR,
     &format_time::FORMAT_TIME,
+    &monotonic_now::MONOTONIC_NOW,
     &now::NOW,
     &now_ms::NOW_MS,
     &time_add::TIME_ADD,

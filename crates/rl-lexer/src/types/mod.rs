@@ -4,7 +4,7 @@
 //! - `character_literal` - single-quoted `'x'` characters
 //! - `identifier` - keywords and user-defined names
 //! - `number_literal` - integers and floats
-//! - `string_literal` - double-quoted `"…"` strings
+//! - `string_literal` - double-quoted `"..."` strings
 mod character_literal;
 mod identifier;
 mod number_literal;

@@ -19,6 +19,12 @@ use rl_utils::errors::Error;
 
 use crate::parser_logic::Parser;
 
+/// Built-in attribute names no `#![define(...)]` may claim. Extend this
+/// list (not the call sites) when new built-ins land.
+pub(crate) const RESERVED_ATTRIBUTE_NAMES: &[&str] = &[
+    "entry", "init", "final", "test", "allow", "deprecated", "convert", "define",
+];
+
 impl Parser {
     /// Parses a `#![...]` program attribute and returns it.
     ///
@@ -40,6 +46,10 @@ impl Parser {
                 self.advance();
                 self.parse_convert_attribute()?
             }
+            TokenType::Identifier(name) if name == "define" => {
+                self.advance();
+                self.parse_define_attribute()?
+            }
             _ => return Err(self.err("expected a valid program attribute", self.peek_span())),
         };
 
@@ -52,7 +62,47 @@ impl Parser {
         Ok(attribute)
     }
 
-    /// Parses the arguments of a `convert` attribute: `convert(s=f(base))`.
+    /// Parses a `define` attribute: `define(name)`.
+    ///
+    /// Declares a custom item marker usable as `!#[name]` or
+    /// `!#[name("arg", ...)]`. Names colliding with built-in attributes
+    /// or duplicate definitions are errors.
+    ///
+    /// # Errors
+    /// Returns an error if the parentheses, name, or closing are malformed.
+    fn parse_define_attribute(&mut self) -> Result<ProgramAttribute, Error> {
+        if !self.match_type(&[TokenType::LeftParen]) {
+            return Err(self.err("expected `(` after `define`", self.peek_span()));
+        }
+        while self.match_type(&[TokenType::Newline]) {}
+        let name = match self.peek() {
+            TokenType::Identifier(name) => {
+                let name = name.clone();
+                self.advance();
+                name
+            }
+            _ => return Err(self.err("expected an attribute name", self.peek_span())),
+        };
+        if RESERVED_ATTRIBUTE_NAMES.contains(&name.as_str()) {
+            return Err(self.err(
+                format!("`{name}` is a built-in attribute and cannot be redefined"),
+                self.peek_span(),
+            ));
+        }
+        for attr in &self.ast_arena.program_attributes {
+            if matches!(attr, ProgramAttribute::Define { name: prev } if prev == &name) {
+                return Err(self.err(
+                    format!("custom attribute `{name}` is already defined"),
+                    self.peek_span(),
+                ));
+            }
+        }
+        while self.match_type(&[TokenType::Newline]) {}
+        if !self.match_type(&[TokenType::RightParen]) {
+            return Err(self.err("expected `)` to close define", self.peek_span()));
+        }
+        Ok(ProgramAttribute::Define { name })
+    }
     ///
     /// Expects the `convert` identifier to have already been consumed. Reads
     /// `(`, a unit symbol, `=`, a numeric factor, `(`, a base unit symbol,

@@ -26,6 +26,24 @@ cpal = { workspace = true, optional = true }
 symphonia = { workspace = true, optional = true }
 eframe = { workspace = true, optional = true }
 shell-words = { workspace = true, optional = true }
+rpassword = { workspace = true, optional = true }
+rustyline = { workspace = true, optional = true }
+digest = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
+sha1 = { workspace = true, optional = true }
+md-5 = { workspace = true, optional = true }
+hmac = { workspace = true, optional = true }
+subtle = { workspace = true, optional = true }
+base64 = { workspace = true, optional = true }
+hex = { workspace = true, optional = true }
+getrandom = { workspace = true, optional = true }
+uuid = { workspace = true, optional = true }
+argon2 = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+csv = { workspace = true, optional = true }
+toml = { workspace = true, optional = true }
+rust-ini = { workspace = true, optional = true }
+serde_yaml = { workspace = true, optional = true }
 libc = { workspace = true, optional = true }
 tempfile = { workspace = true, optional = true }
 glob = { workspace = true, optional = true }
@@ -33,11 +51,51 @@ glob = { workspace = true, optional = true }
 [features]
 default = ["signatures"]
 # Signature-only build: pure `rl-ast`, no OS-facing dependencies. Used by the
-# type checker and the language server.
-signatures = []
+# type checker and the language server. Enables all per-module features so the
+# full `std::*` signature tree is available; OS-facing deps stay gated behind
+# `impls` in each module file.
+signatures = [
+    "std-array",
+    "std-audio",
+    "std-bitwise",
+    "std-c",
+    "std-cli",
+    "std-collections",
+    "std-core",
+    "std-crypto",
+    "std-debug",
+    "std-fs",
+    "std-gui",
+    "std-http",
+    "std-io",
+    "std-math",
+    "std-net",
+    "std-path",
+    "std-process",
+    "std-random",
+    "std-result",
+    "std-serialize",
+    "std-string",
+    "std-terminal",
+    "std-time",
+    "std-types",
+]
 # Full runtime build: the actual function implementations and their handle
 # dependencies. Used by the VM and the interpreter.
 impls = [
+    "std-audio",
+    "std-c",
+    "std-cli",
+    "std-core",
+    "std-crypto",
+    "std-serialize",
+    "std-fs",
+    "std-gui",
+    "std-http",
+    "std-io",
+    "std-net",
+    "std-process",
+    "std-terminal",
     "dep:crossterm",
     "dep:tiny_http",
     "dep:ureq",
@@ -48,7 +106,52 @@ impls = [
     "dep:symphonia",
     "dep:eframe",
     "dep:shell-words",
+    "dep:rpassword",
+    "dep:rustyline",
+    "dep:digest",
+    "dep:sha2",
+    "dep:sha1",
+    "dep:md-5",
+    "dep:hmac",
+    "dep:subtle",
+    "dep:base64",
+    "dep:hex",
+    "dep:getrandom",
+    "dep:uuid",
+    "dep:argon2",
+    "dep:serde_json",
+    "dep:csv",
+    "dep:toml",
+    "dep:rust-ini",
+    "dep:serde_yaml",
     "dep:libc",
     "dep:tempfile",
     "dep:glob",
 ]
+
+# Per-module feature flags. Enable individual modules to build smaller binaries.
+# Each feature gates both the module declaration and its dependencies.
+std-array = []
+std-audio = ["dep:rodio", "dep:cpal", "dep:symphonia"]
+std-bitwise = []
+std-c = ["dep:libffi", "dep:libloading"]
+std-cli = ["dep:shell-words", "dep:rpassword", "dep:rustyline"]
+std-collections = []
+std-core = ["dep:libc"]
+std-crypto = ["dep:digest", "dep:sha2", "dep:sha1", "dep:md-5", "dep:hmac", "dep:subtle", "dep:base64", "dep:hex", "dep:getrandom", "dep:uuid", "dep:argon2"]
+std-debug = []
+std-fs = ["dep:tempfile", "dep:glob"]
+std-gui = ["dep:eframe"]
+std-http = ["dep:ureq", "dep:tiny_http"]
+std-io = []
+std-math = []
+std-net = []
+std-path = []
+std-process = ["dep:shell-words"]
+std-random = []
+std-result = []
+std-serialize = ["dep:serde_json", "dep:csv", "dep:toml", "dep:rust-ini", "dep:serde_yaml"]
+std-string = []
+std-terminal = ["dep:crossterm"]
+std-time = []
+std-types = []

@@ -11,7 +11,7 @@
 //!               |- parse_term   (+ -)
 //!                    |- parse_factor  (* /)
 //!                         |- parse_unary   (! -)
-//!                              |- parse_primary  (literals, identifiers, calls, lambdas, …)
+//!                              |- parse_primary  (literals, identifiers, calls, lambdas, ...)
 //!                                   |- parse_postfix  (. method chains)
 //! ```
 //!

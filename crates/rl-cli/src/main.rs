@@ -12,7 +12,7 @@
 //! | `docs [topic]` | print stdlib / concept / tutorial reference |
 //! | `repl` | start the interactive TUI REPL (`repl_tui` feature) |
 //! | `lsp` | start the LSP server over stdio (`lsp` feature) |
-mod pipeline;
+use rl_cli::pipeline;
 use clap::builder::styling::{AnsiColor, Effects, Styles};
 use clap::{Parser, Subcommand};
 
@@ -24,23 +24,14 @@ const RL_STYLES: Styles = Styles::styled()
     .error(AnsiColor::Red.on_default().effects(Effects::BOLD))
     .valid(AnsiColor::Green.on_default())
     .invalid(AnsiColor::Red.on_default());
-#[cfg(feature = "docs")]
-use rl_docs::{
-    concept_to_markdown, docs_to_json,
-    entries::{concept_entries, stdlib_entries, tutorial_entries},
-    entry::{ConceptEntry, StdEntry},
-    std_to_markdown, tutorial_to_markdown,
-};
 use rl_tooling::new::create_project;
 use rl_tooling::package::{find_embedded, package};
 use rl_tooling::workflows::generate;
 use rl_tooling::{format::format_tokens, package::EmbeddedProgram};
 use std::path::PathBuf;
 
-use crate::pipeline::lex::lex;
-use crate::pipeline::parse::parse;
-#[cfg(feature = "lsp")]
-use rl_lsp::run_lsp;
+use pipeline::lex::lex;
+use pipeline::parse::parse;
 use rl_tooling::dev::read_rl_toml;
 use rl_utils::source::SourceFile;
 
@@ -77,21 +68,10 @@ enum Commands {
         #[arg(long)]
         vm: bool,
 
-        /// JIT compile via cranelift instead
-        /// (this is very very highly experimental)
-        #[arg(long)]
-        cranelift: bool,
-
         /// Arguments forwarded to the script (accessible as argv inside .rl)
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         extra_args: Vec<String>,
     },
-
-    /// Start the interactive TUI REPL
-    #[cfg(feature = "repl")]
-    #[command(long_about = "Start an interactive read-eval-print loop with syntax \
-                             highlighting and history, running in the terminal.")]
-    Repl,
 
     /// Run the current project (reads rl.toml)
     #[command(
@@ -99,24 +79,18 @@ enum Commands {
                        configured entry file.\n\n\
                        Use `rl new` first if you don't have an rl.toml yet.",
         after_help = "EXAMPLES:\n    \
-                       rl dev\n    \
-                       rl dev --vm\n    \
-                       rl dev --cranelift"
+                        rl dev\n    \
+                        rl dev --vm\n"
     )]
     Dev {
         /// Run through the bytecode VM
         /// (this is highly experimental)
         #[arg(long)]
         vm: bool,
-
-        /// JIT compile via cranelift instead
-        /// (this is very very highly experimental)
-        #[arg(long)]
-        cranelift: bool,
     },
 
     /// Scaffold a new project directory, or create a standalone script
-    #[command(after_help = "EXAMPLES:\n    rl new my_project\n    rl new my_project --no-git\n    rl new --script hello")]
+    #[command(after_help = "EXAMPLES:\n    rl new my_project\n    rl new my_project --no-git\n    rl new my_project --lib\n    rl new --script hello")]
     New {
         /// Name for the new project directory or script
         #[arg(value_name = "NAME")]
@@ -129,6 +103,10 @@ enum Commands {
         /// Create a standalone .rl script instead of a project directory
         #[arg(long)]
         script: bool,
+
+        /// Create a library project (generates src/lib.rl instead of src/main.rl)
+        #[arg(long)]
+        lib: bool,
     },
 
     /// Type-check a .rl file and report errors without running it
@@ -158,89 +136,6 @@ enum Commands {
         package: bool,
     },
 
-    /// Print language reference and stdlib documentation
-    #[cfg(feature = "docs")]
-    #[command(
-        long_about = "Print rl's language reference, stdlib docs, and tutorials.\n\n\
-                       With no TOPIC, prints everything. With a TOPIC, searches names \
-                       across all categories for a match (narrow with --stdlib, \
-                       --concept, or --tutorial).",
-        after_help = "EXAMPLES:\n    \
-                       rl docs\n    \
-                       rl docs print\n    \
-                       rl docs io --stdlib\n    \
-                       rl docs loops --concept --json\n    \
-                       rl docs --output docs.md"
-    )]
-    Docs {
-        /// Name to search for (matches stdlib functions, concepts, or tutorial steps)
-        #[arg(value_name = "TOPIC")]
-        topic: Option<String>,
-
-        /// Browse docs in an interactive terminal UI instead of printing them
-        #[arg(long)]
-        tui: bool,
-
-        /// Browse docs in an interactive terminal UI instead of printing them
-        #[arg(long)]
-        website: bool,
-
-        /// Print output as JSON instead of Markdown
-        #[arg(long)]
-        json: bool,
-
-        /// Restrict search to stdlib docs
-        #[arg(long)]
-        stdlib: bool,
-
-        /// Restrict search to concept docs
-        #[arg(long)]
-        concept: bool,
-
-        /// Restrict search to tutorial docs
-        #[arg(long)]
-        tutorial: bool,
-
-        /// Write output to a file instead of stdout
-        #[arg(long)]
-        output: bool,
-
-        /// Custom path for --output (implies --output)
-        #[arg(long, value_name = "PATH")]
-        out_file: Option<PathBuf>,
-
-        /// Generate docs for current project
-        #[arg(long)]
-        generate: bool,
-
-        /// Also emit an HTML version of the generated site (used with --generate)
-        #[arg(long)]
-        html: bool,
-
-        /// Path to a client-side syntax-highlighter script for `.rl` code
-        /// blocks, inlined into the generated site in place of the
-        /// built-in highlighter (used with --generate --html)
-        #[arg(long, value_name = "PATH")]
-        highlight_js: Option<PathBuf>,
-
-        /// Skip inlining any syntax-highlighter script (used with --generate --html)
-        #[arg(long)]
-        no_highlight: bool,
-
-        /// Custom path for --generate
-        #[arg(long, value_name = "PATH")]
-        out_dir: Option<PathBuf>,
-    },
-
-    /// Start the LSP server over stdio
-    #[cfg(feature = "lsp")]
-    #[command(
-        long_about = "Start the Language Server Protocol server, communicating \
-                             over stdio. Intended to be launched by an editor, not run \
-                             directly by hand."
-    )]
-    Lsp,
-
     /// Package a .rl file into a self-contained binary
     #[command(after_help = "EXAMPLES:\n    \
                                  rl package script.rl\n    \
@@ -265,26 +160,6 @@ enum Commands {
     Format {
         #[arg(value_name = "FILE")]
         file: PathBuf,
-    },
-
-    /// Compile a .rl source file to .rlc bytecode
-    #[command(
-        long_about = "Lex, parse, resolve, and compile a .rl source file to bytecode, \
-                           writing the result as a .rlc file.\n\n\
-                           The resulting .rlc file can be run directly with `rl run`, \
-                           skipping the lex/parse/compile step.",
-        after_help = "EXAMPLES:\n    \
-                           rl compile script.rl\n    \
-                           rl compile script.rl --output out.rlc"
-    )]
-    Compile {
-        /// Path to the .rl file to compile
-        #[arg(value_name = "FILE")]
-        file: PathBuf,
-
-        /// Output .rlc path (defaults to FILE with its extension changed to .rlc)
-        #[arg(short, long, value_name = "PATH")]
-        output: Option<PathBuf>,
     },
 
     /// Print debug info for a .rl source file (tokens, parser, or AST)
@@ -314,50 +189,80 @@ enum Commands {
         ast: bool,
     },
 
-    /// Transpile a .rl source file to C
+    /// Package manager for rl dependencies
+    #[cfg(feature = "pm")]
     #[command(
-        long_about = "Lex, parse, resolve, type-check, and transpile a .rl source file to C99.\n\n\
-                       The resulting .c file is written next to the source (or to --output). \
-                       Use --runtime to also emit rl_runtime.h and rl_runtime.c.",
+        long_about = "Manage project dependencies.\n\n\
+                       Downloads tarballs, verifies SHA256, and creates symlinks in deps/.",
         after_help = "EXAMPLES:\n    \
-                       rl transpile script.rl\n    \
-                       rl transpile script.rl --output out.c\n    \
-                       rl transpile script.rl --runtime\n    \
-                       rl transpile script.rl --runtime --compile\n    \
-                       rl transpile script.rl --runtime --compile --opt O3\n    \
-                       rl transpile script.rl --runtime --compile --opt Os"
+                       rl pm install\n    \
+                       rl pm add csv https://example.com/csv-0.1.0.tar.gz\n    \
+                       rl pm add csv https://example.com/csv-0.1.0.tar.gz --sha256 abc123\n    \
+                       rl pm remove csv\n    \
+                       rl pm list\n    \
+                       rl pm update\n    \
+                       rl pm cache clean"
     )]
-    Transpile {
-        /// Path to the .rl file to transpile
-        #[arg(value_name = "FILE")]
-        file: PathBuf,
-
-        /// Output .c path (defaults to FILE with its extension changed to .c)
-        #[arg(short, long, value_name = "PATH")]
-        output: Option<PathBuf>,
-
-        /// Also emit rl_runtime.h and rl_runtime.c
-        #[arg(long)]
-        runtime: bool,
-
-        /// After transpiling, invoke cc to compile the .c file
-        #[arg(short = 'c', long)]
-        compile: bool,
-
-        /// Optimization level forwarded to cc (O0, O1, O2, O3, Os, Og).
-        /// Defaults to O2 when --compile is used.
-        #[arg(long, value_name = "LEVEL")]
-        opt: Option<String>,
-
-        /// Extra flags forwarded to cc (only used with --compile)
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        cc_flags: Vec<String>,
+    Pm {
+        #[command(subcommand)]
+        command: PmCommands,
     },
+}
+
+#[cfg(feature = "pm")]
+#[derive(Subcommand)]
+enum PmCommands {
+    /// Install all dependencies from rl.toml
+    Install,
+    /// Add a dependency to rl.toml and download it
+    Add {
+        /// Package name
+        #[arg(value_name = "NAME")]
+        name: String,
+        /// Tarball URL
+        #[arg(value_name = "URL")]
+        url: String,
+        /// Expected SHA256 hash (optional)
+        #[arg(long, value_name = "HASH")]
+        sha256: Option<String>,
+    },
+    /// Remove a dependency from rl.toml and delete its symlink
+    Remove {
+        /// Package name
+        #[arg(value_name = "NAME")]
+        name: String,
+    },
+    /// List installed dependencies
+    List,
+    /// Re-download all dependencies and verify hashes
+    Update,
+    /// Manage the download cache
+    Cache {
+        #[command(subcommand)]
+        command: CacheCommands,
+    },
+}
+
+#[cfg(feature = "pm")]
+#[derive(Subcommand)]
+enum CacheCommands {
+    /// Clear the download cache
+    Clean,
 }
 
 fn main() {
     #[cfg(feature = "debug")]
     env_logger::init();
+
+    // ADR-0002: the Cranelift backend is gone. Catch the old flag before
+    // clap rejects it so the error points at the replacement. Only scan
+    // rl's own flags (everything after `--` belongs to the script).
+    let own_args = std::env::args().take_while(|a| a != "--");
+    if own_args.into_iter().any(|a| a == "--cranelift") {
+        eprintln!("error: --cranelift was removed (see ADR-0002)");
+        eprintln!("  use `rlt <file> --compile` for native code instead");
+        std::process::exit(1);
+    }
 
     // expriemental
     match find_embedded() {
@@ -367,7 +272,7 @@ fn main() {
             let (ast, statements) = parse(sf.clone(), tokens);
             #[cfg(feature = "vm")]
             {
-                crate::pipeline::vm::vm_loop(sf, ast, statements);
+                pipeline::vm::vm_loop(sf, ast, statements);
                 return;
             }
             #[cfg(not(feature = "vm"))]
@@ -380,7 +285,7 @@ fn main() {
         Some(EmbeddedProgram::Bytecode(bytes)) => {
             #[cfg(feature = "vm")]
             {
-                use crate::pipeline::vm::run_rlc_bytes;
+                use pipeline::vm::run_rlc_bytes;
                 run_rlc_bytes(&bytes, "program");
                 return;
             }
@@ -401,7 +306,6 @@ fn main() {
             file,
             code,
             vm,
-            cranelift,
             ..
         } => {
             // Inline code mode: rl run -c "code here"
@@ -430,23 +334,15 @@ fn main() {
                 }
                 if vm {
                     #[cfg(feature = "vm")]
-                    crate::pipeline::vm::vm_loop(source, ast, statements);
+                    pipeline::vm::vm_loop(source, ast, statements);
                     #[cfg(not(feature = "vm"))]
                     {
                         eprintln!("error: --vm requires the `vm` feature");
                         std::process::exit(1)
                     }
-                } else if cranelift {
-                    #[cfg(feature = "cranelift")]
-                    crate::pipeline::vm::cranelift_loop(source, ast, statements);
-                    #[cfg(not(feature = "cranelift"))]
-                    {
-                        eprintln!("error: --cranelift requires the `cranelift` feature");
-                        std::process::exit(1)
-                    }
                 } else {
                     #[cfg(feature = "vm")]
-                    crate::pipeline::vm::vm_loop(source, ast, statements);
+                    pipeline::vm::vm_loop(source, ast, statements);
                     #[cfg(not(feature = "vm"))]
                     {
                         eprintln!("error: this build of rl has no execution backend (missing the `vm` feature)");
@@ -466,7 +362,7 @@ fn main() {
             if is_rlc {
                 #[cfg(feature = "vm")]
                 {
-                    use crate::pipeline::vm::run_rlc_file;
+                    use pipeline::vm::run_rlc_file;
                     run_rlc_file(&file);
                     return;
                 }
@@ -516,25 +412,15 @@ fn main() {
             }
             if vm {
                 #[cfg(feature = "vm")]
-                crate::pipeline::vm::vm_loop(source, ast, statements);
+                pipeline::vm::vm_loop(source, ast, statements);
                 #[cfg(not(feature = "vm"))]
                 {
                     eprintln!("error: --vm requires the `vm` feature");
                     std::process::exit(1)
                 }
-            } else if cranelift {
-                #[cfg(feature = "cranelift")]
-                crate::pipeline::vm::cranelift_loop(source, ast, statements);
-                #[cfg(not(feature = "cranelift"))]
-                {
-                    eprintln!(
-                        "error: --cranelift requires the `cranelift` feature (which implies `vm`)"
-                    );
-                    std::process::exit(1)
-                }
             } else {
                 #[cfg(feature = "vm")]
-                crate::pipeline::vm::vm_loop(source, ast, statements);
+                pipeline::vm::vm_loop(source, ast, statements);
                 #[cfg(not(feature = "vm"))]
                 {
                     let _ = (&ast, &statements);
@@ -546,8 +432,16 @@ fn main() {
             }
         }
 
-        Commands::Dev { vm, cranelift } => {
+        Commands::Dev { vm } => {
             let config = read_rl_toml();
+
+            // warn if [dependencies] section is missing
+            let raw = std::fs::read_to_string("rl.toml").unwrap_or_default();
+            if !rl_tooling::dev::has_dependencies_section(&raw) {
+                eprintln!("warning: rl.toml is missing a [dependencies] section");
+                eprintln!("  add an empty [dependencies] section to silence this warning");
+            }
+
             let path = std::path::PathBuf::from(&config.project.entry);
             let source_text = std::fs::read_to_string(&path).unwrap_or_else(|_| {
                 eprintln!(
@@ -562,25 +456,15 @@ fn main() {
             let (ast, statements) = parse(source.clone(), tokens);
             if vm {
                 #[cfg(feature = "vm")]
-                crate::pipeline::vm::vm_loop(source, ast, statements);
+                pipeline::vm::vm_loop(source, ast, statements);
                 #[cfg(not(feature = "vm"))]
                 {
                     eprintln!("error: --vm requires the `vm` feature");
                     std::process::exit(1)
                 }
-            } else if cranelift {
-                #[cfg(feature = "cranelift")]
-                crate::pipeline::vm::cranelift_loop(source, ast, statements);
-                #[cfg(not(feature = "cranelift"))]
-                {
-                    eprintln!(
-                        "error: --cranelift requires the `cranelift` feature (which implies `vm`)"
-                    );
-                    std::process::exit(1)
-                }
             } else {
                 #[cfg(feature = "vm")]
-                crate::pipeline::vm::vm_loop(source, ast, statements);
+                pipeline::vm::vm_loop(source, ast, statements);
                 #[cfg(not(feature = "vm"))]
                 {
                     let _ = (&ast, &statements);
@@ -639,355 +523,15 @@ fn main() {
             generate(check, package);
         }
 
-        Commands::New { name, no_git, script } => {
+        Commands::New { name, no_git, script, lib } => {
             if script {
                 rl_tooling::new::create_script(&name);
             } else {
-                create_project(&name, no_git);
+                create_project(&name, no_git, lib);
             }
         }
 
         #[cfg(feature = "docs")]
-        Commands::Docs {
-            topic,
-            json,
-            concept,
-            tutorial,
-            stdlib,
-            output,
-            out_file,
-            generate,
-            html,
-            highlight_js,
-            no_highlight,
-            out_dir,
-            tui,
-            website,
-        } => {
-            if generate {
-                {
-                    let config = read_rl_toml();
-                    let path = std::path::PathBuf::from(&config.project.entry);
-                    let source_text = std::fs::read_to_string(&path).unwrap_or_else(|_| {
-                        eprintln!(
-                            "error: could not read entry file '{}'",
-                            config.project.entry
-                        );
-                        std::process::exit(1);
-                    });
-                    println!("[{}] v{}", config.project.name, config.project.version);
-                    let source = SourceFile::new(&*config.project.entry, source_text);
-                    let tokens = lex(source.clone());
-                    let (ast, statements) = parse(source.clone(), tokens);
-
-                    use rl_checker::TypeChecker;
-                    let mut checker = TypeChecker::new()
-                        .with_source_file(source)
-                        .with_ast_arena(ast)
-                        .with_base_dir(
-                            path.parent()
-                                .unwrap_or_else(|| std::path::Path::new("."))
-                                .to_path_buf(),
-                        );
-                    checker.check(&statements);
-                    for w in &checker.warnings {
-                        w.report_to_stderr();
-                    }
-                    if checker.errors.is_empty() {
-                        println!("check complete");
-                    } else {
-                        for e in &checker.errors {
-                            e.report_to_stderr();
-                        }
-                        std::process::exit(1);
-                    }
-
-                    let parent = match path.parent() {
-                        Some(p) => p,
-                        None => {
-                            eprintln!("error when formatting");
-                            std::process::exit(1);
-                        }
-                    };
-
-                    // format every .rl file in the project
-                    let entries = match std::fs::read_dir(parent) {
-                        Ok(p) => p,
-                        Err(e) => {
-                            eprintln!("error when formatting: {}", e);
-                            std::process::exit(1);
-                        }
-                    };
-                    for entry in entries {
-                        let entry = match entry {
-                            Ok(e) => e,
-                            Err(e) => {
-                                eprintln!("error: {}", e);
-                                continue;
-                            }
-                        };
-                        let file_path = entry.path();
-                        if file_path.extension().and_then(|e| e.to_str()) != Some("rl") {
-                            continue;
-                        }
-                        let source_text =
-                            std::fs::read_to_string(&file_path).unwrap_or_else(|_| {
-                                eprintln!("error: could not read file '{}'", file_path.display());
-                                std::process::exit(1);
-                            });
-                        let source = SourceFile::new(&*file_path.to_string_lossy(), source_text);
-                        let tokens = lex(source);
-                        let formatted = format_tokens(&tokens);
-                        if let Err(e) = std::fs::write(&file_path, formatted) {
-                            eprintln!("error: {}", e);
-                        }
-                    }
-
-                    // generate website from /// doc comments
-                    use rl_tooling::generate_docs::{
-                        extract_doc_items, write_doc_site, write_doc_site_html,
-                    };
-                    let entries = match std::fs::read_dir(parent) {
-                        Ok(p) => p,
-                        Err(e) => {
-                            eprintln!("error when generating website: {}", e);
-                            std::process::exit(1);
-                        }
-                    };
-                    let mut all_items = Vec::new();
-                    for entry in entries {
-                        let entry = match entry {
-                            Ok(e) => e,
-                            Err(e) => {
-                                eprintln!("error: {}", e);
-                                continue;
-                            }
-                        };
-                        let file_path = entry.path();
-                        if file_path.extension().and_then(|e| e.to_str()) != Some("rl") {
-                            continue;
-                        }
-                        let source_text =
-                            std::fs::read_to_string(&file_path).unwrap_or_else(|_| {
-                                eprintln!("error: could not read file '{}'", file_path.display());
-                                std::process::exit(1);
-                            });
-                        let source = SourceFile::new(&*file_path.to_string_lossy(), source_text);
-                        let tokens = lex(source);
-                        let file_name = file_path
-                            .file_name()
-                            .and_then(|n| n.to_str())
-                            .unwrap_or("unknown.rl")
-                            .to_string();
-                        all_items.extend(extract_doc_items(&tokens, &file_name));
-                    }
-
-                    let p = match parent.parent() {
-                        Some(p) => p,
-                        None => parent,
-                    };
-                    let doc_out_dir = match out_dir {
-                        Some(p) => p,
-                        None => p.join("docs_site"),
-                    };
-
-                    if html {
-                        if let Err(e) = write_doc_site_html(
-                            &all_items,
-                            &doc_out_dir,
-                            &config.project.name,
-                            highlight_js.as_deref(),
-                            no_highlight,
-                        ) {
-                            eprintln!("error: failed to write html doc site: {}", e);
-                            std::process::exit(1);
-                        }
-                        println!(
-                            "html doc site written to '{}/index.html'",
-                            doc_out_dir.display()
-                        );
-                    } else {
-                        if let Err(e) =
-                            write_doc_site(&all_items, &doc_out_dir, &config.project.name)
-                        {
-                            eprintln!("error: failed to write doc site: {}", e);
-                            std::process::exit(1);
-                        }
-                        println!(
-                            "doc site written to '{}' ({} items)",
-                            doc_out_dir.display(),
-                            all_items.len()
-                        );
-                    }
-                }
-                return;
-            }
-
-            let std_entries = stdlib_entries();
-            let concept_entries = concept_entries();
-            let tutorial_entries = tutorial_entries();
-
-            let any_category = stdlib || concept || tutorial;
-            let want_std = !any_category || stdlib;
-            let want_concept = !any_category || concept;
-            let want_tutorial = !any_category || tutorial;
-
-            let (matched_std, matched_concepts, matched_tutorial): (
-                Vec<&StdEntry>,
-                Vec<&ConceptEntry>,
-                Vec<&ConceptEntry>,
-            ) = match topic.as_deref() {
-                None => (
-                    if want_std {
-                        std_entries.to_vec()
-                    } else {
-                        Vec::new()
-                    },
-                    if want_concept {
-                        concept_entries.to_vec()
-                    } else {
-                        Vec::new()
-                    },
-                    if want_tutorial {
-                        tutorial_entries.to_vec()
-                    } else {
-                        Vec::new()
-                    },
-                ),
-                Some(query) => {
-                    let matched_std = if want_std {
-                        std_entries
-                            .iter()
-                            .copied()
-                            .filter(|e| e.name.contains(query))
-                            .collect()
-                    } else {
-                        Vec::new()
-                    };
-
-                    let matched_concepts = if want_concept {
-                        concept_entries
-                            .iter()
-                            .copied()
-                            .filter(|e| e.name.contains(query))
-                            .collect()
-                    } else {
-                        Vec::new()
-                    };
-
-                    let matched_tutorial = if want_tutorial {
-                        tutorial_entries
-                            .iter()
-                            .copied()
-                            .filter(|e| e.name.contains(query))
-                            .collect()
-                    } else {
-                        Vec::new()
-                    };
-
-                    if matched_std.is_empty()
-                        && matched_concepts.is_empty()
-                        && matched_tutorial.is_empty()
-                    {
-                        eprintln!("no docs found for '{}'", query);
-                        std::process::exit(1);
-                    }
-
-                    (matched_std, matched_concepts, matched_tutorial)
-                }
-            };
-
-            if tui {
-                #[cfg(feature = "docs-tui")]
-                {
-                    if let Err(e) = rl_docs::tui::run_docs_tui(
-                        &matched_std,
-                        &matched_concepts,
-                        &matched_tutorial,
-                        topic.as_deref(),
-                    ) {
-                        eprintln!("error: docs tui failed: {}", e);
-                        std::process::exit(1);
-                    }
-                    return;
-                }
-                #[cfg(not(feature = "docs-tui"))]
-                {
-                    eprintln!(
-                        "error: this build of rl was compiled without --tui support (missing 'docs-tui' feature)"
-                    );
-                    std::process::exit(1);
-                }
-            }
-
-            if website {
-                rl_docs::website::build_and_open_website(
-                    &matched_std,
-                    &matched_concepts,
-                    &matched_tutorial,
-                );
-                std::process::exit(1);
-            }
-
-            let rendered = if json {
-                match docs_to_json(&matched_std, &matched_concepts, &matched_tutorial) {
-                    Ok(s) => s,
-                    Err(e) => {
-                        eprintln!("error: failed to serialize docs to json: {}", e);
-                        std::process::exit(1);
-                    }
-                }
-            } else {
-                let mut out = String::new();
-                if !matched_std.is_empty() {
-                    out.push_str(&std_to_markdown(&matched_std));
-                }
-                if !matched_concepts.is_empty() {
-                    out.push_str(&concept_to_markdown(&matched_concepts));
-                }
-                if !matched_tutorial.is_empty() {
-                    out.push_str(&tutorial_to_markdown(&matched_tutorial));
-                }
-                out
-            };
-
-            let write_to_file = output || out_file.is_some();
-
-            if write_to_file {
-                let ext = if json { "json" } else { "md" };
-                let filename =
-                    out_file.unwrap_or_else(|| PathBuf::from(format!("docs_output.{}", ext)));
-                if let Err(e) = std::fs::write(&filename, &rendered) {
-                    eprintln!("error: failed to write '{}': {}", filename.display(), e);
-                    std::process::exit(1);
-                }
-                println!("docs written to '{}'", filename.display());
-            } else {
-                println!("{}", rendered);
-            }
-        }
-
-        #[cfg(feature = "repl")]
-        Commands::Repl => {
-            #[cfg(feature = "vm")]
-            rl_repl::start_vm_repl();
-
-            #[cfg(not(feature = "vm"))]
-            {
-                eprintln!("error: repl requires the 'vm' feature to be enabled");
-                std::process::exit(1);
-            }
-        }
-
-        #[cfg(feature = "lsp")]
-        Commands::Lsp => match tokio::runtime::Runtime::new() {
-            Ok(rt) => rt.block_on(run_lsp()),
-            Err(e) => {
-                eprintln!("error: failed to start LSP runtime: {}", e);
-                std::process::exit(1);
-            }
-        },
-
         Commands::Package { file, output, vm } => {
             let path = file.to_str().unwrap_or_else(|| {
                 eprintln!("error: invalid file path");
@@ -997,7 +541,7 @@ fn main() {
             if vm {
                 #[cfg(feature = "vm")]
                 {
-                    use crate::pipeline::vm::compile_to_chunk;
+                    use pipeline::vm::compile_to_chunk;
 
                     let source_text = std::fs::read_to_string(&file).unwrap_or_else(|_| {
                         eprintln!("error: could not read file '{}'", file.display());
@@ -1123,132 +667,61 @@ fn main() {
             }
         }
 
-        Commands::Compile { file, output } => {
-            #[cfg(feature = "vm")]
-            {
-                use crate::pipeline::vm::compile_to_chunk;
-                let path = file
-                    .to_str()
-                    .unwrap_or_else(|| {
-                        eprintln!("error: invalid file path");
+        #[cfg(feature = "pm")]
+        Commands::Pm { command } => {
+            let project_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+            match command {
+                PmCommands::Install => {
+                    if let Err(e) = rl_pm::install_all(&project_root) {
+                        eprintln!("error: {}", e);
                         std::process::exit(1);
-                    })
-                    .to_string();
-                let source_text = std::fs::read_to_string(&file).unwrap_or_else(|_| {
-                    eprintln!("error: could not read file '{}'", file.display());
-                    std::process::exit(1);
-                });
-                let source = SourceFile::new(&*path, source_text);
-                let tokens = lex(source.clone());
-                let (ast, statements) = parse(source.clone(), tokens);
-
-                let checker_tokens = lex(source.clone());
-                let (checker_ast, checker_statements) =
-                    parse(source.clone(), checker_tokens);
-                use rl_checker::TypeChecker;
-                let base_dir = file
-                    .parent()
-                    .map(std::path::Path::to_path_buf)
-                    .unwrap_or_else(|| std::path::PathBuf::from("."));
-                let mut checker = TypeChecker::new()
-                    .with_source_file(source.clone())
-                    .with_ast_arena(checker_ast)
-                    .with_base_dir(base_dir);
-                checker.check(&checker_statements);
-                for w in &checker.warnings {
-                    w.report_to_stderr();
-                }
-                if !checker.errors.is_empty() {
-                    for e in &checker.errors {
-                        e.report_to_stderr();
-                    }
-                    std::process::exit(1);
-                }
-
-                let line_index =
-                    rl_utils::line_index::LineIndex::new(source.name.clone(), source.text.as_str());
-                let chunk = compile_to_chunk(source, ast, statements);
-                let bytes = rl_vm::serialize_chunk(&chunk, Some(&line_index));
-
-                let out_path = output.unwrap_or_else(|| file.with_extension("rlc"));
-                if let Err(e) = std::fs::write(&out_path, &bytes) {
-                    eprintln!("error: failed to write '{}': {}", out_path.display(), e);
-                    std::process::exit(1);
-                }
-                println!("compiled '{}' -> '{}'", file.display(), out_path.display());
-            }
-            #[cfg(not(feature = "vm"))]
-            {
-                let _ = (file, output);
-                eprintln!("error: `compile` requires the `vm` feature");
-                std::process::exit(1);
-            }
-        }
-
-        #[cfg(feature = "cc")]
-        Commands::Transpile {
-            file,
-            output,
-            runtime,
-            compile,
-            opt,
-            cc_flags,
-        } => {
-            use crate::pipeline::cc::transpile_loop;
-            let embed_rt = runtime || compile;
-            let c_path = transpile_loop(&file, output, embed_rt);
-            if compile {
-                let opt_flag = match opt.as_deref() {
-                    Some(level) => format!("-O{}", level),
-                    None => "-O2".to_string(),
-                };
-                let mut cmd = std::process::Command::new("cc");
-                cmd.arg(&opt_flag);
-                cmd.arg("-o").arg(c_path.with_extension(""));
-                cmd.arg(&c_path);
-                if embed_rt {
-                    let dir = c_path.parent().unwrap_or(std::path::Path::new("."));
-                    cmd.arg(dir.join("rl_runtime.c"));
-                    cmd.arg("-I").arg(dir);
-                }
-                // auto-detect std::c usage and add required flags
-                if let Ok(c_src) = std::fs::read_to_string(&c_path) {
-                    if c_src.contains("rl_c_") {
-                        cmd.arg("-DRL_USE_LIBFFI");
-                        cmd.arg("-lffi");
-                        cmd.arg("-ldl");
-                    }
-                    if c_src.contains("rl_http_") && c_src.contains("RL_USE_CURL") {
-                        cmd.arg("-DRL_USE_CURL");
-                        cmd.arg("-lcurl");
                     }
                 }
-                if embed_rt {
-                    cmd.arg("-lm");
+                PmCommands::Add { name, url, sha256 } => {
+                    if let Err(e) = rl_pm::add_dep(&project_root, &name, &url, sha256.as_deref()) {
+                        eprintln!("error: {}", e);
+                        std::process::exit(1);
+                    }
                 }
-                for flag in &cc_flags {
-                    cmd.arg(flag);
+                PmCommands::Remove { name } => {
+                    if let Err(e) = rl_pm::remove_dep(&project_root, &name) {
+                        eprintln!("error: {}", e);
+                        std::process::exit(1);
+                    }
                 }
-                let status = cmd.status().unwrap_or_else(|e| {
-                    eprintln!("error: failed to run cc: {}", e);
-                    std::process::exit(1);
-                });
-                if !status.success() {
-                    std::process::exit(status.code().unwrap_or(1));
+                PmCommands::List => {
+                    match rl_pm::list_deps(&project_root) {
+                        Ok(deps) => {
+                            if deps.is_empty() {
+                                eprintln!("no dependencies");
+                            } else {
+                                for dep in &deps {
+                                    let status = if dep.installed { "installed" } else { "missing" };
+                                    eprintln!("{} {} [{}]", dep.name, dep.url, status);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("error: {}", e);
+                            std::process::exit(1);
+                        }
+                    }
                 }
-                println!(
-                    "compiled '{}' -> '{}' ({})",
-                    file.display(),
-                    c_path.with_extension("").display(),
-                    opt_flag
-                );
+                PmCommands::Update => {
+                    if let Err(e) = rl_pm::update_deps(&project_root) {
+                        eprintln!("error: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+                PmCommands::Cache { command } => match command {
+                    CacheCommands::Clean => {
+                        if let Err(e) = rl_pm::cache_clean() {
+                            eprintln!("error: {}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                },
             }
-        }
-        #[cfg(not(feature = "cc"))]
-        Commands::Transpile { file, .. } => {
-            let _ = file;
-            eprintln!("error: `transpile` requires the `cc` feature\n       rebuild with: cargo build --features cc");
-            std::process::exit(1);
         }
     }
 }

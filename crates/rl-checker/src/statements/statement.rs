@@ -24,6 +24,8 @@ impl TypeChecker {
             match attr {
                 ItemAttribute::Allow(lints_vec) => lints.extend(lints_vec),
                 ItemAttribute::Deprecated(msg) => deprecated = msg.clone(),
+                // Custom markers carry no lint meaning; queried directly.
+                ItemAttribute::Custom { .. } => {}
             }
         }
         (lints, deprecated)
@@ -413,7 +415,10 @@ impl TypeChecker {
 
             // offloads to expression checker
             StatementKind::Expression(expr) => {
-                self.check_expression(*expr);
+                let ty = self.check_expression(*expr);
+                // candidate trailing-expression return; read only when the
+                // enclosing body actually ends with this statement
+                self.last_expr_type = Some(ty);
             }
 
             // loops checker
@@ -436,6 +441,14 @@ impl TypeChecker {
                 }
                 // add loop depth
                 self.enter_loop();
+                // `x is T` refines x to T for the body, dropping
+                // the refinement past any reassignment of x
+                if let Some((name, refined)) = self.branch_refinement(*condition, true) {
+                    let span = statement.span;
+                    self.check_block_refined(body, name, refined, span);
+                    self.exit_loop();
+                    return;
+                }
                 // checks the blocks
                 self.check_block(body);
                 // remove loop depth
@@ -529,6 +542,44 @@ impl TypeChecker {
                     | CheckType::Known(TypeAnnotation::CArray(inner)) => {
                         CheckType::Known((**inner).clone())
                     }
+                    // union of arrays: every member must be an array;
+                    // the item is the union of element types
+                    CheckType::Known(
+                        TypeAnnotation::Any(members) | TypeAnnotation::CAny(members),
+                    ) => {
+                        let mut elems: Vec<TypeAnnotation> = Vec::new();
+                        let mut ok = true;
+                        for m in members.iter() {
+                            match m {
+                                TypeAnnotation::Array(inner)
+                                | TypeAnnotation::CArray(inner) => {
+                                    if !elems.contains(inner) {
+                                        elems.push((**inner).clone());
+                                    }
+                                }
+                                _ => {
+                                    ok = false;
+                                    break;
+                                }
+                            }
+                        }
+                        if !ok {
+                            let iterable_span =
+                                self.ast_arena.exprs.get(*iterable).span;
+                            self.error(
+                                format!(
+                                    "for-each over a union needs every member to be an array, got {}",
+                                    iter_type.info()
+                                ),
+                                iterable_span,
+                            );
+                            CheckType::Unknown
+                        } else if elems.len() == 1 {
+                            CheckType::Known(elems.into_iter().next().unwrap())
+                        } else {
+                            CheckType::Known(TypeAnnotation::Any(std::rc::Rc::new(elems)))
+                        }
+                    }
                     CheckType::Unknown => CheckType::Unknown,
                     other => {
                         let iterable_span = self.ast_arena.exprs.get(*iterable).span;
@@ -576,6 +627,13 @@ impl TypeChecker {
                             cond_span,
                         );
                     }
+                    // `x is T` refines x to T for the body, dropping
+                    // the refinement past any reassignment of x
+                    if let Some((name, refined)) = self.branch_refinement(*cond, true) {
+                        let span = statement.span;
+                        self.check_block_refined(body, name, refined, span);
+                        return;
+                    }
                 }
                 // is the body correect?
                 self.check_block(body);
@@ -589,12 +647,35 @@ impl TypeChecker {
                 self.check_statement(if_branch);
                 // if there is another branch is it correct?
                 if let Some(branch) = else_branch {
+                    // plain `else` refines with the negated if-condition
+                    // (`else if` chains recurse and refine themselves)
+                    let negated: Option<(String, TypeAnnotation)> =
+                        match (&if_branch.kind, &branch.kind) {
+                            (
+                                StatementKind::ConditionalBranch {
+                                    condition: Some(cond),
+                                    ..
+                                },
+                                StatementKind::ConditionalBranch {
+                                    condition: None,
+                                    ..
+                                },
+                            ) => self.branch_refinement(*cond, false),
+                            _ => None,
+                        };
+                    if let Some((name, refined)) = negated
+                        && let StatementKind::ConditionalBranch { body, .. } = &branch.kind {
+                            let span = statement.span;
+                            self.check_block_refined(body, name, refined, span);
+                            return;
+                        }
                     self.check_statement(branch);
                 }
             }
 
             // functions and lambdas
             StatementKind::FunctionDeclaration {
+                name,
                 params,
                 return_type,
                 body,
@@ -610,11 +691,44 @@ impl TypeChecker {
                     );
                 }
                 self.push_return_type(return_type.clone());
+                let saved_propagate = std::mem::replace(&mut self.saw_propagate, false);
                 for stmt in body {
                     self.check_statement(stmt);
                 }
-                self.pop_return_type();
+                let returned = self.pop_return_type();
+                let body_propagated = std::mem::replace(&mut self.saw_propagate, saved_propagate);
                 self.pop_scope();
+                // No `->` annotation (`Null` default): infer the return
+                // type from the body so results/handles flow through calls.
+                // Conservative: all `return`s (or the trailing expression)
+                // must agree on one concrete type, else keep `Null`.
+                if *return_type == TypeAnnotation::Null {
+                    let ends_with_expr = matches!(
+                        body.last().map(|s| &s.kind),
+                        Some(StatementKind::Expression(_))
+                    );
+                    let trailing = if ends_with_expr {
+                        self.last_expr_type.clone()
+                    } else {
+                        None
+                    };
+                    if let Some(inferred) =
+                        Self::infer_fn_return(returned, trailing, ends_with_expr, body_propagated)
+                    {
+                        self.declare(
+                            name.clone(),
+                            CheckType::Function {
+                                params: params
+                                    .iter()
+                                    .map(|p| p.param_type.clone())
+                                    .collect(),
+                                return_type: inferred,
+                            },
+                            false,
+                            statement.span,
+                        );
+                    }
+                }
             }
 
             StatementKind::ImplBlock { record, methods } => {
@@ -623,6 +737,7 @@ impl TypeChecker {
                 }
                 for m in methods {
                     let StatementKind::FunctionDeclaration {
+                        name,
                         params,
                         return_type,
                         body,
@@ -641,11 +756,39 @@ impl TypeChecker {
                         );
                     }
                     self.push_return_type(return_type.clone());
+                    let saved_propagate = std::mem::replace(&mut self.saw_propagate, false);
                     for stmt in body {
                         self.check_statement(stmt);
                     }
-                    self.pop_return_type();
+                    let returned = self.pop_return_type();
+                    let body_propagated =
+                        std::mem::replace(&mut self.saw_propagate, saved_propagate);
                     self.pop_scope();
+                    if *return_type == TypeAnnotation::Null {
+                        let ends_with_expr = matches!(
+                            body.last().map(|s| &s.kind),
+                            Some(StatementKind::Expression(_))
+                        );
+                        let trailing = if ends_with_expr {
+                            self.last_expr_type.clone()
+                        } else {
+                            None
+                        };
+                        if let Some(inferred) =
+                            Self::infer_fn_return(returned, trailing, ends_with_expr, body_propagated)
+                        {
+                            self.methods.insert(
+                                (record.clone(), name.clone()),
+                                CheckType::Function {
+                                    params: params
+                                        .iter()
+                                        .map(|p| p.param_type.clone())
+                                        .collect(),
+                                    return_type: inferred,
+                                },
+                            );
+                        }
+                    }
                 }
             }
             StatementKind::Return(expr) => {
@@ -654,6 +797,10 @@ impl TypeChecker {
                     Some(e) => self.check_expression(*e),
                     None => CheckType::Known(TypeAnnotation::Null),
                 };
+                // record for undeclared-return inference (ignored when annotated)
+                if let Some(top) = self.inferred_return_stack.last_mut() {
+                    top.push(actual_type.clone());
+                }
                 // is the actual type same as the expected return one?
                 if let Some(expected) = self.current_return_type().cloned() {
                     let widens = matches!(
@@ -699,7 +846,11 @@ impl TypeChecker {
             StatementKind::ImportFileNamed { path, names } => {
                 self.import_module(path, Some(names), statement.span);
             }
-            StatementKind::Import { names, path } => {
+            // Type aliases are fully resolved at parse time; uses were
+            // substituted inline and warnings come from the alias_uses
+            // pass. Nothing to check here.
+            StatementKind::TypeAlias { .. } => {}
+            StatementKind::Import { names, wildcard, path } => {
                 let module_path = path.join("::");
                 let mut module = &self.root_module;
                 for seg in path {
@@ -716,23 +867,40 @@ impl TypeChecker {
                     module = next;
                 }
 
-                let mut imported = Vec::new();
-                let mut missing = Vec::new();
-                for name in names {
-                    match module.functions.get(name) {
-                        Some(f) => imported.push((name, f.clone())),
-                        None => missing.push(name),
+                if *wildcard {
+                    for (name, f) in &module.functions {
+                        self.imported_std_fns.insert(name.clone(), f.clone());
+                        let mut canonical = path.clone();
+                        canonical.push(name.clone());
+                        self.imported_std_paths.insert(name.clone(), canonical);
                     }
-                }
+                } else {
+                    let mut imported = Vec::new();
+                    let mut missing = Vec::new();
+                    for (name, alias) in names {
+                        match module.functions.get(name) {
+                            Some(f) => imported.push((
+                                alias.as_deref().unwrap_or(name),
+                                name.clone(),
+                                f.clone(),
+                            )),
+                            None => missing.push(name),
+                        }
+                    }
 
-                for (name, f) in imported {
-                    self.imported_std_fns.insert(name.to_string(), f);
-                }
-                for name in missing {
-                    self.error(
-                        format!("'{name}' is not defined in 'std::{module_path}'"),
-                        statement.span,
-                    );
+                    for (visible, original, f) in imported {
+                        self.imported_std_fns.insert(visible.to_string(), f);
+                        let mut canonical = path.clone();
+                        canonical.push(original.clone());
+                        self.imported_std_paths
+                            .insert(visible.to_string(), canonical);
+                    }
+                    for name in missing {
+                        self.error(
+                            format!("'{name}' is not defined in 'std::{module_path}'"),
+                            statement.span,
+                        );
+                    }
                 }
             }
             StatementKind::DestructureDeclaration { bindings, value } => {
@@ -815,10 +983,34 @@ impl TypeChecker {
 
     fn import_module(&mut self, path: &[String], names: Option<&[String]>, span: Span) {
         let import_name = format!("{}.rl", path.join("/"));
-        let import_path = match &self.base_dir {
+        let mut import_path = match &self.base_dir {
             Some(dir) => dir.join(&import_name),
             None => PathBuf::from(&import_name),
         };
+
+        // try direct file first, then deps/
+        if !import_path.exists() {
+            if let Some(first) = path.first() {
+                let dep_path = self.base_dir.as_ref()
+                    .map(|d| d.join("deps").join(first).join("lib.rl"))
+                    .unwrap_or_default();
+                if dep_path.exists() {
+                    import_path = dep_path;
+                } else {
+                    self.error(
+                        format!("could not import '{}': file not found", path.join("::")),
+                        span,
+                    );
+                    return;
+                }
+            } else {
+                self.error(
+                    format!("could not import '{}': file not found", path.join("::")),
+                    span,
+                );
+                return;
+            }
+        }
 
         let canonical = import_path
             .canonicalize()
@@ -888,7 +1080,7 @@ impl TypeChecker {
             return;
         };
 
-        let Ok((imported_ast, stmts)) = Parser::parse(tokens, source_file) else {
+        let Ok((imported_ast, stmts)) = Parser::parse(tokens, source_file.clone()) else {
             self.error(
                 format!(
                     "module `{}` has syntax error and could not be parsed",
@@ -902,6 +1094,10 @@ impl TypeChecker {
         self.importing.push(canonical.clone());
 
         let prev_ast = std::mem::replace(&mut self.ast_arena, imported_ast);
+        // Errors raised while checking the imported file must carry its
+        // name and text (spans are relative to it), not the importer's.
+        // Restored next to `ast_arena` below; nesting-safe (strict scope).
+        let prev_source = self.source_file.replace(source_file);
 
         for stmt in &stmts {
             match &stmt.kind {
@@ -1073,6 +1269,7 @@ impl TypeChecker {
         }
 
         self.ast_arena = prev_ast;
+        self.source_file = prev_source;
         self.importing.pop();
         self.imported.insert(canonical, new_cache_entry);
     }

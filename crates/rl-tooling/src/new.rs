@@ -9,7 +9,7 @@ use std::path::PathBuf;
 /// |-- .gitignore
 /// |-- rl.toml
 /// |-- src/
-///     |-- main.rl
+///     |-- main.rl (or lib.rl if lib=true)
 /// ```
 ///
 /// `rl.toml` is pre-filled with the project name and current rl version.
@@ -17,12 +17,20 @@ use std::path::PathBuf;
 /// A git repository is initialized automatically.
 ///
 /// Prints an error and exits with code `1` on any IO failure.
-pub fn create_project(name: &str, no_git: bool) {
-    if let Err(e) = try_create_project(name, no_git) {
-        eprintln!("error: failed to create project '{}': {}", name, e);
-        std::process::exit(1);
+pub fn create_project(name: &str, no_git: bool, lib: bool) {
+    if lib {
+        if let Err(e) = try_create_lib_project(name, no_git) {
+            eprintln!("error: failed to create project '{}': {}", name, e);
+            std::process::exit(1);
+        }
+        println!("created library '{}'", name);
+    } else {
+        if let Err(e) = try_create_project(name, no_git) {
+            eprintln!("error: failed to create project '{}': {}", name, e);
+            std::process::exit(1);
+        }
+        println!("created project '{}'", name);
     }
-    println!("created project '{}'", name);
 }
 
 /// Creates a standalone rl script file with a shebang header.
@@ -102,6 +110,8 @@ name = "{}"
 rl-version = "{}"
 version = "0.0.1"
 entry = "src/main.rl"
+
+[dependencies]
 "#,
         name,
         env!("CARGO_PKG_VERSION"),
@@ -116,7 +126,36 @@ main()
     std::fs::create_dir(format!("{}/src", name))?;
     std::fs::write(format!("{}/rl.toml", name), toml)?;
     std::fs::write(format!("{}/src/main.rl", name), main)?;
-    std::fs::write(format!("{}/.gitignore", name), "")?;
+    std::fs::write(format!("{}/.gitignore", name), "deps/\n")?;
+    if !no_git {
+        std::process::Command::new("git")
+            .args(["init", name])
+            .output()?;
+    }
+    Ok(())
+}
+
+/// Inner fallible implementation of library project creation.
+pub fn try_create_lib_project(name: &str, no_git: bool) -> io::Result<()> {
+    let toml = format!(
+        r#"[project]
+name = "{}"
+rl-version = "{}"
+version = "0.0.1"
+entry = "src/lib.rl"
+
+[dependencies]
+"#,
+        name,
+        env!("CARGO_PKG_VERSION"),
+    );
+    let lib_rl = r#"# library entry point
+"#;
+    std::fs::create_dir(name)?;
+    std::fs::create_dir(format!("{}/src", name))?;
+    std::fs::write(format!("{}/rl.toml", name), toml)?;
+    std::fs::write(format!("{}/src/lib.rl", name), lib_rl)?;
+    std::fs::write(format!("{}/.gitignore", name), "deps/\n")?;
     if !no_git {
         std::process::Command::new("git")
             .args(["init", name])

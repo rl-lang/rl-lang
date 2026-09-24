@@ -18,191 +18,44 @@ on:
 
 jobs:
   build:
-    name: Build ${{ matrix.target }}-${{ matrix.group }}
+    name: Build ${{ matrix.platform }}-${{ matrix.arch }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          # g1 variants
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             platform: linux
             arch: x86_64
-            group: g1
-            variants: "rl,rl_no_docs,rl_no_repl,rl_no_docs_repl,rl_debug,rl_debug_no_docs"
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
-            platform: windows
-            arch: x86_64
-            group: g1
-            variants: "rl,rl_no_docs,rl_no_repl,rl_no_docs_repl,rl_debug,rl_debug_no_docs"
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
             platform: linux
             arch: aarch64
-            group: g1
-            variants: "rl,rl_no_docs,rl_no_repl,rl_no_docs_repl,rl_debug,rl_debug_no_docs"
-          - target: aarch64-pc-windows-msvc
-            os: windows-latest
-            platform: windows
-            arch: aarch64
-            group: g1
-            variants: "rl,rl_no_docs,rl_no_repl,rl_no_docs_repl,rl_debug,rl_debug_no_docs"
-          - target: aarch64-linux-android
-            os: ubuntu-latest
-            platform: android
-            arch: aarch64
-            group: g1
-            variants: "rl,rl_no_docs,rl_no_repl,rl_no_docs_repl,rl_debug,rl_debug_no_docs"
-          - target: x86_64-apple-darwin
-            os: macos-latest
-            platform: macos
-            arch: x86_64
-            group: g1
-            variants: "rl,rl_no_docs,rl_no_repl,rl_no_docs_repl,rl_debug,rl_debug_no_docs"
-          - target: aarch64-apple-darwin
-            os: macos-latest
-            platform: macos
-            arch: aarch64
-            group: g1
-            variants: "rl,rl_no_docs,rl_no_repl,rl_no_docs_repl,rl_debug,rl_debug_no_docs"
-
-          # g2 variants
-          - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
-            platform: linux
-            arch: x86_64
-            group: g2
-            variants: "rl_debug_no_repl,rl_debug_no_docs_repl,rl_vm,rl_vm_no_docs,rl_vm_no_repl,rl_vm_no_docs_repl"
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             platform: windows
             arch: x86_64
-            group: g2
-            variants: "rl_debug_no_repl,rl_debug_no_docs_repl,rl_vm,rl_vm_no_docs,rl_vm_no_repl,rl_vm_no_docs_repl"
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
-            platform: linux
-            arch: aarch64
-            group: g2
-            variants: "rl_debug_no_repl,rl_debug_no_docs_repl,rl_vm,rl_vm_no_docs,rl_vm_no_repl,rl_vm_no_docs_repl"
           - target: aarch64-pc-windows-msvc
             os: windows-latest
             platform: windows
             arch: aarch64
-            group: g2
-            variants: "rl_debug_no_repl,rl_debug_no_docs_repl,rl_vm,rl_vm_no_docs,rl_vm_no_repl,rl_vm_no_docs_repl"
-          - target: aarch64-linux-android
-            os: ubuntu-latest
-            platform: android
-            arch: aarch64
-            group: g2
-            variants: "rl_debug_no_repl,rl_debug_no_docs_repl,rl_vm,rl_vm_no_docs,rl_vm_no_repl,rl_vm_no_docs_repl"
           - target: x86_64-apple-darwin
             os: macos-latest
             platform: macos
             arch: x86_64
-            group: g2
-            variants: "rl_debug_no_repl,rl_debug_no_docs_repl,rl_vm,rl_vm_no_docs,rl_vm_no_repl,rl_vm_no_docs_repl"
           - target: aarch64-apple-darwin
             os: macos-latest
             platform: macos
             arch: aarch64
-            group: g2
-            variants: "rl_debug_no_repl,rl_debug_no_docs_repl,rl_vm,rl_vm_no_docs,rl_vm_no_repl,rl_vm_no_docs_repl"
-
-          # g3 variants
-          - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
-            platform: linux
-            arch: x86_64
-            group: g3
-            variants: "rl_vm_debug,rl_vm_debug_no_docs,rl_vm_debug_no_repl,rl_vm_debug_no_docs_repl"
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
-            platform: windows
-            arch: x86_64
-            group: g3
-            variants: "rl_vm_debug,rl_vm_debug_no_docs,rl_vm_debug_no_repl,rl_vm_debug_no_docs_repl"
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
-            platform: linux
-            arch: aarch64
-            group: g3
-            variants: "rl_vm_debug,rl_vm_debug_no_docs,rl_vm_debug_no_repl,rl_vm_debug_no_docs_repl"
-          - target: aarch64-pc-windows-msvc
-            os: windows-latest
-            platform: windows
-            arch: aarch64
-            group: g3
-            variants: "rl_vm_debug,rl_vm_debug_no_docs,rl_vm_debug_no_repl,rl_vm_debug_no_docs_repl"
           - target: aarch64-linux-android
             os: ubuntu-latest
             platform: android
             arch: aarch64
-            group: g3
-            variants: "rl_vm_debug,rl_vm_debug_no_docs,rl_vm_debug_no_repl,rl_vm_debug_no_docs_repl"
-          - target: x86_64-apple-darwin
-            os: macos-latest
-            platform: macos
-            arch: x86_64
-            group: g3
-            variants: "rl_vm_debug,rl_vm_debug_no_docs,rl_vm_debug_no_repl,rl_vm_debug_no_docs_repl"
-          - target: aarch64-apple-darwin
-            os: macos-latest
-            platform: macos
-            arch: aarch64
-            group: g3
-            variants: "rl_vm_debug,rl_vm_debug_no_docs,rl_vm_debug_no_repl,rl_vm_debug_no_docs_repl"
-
-          # g4 variants
-          - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
-            platform: linux
-            arch: x86_64
-            group: g4
-            variants: "rl_lsp"
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
-            platform: windows
-            arch: x86_64
-            group: g4
-            variants: "rl_lsp"
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
-            platform: linux
-            arch: aarch64
-            group: g4
-            variants: "rl_lsp"
-          - target: aarch64-pc-windows-msvc
-            os: windows-latest
-            platform: windows
-            arch: aarch64
-            group: g4
-            variants: "rl_lsp"
-          - target: aarch64-linux-android
-            os: ubuntu-latest
-            platform: android
-            arch: aarch64
-            group: g4
-            variants: "rl_lsp"
-          - target: x86_64-apple-darwin
-            os: macos-latest
-            platform: macos
-            arch: x86_64
-            group: g4
-            variants: "rl_lsp"
-          - target: aarch64-apple-darwin
-            os: macos-latest
-            platform: macos
-            arch: aarch64
-            group: g4
-            variants: "rl_lsp"
 
     runs-on: ${{ matrix.os }}
     env:
       SCCACHE_GHA_ENABLED: "true"
-      SCCACHE_GHA_CACHE_TAG: rl-v1-${{ matrix.target }}-${{ matrix.group }}
+      SCCACHE_GHA_CACHE_TAG: rl-v2-${{ matrix.target }}
       RUSTC_WRAPPER: "sccache"
       RL_BUILD_PROFILE: ${{ inputs.build-profile }}
     steps:
@@ -273,7 +126,7 @@ jobs:
       - name: Start sccache
         uses: mozilla/sccache-action@v0.0.11
 
-      - name: Build variants (${{ matrix.group }})
+      - name: Build all binaries
         shell: bash
         run: |
           if [ "${{ matrix.platform }}" = "android" ]; then
@@ -297,7 +150,7 @@ jobs:
             export PKG_CONFIG_LIBDIR=/usr/lib/aarch64-linux-gnu/pkgconfig
             export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
           fi
-          bash build-variants.sh ${{ matrix.target }} ${{ matrix.platform }} ${{ matrix.arch }} dist "${{ matrix.variants }}"
+          bash build-variants.sh ${{ matrix.target }} ${{ matrix.platform }} ${{ matrix.arch }} dist
 
       - name: Generate checksums
         shell: bash
@@ -311,7 +164,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.target }}-${{ matrix.group }}
+          name: ${{ matrix.platform }}-${{ matrix.arch }}
           path: dist/*
 
   collect:

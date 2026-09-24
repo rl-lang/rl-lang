@@ -59,9 +59,13 @@ impl TypeChecker {
             errors: Vec::new(),
             warnings: Vec::new(),
             return_type_stack: Vec::new(),
+            inferred_return_stack: Vec::new(),
+            last_expr_type: None,
+            saw_propagate: false,
             loop_depth: 0,
             stdlib_fn_names,
             imported_std_fns: HashMap::new(),
+            imported_std_paths: HashMap::new(),
             hovers: Vec::new(),
             definitions: Vec::new(),
             record_spans: HashMap::new(),
@@ -87,6 +91,20 @@ impl TypeChecker {
             vec!["std".into(), "array".into(), "len".into()],
             "use std::len instead".into(),
         );
+        // std::rl metaprogramming is deprecated
+        for name in [
+            "lex",
+            "eval",
+            "eval_isolated",
+            "check",
+            "rl_version",
+            "source_name",
+        ] {
+            m.insert(
+                vec!["std".into(), "rl".into(), name.into()],
+                "std::rl is deprecated and may be removed in a future version".into(),
+            );
+        }
         // fs reorg: io file ops -> fs
         m.insert(
             vec!["std".into(), "io".into(), "read_file".into()],
@@ -197,12 +215,17 @@ impl TypeChecker {
 
     // runs check on every ast statement in the list and returns errors as list
     pub fn check(&mut self, statements: &[Statement]) -> &[Error] {
-        for ProgramAttribute::Convert {
-            symbol,
-            factor,
-            base_symbol,
-        } in &self.ast_arena.program_attributes
-        {
+        for attr in &self.ast_arena.program_attributes {
+            // Custom `define` markers need no checker setup; only unit
+            // conversions register here.
+            let ProgramAttribute::Convert {
+                symbol,
+                factor,
+                base_symbol,
+            } = attr
+            else {
+                continue;
+            };
             self.conversions.insert(symbol, *factor, base_symbol);
         }
         for statement in statements {
@@ -262,6 +285,35 @@ impl TypeChecker {
         for statement in statements {
             self.check_statement(statement);
         }
+        // Deprecation warnings for type alias uses, recorded by the
+        // parser as it substituted. Honors `!#[allow(deprecated)]`
+        // like every other deprecation site. Cloned first: warnings
+        // need `&mut self` while the table is borrowed.
+        let alias_uses = self.ast_arena.alias_uses.clone();
+        let alias_attrs = self.ast_arena.type_alias_attrs.clone();
+        for (name, span) in &alias_uses {
+            let deprecated = alias_attrs.get(name).and_then(|attrs| {
+                attrs.iter().find_map(|attr| match attr {
+                    rl_ast::statements::ItemAttribute::Deprecated(msg) => Some(msg.clone()),
+                    _ => None,
+                })
+            });
+            if let Some(msg) = deprecated {
+                let text = match msg.as_deref() {
+                    Some(m) if !m.is_empty() => {
+                        format!("type alias `{name}` is deprecated: {m}")
+                    }
+                    _ => format!("type alias `{name}` is deprecated"),
+                };
+                if !self
+                    .allow_stack
+                    .last()
+                    .is_some_and(|s| s.contains(&rl_ast::statements::Lint::Deprecated))
+                {
+                    self.warn_lint(rl_ast::statements::Lint::Deprecated, text, *span);
+                }
+            }
+        }
         self.report_unused_in_root_scope();
         &self.errors
     }
@@ -274,10 +326,28 @@ impl TypeChecker {
     /// Emits a warning only if the given `lint` is not suppressed by an
     /// enclosing `!#[allow(...)]` attribute.
     pub fn warn_lint(&mut self, lint: Lint, message: impl Into<String>, span: Span) {
+        self.warn_lint_at(lint, message, span, None);
+    }
+
+    /// Like [`TypeChecker::warn_lint`], but the diagnostic is attributed
+    /// to `origin` instead of the current file. Used for deferred
+    /// diagnostics (e.g. unused bindings) declared in another file.
+    pub fn warn_lint_at(
+        &mut self,
+        lint: Lint,
+        message: impl Into<String>,
+        span: Span,
+        origin: Option<&SourceFile>,
+    ) {
         let suppressed = self.allow_stack.iter().any(|set| set.contains(&lint));
-        if !suppressed {
-            self.warn(message, span);
+        if suppressed {
+            return;
         }
+        let mut err = self.err(message.into(), span);
+        if let Some(file) = origin {
+            err = err.with_source_file(file);
+        }
+        self.warnings.push(err.as_warning());
     }
 
     // transforms arguments into Error type
@@ -326,10 +396,15 @@ impl TypeChecker {
         };
 
         let text = match find_fn_doc(module, fn_name).or_else(|| find_fn_doc(None, fn_name)) {
-            Some((std_entry, func)) => format!(
-                "```rl\nstd::{}::{}\n```\n{}",
-                std_entry.name, func.signature, func.description
-            ),
+            Some((std_entry, func)) => {
+                // `core` is top-level, not under `std::`.
+                let path = if std_entry.name == "core" {
+                    format!("core::{}", func.signature)
+                } else {
+                    format!("std::{}::{}", std_entry.name, func.signature)
+                };
+                format!("```rl\n{}\n```\n{}", path, func.description)
+            }
             None => format!("```rl\nfn {}(..)\n```\nstdlib function", fn_name),
         };
 

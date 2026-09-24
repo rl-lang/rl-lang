@@ -127,3 +127,48 @@ impl<R: Runtime, T: IntoValueR<R> + ValueType> IntoValueR<R> for Vec<T> {
         R::array(self.into_iter().map(IntoValueR::into_value).collect(), elem)
     }
 }
+
+/// Byte-array extraction with integer-literal tolerance. There is no byte
+/// literal syntax, so `[104, 105]` must work for `array[byte]` params:
+/// `Byte` elements pass through, `Int` elements in 0-255 coerce, anything
+/// else (or out of range) is a loud runtime type error via the wrapper's
+/// `R::error`. Mirrors the numeric leniency already in `as_f64`, scoped
+/// to whole-array extraction so scalar `as_u8` dispatch (bitwise, `c`)
+/// stays strict.
+pub struct Bytes(pub Vec<u8>);
+
+impl ValueType for Bytes {
+    fn type_annotation() -> TypeAnnotation {
+        TypeAnnotation::Array(Box::new(TypeAnnotation::Byte))
+    }
+}
+impl<R: Runtime> FromValueR<R> for Bytes {
+    fn from_value(v: R::Value) -> Result<Self, R::Value> {
+        let items = match R::as_array(&v) {
+            Some((items, _)) => items.to_vec(),
+            None => return Err(v),
+        };
+        let mut out = Vec::with_capacity(items.len());
+        for item in items {
+            if let Some(b) = R::as_u8(&item) {
+                out.push(b);
+            } else if let Some(i) = R::as_i64(&item) {
+                match u8::try_from(i) {
+                    Ok(b) => out.push(b),
+                    Err(_) => return Err(v),
+                }
+            } else {
+                return Err(v);
+            }
+        }
+        Ok(Bytes(out))
+    }
+}
+impl<R: Runtime> IntoValueR<R> for Bytes {
+    fn into_value(self) -> R::Value {
+        R::array(
+            self.0.into_iter().map(R::from_u8).collect(),
+            TypeAnnotation::Byte,
+        )
+    }
+}

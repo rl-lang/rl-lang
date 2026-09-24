@@ -1,6 +1,6 @@
 //! Double-quoted string literal scanner.
 //!
-//! Consumes everything between `"…"`, handling escape sequences, and emits
+//! Consumes everything between `"..."`, handling escape sequences, and emits
 //! [`TokenType::StringLiteral`].
 use crate::{tokenizer::Tokenizer, tokentypes::TokenType};
 use rl_utils::errors::Error;
@@ -24,7 +24,7 @@ impl Tokenizer {
     /// | `\f`       | form feed            |
     /// | `\v`       | vertical tab         |
     /// | `\e`       | escape (ESC)         |
-    /// | `\xHH`     | hex byte (1–2 digits)|
+    /// | `\xHH`     | hex byte (1-2 digits)|
     /// | `\uHHHH`   | unicode (4 digits)   |
     /// | `\u{HHHH}` | unicode (braced)     |
     ///

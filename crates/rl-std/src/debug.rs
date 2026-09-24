@@ -445,6 +445,27 @@ pub fn dbg<R: Runtime>(cx: &mut R::Cx, value: R::Value) -> R::Value {
     value
 }
 
+// ---- warn / stack_trace ---------------------------------------------------
+
+#[native_fn(module = "debug", sig(string -> null))]
+pub fn warn<R: Runtime>(cx: &mut R::Cx, msg: String) -> R::Value {
+    let text = format!("\x1b[33m[warn]\x1b[0m {}\n", msg);
+
+    if let Some(buffer) = R::output_buffer(cx) {
+        buffer.push_str(&text);
+    } else {
+        eprint!("{}", text);
+    }
+
+    R::null()
+}
+
+#[native_fn(module = "debug", sig( -> string))]
+pub fn stack_trace() -> String {
+    let bt = std::backtrace::Backtrace::force_capture();
+    bt.to_string()
+}
+
 #[native_fn(module = "debug", sig(fn, int -> result[float]))]
 pub fn bench<R: Runtime>(
     cx: &mut R::Cx,
@@ -488,5 +509,6 @@ rl_std_core::native_module!("debug";
         assert_approx_eq,
         panic, unreachable, todo,
         dbg, type_of, bench,
+        warn, stack_trace,
     ],
 );

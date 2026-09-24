@@ -79,4 +79,17 @@ impl Xoshiro256 {
     pub fn generate_random_bool(&mut self, weight: f64) -> bool {
         self.generate_random_float() < weight.clamp(0.0, 1.0)
     }
+
+    /// Re-seeds the PRNG from a single `u64` value.
+    pub fn reseed(&mut self, seed: u64) {
+        let mut state = [0u64; 4];
+        let mut x = seed;
+        for i in &mut state {
+            x = x.wrapping_add(0x9e3779b97f4a7c15);
+            x = (x ^ (x >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
+            x = (x ^ (x >> 27)).wrapping_mul(0x94d049bb133111eb);
+            *i = x ^ (x >> 31);
+        }
+        self.state = state;
+    }
 }

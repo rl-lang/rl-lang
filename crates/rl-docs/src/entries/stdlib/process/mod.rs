@@ -8,6 +8,7 @@ mod env_keys;
 mod exec;
 mod exec_background;
 mod exec_code;
+mod exec_fg;
 mod exec_lines;
 mod exec_with_cwd;
 mod exec_with_env;
@@ -31,6 +32,7 @@ mod wait_pid;
 mod with_exec;
 mod with_exec_background;
 mod with_exec_code;
+mod with_exec_fg;
 mod with_exec_lines;
 mod with_exec_with_cwd;
 mod with_exec_with_env;
@@ -53,6 +55,7 @@ static FUNCTIONS: &[&FnEntry] = &[
     &exec::EXEC,
     &exec_background::EXEC_BACKGROUND,
     &exec_code::EXEC_CODE,
+    &exec_fg::EXEC_FG,
     &exec_lines::EXEC_LINES,
     &exec_with_cwd::EXEC_WITH_CWD,
     &exec_with_env::EXEC_WITH_ENV,
@@ -76,6 +79,7 @@ static FUNCTIONS: &[&FnEntry] = &[
     &with_exec::WITH_EXEC,
     &with_exec_background::WITH_EXEC_BACKGROUND,
     &with_exec_code::WITH_EXEC_CODE,
+    &with_exec_fg::WITH_EXEC_FG,
     &with_exec_lines::WITH_EXEC_LINES,
     &with_exec_with_cwd::WITH_EXEC_WITH_CWD,
     &with_exec_with_env::WITH_EXEC_WITH_ENV,

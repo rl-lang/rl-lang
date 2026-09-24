@@ -152,10 +152,57 @@ pub fn result_map_err<R: Runtime>(
     }
 }
 
+// ---- chaining (fallible callbacks) ----------------------------------------
+
+#[native_fn(module = "res", untyped)]
+pub fn result_and_then<R: Runtime>(
+    cx: &mut R::Cx,
+    value: R::Value,
+    f: R::Value,
+    span: R::Span,
+) -> R::Value {
+    if let Some(inner) = R::as_ok_inner(&value) {
+        match R::call_value(cx, &f, &[inner], span) {
+            Ok(mapped) => mapped,
+            Err(e) => R::err(R::from_string(e.message().to_string())),
+        }
+    } else if R::as_err_inner(&value).is_some() {
+        value
+    } else {
+        R::err(R::from_string(format!(
+            "result_and_then: expected result, got {}",
+            R::type_name(&value)
+        )))
+    }
+}
+
+#[native_fn(module = "res", untyped)]
+pub fn result_unwrap_or_else<R: Runtime>(
+    cx: &mut R::Cx,
+    value: R::Value,
+    f: R::Value,
+    span: R::Span,
+) -> R::Value {
+    if let Some(inner) = R::as_ok_inner(&value) {
+        inner
+    } else if let Some(err) = R::as_err_inner(&value) {
+        match R::call_value(cx, &f, &[err], span) {
+            Ok(default) => default,
+            Err(e) => R::err(R::from_string(e.message().to_string())),
+        }
+    } else {
+        R::err(R::from_string(format!(
+            "result_unwrap_or_else: expected result, got {}",
+            R::type_name(&value)
+        )))
+    }
+}
+
 rl_std_core::native_module!("res";
     funcs: [
         is_ok, is_err,
         result_unwrap, result_unwrap_err, result_unwrap_or,
         result_map, result_map_err,
+        result_and_then, result_unwrap_or_else,
     ],
 );

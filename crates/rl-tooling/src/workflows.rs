@@ -22,6 +22,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install dependencies
+        run: rl pm install
+
       - name: Run RL check
         uses: rl-lang/rl-check@main
         with:
@@ -42,7 +45,13 @@ jobs:
           - { path: src/main.rl, name: program }
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: rl-lang/rl-package@main
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: rl pm install
+
+      - name: Package
+        uses: rl-lang/rl-package@main
         with:
           file: ${{ matrix.file.path }}
           output: ${{ matrix.file.name }}

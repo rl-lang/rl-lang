@@ -166,15 +166,35 @@ fn bundle_inner(path: &Path, visited: &mut HashSet<PathBuf>) -> std::io::Result<
             // only inline local files, not std::
             if !file_part.contains("::") {
                 let rel: PathBuf = file_part.split('/').collect();
-                let file_path = base_dir.join(rel).with_extension("rl");
-                match bundle_inner(&file_path, visited) {
-                    Ok(inlined) => {
-                        output.push_str(&inlined);
-                        output.push('\n');
-                        continue;
+
+                // try direct file first
+                let file_path = base_dir.join(rel.clone()).with_extension("rl");
+                if file_path.exists() {
+                    match bundle_inner(&file_path, visited) {
+                        Ok(inlined) => {
+                            output.push_str(&inlined);
+                            output.push('\n');
+                            continue;
+                        }
+                        Err(e) => {
+                            eprintln!("warning: could not bundle '{}': {}", file_path.display(), e);
+                        }
                     }
-                    Err(e) => {
-                        eprintln!("warning: could not bundle '{}': {}", file_path.display(), e);
+                }
+
+                // try deps/ directory
+                let first = file_part.split('/').next().unwrap_or(file_part);
+                let dep_path = base_dir.join("deps").join(first).join("lib.rl");
+                if dep_path.exists() {
+                    match bundle_inner(&dep_path, visited) {
+                        Ok(inlined) => {
+                            output.push_str(&inlined);
+                            output.push('\n');
+                            continue;
+                        }
+                        Err(e) => {
+                            eprintln!("warning: could not bundle dependency '{}': {}", first, e);
+                        }
                     }
                 }
             }

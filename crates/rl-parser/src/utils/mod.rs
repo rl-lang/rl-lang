@@ -213,7 +213,18 @@ impl Parser {
                 self.advance();
                 Ok(TypeAnnotation::Null)
             }
+            // `handle` placeholder, mirroring `parse_type`: unifies with
+            // any concrete `Handle(kind)` at check time.
+            TokenType::Handle => {
+                self.advance();
+                Ok(TypeAnnotation::HandleInfer)
+            }
 
+            TokenType::Identifier(name) if name == "any" => {
+                self.advance();
+                let members = self.parse_any_members()?;
+                Ok(TypeAnnotation::Any(Rc::new(members)))
+            }
             TokenType::Identifier(name) => {
                 self.advance();
                 if self.tag_names.contains(&name) {

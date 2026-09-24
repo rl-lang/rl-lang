@@ -16,7 +16,7 @@ pub static FUNCTIONS: ConceptEntry = ConceptEntry {
         DescriptionEntry {
             kind: DescriptionKind::Syntax,
             title: Some("return type and return"),
-            description: "specify a return type with `-> <type>` and use `return` to return a value",
+            description: "specify a return type with `-> <type>` and use `return` to return a value. Omit `->` and the return type is inferred from the body instead, so any type - `handle`, records, tags, results - flows through calls",
             examples: &[
                 "fn add(int a, int b) -> int {\n    return a + b\n}\n\ndec int res = add(3, 4)  // 7",
             ],
@@ -32,13 +32,22 @@ pub static FUNCTIONS: ConceptEntry = ConceptEntry {
             expected_output: &["10"],
         },
         DescriptionEntry {
-            kind: DescriptionKind::Pitfall,
-            title: Some("no implicit last-expression return"),
-            description: "the final line of a function body isn't returned unless it's written explicitly with `return` - unlike languages where the last expression is the implicit return value, leaving off `return` here just discards it and the function returns `null`",
+            kind: DescriptionKind::Explanation,
+            title: Some("trailing expression is returned"),
+            description: "a body ending with a bare expression returns its value, exactly like an explicit `return` - the checker infers the undeclared return type from it on both the VM and compiled backends",
             examples: &[
-                "fn add(int a, int b) {\n    a + b  // never returned\n}\n\nprintln(add(2, 3))  // null",
+                "fn add(int a, int b) {\n    a + b\n}\n\nprintln(add(2, 3))  // 5",
             ],
-            expected_output: &["null"],
+            expected_output: &["5"],
+        },
+        DescriptionEntry {
+            kind: DescriptionKind::Explanation,
+            title: Some("`?` in the body means a result return"),
+            description: "a body using `?` can return `err`, so the inferred return type is wrapped in `result` - `fn grab(string p) { read_file(p)? }` infers `result[string]`, mirroring a `-> result[string]` annotation",
+            examples: &[
+                "fn grab(string p) { read_file(p)? }\n\ndec s = grab(\"data.txt\")?  // unwrapped string",
+            ],
+            expected_output: &[],
         },
         DescriptionEntry {
             kind: DescriptionKind::Pitfall,
@@ -49,8 +58,8 @@ pub static FUNCTIONS: ConceptEntry = ConceptEntry {
         },
     ],
     pitfalls: &[
-        "the last line of a function body isn't implicitly returned - it needs an explicit `return`, or the function returns `null`",
         "a variable holding a function uses the plain `fn` type, which doesn't capture the function's parameter or return types",
+        "an undeclared return type is only inferred when every `return` (or the trailing expression) agrees on one concrete type - mixed returns stay `null`-typed",
     ],
     related: &["lambdas", "types", "result", "null"],
     related_stdlib: &[],

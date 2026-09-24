@@ -63,7 +63,18 @@ impl Resolver {
         path: &[String],
     ) -> Option<(std::path::PathBuf, std::path::PathBuf, Vec<Statement>)> {
         let import_name = format!("{}.rl", path.join("/"));
-        let file_path = self.current_dir.join(&import_name);
+        let mut file_path = self.current_dir.join(&import_name);
+
+        // try direct file first, then deps/
+        if !file_path.exists() {
+            let first = path.first()?;
+            let dep_path = self.current_dir.join("deps").join(first).join("lib.rl");
+            if dep_path.exists() {
+                file_path = dep_path;
+            } else {
+                return None;
+            }
+        }
         let canonical = file_path
             .canonicalize()
             .unwrap_or_else(|_| file_path.clone());

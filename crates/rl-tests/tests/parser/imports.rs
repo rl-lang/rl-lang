@@ -80,3 +80,48 @@ fn import_file_path() {
         span_whole(source),
     );
 }
+
+#[test]
+fn import_wildcard() {
+    let source = "get * from std::math";
+    assert_stmt!(
+        source,
+        StatementKind::Import {
+            names: vec![],
+            wildcard: true,
+            path: vec!["std".to_string(), "math".to_string()],
+        },
+        span_whole(source),
+    );
+}
+
+#[test]
+fn import_aliased() {
+    let source = "get sin as sine from std::math";
+    assert_stmt!(
+        source,
+        StatementKind::Import {
+            names: vec![("sin".to_string(), Some("sine".to_string()))],
+            wildcard: false,
+            path: vec!["std".to_string(), "math".to_string()],
+        },
+        span_whole(source),
+    );
+}
+
+#[test]
+fn import_mixed_alias_and_plain() {
+    let source = "get sin as sine, cos from std::math";
+    assert_stmt!(
+        source,
+        StatementKind::Import {
+            names: vec![
+                ("sin".to_string(), Some("sine".to_string())),
+                ("cos".to_string(), None),
+            ],
+            wildcard: false,
+            path: vec!["std".to_string(), "math".to_string()],
+        },
+        span_whole(source),
+    );
+}

@@ -60,8 +60,20 @@ enum Child<'a> {
 
 fn stmt_summary(kind: &StatementKind, arena: &Arena<Expression>) -> String {
     match kind {
-        StatementKind::Import { names, path } =>
-            format!("Import [{}] from {}", names.join(", "), path.join("::")),
+        StatementKind::Import { names, wildcard, path } => {
+            if *wildcard {
+                format!("Import * from {}", path.join("::"))
+            } else {
+                let display: Vec<String> = names
+                    .iter()
+                    .map(|(name, alias)| match alias {
+                        Some(a) => format!("{name} as {a}"),
+                        None => name.clone(),
+                    })
+                    .collect();
+                format!("Import [{}] from {}", display.join(", "), path.join("::"))
+            }
+        }
         StatementKind::ImportFile { path } =>
             format!("ImportFile \"{}\"", path.join("::")),
         StatementKind::VariableDeclaration { name, type_annotation, value, .. } => {
@@ -101,6 +113,8 @@ fn stmt_summary(kind: &StatementKind, arena: &Arena<Expression>) -> String {
         }
         StatementKind::TagDeclaration { name, variants } =>
             format!("tag {} {{ {} }}", name, variants.join(", ")),
+        StatementKind::TypeAlias { name, target, .. } =>
+            format!("type {} {:?}", name, target),
         StatementKind::ImplBlock { record, .. } =>
             format!("impl {}", record),
         StatementKind::ResolvedImplBlock { record, .. } =>
@@ -400,6 +414,10 @@ fn fmt_type(t: &TypeAnnotation) -> String {
         TypeAnnotation::Enum(name) => name.clone(),
         TypeAnnotation::CEnum(name) => name.clone(),
         TypeAnnotation::Generic(name) => format!("<{}>", name),
+        TypeAnnotation::Any(members) | TypeAnnotation::CAny(members) => {
+            let s: Vec<String> = members.iter().map(fmt_type).collect();
+            format!("any[{}]", s.join(", "))
+        }
         TypeAnnotation::Callback(params, ret) => {
             let p: Vec<String> = params.iter().map(fmt_type).collect();
             format!("fn({}) -> {}", p.join(", "), fmt_type(ret))

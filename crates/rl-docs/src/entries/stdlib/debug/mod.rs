@@ -11,9 +11,11 @@ mod assert_ne;
 mod bench;
 mod dbg;
 mod panic;
+mod stack_trace;
 mod todo;
 mod type_of;
 mod unreachable;
+mod warn;
 
 use assert::ASSERT;
 use assert_approx_eq::ASSERT_APPROX_EQ;
@@ -26,9 +28,11 @@ use assert_ne::ASSERT_NE;
 use bench::BENCH;
 use dbg::DBG;
 use panic::PANIC;
+use stack_trace::STACK_TRACE;
 use todo::TODO;
 use type_of::TYPE_OF;
 use unreachable::UNREACHABLE;
+use warn::WARN;
 
 pub static DEBUG: StdEntry = StdEntry {
     name: "debug",
@@ -50,7 +54,9 @@ static FUNCTIONS: &[&FnEntry] = &[
     &BENCH,
     &DBG,
     &PANIC,
+    &STACK_TRACE,
     &TODO,
     &TYPE_OF,
     &UNREACHABLE,
+    &WARN,
 ];

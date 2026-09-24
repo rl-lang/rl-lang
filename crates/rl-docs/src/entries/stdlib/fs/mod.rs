@@ -1,8 +1,10 @@
 use crate::entry::{FnEntry, StdEntry};
 
 mod append_file;
+mod copy_dir;
 mod copy_file;
 mod delete_file;
+mod dir_size;
 mod file_accessed;
 mod file_created;
 mod file_modified;
@@ -10,6 +12,7 @@ mod file_permissions;
 mod file_size;
 mod glob;
 mod hardlink;
+mod is_symlink;
 mod list_dir;
 mod list_dir_names;
 mod lock_file;
@@ -51,8 +54,10 @@ pub static FS: StdEntry = StdEntry {
 
 static FUNCTIONS: &[&FnEntry] = &[
     &append_file::APPEND_FILE,
+    &copy_dir::COPY_DIR,
     &copy_file::COPY_FILE,
     &delete_file::DELETE_FILE,
+    &dir_size::DIR_SIZE,
     &file_accessed::FILE_ACCESSED,
     &file_created::FILE_CREATED,
     &file_modified::FILE_MODIFIED,
@@ -60,6 +65,7 @@ static FUNCTIONS: &[&FnEntry] = &[
     &file_size::FILE_SIZE,
     &glob::GLOB,
     &hardlink::HARDLINK,
+    &is_symlink::IS_SYMLINK,
     &list_dir::LIST_DIR,
     &list_dir_names::LIST_DIR_NAMES,
     &lock_file::LOCK_FILE,

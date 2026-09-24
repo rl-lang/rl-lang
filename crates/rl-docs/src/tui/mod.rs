@@ -1,8 +1,7 @@
 //! Interactive TUI docs viewer for `rl docs --tui`.
 //!
-//! Renders the same stdlib / concept / tutorial entries used by
-//! [`crate::std_to_markdown`] and friends, but as a browsable, filterable
-//! two-pane app instead of a flat Markdown dump.
+//! Renders stdlib / concept / tutorial entries as a collapsible tree sidebar
+//! with a scrollable content pane.
 //!
 //! # Layout
 //!
@@ -10,10 +9,14 @@
 //! |----------------------|--------------------------------------|
 //! |  search               |                                      |
 //! |----------------------|   content (scrollable, styled from    |
-//! |  [std] io             |   the selected entry's Markdown)      |
-//! |  [std] math            |                                      |
-//! |  [concept] arrays      |                                      |
-//! |  [tutorial] step 1     |                                      |
+//! |  ▼ std Reference      |   the selected entry's Markdown)      |
+//! |    ▶ std::math         |                                      |
+//! |    std::io             |                                      |
+//! |  ▼ Concepts            |                                      |
+//! |    ▶ Syntax             |                                      |
+//! |    ▶ Types              |                                      |
+//! |  ▼ Tutorial            |                                      |
+//! |    ▶ Beginner           |                                      |
 //! |----------------------|--------------------------------------|
 //! |  footer / key hints                                          |
 //! |----------------------------------------------------------------|
@@ -26,6 +29,8 @@
 //! | `/`                                     | focus the search box         |
 //! | `Enter` / `Esc` (while searching)       | back to the list             |
 //! | `↑`/`↓`, `k`/`j`                        | move selection               |
+//! | `Enter` / `→`                            | expand a group               |
+//! | `←`                                     | collapse a group / parent    |
 //! | `g` / `G`                               | jump to first / last entry   |
 //! | `PageUp`/`PageDown`, `Ctrl+u`/`Ctrl+d`   | scroll the content pane      |
 //! | `Esc` (list focused, search non-empty)  | clear the filter             |

@@ -1,5 +1,50 @@
 //! Static name lists for every `std::*` stdlib module.
 
+pub mod crypto {
+    pub const KEYWORDS: &[&str] = &[
+        "sha256",
+        "sha512",
+        "sha1",
+        "md5",
+        "hmac_sha256",
+        "hmac_sha512",
+        "constant_time_eq",
+        "secure_random_bytes",
+        "secure_token",
+        "secure_token_hex",
+        "secure_token_urlsafe",
+        "base64_encode",
+        "base64_decode",
+        "base64_url_encode",
+        "base64_url_decode",
+        "hex_encode",
+        "hex_decode",
+        "uuid_v4",
+        "uuid_v7",
+        "uuid_parse",
+        "password_hash",
+        "password_verify",
+    ];
+}
+
+pub mod cli {
+    pub const KEYWORDS: &[&str] = &[
+        "parse_args",
+        "parse_args_or_exit",
+        "usage_string",
+        "prompt",
+        "prompt_password",
+        "prompt_confirm",
+        "prompt_choice",
+        "shell_split",
+        "shell_join",
+        "read_line_editable",
+        "read_line_with_history",
+        "progress_bar",
+        "spinner_tick",
+    ];
+}
+
 pub mod audio {
     pub const KEYWORDS: &[&str] = &[
         "play_file",
@@ -59,6 +104,14 @@ pub mod array {
         "arr_flat_map",
         "arr_for_each",
         "arr_zip",
+        "arr_chunk",
+        "arr_windows",
+        "arr_swap",
+        "arr_partition",
+        "arr_max_by",
+        "arr_min_by",
+        "arr_zip_longest",
+        "arr_cycle_take",
     ];
 }
 
@@ -73,6 +126,12 @@ pub mod bitwise {
         "count_bits",
         "leading_zeros",
         "trailing_zeros",
+        "rotate_left",
+        "rotate_right",
+        "bit_set",
+        "bit_clear",
+        "bit_toggle",
+        "bit_is_set",
     ];
 }
 
@@ -92,6 +151,8 @@ pub mod debug {
         "dbg",
         "type_of",
         "bench",
+        "warn",
+        "stack_trace",
     ];
 }
 
@@ -137,6 +198,9 @@ pub mod fs {
         "path_canonicalize",
         "path_absolute",
         "path_expand_home",
+        "copy_dir",
+        "dir_size",
+        "is_symlink",
     ];
 }
 
@@ -263,6 +327,7 @@ pub mod random {
         "rand_bytes",
         "rand_char",
         "rand_string",
+        "rand_seed",
     ];
 }
 
@@ -275,6 +340,28 @@ pub mod result {
         "result_unwrap_or",
         "result_map",
         "result_map_err",
+        "result_and_then",
+        "result_unwrap_or_else",
+    ];
+}
+
+pub mod serialize {
+    pub const KEYWORDS: &[&str] = &[
+        "json_parse",
+        "json_stringify",
+        "json_stringify_pretty",
+        "json_is_valid",
+        "json_get",
+        "csv_parse",
+        "csv_parse_with_delimiter",
+        "csv_stringify",
+        "csv_parse_headers",
+        "toml_parse",
+        "toml_stringify",
+        "ini_parse",
+        "ini_stringify",
+        "yaml_parse",
+        "yaml_stringify",
     ];
 }
 
@@ -314,6 +401,19 @@ pub mod string {
         "count",
         "index_of",
         "format",
+        "strip_prefix",
+        "strip_suffix",
+        "last_index_of",
+        "split_once",
+        "lines",
+        "wrap",
+        "indent",
+        "dedent",
+        "diff_lines",
+        "is_alpha",
+        "is_numeric",
+        "is_whitespace",
+        "unicode_category",
     ];
 }
 
@@ -364,6 +464,7 @@ pub mod terminal {
         "term_disable_mouse",
         "term_read_key",
         "term_poll",
+        "term_get_cursor_pos",
     ];
 }
 
@@ -377,6 +478,7 @@ pub mod time {
         "time_add",
         "time_diff",
         "time_parts",
+        "monotonic_now",
     ];
 }
 
@@ -400,6 +502,24 @@ pub mod types {
         "error_unwrap",
         "to_byte",
         "is_byte",
+        "is_uint",
+        "is_sbyte",
+        "is_bsbyte",
+        "is_bbyte",
+        "is_sint",
+        "is_suint",
+        "is_sfloat",
+        "is_array",
+        "is_map",
+        "is_set",
+        "is_tuple",
+        "is_function",
+        "is_c_handle",
+        "is_net_handle",
+        "is_http_handle",
+        "is_audio_handle",
+        "is_gui_handle",
+        "is_file_handle",
     ];
 }
 
@@ -478,6 +598,12 @@ pub mod collections {
         "set_len",
         "set_remove",
         "set_to_array",
+        "set_union",
+        "set_intersection",
+        "set_difference",
+        "set_symmetric_difference",
+        "set_is_subset",
+        "set_is_superset",
         "map_contains",
         "map_remove",
         "map_len",
@@ -488,6 +614,16 @@ pub mod collections {
         "map_values",
         "map_clear",
         "map_merge",
+        "map_get_or",
+        "map_get_or_insert",
+        "heap_push",
+        "heap_pop",
+        "heap_peek",
+        "deque_push_front",
+        "deque_pop_front",
+        "bisect_left",
+        "bisect_right",
+        "sorted_insert",
     ];
 }
 
@@ -538,5 +674,11 @@ pub mod gui {
         "gui_run",
         "gui_close",
         "gui_quit",
+        "gui_set_font_size",
+        "gui_set_color",
+        "gui_set_bg_color",
+        "gui_set_tooltip",
+        "gui_get_window_size",
+        "gui_get_window_pos",
     ];
 }

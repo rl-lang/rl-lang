@@ -1,4 +1,74 @@
 use crate::checker::common::{assert_checker_clean, assert_checker_msg};
+use crate::common::check;
+
+fn assert_checker_warns(source: &str, fragment: &str) {
+    let checker = check(source);
+    assert!(
+        checker.errors.is_empty(),
+        "expected no errors, got: {:?}",
+        checker.errors.iter().map(|e| e.message().to_string()).collect::<Vec<_>>()
+    );
+    let warnings: Vec<String> = checker
+        .warnings
+        .iter()
+        .map(|e| e.message().to_string())
+        .collect();
+    assert!(
+        warnings.iter().any(|m| m.contains(fragment)),
+        "expected a warning containing {fragment:?}, got: {warnings:?}"
+    );
+}
+
+fn assert_no_warnings(source: &str) {
+    let checker = check(source);
+    let warnings: Vec<String> = checker
+        .warnings
+        .iter()
+        .map(|e| e.message().to_string())
+        .collect();
+    assert!(warnings.is_empty(), "expected no warnings, got: {warnings:?}");
+}
+
+#[test]
+fn imported_file_errors_carry_imported_name() {
+    use rl_checker::TypeChecker;
+    use rl_utils::source::SourceFile;
+
+    let dir = tempfile::tempdir().unwrap();
+    let lib_path = dir.path().join("lib.rl");
+    std::fs::write(&lib_path, "dec broken_thing = undefined_function_xyz()\n").unwrap();
+    let main_src = "get broken_thing from lib\n";
+
+    let file = SourceFile::new("main.rl", main_src.to_string());
+    let tokens = rl_lexer::tokenizer::Tokenizer::lex(file.clone()).expect("lex failed");
+    let (ast, stmts) =
+        rl_parser::parser_logic::Parser::parse(tokens, file.clone()).expect("parse failed");
+    let mut checker = TypeChecker::new()
+        .with_source_file(file)
+        .with_ast_arena(ast)
+        .with_base_dir(dir.path().to_path_buf());
+    checker.check(&stmts);
+
+    assert!(
+        !checker.errors.is_empty(),
+        "expected the imported error to surface"
+    );
+    let err = &checker.errors[0];
+    assert!(
+        err.message().contains("undefined_function_xyz"),
+        "unexpected error: {}",
+        err.message()
+    );
+    let name = err.source_name().expect("imported error needs a name");
+    assert!(
+        name.ends_with("lib.rl") && !name.ends_with("main.rl"),
+        "imported error must carry the imported file name, not main.rl (got {name})"
+    );
+    // the span must resolve inside the imported text (line 1), proving
+    // offsets were not mapped against the importing file
+    let text = err.source_text().expect("imported error needs its text");
+    assert!(text.contains("undefined_function_xyz"));
+}
 
 #[test]
 fn unimported_bare_call_errors() {
@@ -38,4 +108,96 @@ fn nested_module_import_passes() {
 #[test]
 fn fully_qualified_nested_path_passes() {
     assert_checker_clean("std::math::consts::is_inf(1.0)");
+}
+
+#[test]
+fn wildcard_import_passes() {
+    assert_checker_clean("get * from std::math\nabs(-5)");
+}
+
+#[test]
+fn aliased_import_passes() {
+    assert_checker_clean("get sin as sine from std::math\nsine(0.0)");
+}
+
+#[test]
+fn mixed_alias_and_plain_passes() {
+    assert_checker_clean("get sin as sine, cos from std::math\nsine(0.0)\ncos(0.0)");
+}
+
+#[test]
+fn deprecated_bare_call_warns() {
+    assert_checker_warns(
+        "get read_file from std::io\nread_file(\"x\")",
+        "'std::io::read_file' is deprecated: use std::fs::read_file instead",
+    );
+}
+
+#[test]
+fn deprecated_qualified_call_warns() {
+    assert_checker_warns(
+        "std::io::read_file(\"x\")",
+        "'std::io::read_file' is deprecated",
+    );
+}
+
+#[test]
+fn deprecated_alias_warns_with_canonical_path() {
+    assert_checker_warns(
+        "get read_file as rf from std::io\nrf(\"x\")",
+        "'std::io::read_file' is deprecated",
+    );
+}
+
+#[test]
+fn deprecated_wildcard_warns() {
+    assert_checker_warns(
+        "get * from std::io\nread_file(\"x\")",
+        "'std::io::read_file' is deprecated",
+    );
+}
+
+#[test]
+fn deprecated_method_call_warns() {
+    assert_checker_warns(
+        "get read_file from std::io\ndec string p = \"x\"\nread_file(p)",
+        "'std::io::read_file' is deprecated",
+    );
+}
+
+#[test]
+fn deprecated_allow_suppresses() {
+    let checker = crate::common::check(
+        "get read_file from std::io\n!#[allow(deprecated)]\nfn demo() -> null {\n    read_file(\"x\")\n}",
+    );
+    let warnings: Vec<String> = checker
+        .warnings
+        .iter()
+        .map(|e| e.message().to_string())
+        .collect();
+    assert!(
+        !warnings.iter().any(|m| m.contains("deprecated")),
+        "expected no deprecation warnings, got: {warnings:?}"
+    );
+}
+
+#[test]
+fn non_deprecated_import_silent() {
+    assert_no_warnings("get println from std::io\nprintln(\"hi\")");
+}
+
+#[test]
+fn deprecated_std_rl_warns() {
+    assert_checker_warns(
+        "get eval from std::rl\neval(\"1\")",
+        "'std::rl::eval' is deprecated",
+    );
+}
+
+#[test]
+fn deprecated_path_fn_warns() {
+    assert_checker_warns(
+        "get path_exists from std::path\npath_exists(\"x\")",
+        "'std::path::path_exists' is deprecated",
+    );
 }

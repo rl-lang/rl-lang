@@ -16,6 +16,7 @@ mod term_end_sync;
 mod term_enter;
 mod term_fg;
 mod term_flush;
+mod term_get_cursor_pos;
 mod term_get_size;
 mod term_hide_cursor;
 mod term_italic;
@@ -62,6 +63,7 @@ use term_end_sync::TERM_END_SYNC;
 use term_enter::TERM_ENTER;
 use term_fg::TERM_FG;
 use term_flush::TERM_FLUSH;
+use term_get_cursor_pos::TERM_GET_CURSOR_POS;
 use term_get_size::TERM_GET_SIZE;
 use term_hide_cursor::TERM_HIDE_CURSOR;
 use term_italic::TERM_ITALIC;
@@ -117,6 +119,7 @@ static FUNCTIONS: &[&FnEntry] = &[
     &TERM_ENTER,
     &TERM_FG,
     &TERM_FLUSH,
+    &TERM_GET_CURSOR_POS,
     &TERM_GET_SIZE,
     &TERM_HIDE_CURSOR,
     &TERM_ITALIC,

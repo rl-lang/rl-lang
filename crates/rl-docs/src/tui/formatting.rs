@@ -12,6 +12,7 @@ pub fn parse_inline(text: &str, base: Color) -> Vec<Span<'static>> {
     let mut current_idx = 0;
 
     let mut is_bold = false;
+    let mut is_italic = false;
     let mut is_code = false;
 
     let bytes = text.as_bytes();
@@ -31,10 +32,24 @@ pub fn parse_inline(text: &str, base: Color) -> Vec<Span<'static>> {
             continue;
         }
 
+        // Check for Italic delimiter "*" (single, not part of "**")
+        if bytes[current_idx] == b'*' {
+            // Make sure this isn't part of "**"
+            let is_double = current_idx + 1 < bytes.len() && bytes[current_idx + 1] == b'*';
+            if !is_double {
+                is_italic = !is_italic;
+                current_idx += 1;
+                continue;
+            }
+        }
+
         // Find the next delimiter boundary
         let mut next_boundary = current_idx;
         while next_boundary < bytes.len() {
             if bytes[next_boundary] == b'`' {
+                break;
+            }
+            if bytes[next_boundary] == b'*' {
                 break;
             }
             if next_boundary + 1 < bytes.len() && &bytes[next_boundary..next_boundary + 2] == b"**"
@@ -52,6 +67,8 @@ pub fn parse_inline(text: &str, base: Color) -> Vec<Span<'static>> {
                 style = style.fg(Color::Cyan).add_modifier(Modifier::DIM);
             } else if is_bold {
                 style = style.fg(Color::Cyan).add_modifier(Modifier::BOLD);
+            } else if is_italic {
+                style = style.fg(base).add_modifier(Modifier::ITALIC);
             } else {
                 style = style.fg(base);
             }

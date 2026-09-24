@@ -177,11 +177,16 @@ impl TypeChecker {
 
                 // is it integer? (only enforced for array/tuple targets -
                 // maps validate the index against their declared key type
-                // further down instead)
-                let target_is_map = matches!(
-                    target_type,
-                    CheckType::Known(TypeAnnotation::Map(_, _) | TypeAnnotation::CMap(_, _))
-                );
+                // further down instead; an all-map union counts as a map)
+                let target_is_map = match &target_type {
+                    CheckType::Known(TypeAnnotation::Map(_, _) | TypeAnnotation::CMap(_, _)) => true,
+                    CheckType::Known(TypeAnnotation::Any(members) | TypeAnnotation::CAny(members)) => {
+                        members.iter().all(|m| {
+                            matches!(m, TypeAnnotation::Map(_, _) | TypeAnnotation::CMap(_, _))
+                        })
+                    }
+                    _ => false,
+                };
                 if !target_is_map
                     && !matches!(
                         index_type,
@@ -201,45 +206,13 @@ impl TypeChecker {
                     );
                 }
 
-                // is the target actually an array?
-                // if it is array return its items type
+                // element type for the target; unions probe every member
+                // (diagnostics truncated) and merge back into one type
                 let result = match &target_type {
-                    CheckType::Known(TypeAnnotation::Array(inner))
-                    | CheckType::Known(TypeAnnotation::CArray(inner)) => {
-                        CheckType::Known((**inner).clone())
+                    CheckType::Known(TypeAnnotation::Any(members) | TypeAnnotation::CAny(members)) => {
+                        self.check_index_any(members.to_vec(), &index_type, expr_span, index_span)
                     }
-                    CheckType::Known(TypeAnnotation::Set(inner))
-                    | CheckType::Known(TypeAnnotation::CSet(inner)) => {
-                        CheckType::Known((**inner).clone())
-                    }
-                    CheckType::Known(TypeAnnotation::Map(key_ty, value_ty))
-                    | CheckType::Known(TypeAnnotation::CMap(key_ty, value_ty)) => {
-                        let expected_key = CheckType::Known((**key_ty).clone());
-                        if !index_type.matches(&expected_key) {
-                            self.error(
-                                format!(
-                                    "map key type mismatch: expected {}, got {}",
-                                    expected_key.info(),
-                                    index_type.info()
-                                ),
-                                index_span,
-                            );
-                        }
-                        CheckType::Known((**value_ty).clone())
-                    }
-                    CheckType::Unknown | CheckType::Known(TypeAnnotation::Null) => {
-                        CheckType::Unknown
-                    }
-                    CheckType::Known(TypeAnnotation::Tuple(_) | TypeAnnotation::CTuple(_)) => {
-                        CheckType::Unknown
-                    }
-                    other => {
-                        self.error(
-                            format!("invalid index operation: this is {}", other.info()),
-                            expr_span,
-                        );
-                        CheckType::Unknown
-                    }
+                    _ => self.check_index_target(&target_type, &index_type, expr_span, index_span),
                 };
                 CheckedExpr::new(result, None)
             }
@@ -352,6 +325,20 @@ impl TypeChecker {
                     );
                 }
 
+                // union receiver: every member must resolve the method
+                // (each probed with diagnostics truncated, so only one
+                // loud error names the failing members); return types
+                // merge back into one type.
+                if let CheckType::Known(
+                    TypeAnnotation::Any(members) | TypeAnnotation::CAny(members),
+                ) = &caller_type
+                {
+                    return CheckedExpr::new(
+                        self.check_method_any(members.clone(), &arg_types, &method, expr_span),
+                        None,
+                    );
+                }
+
                 CheckedExpr::new(self.check_call_path(&method, &arg_types, expr_span), None)
             }
 
@@ -376,12 +363,15 @@ impl TypeChecker {
                 }
                 // add the resolved return type as the expected return
                 self.push_return_type(resolved_return.clone());
+                // isolate `?` tracking: a lambda's propagate is its own
+                let saved_propagate = std::mem::replace(&mut self.saw_propagate, false);
                 // is the body correct?
                 for statement in &body {
                     self.check_statement(statement);
                 }
                 // removes return type
-                self.pop_return_type();
+                let _ = self.pop_return_type();
+                self.saw_propagate = saved_propagate;
                 // remove scope level
                 self.pop_scope();
 
@@ -392,6 +382,23 @@ impl TypeChecker {
                     },
                     None,
                 )
+            }
+
+            ExpressionKind::Is { value, target_type } => {
+                let value_typed = self.check_expression_typed(value);
+                let value_id = self.ast_arena.exprs.get(value);
+                self.check_is_null(&value_typed.ty, value_id.span);
+                // unions as targets narrow to nothing: test members
+                match target_type {
+                    TypeAnnotation::Any(_) | TypeAnnotation::CAny(_) => {
+                        self.error(
+                            "`is` needs one concrete type - test union members one by one",
+                            expr_span,
+                        );
+                    }
+                    _ => {}
+                }
+                CheckedExpr::new(CheckType::Known(TypeAnnotation::Bool), None)
             }
 
             ExpressionKind::Cast { value, target_type } => {
@@ -411,6 +418,16 @@ impl TypeChecker {
                             | TypeAnnotation::UInt
                             | TypeAnnotation::Byte
                     ) | CheckType::Unknown
+                ) || matches!(
+                    &value_typed.ty,
+                    // narrowing cast out of a union: valid iff the target
+                    // matches some member (verified again at runtime)
+                    CheckType::Known(
+                        TypeAnnotation::Any(members) | TypeAnnotation::CAny(members)
+                    ) if members.iter().any(|m| {
+                        CheckType::Known(m.clone())
+                            .matches(&CheckType::Known(target_type.clone()))
+                    })
                 );
 
                 let valid_target = matches!(
@@ -474,11 +491,74 @@ impl TypeChecker {
             }
 
             ExpressionKind::Propagate(inner) => {
+                // A body using `?` can return `err`: inference wraps.
+                // Saved/restored per function/lambda by the caller arms.
+                self.saw_propagate = true;
                 let inner_typed = self.check_expression_typed(inner);
                 let result = match inner_typed.ty {
                     CheckType::Known(
                         TypeAnnotation::Result(inner_ty) | TypeAnnotation::CResult(inner_ty),
-                    ) => CheckType::Known(*inner_ty),
+                    ) => {
+                        if let Some(return_ty) = self.current_return_type()
+                            && !matches!(
+                                return_ty,
+                                // `Null` = undeclared: inference decides
+                                // from the unwrapped type
+                                TypeAnnotation::Null
+                                | TypeAnnotation::Result(_)
+                                | TypeAnnotation::CResult(_)
+                            )
+                        {
+                            self.error(
+                                "`?` cannot be used in a function that does not return a result",
+                                expr_span,
+                            );
+                        }
+                        CheckType::Known(*inner_ty)
+                    }
+                    // `?` over a union: every member must be a result;
+                    // unwraps to the union of payloads.
+                    CheckType::Known(
+                        TypeAnnotation::Any(ref members) | TypeAnnotation::CAny(ref members),
+                    ) => {
+                        if let Some(return_ty) = self.current_return_type()
+                            && !matches!(
+                                return_ty,
+                                TypeAnnotation::Null
+                                    | TypeAnnotation::Result(_)
+                                    | TypeAnnotation::CResult(_)
+                            )
+                        {
+                            self.error(
+                                "`?` cannot be used in a function that does not return a result",
+                                expr_span,
+                            );
+                        }
+                        let mut inners = Vec::with_capacity(members.len());
+                        let mut ok = true;
+                        for m in members.iter() {
+                            match m {
+                                TypeAnnotation::Result(inner)
+                                | TypeAnnotation::CResult(inner) => inners.push((**inner).clone()),
+                                _ => {
+                                    ok = false;
+                                    break;
+                                }
+                            }
+                        }
+                        if ok {
+                            CheckType::Known(TypeAnnotation::Any(std::rc::Rc::new(inners)))
+                        } else {
+                            self.error(
+                                format!(
+                                    "`?` operator requires a result, got {}",
+                                    inner_typed.ty.info()
+                                ),
+                                expr_span,
+                            );
+                            CheckType::Unknown
+                        }
+                    }
                     CheckType::Unknown => CheckType::Unknown,
                     other => {
                         self.error(

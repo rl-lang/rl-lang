@@ -17,6 +17,6 @@ close(file)?"#,
     errors: Some("Will return error if the handle is invalid or not open for writing"),
     see_also: &["write_handle", "close"],
     since: Some("v2.1.0"),
-    deprecated: None,
+    deprecated: Some("moved to std::fs::flush"),
     updated: Some("v2.1.0"),
 };

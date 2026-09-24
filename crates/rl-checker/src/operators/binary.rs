@@ -55,6 +55,18 @@ impl TypeChecker {
             return CheckedExpr::new(CheckType::Unknown, None);
         }
 
+        // union operand: every member pair must satisfy the operator
+        // (probed without emitting), results merge back into one type
+        if matches!(
+            &left.ty,
+            CheckType::Known(TypeAnnotation::Any(_) | TypeAnnotation::CAny(_))
+        ) || matches!(
+            &right.ty,
+            CheckType::Known(TypeAnnotation::Any(_) | TypeAnnotation::CAny(_))
+        ) {
+            return self.check_binary_any(left, right, op, span);
+        }
+
         match op {
             // arithmetic check if both same type or not
             TokenType::Plus | TokenType::Minus | TokenType::Star | TokenType::Slash => {
@@ -233,6 +245,111 @@ impl TypeChecker {
             _ => {
                 self.error(format!("unknown binary operator {:?}", op), span);
                 CheckedExpr::new(CheckType::Unknown, None)
+            }
+        }
+    }
+
+    /// Member-wise binary check for union operands: every member pair
+    /// must satisfy the operator (each pair is probed with diagnostics
+    /// truncated, so only one loud error names the failing pairs).
+    /// Result types merge: one distinct type stays concrete, several
+    /// widen back into `any[...]`.
+    fn check_binary_any(
+        &mut self,
+        left: &CheckedExpr,
+        right: &CheckedExpr,
+        op: &TokenType,
+        span: Span,
+    ) -> CheckedExpr {
+        fn members(ty: &CheckType) -> Vec<TypeAnnotation> {
+            match ty {
+                // defensive flatten (the parser already normalizes)
+                CheckType::Known(TypeAnnotation::Any(m) | TypeAnnotation::CAny(m)) => {
+                    let mut out = Vec::new();
+                    for t in m.iter() {
+                        match t {
+                            TypeAnnotation::Any(n) | TypeAnnotation::CAny(n) => {
+                                out.extend(n.iter().cloned())
+                            }
+                            other => out.push(other.clone()),
+                        }
+                    }
+                    out
+                }
+                CheckType::Known(t) => vec![t.clone()],
+                _ => vec![],
+            }
+        }
+        let lms = members(&left.ty);
+        let rms = members(&right.ty);
+        let mut results: Vec<(TypeAnnotation, Option<Unit>)> = Vec::new();
+        let mut failures: Vec<(TypeAnnotation, TypeAnnotation)> = Vec::new();
+        for lm in &lms {
+            for rm in &rms {
+                let err_len = self.errors.len();
+                let warn_len = self.warnings.len();
+                let r = self.check_binary_operator(
+                    &CheckedExpr::new(CheckType::Known(lm.clone()), left.unit.clone()),
+                    &CheckedExpr::new(CheckType::Known(rm.clone()), right.unit.clone()),
+                    op,
+                    span,
+                );
+                let failed = self.errors.len() > err_len;
+                self.errors.truncate(err_len);
+                self.warnings.truncate(warn_len);
+                match r.ty {
+                    CheckType::Known(t) if !failed => {
+                        if !results.iter().any(|(e, _)| *e == t) {
+                            results.push((t, r.unit));
+                        }
+                    }
+                    _ => failures.push((lm.clone(), rm.clone())),
+                }
+            }
+        }
+        if !failures.is_empty() {
+            let pairs: Vec<String> = failures
+                .iter()
+                .map(|(l, r)| {
+                    format!("{:?} {} {:?}", l, op_str(op), r)
+                })
+                .collect();
+            self.error(
+                format!(
+                    "operator {} not supported for every member of {} and {}: {}",
+                    op_str(op),
+                    left.ty.info(),
+                    right.ty.info(),
+                    pairs.join(", ")
+                ),
+                span,
+            );
+            return CheckedExpr::new(CheckType::Unknown, None);
+        }
+        match results.len() {
+            0 => {
+                self.error(
+                    format!(
+                        "operator {} not supported for {} and {}",
+                        op_str(op),
+                        left.ty.info(),
+                        right.ty.info()
+                    ),
+                    span,
+                );
+                CheckedExpr::new(CheckType::Unknown, None)
+            }
+            1 => {
+                let (t, u) = results.into_iter().next().unwrap();
+                CheckedExpr::new(CheckType::Known(t), u)
+            }
+            _ => {
+                let ts: Vec<TypeAnnotation> =
+                    results.into_iter().map(|(t, _)| t).collect();
+                CheckedExpr::new(
+                    CheckType::Known(TypeAnnotation::Any(std::rc::Rc::new(ts))),
+                    None,
+                )
             }
         }
     }

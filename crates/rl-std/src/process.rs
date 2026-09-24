@@ -222,6 +222,44 @@ pub fn with_exec(e: String, cmd: String) -> Result<String, String> {
     Ok(stdout.trim_end_matches('\n').to_string())
 }
 
+// ---- exec_fg (result[int]) ------------------------------------------------
+// Runs a command with inherited stdin/stdout/stderr (foreground).
+// Useful for launching interactive programs (editors, pagers, TUIs) that need
+// direct terminal access. The caller should leave raw mode / alternate screen
+// before calling this and re-enter afterward.
+
+#[native_fn(module = "process")]
+pub fn exec_fg(cmd: String) -> Result<i64, String> {
+    let status = match shell_command(&cmd)
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()
+    {
+        Ok(s) => s,
+        Err(e) => return Err(format!("exec_fg: failed to run \"{}\": {}", cmd, e)),
+    };
+    Ok(status.code().unwrap_or(-1) as i64)
+}
+
+#[native_fn(module = "process")]
+pub fn with_exec_fg(e: String, cmd: String) -> Result<i64, String> {
+    let mut command = match with_command(&e, &cmd) {
+        Ok(c) => c,
+        Err(err) => return Err(format!("with_exec_fg: invalid args \"{}\": {}", cmd, err)),
+    };
+    let status = match command
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()
+    {
+        Ok(s) => s,
+        Err(e) => return Err(format!("with_exec_fg: failed: {}", e)),
+    };
+    Ok(status.code().unwrap_or(-1) as i64)
+}
+
 // ---- exec_code (result[int]) ----------------------------------------------
 
 #[native_fn(module = "process")]
@@ -682,6 +720,7 @@ rl_std_core::native_module!("process";
         os_name, arch, num_cpus,
         parent_pid, process_exists, process_running,
         exec, with_exec,
+        exec_fg, with_exec_fg,
         exec_code, with_exec_code,
         exec_lines, with_exec_lines,
         exec_with_stdin, with_exec_with_stdin,

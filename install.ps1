@@ -2,7 +2,7 @@
 param(
     [string]$Version,
     [string]$Prefix,
-    [string]$Variant,
+    [string]$Binaries,
     [switch]$Force,
     [switch]$Uninstall,
     [switch]$Help
@@ -12,37 +12,16 @@ $ErrorActionPreference = "Stop"
 $Repo = "rl-lang/rl-lang"
 $InstallDir = if ($Prefix) { $Prefix } elseif ($env:RL_INSTALL_DIR) { $env:RL_INSTALL_DIR } else { "$env:LOCALAPPDATA\rl-lang\bin" }
 
-# --- Variant definitions ---
+# --- Bootstrap note ---
+# This script is a one-time bootstrapper. Once installed, use `rlm` to manage
+# your rl-lang toolchain (install, update, uninstall).
+#   irm https://raw.githubusercontent.com/rl-lang/rl-lang/main/install.ps1 | iex
+# Or install rlm directly from GitHub Releases and use:
+#   rlm install
 
-$Bases = @("rl", "rl_vm", "rl_debug", "rl_vm_debug")
-$Suffixes = @("", "_no_docs", "_no_repl", "_no_docs_repl")
+# --- Binary definitions ---
 
-$Sections = @{
-    1  = "Standard (vm)"
-    5  = "VM-only"
-    9  = "Debug builds"
-    17 = "Language server"
-}
-
-$ActualName = @{
-    "rl" = "rl"
-    "rl_no_docs" = "rl_nd"
-    "rl_no_repl" = "rl_nr"
-    "rl_no_docs_repl" = "rl_ndr"
-    "rl_debug" = "rld"
-    "rl_debug_no_docs" = "rld_nd"
-    "rl_debug_no_repl" = "rld_nr"
-    "rl_debug_no_docs_repl" = "rld_ndr"
-    "rl_vm" = "rlc"
-    "rl_vm_no_docs" = "rlc_nd"
-    "rl_vm_no_repl" = "rlc_nr"
-    "rl_vm_no_docs_repl" = "rlc_ndr"
-    "rl_vm_debug" = "rlcd"
-    "rl_vm_debug_no_docs" = "rlcd_nd"
-    "rl_vm_debug_no_repl" = "rlcd_nr"
-    "rl_vm_debug_no_docs_repl" = "rlcd_ndr"
-    "rl_lsp" = "rlsp"
-}
+$Binaries_ = @("rl", "rlc", "rlt", "rlrepl", "rlsp", "rldocs", "rlm")
 
 # --- Output helpers ---
 
@@ -68,95 +47,81 @@ Options:
   -Help              Show this help message
   -Prefix DIR        Install directory (default: %LOCALAPPDATA%\rl-lang\bin)
   -Force             Overwrite existing binaries without prompting
-  -Variant VARIANTS  Comma-separated list of variants to install
-                     Use "all" to install all variants
+  -Binaries BINS     Comma-separated list of binaries to install
+                     Use "all" to install all binaries
   -Uninstall         Remove installed binaries
 
 Environment variables:
   RL_INSTALL_DIR     Same as -Prefix
   RL_VERSION         Same as VERSION argument
-  RL_VARIANT         Same as -Variant
+  RL_BINARIES        Same as -Binaries
 
 Examples:
-  .\install.ps1                          # interactive install
-  .\install.ps1 latest                   # install latest stable
-  .\install.ps1 nightly                  # install nightly build
-  .\install.ps1 v2.0.0                   # install specific version
-  .\install.ps1 -Variant rl,rl_vm latest # install specific variants
+  .\install.ps1                           # interactive install
+  .\install.ps1 latest                    # install latest stable
+  .\install.ps1 nightly                   # install nightly build
+  .\install.ps1 v2.0.0                    # install specific version
+  .\install.ps1 -Binaries rl,rlc,rlm      # install specific binaries
+  .\install.ps1 -Binaries all latest      # install all binaries
   .\install.ps1 -Prefix C:\rl -Force v2.0.0
   .\install.ps1 -Uninstall               # remove all installed binaries
 "@
     Write-Host $usage
 }
 
-# --- Variant helpers ---
-
-function Get-GroupedVariants {
-    $variants = @()
-    foreach ($b in $Bases) {
-        foreach ($s in $Suffixes) {
-            $variants += "$b$s"
-        }
-    }
-    $variants += "rl_lsp"
-    return $variants
-}
+# --- Binary selection ---
 
 function Print-Menu {
-    $variants = Get-GroupedVariants
-    Write-Host "  Select a build to install:"
-    $i = 1
-    foreach ($v in $variants) {
-        if ($Sections.ContainsKey($i)) {
-            Write-Host ""
-            Write-Host ("  " + $Sections[$i]) -ForegroundColor Cyan
-        }
-        $actual = $ActualName[$v]
-        Write-Host ("    {0,2}) {1,-24} ({2})" -f $i, $v, $actual)
-        $i++
-    }
+    Write-Host "  Select binaries to install:"
     Write-Host ""
-    Write-Host "  Enter number(s), comma-separated (e.g. 1,3,9), or 'all'." -ForegroundColor DarkGray
+    Write-Host "    1) rl        - core (run, check, new, dev, format, pm)" -ForegroundColor Cyan
+    Write-Host "    2) rlc       - compiler (VM backend)" -ForegroundColor Cyan
+    Write-Host "    3) rlt       - transpiler (to C99)" -ForegroundColor Cyan
+    Write-Host "    4) rlrepl    - interactive TUI REPL" -ForegroundColor Cyan
+    Write-Host "    5) rlsp      - LSP server" -ForegroundColor Cyan
+    Write-Host "    6) rldocs    - documentation viewer" -ForegroundColor Cyan
+    Write-Host "    7) rlm       - toolchain manager" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "  Enter number(s), comma-separated (e.g. 1,3,7), or 'all'." -ForegroundColor DarkGray
 }
 
-function Select-Variants {
-    if ($Variant) {
-        if ($Variant.Trim().ToLower() -eq "all") { return Get-GroupedVariants }
-        return $Variant -split "," | ForEach-Object { $_.Trim() }
+function Select-Binaries {
+    if ($Binaries) {
+        if ($Binaries.Trim().ToLower() -eq "all") { return $Binaries_ }
+        return $Binaries -split "," | ForEach-Object { $_.Trim() }
     }
 
-    if ($env:RL_VARIANT) {
-        if ($env:RL_VARIANT.Trim().ToLower() -eq "all") { return Get-GroupedVariants }
-        return $env:RL_VARIANT -split "," | ForEach-Object { $_.Trim() }
+    if ($env:RL_BINARIES) {
+        if ($env:RL_BINARIES.Trim().ToLower() -eq "all") { return $Binaries_ }
+        return $env:RL_BINARIES -split "," | ForEach-Object { $_.Trim() }
     }
 
     if (-not [Environment]::UserInteractive) {
-        Write-Err "No interactive terminal detected and RL_VARIANT is not set."
-        Write-Err "Non-interactive use requires: `$env:RL_VARIANT = 'rl,rl_vm'; .\install.ps1 [version]"
+        Write-Err "No interactive terminal detected and RL_BINARIES is not set."
+        Write-Err "Non-interactive use requires: `$env:RL_BINARIES = 'rl,rlc,rlm'; .\install.ps1 [version]"
         exit 1
     }
 
     Print-Menu
-    $choices = Read-Host "  Enter number(s), comma-separated (e.g. 1,3,9), or 'all'"
-
-    $variants = Get-GroupedVariants
+    $choices = Read-Host "  Enter number(s), comma-separated (e.g. 1,3,7), or 'all'"
 
     if ($choices.Trim().ToLower() -eq "all") {
-        return $variants
+        return $Binaries_
     }
 
     $selected = @()
+    $labels = @("rl", "rlc", "rlt", "rlrepl", "rlsp", "rldocs", "rlm")
     foreach ($part in ($choices -split ",")) {
         $trimmed = $part.Trim()
         if (-not $trimmed) { continue }
 
         $index = 0
-        if (-not [int]::TryParse($trimmed, [ref]$index) -or $index -lt 1 -or $index -gt $variants.Count) {
+        if (-not [int]::TryParse($trimmed, [ref]$index) -or $index -lt 1 -or $index -gt $labels.Count) {
             Write-Err "Invalid selection: $trimmed"
             exit 1
         }
 
-        $selected += $variants[$index - 1]
+        $selected += $labels[$index - 1]
     }
 
     return $selected
@@ -282,24 +247,17 @@ function Test-Checksum {
 # --- Install ---
 
 function Install-One {
-    param($Variant, $Arch, $Version, [switch]$ForceInstall)
+    param($Binary, $Arch, $Version, [switch]$ForceInstall)
 
-    $actual = $ActualName[$Variant]
-    if (-not $actual) {
-        Write-Err "No actual-name mapping for '$Variant'. Skipping."
-        return $false
-    }
-
-    # Check if already installed
-    $exePath = Join-Path $InstallDir "$actual.exe"
+    $exePath = Join-Path $InstallDir "$Binary.exe"
     if ((Test-Path $exePath) -and -not $ForceInstall) {
-        Write-Warn "$actual already exists at $exePath. Use -Force to overwrite."
+        Write-Warn "$Binary already exists at $exePath. Use -Force to overwrite."
         return $true
     }
 
-    Write-Info "Installing $Variant ($actual) $Version (windows-$Arch)..."
+    Write-Info "Installing $Binary $Version (windows-$Arch)..."
 
-    $asset = "$actual-windows-$Arch.zip"
+    $asset = "$Binary-windows-$Arch.zip"
     $url = "https://github.com/$Repo/releases/download/$Version/$asset"
 
     $tmpDir = Join-Path $env:TEMP "rl-install-$(Get-Random)"
@@ -311,7 +269,7 @@ function Install-One {
             Invoke-WebRequest -Uri $url -OutFile $zipPath
         } catch {
             Write-Err "Failed to download $url"
-            Write-Err "Check that this variant/version combination was published."
+            Write-Err "Check that this binary/version combination was published."
             return $false
         }
 
@@ -340,7 +298,7 @@ function Install-One {
         Expand-Archive -Path $zipPath -DestinationPath $tmpDir -Force
 
         New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
-        $exeName = "$actual.exe"
+        $exeName = "$Binary.exe"
         Copy-Item -Path (Join-Path $tmpDir $exeName) -Destination (Join-Path $InstallDir $exeName) -Force
 
         Write-Ok "Installed: $InstallDir\$exeName"
@@ -358,7 +316,7 @@ function Uninstall-All {
     Write-Host "  Uninstalling rl-lang binaries from $InstallDir..." -ForegroundColor White
     Write-Host ""
 
-    foreach ($name in $ActualName.Values) {
+    foreach ($name in $Binaries_) {
         $path = Join-Path $InstallDir "$name.exe"
         if (Test-Path $path) {
             Remove-Item -Path $path -Force
@@ -412,14 +370,14 @@ function Main {
     Write-Info "----------------------------------------"
     Write-Host ""
 
-    $variants = Select-Variants
+    $selected = Select-Binaries
     $installed = 0
     $total = 0
 
-    foreach ($variant in $variants) {
+    foreach ($bin in $selected) {
         $total++
         $params = @{
-            Variant = $variant
+            Binary = $bin
             Arch = $arch
             Version = $resolvedVersion
         }

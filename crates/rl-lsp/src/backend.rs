@@ -9,7 +9,7 @@ use crate::hover::run_hover;
 use crate::pipeline::run_pipeline;
 use crate::references::run_references;
 use crate::rename::run_rename;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use tokio::sync::RwLock;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
@@ -23,6 +23,14 @@ pub struct Backend {
     ///
     /// Written on `didOpen`/`didChange`, read on `hover`, cleared on `didClose`.
     pub docs: RwLock<HashMap<Url, String>>,
+    /// File URIs each document last published diagnostics for (itself
+    /// plus any `get ... from <file>` imports with errors).
+    ///
+    /// Used to clear squiggles from files that no longer error. Two
+    /// open documents can publish the same import; a close clears it
+    /// optimistically (the other document re-publishes on its next
+    /// edit) rather than refcounting.
+    pub published: RwLock<HashMap<Url, HashSet<Url>>>,
 }
 
 #[tower_lsp::async_trait]
@@ -73,9 +81,20 @@ impl LanguageServer for Backend {
     }
 
     // did the editor close the file?
-    // forget the cached text and send no diagnostics
+    // forget the cached text and clear every URI this document published
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
         self.docs.write().await.remove(&params.text_document.uri);
+        let published = self
+            .published
+            .write()
+            .await
+            .remove(&params.text_document.uri)
+            .unwrap_or_default();
+        for uri in published {
+            self.client.publish_diagnostics(uri, vec![], None).await;
+        }
+        // the closed document itself always clears, even if the
+        // pipeline never ran for it
         self.client
             .publish_diagnostics(params.text_document.uri, vec![], None)
             .await;
@@ -150,12 +169,32 @@ impl Backend {
             .insert(uri.clone(), source.to_string());
     }
 
-    /// Runs the rl pipeline on `source` and publishes the resulting diagnostics to the editor.
+    /// Runs the rl pipeline on `source` and publishes the resulting
+    /// diagnostics, grouped per file (the document plus any imports
+    /// with errors). Files that errored last time but are clean now
+    /// get an explicit empty publish so stale squiggles vanish.
     async fn publish(&self, uri: &Url, source: &str) {
-        let diagnostics = run_pipeline(source, uri);
+        let grouped = run_pipeline(source, uri);
 
-        self.client
-            .publish_diagnostics(uri.clone(), diagnostics, None)
-            .await;
+        let mut published = self.published.write().await;
+        let previous = published.insert(
+            uri.clone(),
+            grouped.iter().map(|(u, _)| u.clone()).collect(),
+        );
+        let now: HashSet<&Url> = grouped.iter().map(|(u, _)| u).collect();
+        if let Some(old) = previous {
+            for gone in old.iter().filter(|u| !now.contains(*u)) {
+                self.client
+                    .publish_diagnostics((*gone).clone(), vec![], None)
+                    .await;
+            }
+        }
+        drop(published);
+
+        for (file_uri, diagnostics) in grouped {
+            self.client
+                .publish_diagnostics(file_uri, diagnostics, None)
+                .await;
+        }
     }
 }

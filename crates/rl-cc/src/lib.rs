@@ -45,6 +45,11 @@ pub fn transpile(
             .map_err(|e| vec![Error::at(Reason::Compile, e.to_string(), Span::dummy())])?;
         std::fs::write(&c_path, runtime::RUNTIME_C)
             .map_err(|e| vec![Error::at(Reason::Compile, e.to_string(), Span::dummy())])?;
+        // Single-header audio backend the runtime includes; emitted next
+        // to rl_runtime.c so `#include "miniaudio.h"` resolves when the
+        // transpiled program compiles.
+        std::fs::write(config.output_dir.join("miniaudio.h"), runtime::RUNTIME_MINIAUDIO)
+            .map_err(|e| vec![Error::at(Reason::Compile, e.to_string(), Span::dummy())])?;
         Some((h_path, c_path))
     } else {
         None

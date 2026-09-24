@@ -57,7 +57,7 @@ pub struct StdEntry {
 }
 
 /// Coarse grouping used to organize the concept index / nav.
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ConceptCategory {
     /// Basic language syntax (comments, literals, general structure).
     Syntax,

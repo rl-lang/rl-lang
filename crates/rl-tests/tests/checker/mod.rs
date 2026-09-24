@@ -7,4 +7,5 @@ mod imports;
 mod ops;
 mod records;
 mod tags;
+mod unions;
 mod units;

@@ -34,6 +34,17 @@ pub struct Ast {
     /// `#![convert(kg=1000(g))]`. Compile-time only; discarded by the
     /// resolver before execution.
     pub program_attributes: Vec<ProgramAttribute>,
+    /// Type aliases from `type Name Target`, in declaration order.
+    /// Targets are stored fully resolved (nested aliases substituted at
+    /// definition), so cycles are impossible by construction. Extended
+    /// across file imports by `merge_statements`; file-scoped in v1.
+    pub type_aliases: std::collections::HashMap<String, crate::statements::TypeAnnotation>,
+    /// Item attributes (`!#[deprecated]` etc.) declared on type aliases,
+    /// keyed by alias name. Checked at use sites.
+    pub type_alias_attrs: std::collections::HashMap<String, Vec<crate::statements::ItemAttribute>>,
+    /// Every alias use `(name, span)`, recorded as the parser substitutes.
+    /// The checker drains this for deprecation warnings.
+    pub alias_uses: Vec<(String, rl_utils::span::Span)>,
 }
 
 /// Handle to an `Expression` living in `Ast::exprs`.
@@ -50,6 +61,9 @@ impl Ast {
         Self {
             exprs: Arena::new(),
             program_attributes: Vec::new(),
+            type_aliases: std::collections::HashMap::new(),
+            type_alias_attrs: std::collections::HashMap::new(),
+            alias_uses: Vec::new(),
         }
     }
 
@@ -81,6 +95,15 @@ impl Ast {
         for stmt in &mut statements {
             remap_stmt_kind(&mut stmt.kind, offset, target_arena_id);
         }
+        // Imported aliases join the table; the importer's own definitions
+        // win on collision (first definition in merged order wins).
+        for (name, target) in other.type_aliases {
+            self.type_aliases.entry(name).or_insert(target);
+        }
+        for (name, attrs) in other.type_alias_attrs {
+            self.type_alias_attrs.entry(name).or_insert(attrs);
+        }
+        self.alias_uses.extend(other.alias_uses);
         statements
     }
 }
@@ -167,6 +190,7 @@ fn remap_expr_kind(kind: &mut ExpressionKind, offset: u32, target_arena_id: u32)
             }
         }
         Cast { value, .. } => remap_id(value, offset, target_arena_id),
+        Is { value, .. } => remap_id(value, offset, target_arena_id),
         Lambda { body, .. } | ResolvedLambda { body, .. } => {
             for stmt in body {
                 remap_stmt_kind(&mut stmt.kind, offset, target_arena_id);
@@ -197,7 +221,8 @@ fn remap_stmt_kind(kind: &mut StatementKind, offset: u32, target_arena_id: u32) 
         | ImportFile { .. }
         | ImportFileNamed { .. }
         | RecordDeclaration { .. }
-        | TagDeclaration { .. } => {}
+        | TagDeclaration { .. }
+        | TypeAlias { .. } => {}
 
         VariableDeclaration { value, .. }
         | ResolvedVariableDeclaration { value, .. }

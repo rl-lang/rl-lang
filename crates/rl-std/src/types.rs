@@ -14,6 +14,7 @@
 //! sibling numeric type). This mirrors the old `match VmValue::Int(v)` arms
 //! exactly, so the conversion bodies below need no extra `type_name` guards.
 
+use rl_ast::statements::HandleKind;
 use rl_std_core::Runtime;
 use rl_std_macros::native_fn;
 
@@ -392,9 +393,108 @@ pub fn to_string<R: Runtime>(value: R::Value) -> R::Value {
     R::ok(R::from_string(result))
 }
 
+// ---- compound type predicates ----------------------------------------------
+
+#[native_fn(module = "types", sig(_ -> bool))]
+pub fn is_array<R: Runtime>(value: R::Value) -> bool {
+    R::as_array(&value).is_some()
+}
+
+#[native_fn(module = "types", sig(_ -> bool))]
+pub fn is_map<R: Runtime>(value: R::Value) -> bool {
+    R::as_map(&value).is_some()
+}
+
+#[native_fn(module = "types", sig(_ -> bool))]
+pub fn is_set<R: Runtime>(value: R::Value) -> bool {
+    R::as_set(&value).is_some()
+}
+
+#[native_fn(module = "types", sig(_ -> bool))]
+pub fn is_tuple<R: Runtime>(value: R::Value) -> bool {
+    R::type_name(&value) == "tuple"
+}
+
+#[native_fn(module = "types", sig(_ -> bool))]
+pub fn is_function<R: Runtime>(value: R::Value) -> bool {
+    R::is_callable(&value)
+}
+
+// ---- numeric type predicates ----------------------------------------------
+
+#[native_fn(module = "types", sig(_ -> bool))]
+pub fn is_uint<R: Runtime>(value: R::Value) -> bool {
+    R::type_name(&value) == "uint"
+}
+
+#[native_fn(module = "types", sig(_ -> bool))]
+pub fn is_sbyte<R: Runtime>(value: R::Value) -> bool {
+    R::type_name(&value) == "sbyte"
+}
+
+#[native_fn(module = "types", sig(_ -> bool))]
+pub fn is_bsbyte<R: Runtime>(value: R::Value) -> bool {
+    R::type_name(&value) == "big sbyte"
+}
+
+#[native_fn(module = "types", sig(_ -> bool))]
+pub fn is_bbyte<R: Runtime>(value: R::Value) -> bool {
+    R::type_name(&value) == "big byte"
+}
+
+#[native_fn(module = "types", sig(_ -> bool))]
+pub fn is_sint<R: Runtime>(value: R::Value) -> bool {
+    R::type_name(&value) == "small int"
+}
+
+#[native_fn(module = "types", sig(_ -> bool))]
+pub fn is_suint<R: Runtime>(value: R::Value) -> bool {
+    R::type_name(&value) == "small uint"
+}
+
+#[native_fn(module = "types", sig(_ -> bool))]
+pub fn is_sfloat<R: Runtime>(value: R::Value) -> bool {
+    R::type_name(&value) == "small float"
+}
+
+// ---- handle type predicates -----------------------------------------------
+
+#[native_fn(module = "types", sig(_ -> bool))]
+pub fn is_c_handle<R: Runtime>(value: R::Value) -> bool {
+    R::as_handle(&value, HandleKind::C).is_some()
+}
+
+#[native_fn(module = "types", sig(_ -> bool))]
+pub fn is_net_handle<R: Runtime>(value: R::Value) -> bool {
+    R::as_handle(&value, HandleKind::Net).is_some()
+}
+
+#[native_fn(module = "types", sig(_ -> bool))]
+pub fn is_http_handle<R: Runtime>(value: R::Value) -> bool {
+    R::as_handle(&value, HandleKind::Http).is_some()
+}
+
+#[native_fn(module = "types", sig(_ -> bool))]
+pub fn is_audio_handle<R: Runtime>(value: R::Value) -> bool {
+    R::as_handle(&value, HandleKind::Audio).is_some()
+}
+
+#[native_fn(module = "types", sig(_ -> bool))]
+pub fn is_gui_handle<R: Runtime>(value: R::Value) -> bool {
+    R::as_handle(&value, HandleKind::Gui).is_some()
+}
+
+#[native_fn(module = "types", sig(_ -> bool))]
+pub fn is_file_handle<R: Runtime>(value: R::Value) -> bool {
+    R::as_handle(&value, HandleKind::File).is_some()
+}
+
 rl_std_core::native_module!("types";
     funcs: [
         is_bool, is_null, is_char, is_int, is_float, is_string, is_byte, is_error,
+        is_uint, is_sbyte, is_bsbyte, is_bbyte, is_sint, is_suint, is_sfloat,
+        is_array, is_map, is_set, is_tuple, is_function,
+        is_c_handle, is_net_handle, is_http_handle, is_audio_handle, is_gui_handle, is_file_handle,
         error_unwrap,
         to_bin, to_hex, to_oct,
         to_bool, to_byte, to_char, to_float, to_int, to_string,

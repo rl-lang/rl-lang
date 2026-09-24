@@ -47,6 +47,7 @@ pub async fn run_lsp() {
     let (service, socket) = LspService::new(|client| Backend {
         client,
         docs: Default::default(),
+        published: Default::default(),
     });
 
     // creates a new server and passes the stdin stdout and the socket

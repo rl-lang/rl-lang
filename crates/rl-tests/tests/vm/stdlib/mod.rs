@@ -1,9 +1,14 @@
 mod arr_zip;
 mod bitwise;
+mod cli;
 mod collections;
+mod core;
+mod crypto;
 mod fs;
 mod io;
 mod math;
+mod random;
 mod result;
+mod serialize;
 mod string;
 mod types;

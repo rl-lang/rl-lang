@@ -12,7 +12,9 @@ This directory tracks significant architectural decisions made across the projec
 
 | ID | Title | Status | Scope | Date |
 | :--- | :--- | :--- | :--- | :--- |
-<!-- | [ADR-0001](0001-short-title.md) | Short Title of Decision | Accepted | Compiler | 2026-06-15 | -->
+| [ADR-0001](0001-deprecate-std-rl-for-selfhosting.md) | Deprecate `std::rl` ahead of self-hosting | Deprecated | Standard Library | 2026-09-26 |
+| [ADR-0002](0002-drop-cranelift-for-cc-and-rlc.md) | Drop Cranelift in favor of rl-cc and the RL compiler | Accepted | Compiler backend | 2026-09-27 |
+| [ADR-0003](0003-core-intrinsics-for-selfhosting.md) | `core::` intrinsics for self-hosting | Accepted | Standard Library | 2026-09-28 |
 <!-- | [ADR-0002](0002-short-title.md) | Short Title of Decision | Proposed | Syntax | 2026-07-01 | -->
 
 ---

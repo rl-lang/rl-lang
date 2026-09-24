@@ -146,6 +146,11 @@ impl Resolver {
                 None
             }
 
+            ExpressionKind::Is { value, .. } => {
+                self.resolve_expression(value);
+                None
+            }
+
             ExpressionKind::ErrorLiteral(inner)
             | ExpressionKind::OkLiteral(inner)
             | ExpressionKind::ErrLiteral(inner)

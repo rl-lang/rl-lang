@@ -11,8 +11,11 @@
 
 #[cfg(feature = "impls")]
 use std::io::{BufRead, Read, Seek, Write};
-use rl_std_macros::native_fn;
+#[cfg(feature = "impls")]
 use crate::io::{IoFileHandle, IoStore, insert_handle, extract_handle};
+#[cfg(not(feature = "impls"))]
+use crate::io::{IoFileHandle, IoStore};
+use rl_std_macros::native_fn;
 
 // ---- directory creation / removal (language `result[null]`) ---------------
 
@@ -935,6 +938,117 @@ pub fn readline<R: IoStore>(cx: &mut R::Cx, handle: R::Value) -> R::Value {
     }
 }
 
+// ---- recursive dir operations ---------------------------------------------
+
+#[native_fn(module = "fs")]
+pub fn copy_dir(src: String, dest: String) -> Result<(), String> {
+    let src_path = std::path::Path::new(&src);
+    if !src_path.is_dir() {
+        return Err(format!("copy_dir: source \"{}\" is not a directory", src));
+    }
+    let dest_path = std::path::Path::new(&dest);
+    if let Err(e) = std::fs::create_dir_all(dest_path) {
+        return Err(format!(
+            "copy_dir: failed to create \"{}\": {}",
+            dest, e
+        ));
+    }
+    let mut stack = vec![src_path.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let entries = match std::fs::read_dir(&dir) {
+            Ok(e) => e,
+            Err(e) => {
+                return Err(format!(
+                    "copy_dir: failed to read \"{}\": {}",
+                    dir.to_string_lossy(),
+                    e
+                ))
+            }
+        };
+        for entry in entries.filter_map(|e| e.ok()) {
+            let path = entry.path();
+            let rel = path.strip_prefix(src_path).unwrap_or(&path);
+            let target = dest_path.join(rel);
+            if path.is_dir() {
+                if let Err(e) = std::fs::create_dir_all(&target) {
+                    return Err(format!(
+                        "copy_dir: failed to create \"{}\": {}",
+                        target.to_string_lossy(),
+                        e
+                    ));
+                }
+                stack.push(path);
+            } else {
+                if let Some(parent) = target.parent()
+                    && let Err(e) = std::fs::create_dir_all(parent)
+                {
+                    return Err(format!(
+                        "copy_dir: failed to create \"{}\": {}",
+                        parent.to_string_lossy(),
+                        e
+                    ));
+                }
+                if let Err(e) = std::fs::copy(&path, &target) {
+                    return Err(format!(
+                        "copy_dir: failed to copy \"{}\" to \"{}\": {}",
+                        path.to_string_lossy(),
+                        target.to_string_lossy(),
+                        e
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[native_fn(module = "fs")]
+pub fn dir_size(path: String) -> Result<i64, String> {
+    let mut total: i64 = 0;
+    let mut stack = vec![std::path::PathBuf::from(&path)];
+    while let Some(dir) = stack.pop() {
+        let entries = match std::fs::read_dir(&dir) {
+            Ok(e) => e,
+            Err(e) => {
+                return Err(format!(
+                    "dir_size: failed to read \"{}\": {}",
+                    dir.to_string_lossy(),
+                    e
+                ))
+            }
+        };
+        for entry in entries.filter_map(|e| e.ok()) {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else {
+                match std::fs::metadata(&path) {
+                    Ok(m) => total += m.len() as i64,
+                    Err(e) => {
+                        return Err(format!(
+                            "dir_size: failed to stat \"{}\": {}",
+                            path.to_string_lossy(),
+                            e
+                        ))
+                    }
+                }
+            }
+        }
+    }
+    Ok(total)
+}
+
+#[native_fn(module = "fs")]
+pub fn is_symlink(path: String) -> Result<bool, String> {
+    match std::fs::symlink_metadata(&path) {
+        Ok(metadata) => Ok(metadata.file_type().is_symlink()),
+        Err(e) => Err(format!(
+            "is_symlink: failed to read \"{}\": {}",
+            path, e
+        )),
+    }
+}
+
 rl_std_core::native_module!("fs";
     bound: IoStore;
     funcs: [
@@ -957,5 +1071,6 @@ rl_std_core::native_module!("fs";
         path_relative,
         open, close,
         read_handle, write_handle, seek, flush, read_all, readline,
+        copy_dir, dir_size, is_symlink,
     ],
 );

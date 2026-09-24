@@ -20,7 +20,7 @@ pub mod rng;
 pub mod runtime;
 pub mod signatures;
 
-pub use convert::{FromValueR, IntoValueR, ValueType};
+pub use convert::{Bytes, FromValueR, IntoValueR, ValueType};
 pub use handle::{Arity, NativeHandle, NativeThunk};
 pub use rng::Xoshiro256;
 pub use runtime::{HandleStore, Runtime};

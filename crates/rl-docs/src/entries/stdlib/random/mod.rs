@@ -16,6 +16,7 @@ mod rand_int_range;
 mod rand_range;
 mod rand_range_step;
 mod rand_sample;
+mod rand_seed;
 mod rand_shuffle;
 mod rand_string;
 
@@ -44,6 +45,7 @@ static FUNCTIONS: &[&FnEntry] = &[
     &rand_range::RAND_RANGE,
     &rand_range_step::RAND_RANGE_STEP,
     &rand_sample::RAND_SAMPLE,
+    &rand_seed::RAND_SEED,
     &rand_shuffle::RAND_SHUFFLE,
     &rand_string::RAND_STRING,
 ];

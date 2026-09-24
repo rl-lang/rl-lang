@@ -4,6 +4,7 @@
 //! with the `str` primitive. Ported once from the former per-runtime
 //! `stdlib/string/*.rs` copies.
 
+use rl_ast::statements::TypeAnnotation;
 use rl_std_core::Runtime;
 use rl_std_macros::native_fn;
 use rl_utils::errors::Error;
@@ -229,6 +230,212 @@ pub fn format<R: Runtime>(
     Ok(result)
 }
 
+// ---- prefix / suffix stripping --------------------------------------------
+
+#[native_fn(module = "str")]
+pub fn strip_prefix(string: String, prefix: String) -> Result<String, String> {
+    match string.strip_prefix(&prefix) {
+        Some(rest) => Ok(rest.to_string()),
+        None => Err(format!(
+            "strip_prefix: string does not start with \"{}\"",
+            prefix
+        )),
+    }
+}
+
+#[native_fn(module = "str")]
+pub fn strip_suffix(string: String, suffix: String) -> Result<String, String> {
+    match string.strip_suffix(&suffix) {
+        Some(rest) => Ok(rest.to_string()),
+        None => Err(format!(
+            "strip_suffix: string does not end with \"{}\"",
+            suffix
+        )),
+    }
+}
+
+// ---- search from end ------------------------------------------------------
+
+#[native_fn(module = "str")]
+pub fn last_index_of(string: String, needle: String) -> i64 {
+    match string.rfind(&needle) {
+        Some(i) => string[..i].chars().count() as i64,
+        None => -1_i64,
+    }
+}
+
+// ---- split variants -------------------------------------------------------
+
+#[native_fn(module = "str")]
+pub fn split_once(string: String, sep: String) -> Result<Vec<String>, String> {
+    match string.split_once(&sep) {
+        Some((before, after)) => Ok(vec![before.to_string(), after.to_string()]),
+        None => Err(format!(
+            "split_once: separator \"{}\" not found in string",
+            sep
+        )),
+    }
+}
+
+#[native_fn(module = "str")]
+pub fn lines(string: String) -> Vec<String> {
+    string.lines().map(String::from).collect()
+}
+
+// ---- wrap / indent / dedent -----------------------------------------------
+
+#[native_fn(module = "str")]
+pub fn wrap(string: String, width: i64) -> String {
+    if width <= 0 {
+        return string;
+    }
+    let width = width as usize;
+    let mut result = String::new();
+    let mut line_len = 0;
+
+    for word in string.split_whitespace() {
+        if line_len == 0 {
+            result.push_str(word);
+            line_len = word.len();
+        } else if line_len + 1 + word.len() <= width {
+            result.push(' ');
+            result.push_str(word);
+            line_len += 1 + word.len();
+        } else {
+            result.push('\n');
+            result.push_str(word);
+            line_len = word.len();
+        }
+    }
+    result
+}
+
+#[native_fn(module = "str")]
+pub fn indent(string: String, prefix: String) -> String {
+    let lines: Vec<String> = string.lines().map(|l| format!("{}{}", prefix, l)).collect();
+    lines.join("\n")
+}
+
+#[native_fn(module = "str")]
+pub fn dedent(string: String) -> String {
+    let prefix_len = string
+        .lines()
+        .filter(|l| !l.is_empty())
+        .map(|l| l.len() - l.trim_start().len())
+        .min()
+        .unwrap_or(0);
+    string
+        .lines()
+        .map(|l| {
+            if l.is_empty() {
+                String::new()
+            } else {
+                l[prefix_len..].to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+// ---- line-level diff ------------------------------------------------------
+
+#[native_fn(module = "str", sig(string, string -> result[array[tuple[string, int]]]))]
+pub fn diff_lines<R: Runtime>(_cx: &mut R::Cx, a: String, b: String) -> R::Value {
+    let lines_a: Vec<&str> = a.lines().collect();
+    let lines_b: Vec<&str> = b.lines().collect();
+
+    let mut result = Vec::new();
+    let max_len = lines_a.len().max(lines_b.len());
+    let mut i = 0;
+
+    while i < max_len {
+        let in_a = lines_a.get(i).copied();
+        let in_b = lines_b.get(i).copied();
+
+        match (in_a, in_b) {
+            (Some(a_line), Some(b_line)) if a_line == b_line => {
+                result.push(R::tuple(vec![
+                    R::from_string(a_line.to_string()),
+                    R::from_i64(0),
+                ]));
+            }
+            (Some(a_line), Some(b_line)) => {
+                result.push(R::tuple(vec![
+                    R::from_string(format!("-{}", a_line)),
+                    R::from_i64(-1),
+                ]));
+                result.push(R::tuple(vec![
+                    R::from_string(format!("+{}", b_line)),
+                    R::from_i64(1),
+                ]));
+            }
+            (Some(a_line), None) => {
+                result.push(R::tuple(vec![
+                    R::from_string(format!("-{}", a_line)),
+                    R::from_i64(-1),
+                ]));
+            }
+            (None, Some(b_line)) => {
+                result.push(R::tuple(vec![
+                    R::from_string(format!("+{}", b_line)),
+                    R::from_i64(1),
+                ]));
+            }
+            (None, None) => {}
+        }
+        i += 1;
+    }
+
+    let inner = TypeAnnotation::Tuple(std::rc::Rc::new(vec![
+        TypeAnnotation::String,
+        TypeAnnotation::Int,
+    ]));
+    R::ok(R::array(result, inner))
+}
+
+// ---- character class predicates -------------------------------------------
+
+#[native_fn(module = "str")]
+pub fn is_alpha(string: String) -> bool {
+    !string.is_empty() && string.chars().all(|c| c.is_alphabetic())
+}
+
+#[native_fn(module = "str")]
+pub fn is_numeric(string: String) -> bool {
+    !string.is_empty() && string.chars().all(|c| c.is_ascii_digit())
+}
+
+#[native_fn(module = "str")]
+pub fn is_whitespace(string: String) -> bool {
+    !string.is_empty() && string.chars().all(|c| c.is_whitespace())
+}
+
+// ---- unicode category -----------------------------------------------------
+
+#[native_fn(module = "str")]
+pub fn unicode_category(ch: String) -> Result<String, String> {
+    let c = match ch.chars().next() {
+        Some(c) => c,
+        None => return Err("unicode_category: empty string".to_string()),
+    };
+    let cat = if c.is_alphabetic() {
+        if c.is_uppercase() { "Lu" }
+        else if c.is_lowercase() { "Ll" }
+        else { "Lt" }
+    } else if c.is_numeric() {
+        "Nd"
+    } else if c.is_whitespace() {
+        "Zs"
+    } else if c == '\n' || c == '\r' || c == '\t' {
+        "Zl"
+    } else if !c.is_control() {
+        "Po"
+    } else {
+        "Cc"
+    };
+    Ok(cat.to_string())
+}
+
 rl_std_core::native_module!("str";
     funcs: [
         to_upper, to_lower, trim, trim_end, trim_start, reverse,
@@ -237,5 +444,9 @@ rl_std_core::native_module!("str";
         bytes, chars, split,
         char_at, slice, join,
         concat, format,
+        strip_prefix, strip_suffix, last_index_of,
+        split_once, lines,
+        wrap, indent, dedent, diff_lines,
+        is_alpha, is_numeric, is_whitespace, unicode_category,
     ],
 );

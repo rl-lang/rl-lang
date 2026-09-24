@@ -1,9 +1,12 @@
 use serde::Deserialize;
+use std::collections::HashMap;
 
 /// Represents the full `rl.toml` project manifest.
 #[derive(Deserialize)]
 pub struct RlToml {
     pub project: Project,
+    #[serde(default)]
+    pub dependencies: HashMap<String, Dependency>,
 }
 
 /// The `[project]` section of `rl.toml`.
@@ -15,6 +18,18 @@ pub struct Project {
     pub version: String,
     /// Path to the entry point relative to the project root (e.g. `"src/main.rl"`).
     pub entry: String,
+}
+
+/// A dependency entry in `[dependencies]`.
+#[derive(Deserialize, Clone)]
+pub struct Dependency {
+    pub url: String,
+    pub sha256: Option<String>,
+}
+
+/// Returns `true` if the raw TOML content contains a `[dependencies]` section.
+pub fn has_dependencies_section(raw: &str) -> bool {
+    raw.contains("[dependencies]")
 }
 
 /// Reads and parses `rl.toml` from the current directory.

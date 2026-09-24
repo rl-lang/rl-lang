@@ -1,0 +1,17 @@
+[package]
+name = "rl-pm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Package manager for the rl-lang toolchain"
+repository.workspace = true
+
+[dependencies]
+serde.workspace = true
+toml.workspace = true
+ureq.workspace = true
+dirs = "6"
+tar = "0.4"
+flate2 = "1"
+sha2 = "0.10"
+walkdir = "2"

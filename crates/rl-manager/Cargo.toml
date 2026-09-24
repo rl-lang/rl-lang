@@ -1,0 +1,34 @@
+[package]
+name = "rl-manager"
+version.workspace = true
+readme = "readme.md"
+edition.workspace = true
+license.workspace = true
+description = "rl-lang toolchain manager - install, update, and manage rl binaries"
+repository.workspace = true
+
+[lib]
+name = "rl_manager"
+path = "src/lib.rs"
+
+[[bin]]
+name = "rlm"
+path = "src/bin/rlm.rs"
+
+[dependencies]
+clap.workspace = true
+ureq.workspace = true
+sha2.workspace = true
+tar.workspace = true
+flate2.workspace = true
+zip.workspace = true
+tempfile.workspace = true
+crossterm = { workspace = true, optional = true }
+ratatui = { workspace = true, optional = true }
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+[features]
+default = ["tui"]
+tui = ["dep:crossterm", "dep:ratatui"]

@@ -7,7 +7,6 @@ members = [
     "crates/rl-parser",
     "crates/rl-resolver",
     "crates/rl-vm",
-    "crates/rl-cranelift",
     "crates/rl-checker",
     "crates/rl-docs",
     "crates/rl-tooling",
@@ -20,33 +19,36 @@ members = [
     "crates/rl-std",
     "crates/rl-tests",
     "crates/rl-benches",
-    "crates/rl-cc"
+    "crates/rl-cc",
+    "crates/rl-pm",
+    "crates/rl-manager",
 ]
 
 [workspace.package]
-version = "2.1.0"
+version = "2.2.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/rl-lang/rl-lang"
 
 [workspace.dependencies]
-rl-commons = { path = "crates/rl-commons", version = "2.1.0" }
-rl-std-core = { path = "crates/rl-std-core", version = "2.1.0" }
-rl-std-macros = { path = "crates/rl-std-macros", version = "2.1.0" }
-rl-std = { path = "crates/rl-std", version = "2.1.0" }
-rl-utils = { path = "crates/rl-utils", version = "2.1.0" }
-rl-lexer = { path = "crates/rl-lexer", version = "2.1.0" }
-rl-ast = { path = "crates/rl-ast", version = "2.1.0" }
-rl-parser = { path = "crates/rl-parser", version = "2.1.0" }
-rl-resolver = { path = "crates/rl-resolver", version = "2.1.0" }
-rl-vm = { path = "crates/rl-vm", version = "2.1.0" }
-rl-cranelift = { path = "crates/rl-cranelift", version = "2.1.0" }
-rl-checker = { path = "crates/rl-checker", version = "2.1.0" }
-rl-docs = { path = "crates/rl-docs", version = "2.1.0" }
-rl-tooling = { path = "crates/rl-tooling", version = "2.1.0" }
-rl-repl = { path = "crates/rl-repl", default-features = false, version = "2.1.0" }
-rl-lsp = { path = "crates/rl-lsp", version = "2.1.0" }
-rl-cc = { path = "crates/rl-cc", version = "2.1.0" }
+rl-commons = { path = "crates/rl-commons", version = "2.2.0" }
+rl-std-core = { path = "crates/rl-std-core", version = "2.2.0" }
+rl-std-macros = { path = "crates/rl-std-macros", version = "2.2.0" }
+rl-std = { path = "crates/rl-std", version = "2.2.0" }
+rl-utils = { path = "crates/rl-utils", version = "2.2.0" }
+rl-lexer = { path = "crates/rl-lexer", version = "2.2.0" }
+rl-ast = { path = "crates/rl-ast", version = "2.2.0" }
+rl-parser = { path = "crates/rl-parser", version = "2.2.0" }
+rl-resolver = { path = "crates/rl-resolver", version = "2.2.0" }
+rl-vm = { path = "crates/rl-vm", version = "2.2.0" }
+rl-checker = { path = "crates/rl-checker", version = "2.2.0" }
+rl-docs = { path = "crates/rl-docs", version = "2.2.0" }
+rl-tooling = { path = "crates/rl-tooling", version = "2.2.0" }
+rl-repl = { path = "crates/rl-repl", default-features = false, version = "2.2.0" }
+rl-lsp = { path = "crates/rl-lsp", version = "2.2.0" }
+rl-cc = { path = "crates/rl-cc", version = "2.2.0" }
+rl-pm = { path = "crates/rl-pm", version = "2.2.0" }
+rl-manager = { path = "crates/rl-manager", version = "2.2.0" }
 
 criterion = { version = "0.5", features = ["html_reports"] }
 syn = { version = "2", features = ["full"] }
@@ -67,10 +69,6 @@ libffi = "5"
 clap = { version = "4.6.1", features = ["derive"] }
 log = "0.4"
 env_logger = "0.11"
-cranelift-jit = "0.116"
-cranelift-module = "0.116"
-cranelift-codegen = "0.116"
-cranelift-frontend = "0.116"
 target-lexicon = "0.13"
 zstd = "0.13"
 rodio = { version = "0.22.2", default-features = false, features = ["playback", "symphonia-all"] }
@@ -78,9 +76,28 @@ cpal = "0.17"
 symphonia = { version = "0.5", features = ["all"] }
 eframe = { version = "0.35", features = ["android-game-activity"] }
 shell-words = "1.1"
+rpassword = "7"
+rustyline = "17"
 libc = "0.2"
 tempfile = "3.27.0"
 glob = "0.3"
+sha2 = "0.10"
+digest = "0.10"
+sha1 = "0.10"
+md-5 = "0.10"
+hmac = "0.12"
+subtle = "2.5"
+base64 = "0.22"
+hex = "0.4"
+getrandom = "0.2"
+uuid = { version = "1", features = ["v4", "v7"] }
+argon2 = "0.5"
+csv = "1"
+rust-ini = "0.18"
+serde_yaml = "0.9"
+tar = "0.4"
+flate2 = "1"
+zip = "0.6"
 
 [profile.release]
 opt-level = 3

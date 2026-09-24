@@ -19,6 +19,7 @@ mod match_statement;
 mod program_attribute;
 mod record_declaration;
 mod tag_declaration;
+mod type_alias;
 mod variable_declaration;
 mod while_statement;
 
@@ -31,6 +32,17 @@ use rl_lexer::tokentypes::TokenType;
 use rl_utils::{errors::Error, span::Span};
 
 impl Parser {
+    /// Whether an identifier after `dec` starts a typed declaration.
+    ///
+    /// Bare identifiers default to inferred bindings (`dec name = value`),
+    /// so known type names opt out: declared records/tags, type aliases,
+    /// and the reserved `any[...]` union (an Identifier, not a keyword).
+    fn is_typed_dec_name(&self, name: &str) -> bool {
+        name == "any"
+            || self.record_names.contains(name)
+            || self.tag_names.contains(name)
+            || self.ast_arena.type_aliases.contains_key(name)
+    }
     /// Dispatches the current token to the appropriate statement sub-parser.
     ///
     /// | Token | Action |
@@ -87,7 +99,7 @@ impl Parser {
                 self.advance();
 
                 let is_inferred = if let TokenType::Identifier(name) = self.peek() {
-                    !self.record_names.contains(&name) && !self.tag_names.contains(&name)
+                    !self.is_typed_dec_name(&name)
                 } else {
                     false
                 };
@@ -107,6 +119,12 @@ impl Parser {
                 #[cfg(feature = "debug")]
                 log::info!("found `declaration` for constant while parsing");
                 self.parse_const_declartion(start)?
+            }
+            TokenType::Type => {
+                self.advance();
+                #[cfg(feature = "debug")]
+                log::info!("found `type` for alias declaration while parsing");
+                self.parse_type_alias(start, Vec::new())?
             }
             TokenType::While => {
                 self.advance();
@@ -296,6 +314,17 @@ impl Parser {
                     let msg = self.parse_optional_string_arg()?.or_else(|| Some(String::new()));
                     item_attrs.push(ItemAttribute::Deprecated(msg));
                 }
+                // custom markers from `#![define(name)]`: bare or with
+                // string args. Anything else is still a typo error.
+                TokenType::Identifier(name) => {
+                    let name = name.clone();
+                    if !self.custom_attr_defined(&name) {
+                        return Err(self.err("expected valid attribute", self.peek_span()));
+                    }
+                    self.advance();
+                    let args = self.parse_string_list_arg()?;
+                    item_attrs.push(ItemAttribute::Custom { name, args });
+                }
                 _ => return Err(self.err("expected valid attribute", self.peek_span())),
             }
 
@@ -324,7 +353,7 @@ impl Parser {
             TokenType::Dec => {
                 self.advance();
                 let is_inferred = if let TokenType::Identifier(name) = self.peek() {
-                    !self.record_names.contains(&name) && !self.tag_names.contains(&name)
+                    !self.is_typed_dec_name(&name)
                 } else {
                     false
                 };
@@ -341,6 +370,10 @@ impl Parser {
                 let mut stmt = self.parse_const_declartion(start)?;
                 Self::inject_item_attributes(&mut stmt, item_attrs);
                 Ok(stmt)
+            }
+            TokenType::Type => {
+                self.advance();
+                self.parse_type_alias(start, item_attrs)
             }
             _ => Err(self.err(
                 "expected fn, dec, or const after `!#[...]`",
@@ -442,5 +475,42 @@ impl Parser {
             }
             _ => Err(self.err("expected a number after `=`", self.peek_span())),
         }
+    }
+
+    /// True when `name` was declared by a `#![define(name)]` seen so far.
+    /// Defines are declare-before-use like values: a use above its
+    /// `#![define]` is an unknown attribute, not a forward reference.
+    fn custom_attr_defined(&self, name: &str) -> bool {
+        use rl_ast::statements::ProgramAttribute;
+        self.ast_arena.program_attributes.iter().any(|attr| {
+            matches!(attr, ProgramAttribute::Define { name: prev } if prev == name)
+        })
+    }
+
+    /// Parses `("a", "b")` or nothing, for custom `!#[name]` markers.
+    fn parse_string_list_arg(&mut self) -> Result<Vec<String>, Error> {
+        if !self.match_type(&[TokenType::LeftParen]) {
+            return Ok(Vec::new());
+        }
+        let mut args = Vec::new();
+        loop {
+            while self.match_type(&[TokenType::Newline]) {}
+            match self.peek() {
+                TokenType::StringLiteral(s) => {
+                    args.push(s.clone());
+                    self.advance();
+                }
+                _ => return Err(self.err("expected a string literal", self.peek_span())),
+            }
+            while self.match_type(&[TokenType::Newline]) {}
+            if self.match_type(&[TokenType::Comma]) {
+                continue;
+            }
+            break;
+        }
+        if !self.match_type(&[TokenType::RightParen]) {
+            return Err(self.err("expected `)`", self.peek_span()));
+        }
+        Ok(args)
     }
 }

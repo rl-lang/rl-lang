@@ -1,0 +1,193 @@
+use super::propagate::{emit_propagate_assign, emit_propagate_guard};
+use super::result_field_access;
+use crate::codegen::CCodegen;
+use crate::types::type_to_c;
+use rl_ast::nodes::ExpressionKind;
+use rl_ast::statements::{Statement, StatementKind, TypeAnnotation};
+use rl_ast::ExprId;
+use rl_utils::errors::Error;
+
+/// A bare expression used as a statement. A `?expr` gets the
+/// early-return guard; otherwise the value is simply discarded.
+pub(super) fn compile_expr_stmt(cc: &mut CCodegen, expr_id: ExprId) -> Result<(), Error> {
+    let expr = cc.ast.exprs.get(expr_id);
+    if let ExpressionKind::Propagate(inner) = &expr.kind {
+        let temp = emit_propagate_assign(cc, *inner)?;
+        emit_propagate_guard(cc, &temp, true)?;
+    } else {
+        cc.hoist_stmt_literals(expr_id)?;
+        cc.writer.write_indent();
+        cc.compile_expr(expr_id)?;
+        cc.writer.write(";\n");
+    }
+    Ok(())
+}
+
+/// `return expr` / bare `return`. A `return ?expr` always returns the
+/// `rl_result` on failure (never the script-mode exit path), then
+/// unwraps the success value for the caller. Inside a lambda the static
+/// C function returns `rl_result`, so values wrap with `rl_ok`.
+pub(super) fn compile_return(cc: &mut CCodegen, ret: Option<ExprId>) -> Result<(), Error> {
+    match ret {
+        Some(expr_id) => {
+            let expr = cc.ast.exprs.get(expr_id);
+            if let ExpressionKind::Propagate(inner) = &expr.kind {
+                let temp = emit_propagate_assign(cc, *inner)?;
+                emit_propagate_guard(cc, &temp, false)?;
+                cc.writer.write_indent();
+                if cc.in_lambda_body {
+                    cc.writer.write(&format!(
+                        "return rl_ok({});\n",
+                        result_field_access("rl_result", &temp)
+                    ));
+                } else {
+                    cc.writer.write(&format!(
+                        "return {};\n",
+                        result_field_access("rl_result", &temp)
+                    ));
+                }
+            } else if cc.in_lambda_body {
+                cc.hoist_stmt_literals(expr_id)?;
+                cc.writer.write_indent();
+                cc.writer.write("return rl_ok(");
+                cc.compile_expr(expr_id)?;
+                cc.writer.write(");\n");
+            } else {
+                cc.hoist_stmt_literals(expr_id)?;
+                cc.writer.write_indent();
+                cc.writer.write("return ");
+                // dynamic boundary, like declarations: box into union
+                // storage, unbox out of it into concrete storage
+                let declared = cc.fn_return.clone();
+                let dynamic_val = matches!(
+                    cc.inferred_expr_type(expr_id),
+                    Some(
+                        TypeAnnotation::Any(_)
+                            | TypeAnnotation::CAny(_)
+                            | TypeAnnotation::Infer
+                            | TypeAnnotation::Generic(_)
+                    )
+                );
+                match declared {
+                    Some(
+                        TypeAnnotation::Any(_)
+                        | TypeAnnotation::CAny(_),
+                    ) => {
+                        let st = declared.clone().unwrap();
+                        if !cc.box_for_any_storage(&st, expr_id)? {
+                            cc.compile_expr(expr_id)?;
+                        }
+                    }
+                    Some(concrete) if dynamic_val => {
+                        if let Some(unbox_fn) = CCodegen::dynamic_unboxer(&concrete) {
+                            cc.writer.write(&format!("{unbox_fn}("));
+                            cc.compile_expr(expr_id)?;
+                            cc.writer.write(")");
+                        } else {
+                            cc.compile_expr(expr_id)?;
+                        }
+                    }
+                    _ => {
+                        cc.compile_expr(expr_id)?;
+                    }
+                }
+                cc.writer.write(";\n");
+            }
+        }
+        None => {
+            cc.writer.writeln("return;");
+        }
+    }
+    Ok(())
+}
+
+/// `while cond { body }` - maps directly onto a C `while` loop.
+pub(super) fn compile_while(
+    cc: &mut CCodegen,
+    condition: ExprId,
+    body: &[Statement],
+) -> Result<(), Error> {
+    cc.writer.write_indent();
+    cc.writer.write("while (");
+    cc.compile_expr(condition)?;
+    cc.writer.write(") {\n");
+    cc.writer.indent();
+    cc.push_scope();
+    // `x is T` refines x for the body (mirrors the checker)
+    let saved = cc
+        .detect_is_refinement(condition)
+        .map(|(name, refined)| (name.clone(), cc.refine_var(name, refined)));
+    for s in body {
+        cc.compile_statement(s)?;
+    }
+    if let Some((name, prev)) = saved {
+        cc.unrefine_var(&name, prev);
+    }
+    cc.pop_scope();
+    cc.writer.dedent();
+    cc.writer.write_indent();
+    cc.writer.write("}\n");
+    Ok(())
+}
+
+/// `for [init, cond, incr] { body }` - maps onto a C `for` loop.
+pub(super) fn compile_for(
+    cc: &mut CCodegen,
+    initializer: &Statement,
+    condition: ExprId,
+    increment: ExprId,
+    body: &[Statement],
+) -> Result<(), Error> {
+    cc.writer.write_indent();
+    cc.writer.write("for (");
+    cc.push_scope();
+    compile_for_init(cc, initializer)?;
+    cc.writer.write("; ");
+    cc.compile_expr(condition)?;
+    cc.writer.write("; ");
+    cc.compile_expr(increment)?;
+    cc.writer.write(") {\n");
+    cc.writer.indent();
+    for s in body {
+        cc.compile_statement(s)?;
+    }
+    cc.pop_scope();
+    cc.writer.dedent();
+    cc.writer.write_indent();
+    cc.writer.write("}\n");
+    Ok(())
+}
+
+/// Compiles a C-style `for` initializer (`int64_t i = 0`) without the
+/// trailing semicolon or newline, so it fits inside `for (...; ...; ...)`.
+fn compile_for_init(cc: &mut CCodegen, stmt: &Statement) -> Result<(), Error> {
+    if let StatementKind::ResolvedVariableDeclaration {
+        name,
+        type_annotation,
+        value,
+        ..
+    } = &stmt.kind
+    {
+        let c_type = type_to_c(type_annotation);
+        let c_name = cc.declare_unique(name);
+        cc.writer.write(&format!("{} {} = ", c_type, c_name));
+        cc.compile_expr(*value)?;
+    }
+    Ok(())
+}
+
+/// `loop { body }` - an infinite `while (1)` loop, exited via `break`.
+pub(super) fn compile_loop(cc: &mut CCodegen, body: &[Statement]) -> Result<(), Error> {
+    cc.writer.write_indent();
+    cc.writer.write("while (1) {\n");
+    cc.writer.indent();
+    cc.push_scope();
+    for s in body {
+        cc.compile_statement(s)?;
+    }
+    cc.pop_scope();
+    cc.writer.dedent();
+    cc.writer.write_indent();
+    cc.writer.write("}\n");
+    Ok(())
+}

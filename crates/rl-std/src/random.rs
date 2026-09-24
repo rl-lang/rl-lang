@@ -241,6 +241,13 @@ pub fn rand_shuffle<R: Runtime>(_cx: &mut R::Cx, array: R::Value) -> R::Value {
     R::ok(R::array(items, rl_ast::statements::TypeAnnotation::Infer))
 }
 
+// ---- seeding --------------------------------------------------------------
+
+#[native_fn(module = "random")]
+pub fn rand_seed<R: Runtime>(cx: &mut R::Cx, seed: i64) {
+    R::rng(cx).reseed(seed as u64);
+}
+
 rl_std_core::native_module!("random";
     funcs: [
         rand_int, rand_int_range,
@@ -251,5 +258,6 @@ rl_std_core::native_module!("random";
         rand_choice, rand_choices, rand_sample, rand_shuffle,
         rand_byte, rand_bytes,
         rand_char, rand_string,
+        rand_seed,
     ],
 );
