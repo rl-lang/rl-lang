@@ -52,6 +52,8 @@ pub(super) fn compile_function_decl(
     cc.writer.indent();
 
     cc.push_scope();
+    // like lambdas above: no refinements inside function bodies
+    let saved_refined = std::mem::take(&mut cc.refined_vars);
     // Locals must not leak into other functions' bodies.
     let saved_types = cc.var_types.clone();
     let saved_nullable = cc.nullable_vars.clone();
@@ -72,12 +74,25 @@ pub(super) fn compile_function_decl(
     cc.writer.dedent();
     cc.writer.write_indent();
     cc.writer.write("}\n\n");
+    cc.refined_vars = saved_refined;
     Ok(())
 }
 
 /// `impl Record { fn method(...) { ... } }` — emits each method as a
 /// top-level `impl_Record_method` C function.
 pub(super) fn compile_impl_block(
+    cc: &mut CCodegen,
+    record: &str,
+    methods: &[Statement],
+) -> Result<(), Error> {
+    // methods may outlive refinements like lambdas do
+    let saved_refined = std::mem::take(&mut cc.refined_vars);
+    let result = compile_impl_block_inner(cc, record, methods);
+    cc.refined_vars = saved_refined;
+    result
+}
+
+fn compile_impl_block_inner(
     cc: &mut CCodegen,
     record: &str,
     methods: &[Statement],

@@ -395,6 +395,13 @@ static inline rl_map rl_unbox_map(rl_value v) {
     }
     return *v.data.map;
 }
+static inline rl_set rl_unbox_set(rl_value v) {
+    if (v.tag != RL_VTAG_SET) {
+        fprintf(stderr, "error: type mismatch unwrapping value\n");
+        _rl_abort();
+    }
+    return *v.data.set;
+}
 
 // Generic wrap: convert any plain C value into a successful `rl_result`
 // (narrower ints/floats widen; `rl_result` and `void*` pass through as

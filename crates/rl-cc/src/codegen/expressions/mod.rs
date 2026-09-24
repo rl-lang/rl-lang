@@ -191,32 +191,7 @@ impl<'a> CCodegen<'a> {
                         )
                     );
                     if dynamic_storage {
-                        let unboxer = match refined {
-                            TypeAnnotation::Int
-                            | TypeAnnotation::CInt
-                            | TypeAnnotation::UInt
-                            | TypeAnnotation::CUInt
-                            | TypeAnnotation::SInt
-                            | TypeAnnotation::CSInt
-                            | TypeAnnotation::SUInt
-                            | TypeAnnotation::CSUInt => Some("rl_unbox_i64"),
-                            TypeAnnotation::Float
-                            | TypeAnnotation::CFloat
-                            | TypeAnnotation::SFloat
-                            | TypeAnnotation::CSFloat => Some("rl_unbox_f64"),
-                            TypeAnnotation::Bool | TypeAnnotation::CBool => {
-                                Some("rl_unbox_bool")
-                            }
-                            TypeAnnotation::String | TypeAnnotation::CString => {
-                                Some("rl_unbox_str")
-                            }
-                            TypeAnnotation::Array(_)
-                            | TypeAnnotation::CArray(_) => Some("rl_unbox_arr"),
-                            TypeAnnotation::Map(_, _)
-                            | TypeAnnotation::CMap(_, _) => Some("rl_unbox_map"),
-                            _ => None,
-                        };
-                        if let Some(unbox_fn) = unboxer {
+                        if let Some(unbox_fn) = Self::dynamic_unboxer(&refined) {
                             self.writer.write(&format!("{unbox_fn}({})", c_name));
                             return Ok(());
                         }
@@ -352,6 +327,22 @@ impl<'a> CCodegen<'a> {
                         self.writer.write(")");
                     }
                 } else {
+                    // bare call to a top-level user function: same
+                    // argument handling as path calls (Any boxing etc.)
+                    let user_target: Option<String> = match &callee_expr.kind {
+                        ExpressionKind::ResolvedIdentifier { name, .. }
+                        | ExpressionKind::Identifier(name) => {
+                            if !is_variable && self.user_fns.contains(name) {
+                                Some(name.to_string())
+                            } else {
+                                None
+                            }
+                        }
+                        _ => None,
+                    };
+                    if let Some(target) = user_target {
+                        return self.compile_user_call(&target, args);
+                    }
                     self.compile_expr(*callee)?;
                     self.writer.write("(");
                     for (i, arg) in args.iter().enumerate() {
@@ -1251,11 +1242,28 @@ impl<'a> CCodegen<'a> {
     fn compile_user_call(&mut self, name: &str, args: &[ExprId]) -> Result<(), Error> {
         let c_name = mangle(name);
         self.writer.write(&format!("{}(", c_name));
+        let params = self.user_fn_params.get(name).cloned().unwrap_or_default();
         for (i, arg) in args.iter().enumerate() {
             if i > 0 {
                 self.writer.write(", ");
             }
-            self.compile_expr(*arg)?;
+            // concrete argument into an `any` parameter boxes, mirroring
+            // declarations (the checker already proved membership).
+            // Unknown/unboxable arguments fall back to plain emission
+            // (status quo ante): declarations stay strict, call
+            // boundaries stay lenient.
+            let mut emitted = false;
+            if let Some(TypeAnnotation::Any(_) | TypeAnnotation::CAny(_)) = params.get(i) {
+                let param = params[i].clone();
+                match self.box_for_any_storage(&param, *arg) {
+                    Ok(true) => emitted = true,
+                    Ok(false) => {}
+                    Err(_) => {}
+                }
+            }
+            if !emitted {
+                self.compile_expr(*arg)?;
+            }
         }
         self.writer.write(")");
         Ok(())
@@ -1363,6 +1371,10 @@ impl<'a> CCodegen<'a> {
     ) -> Result<(), Error> {
         let lambda_id = self.lambda_counter;
         self.lambda_counter += 1;
+        // closures may outlive refinements (live captures): compile
+        // bodies against declared types, mirroring the checker, which
+        // skips refinement for bodies defining functions
+        let saved_refined = std::mem::take(&mut self.refined_vars);
         let fn_name = format!("_rl_lambda_{}", lambda_id);
 
         let mut captured_names: Vec<String> = Vec::new();
@@ -1440,6 +1452,7 @@ impl<'a> CCodegen<'a> {
         func_code.push_str("}\n\n");
 
         self.static_funcs.push(func_code);
+        self.refined_vars = saved_refined;
 
         let mut captures_code = String::new();
         for (i, name) in captured_names.iter().enumerate() {

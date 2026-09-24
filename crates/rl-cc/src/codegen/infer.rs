@@ -41,7 +41,11 @@ impl<'a> CCodegen<'a> {
             ExpressionKind::SByte(_) => Some(TypeAnnotation::SByte),
             ExpressionKind::BSByte(_) => Some(TypeAnnotation::BSByte),
             ExpressionKind::Grouping(inner) => self.inferred_expr_type(*inner),
-            ExpressionKind::ResolvedIdentifier { name, .. } => self.var_types.get(name).cloned(),
+            ExpressionKind::ResolvedIdentifier { name, .. } => self
+                .refined_vars
+                .get(name)
+                .cloned()
+                .or_else(|| self.var_types.get(name).cloned()),
             ExpressionKind::ArrayLiteral(elems) => {
                 let elem = elems
                     .first()

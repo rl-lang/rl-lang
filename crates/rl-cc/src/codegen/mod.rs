@@ -63,6 +63,9 @@ pub struct CCodegen<'a> {
     /// Declared return types of top-level user functions, for inferring
     /// the type of `CallExpr` results (`dec x = get_filtered_notes()`).
     pub user_fn_returns: HashMap<String, TypeAnnotation>,
+    /// Declared parameter types of top-level user functions, for boxing
+    /// concrete arguments into `any` parameters at call sites.
+    pub user_fn_params: HashMap<String, Vec<TypeAnnotation>>,
     /// Top-level variables, emitted at C file scope so every function
     /// body can read and assign them.
     pub global_names: HashSet<String>,
@@ -121,6 +124,7 @@ impl<'a> CCodegen<'a> {
             closure_factories: HashMap::new(),
             user_fns: HashSet::new(),
             user_fn_returns: HashMap::new(),
+            user_fn_params: HashMap::new(),
             global_names: HashSet::new(),
             tuple_defs: String::new(),
             record_defs: String::new(),
@@ -468,10 +472,17 @@ impl<'a> CCodegen<'a> {
         // inference, which patched precise types into the root scope.
         for stmt in statements {
             if let StatementKind::ResolvedFunctionDeclaration {
-                name, return_type, ..
+                name,
+                return_type,
+                params,
+                ..
             } = &stmt.kind
             {
                 self.user_fns.insert(name.clone());
+                self.user_fn_params.insert(
+                    name.clone(),
+                    params.iter().map(|p| p.param_type.clone()).collect(),
+                );
                 let mut resolved_return = return_type.clone();
                 if resolved_return == TypeAnnotation::Null {
                     if let Some(inferred) = self
@@ -1014,6 +1025,26 @@ impl<'a> CCodegen<'a> {
             self.writer.write("rl_value_null()");
             return Ok(true);
         }
+        // identifier reads out of dynamic storage (union params and
+        // variables) are already boxes: assign directly. inference
+        // reports None for these, which must not be mistaken for a
+        // concrete value needing a box. refined reads are excluded:
+        // they unbox on emission, so the value needs re-boxing below.
+        if let ExpressionKind::Identifier(n) | ExpressionKind::ResolvedIdentifier { name: n, .. } =
+            &expr.kind
+        {
+            if !self.refined_vars.contains_key(n) && matches!(
+                self.var_types.get(n),
+                Some(
+                    TypeAnnotation::Any(_)
+                        | TypeAnnotation::CAny(_)
+                        | TypeAnnotation::Infer
+                        | TypeAnnotation::Generic(_)
+                )
+            ) {
+                return Ok(false);
+            }
+        }
         // name the value for loud errors below (struct literals infer
         // to None, which would otherwise report as `None`)
         let value_desc = match &expr.kind {
@@ -1096,6 +1127,29 @@ impl<'a> CCodegen<'a> {
             None => {
                 self.refined_vars.remove(name);
             }
+        }
+    }
+
+    /// C unboxer for a dynamic (`rl_value`) source flowing into
+    /// `target` storage, or None when no conversion applies. Numerics
+    /// convert (mirroring the VM's `as`); everything else asserts the
+    /// exact tag. Shared by casts and `return` positions.
+    pub fn dynamic_unboxer(target: &TypeAnnotation) -> Option<&'static str> {
+        use TypeAnnotation as T;
+        match target {
+            T::Int | T::CInt | T::UInt | T::CUInt | T::SInt | T::CSInt | T::SUInt | T::CSUInt => {
+                Some("rl_unbox_num_i64")
+            }
+            T::Float | T::CFloat | T::SFloat | T::CSFloat => Some("rl_unbox_num_f64"),
+            T::Bool | T::CBool => Some("rl_unbox_bool"),
+            T::String | T::CString => Some("rl_unbox_str"),
+            T::Array(_) | T::CArray(_) => Some("rl_unbox_arr"),
+            T::Map(_, _) | T::CMap(_, _) => Some("rl_unbox_map"),
+            T::Set(_) | T::CSet(_) => Some("rl_unbox_set"),
+            T::Handle(_) | T::HandleInfer | T::Enum(_) | T::CEnum(_) => {
+                Some("rl_unbox_i64")
+            }
+            _ => None,
         }
     }
 

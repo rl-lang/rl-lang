@@ -3,7 +3,7 @@ use super::result_field_access;
 use crate::codegen::CCodegen;
 use crate::types::type_to_c;
 use rl_ast::nodes::ExpressionKind;
-use rl_ast::statements::{Statement, StatementKind};
+use rl_ast::statements::{Statement, StatementKind, TypeAnnotation};
 use rl_ast::ExprId;
 use rl_utils::errors::Error;
 
@@ -56,7 +56,41 @@ pub(super) fn compile_return(cc: &mut CCodegen, ret: Option<ExprId>) -> Result<(
                 cc.hoist_stmt_literals(expr_id)?;
                 cc.writer.write_indent();
                 cc.writer.write("return ");
-                cc.compile_expr(expr_id)?;
+                // dynamic boundary, like declarations: box into union
+                // storage, unbox out of it into concrete storage
+                let declared = cc.fn_return.clone();
+                let dynamic_val = matches!(
+                    cc.inferred_expr_type(expr_id),
+                    Some(
+                        TypeAnnotation::Any(_)
+                            | TypeAnnotation::CAny(_)
+                            | TypeAnnotation::Infer
+                            | TypeAnnotation::Generic(_)
+                    )
+                );
+                match declared {
+                    Some(
+                        TypeAnnotation::Any(_)
+                        | TypeAnnotation::CAny(_),
+                    ) => {
+                        let st = declared.clone().unwrap();
+                        if !cc.box_for_any_storage(&st, expr_id)? {
+                            cc.compile_expr(expr_id)?;
+                        }
+                    }
+                    Some(concrete) if dynamic_val => {
+                        if let Some(unbox_fn) = CCodegen::dynamic_unboxer(&concrete) {
+                            cc.writer.write(&format!("{unbox_fn}("));
+                            cc.compile_expr(expr_id)?;
+                            cc.writer.write(")");
+                        } else {
+                            cc.compile_expr(expr_id)?;
+                        }
+                    }
+                    _ => {
+                        cc.compile_expr(expr_id)?;
+                    }
+                }
                 cc.writer.write(";\n");
             }
         }

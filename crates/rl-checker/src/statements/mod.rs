@@ -360,18 +360,156 @@ impl TypeChecker {
         arena: &rl_ast::arena::Arena<rl_ast::nodes::Expression>,
         name: &str,
     ) -> bool {
-        Self::body_assigns_name_inner(statements, arena, name, false)
+        statements
+            .iter()
+            .any(|s| Self::stmt_assigns_name(s, arena, name))
     }
 
-    /// Inner assign scan with `count_fns`: when true, any function or
-    /// lambda definition also counts. Closures observe reassignment
-    /// (verified live), so in a body that reassigns the refined binding
-    /// a closure created anywhere may observe the new value.
     /// Checks `body` with `name` refined to `refined`, dropping the
     /// refinement (popping its scope) at the first statement assigning
     /// `name` or defining a function that could observe a later
     /// reassignment. Linear and order-sensitive: statements before the
     /// cutoff see the narrow type, statements after see the declared one.
+    /// Whether `body` defines any function, lambda, or impl block
+    /// at any depth. Closures observe reassignment live (verified),
+    /// so a refined binding read inside one may outlive the
+    /// refinement: bodies containing function definitions skip
+    /// refinement entirely rather than risk silent mistyping.
+    pub fn body_contains_fn(
+        statements: &[Statement],
+        arena: &rl_ast::arena::Arena<rl_ast::nodes::Expression>,
+    ) -> bool {
+        statements.iter().any(|s| Self::stmt_contains_fn(s, arena))
+    }
+
+    fn stmt_contains_fn(
+        stmt: &Statement,
+        arena: &rl_ast::arena::Arena<rl_ast::nodes::Expression>,
+    ) -> bool {
+        match &stmt.kind {
+            StatementKind::FunctionDeclaration { .. }
+            | StatementKind::ResolvedFunctionDeclaration { .. } => true,
+            StatementKind::ImplBlock { .. } | StatementKind::ResolvedImplBlock { .. } => true,
+            StatementKind::While { body, .. } | StatementKind::Loop(body) => {
+                Self::body_contains_fn(body, arena)
+            }
+            StatementKind::For { body, .. }
+            | StatementKind::ResolvedFor { body, .. }
+            | StatementKind::ForRange { body, .. }
+            | StatementKind::ResolvedForRange { body, .. }
+            | StatementKind::ForEach { body, .. }
+            | StatementKind::ResolvedForEach { body, .. } => {
+                Self::body_contains_fn(body, arena)
+            }
+            StatementKind::Conditional { if_branch, else_branch } => {
+                Self::stmt_contains_fn(if_branch, arena)
+                    || else_branch
+                        .as_ref()
+                        .is_some_and(|b| Self::stmt_contains_fn(b, arena))
+            }
+            StatementKind::ConditionalBranch { body, .. } => {
+                Self::body_contains_fn(body, arena)
+            }
+            StatementKind::Match { arms, .. } => arms
+                .iter()
+                .any(|(_, b)| Self::body_contains_fn(b, arena)),
+            StatementKind::VariableDeclaration { value, .. }
+            | StatementKind::ResolvedVariableDeclaration { value, .. }
+            | StatementKind::ConstantDeclaration { value, .. }
+            | StatementKind::ResolvedConstantDeclaration { value, .. }
+            | StatementKind::ResolvedArray { value, .. }
+            | StatementKind::ResolvedConstantArray { value, .. }
+            | StatementKind::ResolvedMap { value, .. }
+            | StatementKind::ResolvedConstantMap { value, .. }
+            | StatementKind::ResolvedSet { value, .. }
+            | StatementKind::ResolvedConstantSet { value, .. }
+            | StatementKind::ResolvedDestructureDeclaration { value, .. }
+            | StatementKind::Expression(value)
+            | StatementKind::Return(Some(value)) => {
+                Self::expr_contains_fn(arena, *value)
+            }
+            StatementKind::Array { value, .. }
+            | StatementKind::ConstantArray { value, .. }
+            | StatementKind::Set { items: value, .. }
+            | StatementKind::ConstantSet { items: value, .. } => value
+                .iter()
+                .any(|id| Self::expr_contains_fn(arena, *id)),
+            StatementKind::Map { entries, .. } | StatementKind::ConstantMap { entries, .. } => {
+                entries.iter().any(|(k, v)| {
+                    Self::expr_contains_fn(arena, *k) || Self::expr_contains_fn(arena, *v)
+                })
+            }
+            StatementKind::DestructureDeclaration { value, .. } => {
+                Self::expr_contains_fn(arena, *value)
+            }
+            _ => false,
+        }
+    }
+
+    fn expr_contains_fn(
+        arena: &rl_ast::arena::Arena<rl_ast::nodes::Expression>,
+        id: rl_ast::ExprId,
+    ) -> bool {
+        use rl_ast::nodes::ExpressionKind as EK;
+        let expr = arena.get(id);
+        match &expr.kind {
+            EK::Lambda { .. } | EK::ResolvedLambda { .. } => true,
+            EK::Binary { left, right, .. } => {
+                Self::expr_contains_fn(arena, *left) || Self::expr_contains_fn(arena, *right)
+            }
+            EK::Unary { operand, .. }
+            | EK::Grouping(operand)
+            | EK::Propagate(operand)
+            | EK::OkLiteral(operand)
+            | EK::ErrLiteral(operand)
+            | EK::ErrorLiteral(operand)
+            | EK::Cast { value: operand, .. }
+            | EK::Is { value: operand, .. } => Self::expr_contains_fn(arena, *operand),
+            EK::Call { args, .. } => args.iter().any(|a| Self::expr_contains_fn(arena, *a)),
+            EK::MethodCall { caller, args, .. } => {
+                Self::expr_contains_fn(arena, *caller)
+                    || args.iter().any(|a| Self::expr_contains_fn(arena, *a))
+            }
+            EK::CallExpr { callee, args } => {
+                Self::expr_contains_fn(arena, *callee)
+                    || args.iter().any(|a| Self::expr_contains_fn(arena, *a))
+            }
+            EK::FieldAccess { target, .. } => Self::expr_contains_fn(arena, *target),
+            EK::Index { target, index } => {
+                Self::expr_contains_fn(arena, *target)
+                    || Self::expr_contains_fn(arena, *index)
+            }
+            EK::IndexAssign {
+                target,
+                index,
+                value,
+            } => {
+                Self::expr_contains_fn(arena, *target)
+                    || Self::expr_contains_fn(arena, *index)
+                    || Self::expr_contains_fn(arena, *value)
+            }
+            EK::FieldAssign { target, value, .. } => {
+                Self::expr_contains_fn(arena, *target)
+                    || Self::expr_contains_fn(arena, *value)
+            }
+            EK::Assign { value, .. } | EK::ResolvedAssign { value, .. } => {
+                Self::expr_contains_fn(arena, *value)
+            }
+            EK::ArrayLiteral(elems)
+            | EK::SetLiteral(elems)
+            | EK::TupleLiteral(elems) => {
+                elems.iter().any(|e| Self::expr_contains_fn(arena, *e))
+            }
+            EK::MapLiteral(pairs) => pairs.iter().any(|(k, v)| {
+                Self::expr_contains_fn(arena, *k) || Self::expr_contains_fn(arena, *v)
+            }),
+            EK::StructLiteral { fields, .. } => fields
+                .iter()
+                .any(|(_, v)| Self::expr_contains_fn(arena, *v)),
+            _ => false,
+        }
+    }
+
     pub fn check_block_refined(
         &mut self,
         body: &[Statement],
@@ -379,6 +517,12 @@ impl TypeChecker {
         refined: TypeAnnotation,
         span: Span,
     ) {
+        // function definitions opt the whole body out: a closure may
+        // observe a later reassignment, which no ordering trick fixes
+        if Self::body_contains_fn(body, &self.ast_arena.exprs) {
+            self.check_block(body);
+            return;
+        }
         self.push_scope();
         self.declare(name.clone(), CheckType::Known(refined), false, span);
         // the refinement's "use" was the condition test itself: never
@@ -391,7 +535,7 @@ impl TypeChecker {
         let mut active = true;
         for stmt in body {
             if active
-                && Self::stmt_assigns_name(stmt, &self.ast_arena.exprs, &name, true)
+                && Self::stmt_assigns_name(stmt, &self.ast_arena.exprs, &name)
             {
                 active = false;
                 self.pop_scope();
@@ -403,22 +547,10 @@ impl TypeChecker {
         }
     }
 
-    pub fn body_assigns_name_inner(
-        statements: &[Statement],
-        arena: &rl_ast::arena::Arena<rl_ast::nodes::Expression>,
-        name: &str,
-        count_fns: bool,
-    ) -> bool {
-        statements
-            .iter()
-            .any(|s| Self::stmt_assigns_name(s, arena, name, count_fns))
-    }
-
     fn stmt_assigns_name(
         stmt: &Statement,
         arena: &rl_ast::arena::Arena<rl_ast::nodes::Expression>,
         name: &str,
-        count_fns: bool,
     ) -> bool {
         match &stmt.kind {
             StatementKind::VariableDeclaration { value, .. }
@@ -432,30 +564,30 @@ impl TypeChecker {
             | StatementKind::ResolvedSet { value, .. }
             | StatementKind::ResolvedConstantSet { value, .. }
             | StatementKind::ResolvedDestructureDeclaration { value, .. } => {
-                Self::expr_assigns_name(arena, *value, name, count_fns)
+                Self::expr_assigns_name(arena, *value, name)
             }
             StatementKind::DestructureDeclaration { bindings, value } => {
                 bindings.iter().any(|(_, n)| n == name)
-                    || Self::expr_assigns_name(arena, *value, name, count_fns)
+                    || Self::expr_assigns_name(arena, *value, name)
             }
             StatementKind::Array { value, .. } | StatementKind::ConstantArray { value, .. } => {
-                value.iter().any(|id| Self::expr_assigns_name(arena, *id, name, count_fns))
+                value.iter().any(|id| Self::expr_assigns_name(arena, *id, name))
             }
             StatementKind::Map { entries, .. } | StatementKind::ConstantMap { entries, .. } => {
                 entries
                     .iter()
-                    .any(|(k, v)| Self::expr_assigns_name(arena, *k, name, count_fns) || Self::expr_assigns_name(arena, *v, name, count_fns))
+                    .any(|(k, v)| Self::expr_assigns_name(arena, *k, name) || Self::expr_assigns_name(arena, *v, name))
             }
             StatementKind::Set { items, .. } | StatementKind::ConstantSet { items, .. } => {
-                items.iter().any(|id| Self::expr_assigns_name(arena, *id, name, count_fns))
+                items.iter().any(|id| Self::expr_assigns_name(arena, *id, name))
             }
-            StatementKind::Expression(id) => Self::expr_assigns_name(arena, *id, name, count_fns),
-            StatementKind::Return(Some(id)) => Self::expr_assigns_name(arena, *id, name, count_fns),
+            StatementKind::Expression(id) => Self::expr_assigns_name(arena, *id, name),
+            StatementKind::Return(Some(id)) => Self::expr_assigns_name(arena, *id, name),
             StatementKind::While { condition, body } => {
-                Self::expr_assigns_name(arena, *condition, name, count_fns)
-                    || Self::body_assigns_name_inner(body, arena, name, count_fns)
+                Self::expr_assigns_name(arena, *condition, name)
+                    || Self::body_assigns_name(body, arena, name)
             }
-            StatementKind::Loop(body) => Self::body_assigns_name_inner(body, arena, name, count_fns),
+            StatementKind::Loop(body) => Self::body_assigns_name(body, arena, name),
             StatementKind::For {
                 initializer,
                 condition,
@@ -468,10 +600,10 @@ impl TypeChecker {
                 increment,
                 body,
             } => {
-                Self::stmt_assigns_name(initializer, arena, name, count_fns)
-                    || Self::expr_assigns_name(arena, *condition, name, count_fns)
-                    || Self::expr_assigns_name(arena, *increment, name, count_fns)
-                    || Self::body_assigns_name_inner(body, arena, name, count_fns)
+                Self::stmt_assigns_name(initializer, arena, name)
+                    || Self::expr_assigns_name(arena, *condition, name)
+                    || Self::expr_assigns_name(arena, *increment, name)
+                    || Self::body_assigns_name(body, arena, name)
             }
             StatementKind::ForRange {
                 variable, range, body, ..
@@ -480,8 +612,8 @@ impl TypeChecker {
                 variable, range, body, ..
             } => {
                 variable == name
-                    || Self::stmt_assigns_name(range, arena, name, count_fns)
-                    || Self::body_assigns_name_inner(body, arena, name, count_fns)
+                    || Self::stmt_assigns_name(range, arena, name)
+                    || Self::body_assigns_name(body, arena, name)
             }
             StatementKind::ForEach {
                 variable, iterable, body, ..
@@ -490,39 +622,37 @@ impl TypeChecker {
                 variable, iterable, body, ..
             } => {
                 variable == name
-                    || Self::expr_assigns_name(arena, *iterable, name, count_fns)
-                    || Self::body_assigns_name_inner(body, arena, name, count_fns)
+                    || Self::expr_assigns_name(arena, *iterable, name)
+                    || Self::body_assigns_name(body, arena, name)
             }
             StatementKind::Conditional { if_branch, else_branch } => {
-                Self::stmt_assigns_name(if_branch, arena, name, count_fns)
+                Self::stmt_assigns_name(if_branch, arena, name)
                     || else_branch
                         .as_ref()
-                        .is_some_and(|b| Self::stmt_assigns_name(b, arena, name, count_fns))
+                        .is_some_and(|b| Self::stmt_assigns_name(b, arena, name))
             }
             StatementKind::ConditionalBranch { condition, body, .. } => {
-                condition.as_ref().is_some_and(|c| Self::expr_assigns_name(arena, *c, name, count_fns))
-                    || Self::body_assigns_name_inner(body, arena, name, count_fns)
+                condition.as_ref().is_some_and(|c| Self::expr_assigns_name(arena, *c, name))
+                    || Self::body_assigns_name(body, arena, name)
             }
             StatementKind::FunctionDeclaration { params, body, .. }
             | StatementKind::ResolvedFunctionDeclaration { params, body, .. } => {
-                count_fns
-                    || params.iter().any(|p| p.param_name == name)
-                    || Self::body_assigns_name_inner(body, arena, name, count_fns)
+                params.iter().any(|p| p.param_name == name)
+                    || Self::body_assigns_name(body, arena, name)
             }
             StatementKind::ImplBlock { methods, .. } | StatementKind::ResolvedImplBlock { methods, .. } => {
-                count_fns
-                    || methods.iter().any(|m| Self::stmt_assigns_name(m, arena, name, count_fns))
+                methods.iter().any(|m| Self::stmt_assigns_name(m, arena, name))
             }
             StatementKind::Match { value, arms } => {
-                Self::expr_assigns_name(arena, *value, name, count_fns)
+                Self::expr_assigns_name(arena, *value, name)
                     || arms.iter().any(|(pat, b)| {
                         let pat_assigns = match pat {
                             rl_ast::statements::MatchPattern::Literal(id) => {
-                                Self::expr_assigns_name(arena, *id, name, count_fns)
+                                Self::expr_assigns_name(arena, *id, name)
                             }
                             rl_ast::statements::MatchPattern::Wildcard => false,
                         };
-                        pat_assigns || Self::body_assigns_name_inner(b, arena, name, count_fns)
+                        pat_assigns || Self::body_assigns_name(b, arena, name)
                     })
             }
             StatementKind::TypeAlias { .. }
@@ -544,74 +674,72 @@ impl TypeChecker {
         arena: &rl_ast::arena::Arena<rl_ast::nodes::Expression>,
         id: rl_ast::ExprId,
         name: &str,
-        count_fns: bool,
     ) -> bool {
         let expr = arena.get(id);
         match &expr.kind {
             ExpressionKind::Assign { name: n, value }
             | ExpressionKind::ResolvedAssign { name: n, value, .. } => {
-                n == name || Self::expr_assigns_name(arena, *value, name, count_fns)
+                n == name || Self::expr_assigns_name(arena, *value, name)
             }
             ExpressionKind::Lambda { params, body, .. }
             | ExpressionKind::ResolvedLambda { params, body, .. } => {
-                count_fns
-                    || params.iter().any(|p| p.param_name == name)
-                    || Self::body_assigns_name_inner(body, arena, name, count_fns)
+                params.iter().any(|p| p.param_name == name)
+                    || Self::body_assigns_name(body, arena, name)
             }
             ExpressionKind::Binary { left, right, .. } => {
-                Self::expr_assigns_name(arena, *left, name, count_fns)
-                    || Self::expr_assigns_name(arena, *right, name, count_fns)
+                Self::expr_assigns_name(arena, *left, name)
+                    || Self::expr_assigns_name(arena, *right, name)
             }
             ExpressionKind::Unary { operand, .. }
             | ExpressionKind::Grouping(operand)
             | ExpressionKind::Propagate(operand)
             | ExpressionKind::OkLiteral(operand)
             | ExpressionKind::ErrLiteral(operand)
-            | ExpressionKind::ErrorLiteral(operand) => Self::expr_assigns_name(arena, *operand, name, count_fns),
+            | ExpressionKind::ErrorLiteral(operand) => Self::expr_assigns_name(arena, *operand, name),
             ExpressionKind::Call { args, .. } => args
                 .iter()
-                .any(|a| Self::expr_assigns_name(arena, *a, name, count_fns)),
+                .any(|a| Self::expr_assigns_name(arena, *a, name)),
             ExpressionKind::MethodCall { caller, args, .. } => {
-                Self::expr_assigns_name(arena, *caller, name, count_fns)
-                    || args.iter().any(|a| Self::expr_assigns_name(arena, *a, name, count_fns))
+                Self::expr_assigns_name(arena, *caller, name)
+                    || args.iter().any(|a| Self::expr_assigns_name(arena, *a, name))
             }
             ExpressionKind::CallExpr { callee, args } => {
-                Self::expr_assigns_name(arena, *callee, name, count_fns)
-                    || args.iter().any(|a| Self::expr_assigns_name(arena, *a, name, count_fns))
+                Self::expr_assigns_name(arena, *callee, name)
+                    || args.iter().any(|a| Self::expr_assigns_name(arena, *a, name))
             }
             ExpressionKind::FieldAccess { target, .. } => {
-                Self::expr_assigns_name(arena, *target, name, count_fns)
+                Self::expr_assigns_name(arena, *target, name)
             }
             ExpressionKind::Index { target, index } => {
-                Self::expr_assigns_name(arena, *target, name, count_fns)
-                    || Self::expr_assigns_name(arena, *index, name, count_fns)
+                Self::expr_assigns_name(arena, *target, name)
+                    || Self::expr_assigns_name(arena, *index, name)
             }
             ExpressionKind::IndexAssign {
                 target,
                 index,
                 value,
             } => {
-                Self::expr_assigns_name(arena, *target, name, count_fns)
-                    || Self::expr_assigns_name(arena, *index, name, count_fns)
-                    || Self::expr_assigns_name(arena, *value, name, count_fns)
+                Self::expr_assigns_name(arena, *target, name)
+                    || Self::expr_assigns_name(arena, *index, name)
+                    || Self::expr_assigns_name(arena, *value, name)
             }
             ExpressionKind::FieldAssign { target, value, .. } => {
-                Self::expr_assigns_name(arena, *target, name, count_fns)
-                    || Self::expr_assigns_name(arena, *value, name, count_fns)
+                Self::expr_assigns_name(arena, *target, name)
+                    || Self::expr_assigns_name(arena, *value, name)
             }
             ExpressionKind::ArrayLiteral(elems)
             | ExpressionKind::SetLiteral(elems)
             | ExpressionKind::TupleLiteral(elems) => {
-                elems.iter().any(|e| Self::expr_assigns_name(arena, *e, name, count_fns))
+                elems.iter().any(|e| Self::expr_assigns_name(arena, *e, name))
             }
             ExpressionKind::MapLiteral(pairs) => pairs.iter().any(|(k, v)| {
-                Self::expr_assigns_name(arena, *k, name, count_fns) || Self::expr_assigns_name(arena, *v, name, count_fns)
+                Self::expr_assigns_name(arena, *k, name) || Self::expr_assigns_name(arena, *v, name)
             }),
             ExpressionKind::StructLiteral { fields, .. } => fields
                 .iter()
-                .any(|(_, v)| Self::expr_assigns_name(arena, *v, name, count_fns)),
+                .any(|(_, v)| Self::expr_assigns_name(arena, *v, name)),
             ExpressionKind::Cast { value, .. } | ExpressionKind::Is { value, .. } => {
-                Self::expr_assigns_name(arena, *value, name, count_fns)
+                Self::expr_assigns_name(arena, *value, name)
             }
             // leaves never assign
             ExpressionKind::Null
