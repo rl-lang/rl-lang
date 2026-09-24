@@ -41,7 +41,11 @@ impl<'a> CCodegen<'a> {
             ExpressionKind::SByte(_) => Some(TypeAnnotation::SByte),
             ExpressionKind::BSByte(_) => Some(TypeAnnotation::BSByte),
             ExpressionKind::Grouping(inner) => self.inferred_expr_type(*inner),
-            ExpressionKind::ResolvedIdentifier { name, .. } => self.var_types.get(name).cloned(),
+            ExpressionKind::ResolvedIdentifier { name, .. } => self
+                .refined_vars
+                .get(name)
+                .cloned()
+                .or_else(|| self.var_types.get(name).cloned()),
             ExpressionKind::ArrayLiteral(elems) => {
                 let elem = elems
                     .first()
@@ -527,12 +531,128 @@ impl<'a> CCodegen<'a> {
         }
     }
 
-    /// Effective storage annotation for a declaration: the annotation
-    /// itself, unless it is `Infer`/`Generic`, in which case the
-    /// initializer shape (and the checker's stdlib signatures) decide.
+    /// True for `result_unwrap(x)` (function or method form) where x's
+    /// payload type is unknown. Lets declarations unwrap by their storage
+    /// type instead of the i64 default (e.g. `dec bool b` over a map
+    /// lookup, whose value type is a free generic).
+    /// A fully unknown payload (no checker signature, e.g. bare-path
+    /// stdlib calls) also counts: storage type is the best available
+    /// guess, strictly better than the blind i64 default.
+    pub fn is_unwrap_of_dynamic(&self, id: ExprId) -> bool {
+        let expr = self.ast.exprs.get(id);
+        let inner = match &expr.kind {
+            ExpressionKind::Call { path, args } => {
+                if path.last().map(|s| s.as_str()) != Some("result_unwrap") {
+                    return false;
+                }
+                args.first().copied()
+            }
+            ExpressionKind::MethodCall { caller, method, .. } => {
+                if method.last().map(|s| s.as_str()) != Some("result_unwrap") {
+                    return false;
+                }
+                Some(*caller)
+            }
+            _ => None,
+        };
+        let Some(arg) = inner else {
+            return false;
+        };
+        match self.inferred_expr_type(arg) {
+            Some(TypeAnnotation::Result(payload)) | Some(TypeAnnotation::CResult(payload)) => {
+                Self::needs_inference(&payload)
+            }
+            // No static payload at all: dynamic by definition.
+            Some(_) | None => true,
+        }
+    }
     /// A bare `handle` (HandleInfer) refines to the initializer handle
     /// kind like the checker does. Falls back to `Result(Infer)` - most
     /// dynamic values in generated code are results.
+    /// The `x` inside `result_unwrap(x)` (function or method form),
+    /// so declarations that unwrap by storage type can compile the inner
+    /// call directly instead of double-unwrapping.
+    pub fn unwrap_inner_arg(&self, id: ExprId) -> Option<ExprId> {
+        let expr = self.ast.exprs.get(id);
+        match &expr.kind {
+            ExpressionKind::Call { path, args } => {
+                if path.last().map(|s| s.as_str()) != Some("result_unwrap") {
+                    return None;
+                }
+                args.first().copied()
+            }
+            ExpressionKind::MethodCall { caller, method, .. } => {
+                if method.last().map(|s| s.as_str()) != Some("result_unwrap") {
+                    return None;
+                }
+                Some(*caller)
+            }
+            _ => None,
+        }
+    }
+    /// True for `__arr_get` / `__map_get` (function or method form)
+    /// whose container layout is statically unknown, so the emitter
+    /// takes the boxed form. Declarations over these get storage-driven
+    /// unboxing; anything else would mistype the payload.
+    pub fn core_get_needs_boxing(&self, id: ExprId) -> bool {
+        let expr = self.ast.exprs.get(id);
+        let (name, container) = match &expr.kind {
+            ExpressionKind::Call { path, args } => {
+                let name = path.last().map(|s| s.as_str()).unwrap_or("");
+                if name != "__arr_get" && name != "__map_get" {
+                    return false;
+                }
+                (name, args.first().copied())
+            }
+            ExpressionKind::MethodCall { caller, method, .. } => {
+                let name = method.last().map(|s| s.as_str()).unwrap_or("");
+                if name != "__arr_get" && name != "__map_get" {
+                    return false;
+                }
+                (name, Some(*caller))
+            }
+            _ => return false,
+        };
+        let Some(cid) = container else {
+            return true;
+        };
+        if name == "__arr_get" {
+            // Known element type takes the typed getter.
+            self.array_arg_elem(cid).is_none()
+        } else {
+            match self.inferred_expr_type(cid) {
+                Some(TypeAnnotation::Map(_, vt)) | Some(TypeAnnotation::CMap(_, vt)) => {
+                    Self::needs_inference(&vt)
+                }
+                // Unknown container entirely: box it.
+                _ => true,
+            }
+        }
+    }
+    /// The message argument of an `__abort(...)` call, if `id` is one.
+    /// Lets declarations panic first and feed storage an unreachable
+    /// dummy, so abort's `-> T` contract holds in generated code too.
+    pub fn abort_message_arg(&self, id: ExprId) -> Option<ExprId> {
+        let expr = self.ast.exprs.get(id);
+        match &expr.kind {
+            ExpressionKind::Call { path, args } => {
+                if path.last().map(|s| s.as_str()) != Some("__abort") {
+                    return None;
+                }
+                args.first().copied()
+            }
+            ExpressionKind::MethodCall { method, args, .. } => {
+                if method.last().map(|s| s.as_str()) != Some("__abort") {
+                    return None;
+                }
+                args.first().copied()
+            }
+            _ => None,
+        }
+    }
+    /// Effective storage annotation for a declaration: the annotation
+    /// itself, unless it is `Infer`/`Generic`, in which case the
+    /// initializer shape (and the checker's stdlib signatures) decide.
     pub fn effective_decl_type(
         &self,
         annotation: &TypeAnnotation,

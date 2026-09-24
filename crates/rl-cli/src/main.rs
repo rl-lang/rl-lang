@@ -68,11 +68,6 @@ enum Commands {
         #[arg(long)]
         vm: bool,
 
-        /// JIT compile via cranelift instead
-        /// (this is very very highly experimental)
-        #[arg(long)]
-        cranelift: bool,
-
         /// Arguments forwarded to the script (accessible as argv inside .rl)
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         extra_args: Vec<String>,
@@ -84,20 +79,14 @@ enum Commands {
                        configured entry file.\n\n\
                        Use `rl new` first if you don't have an rl.toml yet.",
         after_help = "EXAMPLES:\n    \
-                       rl dev\n    \
-                       rl dev --vm\n    \
-                       rl dev --cranelift"
+                        rl dev\n    \
+                        rl dev --vm\n"
     )]
     Dev {
         /// Run through the bytecode VM
         /// (this is highly experimental)
         #[arg(long)]
         vm: bool,
-
-        /// JIT compile via cranelift instead
-        /// (this is very very highly experimental)
-        #[arg(long)]
-        cranelift: bool,
     },
 
     /// Scaffold a new project directory, or create a standalone script
@@ -265,6 +254,16 @@ fn main() {
     #[cfg(feature = "debug")]
     env_logger::init();
 
+    // ADR-0002: the Cranelift backend is gone. Catch the old flag before
+    // clap rejects it so the error points at the replacement. Only scan
+    // rl's own flags (everything after `--` belongs to the script).
+    let own_args = std::env::args().take_while(|a| a != "--");
+    if own_args.into_iter().any(|a| a == "--cranelift") {
+        eprintln!("error: --cranelift was removed (see ADR-0002)");
+        eprintln!("  use `rlt <file> --compile` for native code instead");
+        std::process::exit(1);
+    }
+
     // expriemental
     match find_embedded() {
         Some(EmbeddedProgram::Source(source)) => {
@@ -307,7 +306,6 @@ fn main() {
             file,
             code,
             vm,
-            cranelift,
             ..
         } => {
             // Inline code mode: rl run -c "code here"
@@ -340,14 +338,6 @@ fn main() {
                     #[cfg(not(feature = "vm"))]
                     {
                         eprintln!("error: --vm requires the `vm` feature");
-                        std::process::exit(1)
-                    }
-                } else if cranelift {
-                    #[cfg(feature = "cranelift")]
-                    pipeline::vm::cranelift_loop(source, ast, statements);
-                    #[cfg(not(feature = "cranelift"))]
-                    {
-                        eprintln!("error: --cranelift requires the `cranelift` feature");
                         std::process::exit(1)
                     }
                 } else {
@@ -428,16 +418,6 @@ fn main() {
                     eprintln!("error: --vm requires the `vm` feature");
                     std::process::exit(1)
                 }
-            } else if cranelift {
-                #[cfg(feature = "cranelift")]
-                pipeline::vm::cranelift_loop(source, ast, statements);
-                #[cfg(not(feature = "cranelift"))]
-                {
-                    eprintln!(
-                        "error: --cranelift requires the `cranelift` feature (which implies `vm`)"
-                    );
-                    std::process::exit(1)
-                }
             } else {
                 #[cfg(feature = "vm")]
                 pipeline::vm::vm_loop(source, ast, statements);
@@ -452,7 +432,7 @@ fn main() {
             }
         }
 
-        Commands::Dev { vm, cranelift } => {
+        Commands::Dev { vm } => {
             let config = read_rl_toml();
 
             // warn if [dependencies] section is missing
@@ -480,16 +460,6 @@ fn main() {
                 #[cfg(not(feature = "vm"))]
                 {
                     eprintln!("error: --vm requires the `vm` feature");
-                    std::process::exit(1)
-                }
-            } else if cranelift {
-                #[cfg(feature = "cranelift")]
-                pipeline::vm::cranelift_loop(source, ast, statements);
-                #[cfg(not(feature = "cranelift"))]
-                {
-                    eprintln!(
-                        "error: --cranelift requires the `cranelift` feature (which implies `vm`)"
-                    );
                     std::process::exit(1)
                 }
             } else {

@@ -164,8 +164,8 @@ impl Parser {
                 }
             }
             let span = start.join(self.previous_span());
-            let is_std = segments[0] == "std";
-            return if is_std {
+            let is_builtin_module = segments[0] == "std" || segments[0] == "core";
+            return if is_builtin_module {
                 // last segment is the function name; everything before it is the path
                 let name = segments
                     .pop()
@@ -250,9 +250,9 @@ impl Parser {
         }
 
         let span = start.join(self.previous_span());
-        let is_std = path.first().map(|s| s == "std").unwrap_or(false);
+        let is_builtin_module = path.first().map(|s| s == "std" || s == "core").unwrap_or(false);
 
-        if is_std {
+        if is_builtin_module {
             Ok(Statement::new(
                 StatementKind::Import {
                     names,

@@ -73,6 +73,12 @@ pub enum ProgramAttribute {
         factor: f64,
         base_symbol: String,
     },
+    /// Declares a custom item attribute: `#![define(x)]` allows `!#[x]`
+    /// and `!#[x("arg", ...)]` on items. Markers only - the compiler
+    /// attaches them, user tooling and future phases interpret them.
+    Define {
+        name: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -307,6 +313,14 @@ pub enum StatementKind {
         path: Vec<String>,
         names: Vec<String>,
     },
+    /// A type alias: `type Name Target`. Compile-time only; the target
+    /// is stored resolved in the `Ast` alias table, and uses vanish
+    /// before codegen. Carries item attributes (`!#[deprecated]`).
+    TypeAlias {
+        name: String,
+        target: TypeAnnotation,
+        item_attributes: Vec<ItemAttribute>,
+    },
 
     DestructureDeclaration {
         bindings: Vec<(TypeAnnotation, String)>,
@@ -389,6 +403,13 @@ pub enum ItemAttribute {
     Allow(Vec<Lint>),
     /// `!#[deprecated]` or `!#[deprecated("use foo() instead")]`
     Deprecated(Option<String>),
+    /// A user-defined marker from `#![define(name)]`, applied as `!#[name]`
+    /// or `!#[name("arg", ...)]`. Attaches only - interpretation belongs
+    /// to tooling and future compiler phases.
+    Custom {
+        name: String,
+        args: Vec<String>,
+    },
 }
 
 /// The type of a variable, constant, or parameter binding.
@@ -479,6 +500,12 @@ pub enum TypeAnnotation {
     Handle(HandleKind),
     /// Placeholder used by `dec handle name = v` bindings.
     HandleInfer,
+    /// Union of member types (`any[int, string]`): a value of any one
+    /// member type. Members are normalized at parse (flattened,
+    /// deduplicated, never empty).
+    Any(Rc<Vec<TypeAnnotation>>),
+    /// Constant union (`const any[int, string] ...`).
+    CAny(Rc<Vec<TypeAnnotation>>),
 }
 
 /// A single function or lambda parameter: a name and its type annotation.
@@ -549,6 +576,55 @@ impl TypeAnnotation {
                     .collect::<Option<Vec<_>>>()?,
             )),
             _ => return None,
+        })
+    }
+}
+
+impl StatementKind {
+    /// Item-level attributes (`!#[allow(...)]`, `!#[deprecated(...)]`) on
+    /// `fn` / `dec` / `const` declarations. The single canonical query -
+    /// compiler passes should call this instead of matching variants.
+    pub fn item_attributes(&self) -> &[ItemAttribute] {
+        match self {
+            StatementKind::FunctionDeclaration { item_attributes, .. }
+            | StatementKind::VariableDeclaration { item_attributes, .. }
+            | StatementKind::ConstantDeclaration { item_attributes, .. } => item_attributes,
+            _ => &[],
+        }
+    }
+
+    /// Function-lifecycle marker (`!#[entry]`, `!#[test]`, ...), if any.
+    pub fn function_attribute(&self) -> Option<&FunctionAttribute> {
+        match self {
+            StatementKind::FunctionDeclaration { attribute, .. }
+            | StatementKind::ResolvedFunctionDeclaration { attribute, .. } => attribute.as_ref(),
+            _ => None,
+        }
+    }
+
+    /// True when `!#[allow(lint)]` covers this item.
+    pub fn has_lint(&self, lint: Lint) -> bool {
+        self.item_attributes().iter().any(|attr| match attr {
+            ItemAttribute::Allow(lints) => lints.contains(&lint),
+            _ => false,
+        })
+    }
+
+    /// The deprecation message, if `!#[deprecated]` marks this item.
+    /// `None` means not deprecated; `Some(None)` is a bare marker.
+    pub fn deprecation(&self) -> Option<Option<&str>> {
+        self.item_attributes().iter().find_map(|attr| match attr {
+            ItemAttribute::Deprecated(msg) => Some(msg.as_deref()),
+            _ => None,
+        })
+    }
+
+    /// Custom marker args, if `!#[name]` (from `#![define(name)]`) marks
+    /// this item. Answers "does something have x" with its arguments.
+    pub fn has_custom_attr(&self, name: &str) -> Option<&[String]> {
+        self.item_attributes().iter().find_map(|attr| match attr {
+            ItemAttribute::Custom { name: n, args } if n == name => Some(args.as_slice()),
+            _ => None,
         })
     }
 }

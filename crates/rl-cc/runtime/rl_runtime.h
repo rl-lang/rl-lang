@@ -30,6 +30,7 @@
 #include <termios.h>
 #include <errno.h>
 #include <time.h>
+#include <sys/random.h>
 #include <ctype.h>
 #include <dlfcn.h>
 #include <dirent.h>
@@ -222,6 +223,9 @@ static inline rl_result rl_ok_closure(rl_closure v) {
 static inline rl_result _rl_identity_result(rl_result v) { return v; }
 static inline rl_result _rl_ok_null(void) { return rl_ok_null(); }
 
+// Flushes stdio and aborts; the loud failure behind checked unwraps.
+void _rl_abort(void);
+
 // Unwrap helpers - extract the inner C value from a successful
 // `rl_result`. Callers must have checked `is_ok` (or `?`) first;
 // these do no error checking.
@@ -258,9 +262,165 @@ static inline rl_set _rl_id_set(rl_set v) { return v; }
 
 static inline int64_t _rl_unwrap_auto(rl_result v) { return v.data.i64; }
 
+// Generic box: convert any plain C value into a dynamically-typed
+// `rl_value` for intrinsics taking heterogeneous values (`__arr_push`,
+// `__map_set`, set ops). Niche widths widen like `rl_ok`.
+#define rl_box(x) _Generic((x), \
+    int64_t:  _rl_box_i64, \
+    uint64_t: _rl_box_u64, \
+    int32_t:  _rl_box_i32, \
+    uint32_t: _rl_box_u32, \
+    double:   _rl_box_f64, \
+    float:    _rl_box_f32, \
+    bool:     _rl_box_bool, \
+    rl_string: _rl_box_str, \
+    rl_array:  _rl_box_arr, \
+    rl_map:    _rl_box_map, \
+    rl_set:    _rl_box_set, \
+    rl_value: _rl_box_value \
+)(x)
+
+static inline rl_value _rl_box_i64(int64_t v) {
+    rl_value r; r.tag = RL_VTAG_I64; r.data.i64 = v; return r;
+}
+static inline rl_value _rl_box_u64(uint64_t v) {
+    rl_value r; r.tag = RL_VTAG_I64; r.data.i64 = (int64_t)v; return r;
+}
+static inline rl_value _rl_box_i32(int32_t v) {
+    rl_value r; r.tag = RL_VTAG_I64; r.data.i64 = v; return r;
+}
+static inline rl_value _rl_box_u32(uint32_t v) {
+    rl_value r; r.tag = RL_VTAG_I64; r.data.i64 = v; return r;
+}
+static inline rl_value _rl_box_int(int v) {
+    rl_value r; r.tag = RL_VTAG_I64; r.data.i64 = v; return r;
+}
+static inline rl_value _rl_box_f64(double v) {
+    rl_value r; r.tag = RL_VTAG_F64; r.data.f64 = v; return r;
+}
+static inline rl_value _rl_box_f32(float v) {
+    rl_value r; r.tag = RL_VTAG_F64; r.data.f64 = v; return r;
+}
+static inline rl_value _rl_box_bool(bool v) {
+    rl_value r; r.tag = RL_VTAG_BOOL; r.data.boolean = v; return r;
+}
+static inline rl_value _rl_box_str(rl_string v) {
+    rl_value r; r.tag = RL_VTAG_STR; r.data.str = v; return r;
+}
+static inline rl_value _rl_box_arr(rl_array v) {
+    rl_value r; r.tag = RL_VTAG_ARR; r.data.arr = v; return r;
+}
+static inline rl_value _rl_box_map(rl_map v) {
+    rl_value r; r.tag = RL_VTAG_MAP;
+    rl_map *mp = malloc(sizeof(rl_map));
+    *mp = v;
+    r.data.map = mp;
+    return r;
+}
+static inline rl_value _rl_box_set(rl_set v) {
+    rl_value r; r.tag = RL_VTAG_SET;
+    rl_set *sp = malloc(sizeof(rl_set));
+    *sp = v;
+    r.data.set = sp;
+    return r;
+}
+static inline rl_value _rl_box_value(rl_value v) { return v; }
+
+// Checked unboxers for declaration-driven `core::` gets: abort on a
+// tag mismatch like the checked `rl_result_unwrap_*` family.
+static inline int64_t rl_unbox_i64(rl_value v) {
+    if (v.tag != RL_VTAG_I64) {
+        fprintf(stderr, "error: type mismatch unwrapping value\n");
+        _rl_abort();
+    }
+    return v.data.i64;
+}
+static inline double rl_unbox_f64(rl_value v) {
+    if (v.tag != RL_VTAG_F64) {
+        fprintf(stderr, "error: type mismatch unwrapping value\n");
+        _rl_abort();
+    }
+    return v.data.f64;
+}
+static inline bool rl_unbox_bool(rl_value v) {
+    if (v.tag != RL_VTAG_BOOL) {
+        fprintf(stderr, "error: type mismatch unwrapping value\n");
+        _rl_abort();
+    }
+    return v.data.boolean;
+}
+static inline rl_string rl_unbox_str(rl_value v) {
+    if (v.tag != RL_VTAG_STR) {
+        fprintf(stderr, "error: type mismatch unwrapping value\n");
+        _rl_abort();
+    }
+    return v.data.str;
+}
+// Numeric-converting unboxers for `as` casts out of dynamic (`any`)
+// storage, mirroring the VM's `as` (any numeric converts, the rest
+// abort). Narrower C widths cast again at the use site.
+static inline int64_t rl_unbox_num_i64(rl_value v) {
+    if (v.tag == RL_VTAG_I64) return v.data.i64;
+    if (v.tag == RL_VTAG_F64) return (int64_t)v.data.f64;
+    fprintf(stderr, "error: invalid cast to int\n");
+    _rl_abort();
+}
+static inline double rl_unbox_num_f64(rl_value v) {
+    if (v.tag == RL_VTAG_F64) return v.data.f64;
+    if (v.tag == RL_VTAG_I64) return (double)v.data.i64;
+    fprintf(stderr, "error: invalid cast to float\n");
+    _rl_abort();
+}
+// Null dynamic value (unions accept `null`; there is no null literal
+// with a storage type, so declarations emit this directly).
+static inline rl_value rl_value_null(void) {
+    rl_value r; r.tag = RL_VTAG_NULL; return r;
+}
+// Tag test for `is` over dynamic (`any`) storage: single evaluation,
+// no temporaries at the use site.
+static inline bool rl_value_has_tag(rl_value v, int tag) {
+    return v.tag == tag;
+}
+static inline rl_array rl_unbox_arr(rl_value v) {
+    if (v.tag != RL_VTAG_ARR) {
+        fprintf(stderr, "error: type mismatch unwrapping value\n");
+        _rl_abort();
+    }
+    return v.data.arr;
+}
+static inline rl_map rl_unbox_map(rl_value v) {
+    if (v.tag != RL_VTAG_MAP) {
+        fprintf(stderr, "error: type mismatch unwrapping value\n");
+        _rl_abort();
+    }
+    return *v.data.map;
+}
+static inline rl_set rl_unbox_set(rl_value v) {
+    if (v.tag != RL_VTAG_SET) {
+        fprintf(stderr, "error: type mismatch unwrapping value\n");
+        _rl_abort();
+    }
+    return *v.data.set;
+}
+
 // Generic wrap: convert any plain C value into a successful `rl_result`
 // (narrower ints/floats widen; `rl_result` and `void*` pass through as
 // identity/null). Emitted by generated code at value boundaries.
+static inline rl_result rl_value_to_result(rl_value v) {
+    switch (v.tag) {
+        case RL_VTAG_NULL: return rl_ok_null();
+        case RL_VTAG_I64: return rl_ok_i64(v.data.i64);
+        case RL_VTAG_F64: return rl_ok_f64(v.data.f64);
+        case RL_VTAG_BOOL: return rl_ok_bool(v.data.boolean);
+        case RL_VTAG_STR: return rl_ok_str(v.data.str);
+        case RL_VTAG_ARR: return rl_ok_arr(v.data.arr);
+        case RL_VTAG_MAP: return rl_ok_map(*v.data.map);
+        case RL_VTAG_SET: return rl_ok_set(*v.data.set);
+        case RL_VTAG_CLOSURE: return rl_ok_closure(*v.data.closure);
+        default: return rl_ok_null();
+    }
+}
+
 #define rl_ok(x) _Generic((x), \
     int64_t:  rl_ok_i64, \
     uint64_t: _rl_ok_u64, \
@@ -280,6 +440,7 @@ static inline int64_t _rl_unwrap_auto(rl_result v) { return v.data.i64; }
     rl_set:    rl_ok_set, \
     rl_closure: rl_ok_closure, \
     rl_result: _rl_identity_result, \
+    rl_value: rl_value_to_result, \
     void*:    _rl_ok_null \
 )(x)
 
@@ -370,6 +531,9 @@ void rl_print_rl_map(rl_map v);
 void rl_println_rl_map(rl_map v);
 void rl_print_rl_set(rl_set v);
 void rl_println_rl_set(rl_set v);
+// Print a dynamically-typed boxed value by its tag.
+void rl_print_rl_value(rl_value v);
+void rl_println_rl_value(rl_value v);
 // Closures print as an opaque `<closure>` placeholder.
 void rl_print_closure(rl_closure v);
 void rl_println_closure(rl_closure v);
@@ -395,6 +559,7 @@ void rl_println_closure(rl_closure v);
     rl_map:   rl_print_rl_map, \
     rl_set:   rl_print_rl_set, \
     rl_closure: rl_print_closure, \
+    rl_value: rl_print_rl_value, \
     default:  rl_print_ptr \
 )(x)
 
@@ -418,6 +583,7 @@ void rl_println_closure(rl_closure v);
     rl_map:   rl_println_rl_map, \
     rl_set:   rl_println_rl_set, \
     rl_closure: rl_println_closure, \
+    rl_value: rl_println_rl_value, \
     default:  rl_println_ptr \
 )(x)
 
@@ -742,6 +908,115 @@ rl_array rl_process_args(void);
 // Snapshot argv at startup; generated `main` calls this first.
 void rl_store_args(int argc, char **argv);
 
+// ---- core ----
+// Mirrors `core::` intrinsics. Typed getters abort out-of-bounds, missing
+// keys and mistyped values; the boxed forms serve dynamic containers with
+// declaration-driven unboxing (`rl_unbox_*`). Maps are string-keyed.
+rl_array rl_core_arr_new(void);
+rl_array rl_core_arr_push(rl_array a, rl_value v);
+int64_t rl_core_arr_get_i64(rl_array a, int64_t i);
+double rl_core_arr_get_f64(rl_array a, int64_t i);
+bool rl_core_arr_get_bool(rl_array a, int64_t i);
+rl_string rl_core_arr_get_str(rl_array a, int64_t i);
+rl_array rl_core_arr_get_arr(rl_array a, int64_t i);
+rl_map rl_core_arr_get_map(rl_array a, int64_t i);
+rl_value rl_core_arr_get_boxed(rl_array a, int64_t i);
+rl_array rl_core_arr_set(rl_array a, int64_t i, rl_value v);
+rl_value rl_core_map_get_boxed(rl_map m, rl_string k);
+int64_t rl_core_map_get_i64(rl_map m, rl_string k);
+double rl_core_map_get_f64(rl_map m, rl_string k);
+bool rl_core_map_get_bool(rl_map m, rl_string k);
+rl_string rl_core_map_get_str(rl_map m, rl_string k);
+rl_array rl_core_map_get_arr(rl_map m, rl_string k);
+rl_map rl_core_map_get_map(rl_map m, rl_string k);
+rl_map rl_core_map_set(rl_map m, rl_string k, rl_value v);
+rl_array rl_core_map_keys(rl_map m);
+rl_set rl_core_set_add(rl_set s, rl_value v);
+bool rl_core_set_has(rl_set s, rl_value v);
+rl_string rl_core_type_of(rl_result v);
+rl_array rl_core_arr_remove(rl_array a, int64_t i);
+rl_map rl_core_map_remove(rl_map m, rl_string k);
+bool rl_core_map_has(rl_map m, rl_string k);
+rl_set rl_core_set_remove(rl_set s, rl_value v);
+int64_t rl_core_arr_len(rl_array a);
+int64_t rl_core_map_len(rl_map m);
+int64_t rl_core_set_len(rl_set s);
+int64_t rl_core_str_len(rl_string s);
+uint8_t rl_core_str_get_byte(rl_string s, int64_t i);
+rl_string rl_core_str_slice(rl_string s, int64_t start, int64_t end);
+rl_string rl_core_str_concat(rl_string a, rl_string b);
+int64_t rl_core_syscall6(int64_t nr, int64_t a1, int64_t a2, int64_t a3,
+    int64_t a4, int64_t a5, int64_t a6);
+
+// ---- cli ----
+// Mirrors `std::cli`. The arg parser drops everything through the first
+// `--`, reads spec maps with string values, and returns string/bool/array
+// values plus a `"_"` positional array. Editable input is plain line reads
+// with history threading (no arrow-key editing).
+rl_result rl_cli_parse_args(rl_array spec);
+rl_result rl_cli_parse_args_or_exit(rl_array spec);
+rl_result rl_cli_usage(rl_array spec);
+rl_string rl_cli_prompt(rl_string msg);
+rl_string rl_cli_prompt_password(rl_string msg);
+bool rl_cli_prompt_confirm(rl_string msg);
+rl_string rl_cli_prompt_choice(rl_string msg, rl_array options);
+rl_result rl_cli_shell_split(rl_string s);
+rl_string rl_cli_shell_join(rl_array parts);
+rl_string rl_cli_read_line_editable(rl_string msg);
+rl_result rl_cli_read_line_with_history(rl_string msg, rl_array history);
+rl_result rl_cli_progress_bar(int64_t current, int64_t total, rl_string label);
+rl_result rl_cli_spinner_tick(int64_t frame);
+
+// ---- crypto ----
+// Mirrors `std::crypto`. Byte arrays are int64-element arrays holding
+// 0-255. Password hashing needs libargon2 (rlt links it when generated
+// code mentions rl_crypto_password).
+rl_array rl_crypto_sha256(rl_array data);
+rl_array rl_crypto_sha512(rl_array data);
+rl_array rl_crypto_sha1(rl_array data);
+rl_array rl_crypto_md5(rl_array data);
+rl_array rl_crypto_hmac_sha256(rl_array key, rl_array data);
+rl_array rl_crypto_hmac_sha512(rl_array key, rl_array data);
+bool rl_crypto_constant_time_eq(rl_array a, rl_array b);
+rl_array rl_crypto_secure_random_bytes(int64_t count);
+rl_array rl_crypto_secure_token(int64_t count);
+rl_string rl_crypto_secure_token_hex(int64_t count);
+rl_string rl_crypto_secure_token_urlsafe(int64_t count);
+rl_string rl_crypto_base64_encode(rl_array data);
+rl_result rl_crypto_base64_decode(rl_string s);
+rl_string rl_crypto_base64_url_encode(rl_array data);
+rl_result rl_crypto_base64_url_decode(rl_string s);
+rl_string rl_crypto_hex_encode(rl_array data);
+rl_result rl_crypto_hex_decode(rl_string s);
+rl_string rl_crypto_uuid_v4(void);
+rl_string rl_crypto_uuid_v7(void);
+rl_result rl_crypto_uuid_parse(rl_string s);
+rl_string rl_crypto_password_hash(rl_string password);
+bool rl_crypto_password_verify(rl_string password, rl_string hash);
+
+// ---- serialize ----
+// Mirrors `std::serialize`. YAML needs libyaml (rlt links it when
+// generated code mentions rl_serialize_yaml).
+rl_result rl_serialize_json_parse(rl_string s);
+rl_string rl_serialize_json_stringify(rl_result v);
+rl_string rl_serialize_json_stringify_pretty(rl_result v);
+bool rl_serialize_json_is_valid(rl_string s);
+rl_result rl_serialize_json_get(rl_result v, rl_string path);
+rl_result rl_serialize_csv_parse(rl_string s);
+rl_result rl_serialize_csv_parse_with_delimiter(rl_string s, rl_string delim);
+rl_string rl_serialize_csv_stringify(rl_array rows);
+rl_result rl_serialize_csv_parse_headers(rl_string s);
+rl_result rl_serialize_toml_parse(rl_string s);
+rl_result rl_serialize_toml_stringify(rl_result v);
+rl_result rl_serialize_ini_parse(rl_string s);
+rl_result rl_serialize_ini_stringify(rl_result v);
+rl_result rl_serialize_yaml_parse(rl_string s);
+rl_result rl_serialize_yaml_stringify(rl_result v);
+
+// Dynamic index for result-held containers (dynamic unwraps): maps by
+// string key, arrays by int index. Errors pass through.
+rl_result rl_dynamic_get(rl_result target, rl_result key);
+
 // ---- time ----
 // Format a Unix timestamp with a strftime-style `pattern`, or an error.
 rl_result rl_time_format_time(int64_t timestamp, rl_string pattern);
@@ -1055,6 +1330,9 @@ rl_result rl_term_poll(int64_t ms);
 // ---- result unwrap (with error checking) ----
 // Checked unwrap used by RL `unwrap`: aborts with a message when `r`
 // is an error instead of silently reading a dead union member.
+// Identity on ok (payload untouched); lets declarations hold dynamic
+// unwraps as results without mistyping the storage.
+rl_result rl_result_unwrap_result(rl_result r);
 int64_t rl_result_unwrap_i64(rl_result r);
 double rl_result_unwrap_f64(rl_result r);
 bool rl_result_unwrap_bool(rl_result r);

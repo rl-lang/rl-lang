@@ -30,6 +30,47 @@ fn assert_no_warnings(source: &str) {
 }
 
 #[test]
+fn imported_file_errors_carry_imported_name() {
+    use rl_checker::TypeChecker;
+    use rl_utils::source::SourceFile;
+
+    let dir = tempfile::tempdir().unwrap();
+    let lib_path = dir.path().join("lib.rl");
+    std::fs::write(&lib_path, "dec broken_thing = undefined_function_xyz()\n").unwrap();
+    let main_src = "get broken_thing from lib\n";
+
+    let file = SourceFile::new("main.rl", main_src.to_string());
+    let tokens = rl_lexer::tokenizer::Tokenizer::lex(file.clone()).expect("lex failed");
+    let (ast, stmts) =
+        rl_parser::parser_logic::Parser::parse(tokens, file.clone()).expect("parse failed");
+    let mut checker = TypeChecker::new()
+        .with_source_file(file)
+        .with_ast_arena(ast)
+        .with_base_dir(dir.path().to_path_buf());
+    checker.check(&stmts);
+
+    assert!(
+        !checker.errors.is_empty(),
+        "expected the imported error to surface"
+    );
+    let err = &checker.errors[0];
+    assert!(
+        err.message().contains("undefined_function_xyz"),
+        "unexpected error: {}",
+        err.message()
+    );
+    let name = err.source_name().expect("imported error needs a name");
+    assert!(
+        name.ends_with("lib.rl") && !name.ends_with("main.rl"),
+        "imported error must carry the imported file name, not main.rl (got {name})"
+    );
+    // the span must resolve inside the imported text (line 1), proving
+    // offsets were not mapped against the importing file
+    let text = err.source_text().expect("imported error needs its text");
+    assert!(text.contains("undefined_function_xyz"));
+}
+
+#[test]
 fn unimported_bare_call_errors() {
     assert_checker_msg(r#"println("hello")"#, "import it before use");
 }

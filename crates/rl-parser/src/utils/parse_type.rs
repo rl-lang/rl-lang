@@ -6,6 +6,56 @@ use rl_lexer::tokentypes::TokenType;
 use rl_utils::errors::Error;
 
 impl Parser {
+    /// Parses an `any[T, ...]` member list (the `[` is consumed here).
+    ///
+    /// Members parse like array elements (always mutable inside, matching
+    /// `array[T]`). Normalization: nested `any[...]` flatten, duplicates
+    /// drop out, trailing commas are allowed. Empty and single-member
+    /// lists are errors (`any[]` means nothing, `any[int]` is just `int`).
+    ///
+    /// Shared by `parse_type` (both mutabilities) and `parse_param_type`.
+    pub fn parse_any_members(&mut self) -> Result<Vec<TypeAnnotation>, Error> {
+        if !self.match_type(&[TokenType::LeftBracket]) {
+            return Err(self.err("`any` needs a member list: any[T, ...]", self.peek_span()));
+        }
+        let mut members: Vec<TypeAnnotation> = Vec::new();
+        // newlines are fine everywhere: the formatter may break long
+        // member lists vertical, like arrays
+        while self.match_type(&[TokenType::Newline]) {}
+        loop {
+            if self.peek() == TokenType::RightBracket {
+                break;
+            }
+            match self.parse_type(true)? {
+                TypeAnnotation::Any(inner) | TypeAnnotation::CAny(inner) => {
+                    members.extend(inner.iter().cloned());
+                }
+                other => members.push(other),
+            }
+            while self.match_type(&[TokenType::Newline]) {}
+            if !self.match_type(&[TokenType::Comma]) {
+                break;
+            }
+            while self.match_type(&[TokenType::Newline]) {}
+        }
+        if !self.match_type(&[TokenType::RightBracket]) {
+            return Err(self.err("expected `]` after any members", self.peek_span()));
+        }
+        let mut unique: Vec<TypeAnnotation> = Vec::with_capacity(members.len());
+        for m in members {
+            if !unique.contains(&m) {
+                unique.push(m);
+            }
+        }
+        match unique.len() {
+            0 => Err(self.err("any[...] needs at least one member type", self.peek_span())),
+            1 => Err(self.err(
+                "any[...] with one member is just that type - write it directly",
+                self.peek_span(),
+            )),
+            _ => Ok(unique),
+        }
+    }
     /// Parses a type keyword into a [`TypeAnnotation`].
     ///
     /// The `is_mut` flag controls which annotation variant is produced:
@@ -176,9 +226,23 @@ impl Parser {
                     self.advance();
                     TypeAnnotation::HandleInfer
                 }
-                TokenType::Identifier(name) => {
+                TokenType::Identifier(name) if name == "any" => {
                     self.advance();
-                    if self.tag_names.contains(&name) {
+                    let members = self.parse_any_members()?;
+                    TypeAnnotation::Any(Rc::new(members))
+                }
+                TokenType::Identifier(name) => {
+                    let use_span = self.peek_span();
+                    self.advance();
+                    // Type aliases substitute eagerly: the table is
+                    // complete for everything declared above, the target
+                    // is stored resolved, and the use is recorded for
+                    // deprecation warnings. Nothing alias-flavored flows
+                    // downstream - backends only ever see concrete types.
+                    if let Some(target) = self.ast_arena.type_aliases.get(&name).cloned() {
+                        self.ast_arena.alias_uses.push((name.clone(), use_span));
+                        target
+                    } else if self.tag_names.contains(&name) {
                         TypeAnnotation::Enum(name)
                     } else {
                         TypeAnnotation::Record(name)
@@ -333,9 +397,18 @@ impl Parser {
                     self.advance();
                     TypeAnnotation::CError
                 }
-                TokenType::Identifier(name) => {
+                TokenType::Identifier(name) if name == "any" => {
                     self.advance();
-                    if self.tag_names.contains(&name) {
+                    let members = self.parse_any_members()?;
+                    TypeAnnotation::CAny(Rc::new(members))
+                }
+                TokenType::Identifier(name) => {
+                    let use_span = self.peek_span();
+                    self.advance();
+                    if let Some(target) = self.ast_arena.type_aliases.get(&name).cloned() {
+                        self.ast_arena.alias_uses.push((name.clone(), use_span));
+                        target
+                    } else if self.tag_names.contains(&name) {
                         TypeAnnotation::CEnum(name)
                     } else {
                         TypeAnnotation::CRecord(name)

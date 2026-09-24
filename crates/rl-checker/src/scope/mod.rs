@@ -30,7 +30,13 @@ impl TypeChecker {
                     && !item.suppressed_lints.contains(&Lint::Unused)
                 {
                     let kind = unused_kind(item);
-                    self.warn_lint(Lint::Unused, format!("unused {} '{}'", kind, name), item.decl_span);
+                    let origin = item.decl_file.clone();
+                    self.warn_lint_at(
+                        Lint::Unused,
+                        format!("unused {} '{}'", kind, name),
+                        item.decl_span,
+                        origin.as_ref(),
+                    );
                 }
             }
         }
@@ -41,7 +47,7 @@ impl TypeChecker {
     /// are reported while the scope remains available for post-check inspection.
     pub fn report_unused_in_root_scope(&mut self) {
         if let Some(scope) = self.scopes.first() {
-            let unused: Vec<(String, Span, &str)> = scope
+            let unused: Vec<(String, Span, &str, Option<rl_utils::source::SourceFile>)> = scope
                 .iter()
                 .filter(|(name, item)| {
                     if !item.used && !item.is_const && !name.starts_with('_')
@@ -57,10 +63,22 @@ impl TypeChecker {
                         false
                     }
                 })
-                .map(|(name, item)| (name.clone(), item.decl_span, unused_kind(item)))
+                .map(|(name, item)| {
+                    (
+                        name.clone(),
+                        item.decl_span,
+                        unused_kind(item),
+                        item.decl_file.clone(),
+                    )
+                })
                 .collect();
-            for (name, span, kind) in unused {
-                self.warn_lint(Lint::Unused, format!("unused {} '{}'", kind, name), span);
+            for (name, span, kind, origin) in unused {
+                self.warn_lint_at(
+                    Lint::Unused,
+                    format!("unused {} '{}'", kind, name),
+                    span,
+                    origin.as_ref(),
+                );
             }
         }
     }

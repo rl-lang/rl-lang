@@ -33,7 +33,6 @@ rl-parser.workspace = true
 rl-resolver.workspace = true
 rl-vm = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
-rl-cranelift = { workspace = true, optional = true }
 rl-checker.workspace = true
 rl-docs = { workspace = true, optional = true }
 rl-tooling.workspace = true
@@ -54,7 +53,6 @@ tempfile.workspace = true
 default = ["repl", "vm", "docs", "docs-tui", "pm"]
 run = []
 vm = ["dep:rl-vm"]
-cranelift = ["vm", "rl-cranelift"]
 repl = ["dep:rl-repl", "rl-repl/vm"]
 docs = ["dep:rl-docs"]
 docs-tui = ["docs", "rl-docs/tui"]

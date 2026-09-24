@@ -34,6 +34,7 @@ impl Parser {
                 return Err(self.err("expected => after match pattern", self.peek_span()));
             }
 
+            while self.match_type(&[TokenType::Newline]) {}
             let body = self.parse_block()?;
             while self.match_type(&[TokenType::Newline]) {}
             arms.push((pattern, body));

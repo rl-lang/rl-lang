@@ -143,6 +143,12 @@ pub enum ExpressionKind {
         value: ExprId,
         target_type: TypeAnnotation,
     },
+    /// A runtime type test `value is Type`. Evaluates to bool; `if`
+    /// and `while` refine plain-variable bindings in the taken branch.
+    Is {
+        value: ExprId,
+        target_type: TypeAnnotation,
+    },
 
     TupleLiteral(Vec<ExprId>),
     ErrorLiteral(ExprId),

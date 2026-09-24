@@ -23,3 +23,6 @@ rl-parser.workspace = true
 clap.workspace = true
 tower-lsp.workspace = true
 tokio.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

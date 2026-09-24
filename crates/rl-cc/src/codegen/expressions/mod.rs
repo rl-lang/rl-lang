@@ -1,15 +1,20 @@
 mod assert;
 mod audio;
 mod c_ffi;
+mod cli;
 mod closure;
 mod collections;
+mod core;
+mod crypto;
 mod http;
 mod io;
+mod is_op;
 mod math;
 mod network;
 mod process;
 mod random;
 mod result;
+mod serialize;
 mod string;
 mod terminal;
 mod types;
@@ -27,7 +32,30 @@ use rl_utils::span::Span;
 
 impl<'a> CCodegen<'a> {
     pub fn compile_expr(&mut self, id: ExprId) -> Result<(), Error> {
+        // A statement-shaped literal hoisted before this statement
+        // reuses its temp instead of emitting statements mid-expression.
+        if let Some(temp) = self.hoisted_tmps.get(&id).cloned() {
+            self.writer.write(&temp);
+            return Ok(());
+        }
         let kind = self.ast.exprs.get(id).kind.clone();
+        // Statement-shaped call arguments hoist before the call writes
+        // anything (`f({...})`). Nested-in-expression calls stay
+        // unsupported, exactly as before.
+        match &kind {
+            ExpressionKind::Call { args, .. } | ExpressionKind::CallExpr { args, .. } => {
+                for arg in args {
+                    self.hoist_stmt_literals(*arg)?;
+                }
+            }
+            ExpressionKind::MethodCall { caller, args, .. } => {
+                self.hoist_stmt_literals(*caller)?;
+                for arg in args {
+                    self.hoist_stmt_literals(*arg)?;
+                }
+            }
+            _ => {}
+        }
         match &kind {
             ExpressionKind::Integer(v) => {
                 self.writer.write(&format!("(int64_t){}", v));
@@ -146,6 +174,29 @@ impl<'a> CCodegen<'a> {
             }
             ExpressionKind::ResolvedIdentifier { name, .. } => {
                 let c_name = self.lookup(name);
+                // `is`-refined reads out of dynamic storage unbox to the
+                // refined type (mirrors the checker's branch refinement,
+                // which gates all programs). Concrete storage needs no
+                // unboxing; unboxable targets fall back to the plain name
+                // (unreachable in checked programs - such values cannot
+                // enter dynamic storage).
+                if let Some(refined) = self.refined_vars.get(name).cloned() {
+                    let dynamic_storage = matches!(
+                        self.var_types.get(name),
+                        Some(
+                            TypeAnnotation::Any(_)
+                                | TypeAnnotation::CAny(_)
+                                | TypeAnnotation::Infer
+                                | TypeAnnotation::Generic(_)
+                        )
+                    );
+                    if dynamic_storage {
+                        if let Some(unbox_fn) = Self::dynamic_unboxer(&refined) {
+                            self.writer.write(&format!("{unbox_fn}({})", c_name));
+                            return Ok(());
+                        }
+                    }
+                }
                 if self.nullable_vars.contains(name) {
                     match self.var_types.get(name) {
                         Some(TypeAnnotation::Int) | Some(TypeAnnotation::CInt) => {
@@ -276,6 +327,22 @@ impl<'a> CCodegen<'a> {
                         self.writer.write(")");
                     }
                 } else {
+                    // bare call to a top-level user function: same
+                    // argument handling as path calls (Any boxing etc.)
+                    let user_target: Option<String> = match &callee_expr.kind {
+                        ExpressionKind::ResolvedIdentifier { name, .. }
+                        | ExpressionKind::Identifier(name) => {
+                            if !is_variable && self.user_fns.contains(name) {
+                                Some(name.to_string())
+                            } else {
+                                None
+                            }
+                        }
+                        _ => None,
+                    };
+                    if let Some(target) = user_target {
+                        return self.compile_user_call(&target, args);
+                    }
                     self.compile_expr(*callee)?;
                     self.writer.write("(");
                     for (i, arg) in args.iter().enumerate() {
@@ -356,62 +423,49 @@ impl<'a> CCodegen<'a> {
                     _ => type_to_c(&elem_ta),
                 };
                 let tag = Self::array_elem_tag_from_type(&elem_ta);
+                // Map/set elements are statement-shaped, which cannot sit
+                // inside the `&(...[]){...}` initializer below. Hoist each
+                // into a temp first (valid at statement level, where array
+                // literals overwhelmingly appear; nested-in-expression
+                // arrays of literals stay unsupported, as before).
+                let mut hoisted: Vec<Option<String>> = Vec::with_capacity(elems.len());
+                for elem in elems.iter() {
+                    // A declaration-level pre-pass may already have built
+                    // this element; otherwise hoist it now.
+                    if let Some(temp) = self.hoisted_tmps.get(elem).cloned() {
+                        hoisted.push(Some(temp));
+                        continue;
+                    }
+                    let kind = self.ast.exprs.get(*elem).kind.clone();
+                    match kind {
+                        ExpressionKind::MapLiteral(entries) => {
+                            hoisted.push(Some(self.emit_map_lit(&entries)?));
+                        }
+                        ExpressionKind::SetLiteral(items) => {
+                            hoisted.push(Some(self.emit_set_lit(&items)?));
+                        }
+                        _ => hoisted.push(None),
+                    }
+                }
                 self.writer.write(&format!("rl_arr_from_vals_tag(&({}[]){{", c_elem));
                 for (i, elem) in elems.iter().enumerate() {
                     if i > 0 {
                         self.writer.write(", ");
                     }
-                    self.compile_expr(*elem)?;
+                    if let Some(temp) = &hoisted[i] {
+                        self.writer.write(temp);
+                    } else {
+                        self.compile_expr(*elem)?;
+                    }
                 }
                 self.writer.write(&format!("}}, {}, (int32_t)sizeof({}), {})", elems.len(), c_elem, tag));
             }
             ExpressionKind::MapLiteral(entries) => {
-                let temp = self.temp_var();
-                self.writer.write_indent();
-                self.writer
-                    .write(&format!("rl_map {} = rl_map_new();\n", temp));
-                for (key_id, val_id) in entries {
-                    let key_expr = self.ast.exprs.get(*key_id);
-                    if let ExpressionKind::String(key_str) = &key_expr.kind {
-                        let val_expr = self.ast.exprs.get(*val_id);
-                        let val_type = match &val_expr.kind {
-                            ExpressionKind::Integer(_) => TypeAnnotation::Int,
-                            ExpressionKind::Float(_) => TypeAnnotation::Float,
-                            ExpressionKind::Bool(_) => TypeAnnotation::Bool,
-                            ExpressionKind::String(_) => TypeAnnotation::String,
-                            ExpressionKind::ArrayLiteral(e) if !e.is_empty() => TypeAnnotation::Array(Box::new(TypeAnnotation::Infer)),
-                            _ => TypeAnnotation::Int,
-                        };
-                        self.writer.write_indent();
-                        self.writer.write(&format!(
-                            "rl_map_set(&{}, \"{}\", ",
-                            temp, key_str
-                        ));
-                        self.emit_value_wrapping(&val_type, *val_id)?;
-                        self.writer.write(");\n");
-                    }
-                }
+                let temp = self.emit_map_lit(&entries)?;
                 self.writer.write(&temp);
             }
             ExpressionKind::SetLiteral(items) => {
-                let temp = self.temp_var();
-                self.writer.write_indent();
-                self.writer
-                    .write(&format!("rl_set {} = rl_set_new();\n", temp));
-                for item_id in items {
-                    let val_expr = self.ast.exprs.get(*item_id);
-                    let val_type = match &val_expr.kind {
-                        ExpressionKind::Integer(_) => TypeAnnotation::Int,
-                        ExpressionKind::Float(_) => TypeAnnotation::Float,
-                        ExpressionKind::Bool(_) => TypeAnnotation::Bool,
-                        ExpressionKind::String(_) => TypeAnnotation::String,
-                        _ => TypeAnnotation::Int,
-                    };
-                    self.writer.write_indent();
-                    self.writer.write(&format!("rl_set_add(&{}, ", temp));
-                    self.emit_value_wrapping(&val_type, *item_id)?;
-                    self.writer.write(");\n");
-                }
+                let temp = self.emit_set_lit(&items)?;
                 self.writer.write(&temp);
             }
             ExpressionKind::TupleLiteral(elems) => {
@@ -475,6 +529,10 @@ impl<'a> CCodegen<'a> {
             }
             ExpressionKind::ResolvedAssign { name, value, .. } => {
                 let c_name = self.lookup(name);
+                // reassignment drops any `is`-refinement: the branch-end
+                // restore puts the pre-branch entry back, so nesting stays
+                // correct (mirrors the checker's linear cutoff)
+                self.refined_vars.remove(name);
                 if self.nullable_vars.contains(name) {
                     let value_expr = self.ast.exprs.get(*value);
                     if let ExpressionKind::Null = &value_expr.kind {
@@ -510,16 +568,32 @@ impl<'a> CCodegen<'a> {
                     }
                 } else {
                     self.writer.write(&format!("{} = ", c_name));
-                    // Hint empty literals (`x = []`) with the element type.
-                    let saved_hint = self.array_elem_hint.clone();
-                    if let Some(TypeAnnotation::Array(elem))
-                    | Some(TypeAnnotation::CArray(elem)) =
-                        self.var_types.get(name).cloned()
-                    {
-                        self.array_elem_hint = Some(*elem);
+                    // assignments into union storage box like declarations
+                    // do; anything else emits directly
+                    let storage = self.var_types.get(name).cloned();
+                    match storage {
+                        Some(
+                            TypeAnnotation::Any(_)
+                            | TypeAnnotation::CAny(_),
+                        ) => {
+                            let st = storage.clone().unwrap();
+                            if !self.box_for_any_storage(&st, *value)? {
+                                self.compile_expr(*value)?;
+                            }
+                        }
+                        _ => {
+                            // Hint empty literals (`x = []`) with the element type.
+                            let saved_hint = self.array_elem_hint.clone();
+                            if let Some(TypeAnnotation::Array(elem))
+                            | Some(TypeAnnotation::CArray(elem)) =
+                                self.var_types.get(name).cloned()
+                            {
+                                self.array_elem_hint = Some(*elem);
+                            }
+                            self.compile_expr(*value)?;
+                            self.array_elem_hint = saved_hint;
+                        }
                     }
-                    self.compile_expr(*value)?;
-                    self.array_elem_hint = saved_hint;
                 }
             }
             ExpressionKind::Index { target, index } => {
@@ -527,6 +601,19 @@ impl<'a> CCodegen<'a> {
                 // type; tuples use `.field_N` for literal indexes; maps
                 // look up string keys. Anything else is a compile error
                 // instead of an invalid C subscript.
+                // Result-held containers (dynamic unwraps) dispatch at
+                // runtime for maps and arrays alike.
+                if matches!(
+                    self.inferred_expr_type(*target).as_ref(),
+                    Some(TypeAnnotation::Result(_)) | Some(TypeAnnotation::CResult(_))
+                ) {
+                    self.writer.write("rl_dynamic_get(");
+                    self.compile_expr(*target)?;
+                    self.writer.write(", rl_ok(");
+                    self.compile_expr(*index)?;
+                    self.writer.write("))");
+                    return Ok(());
+                }
                 match self.inferred_expr_type(*target).as_ref() {
                     Some(TypeAnnotation::Array(inner))
                     | Some(TypeAnnotation::CArray(inner)) => {
@@ -613,8 +700,31 @@ impl<'a> CCodegen<'a> {
             }
             ExpressionKind::Cast { value, target_type } => {
                 let c_type = type_to_c(target_type);
-                self.writer.write(&format!("({})", c_type));
-                self.compile_expr(*value)?;
+                // casts out of dynamic (`any`) storage unbox with numeric
+                // conversion (mirroring the VM's `as`); concrete sources
+                // keep the plain C cast
+                let dynamic_source = matches!(
+                    self.inferred_expr_type(*value),
+                    Some(TypeAnnotation::Any(_) | TypeAnnotation::CAny(_))
+                );
+                if dynamic_source {
+                    use rl_ast::statements::TypeAnnotation as T;
+                    let unboxer = match target_type {
+                        T::Float | T::CFloat | T::SFloat | T::CSFloat => {
+                            "rl_unbox_num_f64"
+                        }
+                        _ => "rl_unbox_num_i64",
+                    };
+                    self.writer.write(&format!("(({}){}(", c_type, unboxer));
+                    self.compile_expr(*value)?;
+                    self.writer.write("))");
+                } else {
+                    self.writer.write(&format!("({})", c_type));
+                    self.compile_expr(*value)?;
+                }
+            }
+            ExpressionKind::Is { value, target_type } => {
+                self::is_op::compile_is(self, value, target_type)?;
             }
             ExpressionKind::ResolvedLambda { params, return_type, body, .. } => {
                 self.compile_lambda(params, return_type, body)?;
@@ -817,6 +927,87 @@ impl<'a> CCodegen<'a> {
             "with_exec_with_cwd" => return self::process::compile_with_exec_with_cwd(self, args),
             "exec_with_timeout" => return self::process::compile_exec_with_timeout(self, args),
             "with_exec_background" => return self::process::compile_with_exec_background(self, args),
+            "parse_args" => return self::cli::compile_parse_args(self, args),
+            "parse_args_or_exit" => return self::cli::compile_parse_args_or_exit(self, args),
+            "usage_string" => return self::cli::compile_usage_string(self, args),
+            "prompt" => return self::cli::compile_prompt(self, args),
+            "prompt_password" => return self::cli::compile_prompt_password(self, args),
+            "prompt_confirm" => return self::cli::compile_prompt_confirm(self, args),
+            "prompt_choice" => return self::cli::compile_prompt_choice(self, args),
+            "shell_split" => return self::cli::compile_shell_split(self, args),
+            "shell_join" => return self::cli::compile_shell_join(self, args),
+            "read_line_editable" => return self::cli::compile_read_line_editable(self, args),
+            "read_line_with_history" => return self::cli::compile_read_line_with_history(self, args),
+            "progress_bar" => return self::cli::compile_progress_bar(self, args),
+            "spinner_tick" => return self::cli::compile_spinner_tick(self, args),
+            "__arr_new" => return self::core::compile_arr_new(self),
+            "__arr_push" => return self::core::compile_arr_push(self, args),
+            "__arr_get" => return self::core::compile_arr_get(self, args),
+            "__arr_set" => return self::core::compile_arr_set(self, args),
+            "__map_new" => return self::core::compile_map_new(self),
+            "__map_get" => return self::core::compile_map_get(self, args),
+            "__map_set" => return self::core::compile_map_set(self, args),
+            "__map_keys" => return self::core::compile_map_keys(self, args),
+            "__set_new" => return self::core::compile_set_new(self),
+            "__set_add" => return self::core::compile_set_add(self, args),
+            "__set_has" => return self::core::compile_set_has(self, args),
+            "__abort" => return self::core::compile_abort(self, args),
+            "__arr_remove" => return self::core::compile_arr_remove(self, args),
+            "__map_remove" => return self::core::compile_map_remove(self, args),
+            "__map_has" => return self::core::compile_map_has(self, args),
+            "__set_remove" => return self::core::compile_set_remove(self, args),
+            "__arr_len" => return self::core::compile_arr_len(self, args),
+            "__map_len" => return self::core::compile_map_len(self, args),
+            "__set_len" => return self::core::compile_set_len(self, args),
+            "__str_len" => return self::core::compile_str_len(self, args),
+            "__str_get_byte" => return self::core::compile_str_get_byte(self, args),
+            "__str_slice" => return self::core::compile_str_slice(self, args),
+            "__str_concat" => return self::core::compile_str_concat(self, args),
+            "__syscall6" => return self::core::compile_syscall6(self, args),
+            "__type_of" => return self::core::compile_type_of(self, args),
+            "__result_ok_value" => return self::core::compile_result_ok_value(self, args),
+            "__result_err_value" => return self::core::compile_result_err_value(self, args),
+            "sha256" => return self::crypto::compile_sha256(self, args),
+            "sha512" => return self::crypto::compile_sha512(self, args),
+            "sha1" => return self::crypto::compile_sha1(self, args),
+            "md5" => return self::crypto::compile_md5(self, args),
+            "hmac_sha256" => return self::crypto::compile_hmac_sha256(self, args),
+            "hmac_sha512" => return self::crypto::compile_hmac_sha512(self, args),
+            "constant_time_eq" => return self::crypto::compile_constant_time_eq(self, args),
+            "secure_random_bytes" => return self::crypto::compile_secure_random_bytes(self, args),
+            "secure_token" => return self::crypto::compile_secure_token(self, args),
+            "secure_token_hex" => return self::crypto::compile_secure_token_hex(self, args),
+            "secure_token_urlsafe" => return self::crypto::compile_secure_token_urlsafe(self, args),
+            "base64_encode" => return self::crypto::compile_base64_encode(self, args),
+            "base64_decode" => return self::crypto::compile_base64_decode(self, args),
+            "base64_url_encode" => return self::crypto::compile_base64_url_encode(self, args),
+            "base64_url_decode" => return self::crypto::compile_base64_url_decode(self, args),
+            "hex_encode" => return self::crypto::compile_hex_encode(self, args),
+            "hex_decode" => return self::crypto::compile_hex_decode(self, args),
+            "uuid_v4" => return self::crypto::compile_uuid_v4(self),
+            "uuid_v7" => return self::crypto::compile_uuid_v7(self),
+            "uuid_parse" => return self::crypto::compile_uuid_parse(self, args),
+            "password_hash" => return self::crypto::compile_password_hash(self, args),
+            "password_verify" => return self::crypto::compile_password_verify(self, args),
+            "json_parse" => return self::serialize::compile_json_parse(self, args),
+            "json_stringify" => return self::serialize::compile_json_stringify(self, args),
+            "json_stringify_pretty" => {
+                return self::serialize::compile_json_stringify_pretty(self, args);
+            }
+            "json_is_valid" => return self::serialize::compile_json_is_valid(self, args),
+            "json_get" => return self::serialize::compile_json_get(self, args),
+            "csv_parse" => return self::serialize::compile_csv_parse(self, args),
+            "csv_parse_with_delimiter" => {
+                return self::serialize::compile_csv_parse_with_delimiter(self, args);
+            }
+            "csv_stringify" => return self::serialize::compile_csv_stringify(self, args),
+            "csv_parse_headers" => return self::serialize::compile_csv_parse_headers(self, args),
+            "toml_parse" => return self::serialize::compile_toml_parse(self, args),
+            "toml_stringify" => return self::serialize::compile_toml_stringify(self, args),
+            "ini_parse" => return self::serialize::compile_ini_parse(self, args),
+            "ini_stringify" => return self::serialize::compile_ini_stringify(self, args),
+            "yaml_parse" => return self::serialize::compile_yaml_parse(self, args),
+            "yaml_stringify" => return self::serialize::compile_yaml_stringify(self, args),
             "pipe" => return self::process::compile_pipe(self, args),
             "pipe_all" => return self::process::compile_pipe_all(self, args),
             "args" => return self::process::compile_args(self),
@@ -1051,11 +1242,28 @@ impl<'a> CCodegen<'a> {
     fn compile_user_call(&mut self, name: &str, args: &[ExprId]) -> Result<(), Error> {
         let c_name = mangle(name);
         self.writer.write(&format!("{}(", c_name));
+        let params = self.user_fn_params.get(name).cloned().unwrap_or_default();
         for (i, arg) in args.iter().enumerate() {
             if i > 0 {
                 self.writer.write(", ");
             }
-            self.compile_expr(*arg)?;
+            // concrete argument into an `any` parameter boxes, mirroring
+            // declarations (the checker already proved membership).
+            // Unknown/unboxable arguments fall back to plain emission
+            // (status quo ante): declarations stay strict, call
+            // boundaries stay lenient.
+            let mut emitted = false;
+            if let Some(TypeAnnotation::Any(_) | TypeAnnotation::CAny(_)) = params.get(i) {
+                let param = params[i].clone();
+                match self.box_for_any_storage(&param, *arg) {
+                    Ok(true) => emitted = true,
+                    Ok(false) => {}
+                    Err(_) => {}
+                }
+            }
+            if !emitted {
+                self.compile_expr(*arg)?;
+            }
         }
         self.writer.write(")");
         Ok(())
@@ -1163,6 +1371,10 @@ impl<'a> CCodegen<'a> {
     ) -> Result<(), Error> {
         let lambda_id = self.lambda_counter;
         self.lambda_counter += 1;
+        // closures may outlive refinements (live captures): compile
+        // bodies against declared types, mirroring the checker, which
+        // skips refinement for bodies defining functions
+        let saved_refined = std::mem::take(&mut self.refined_vars);
         let fn_name = format!("_rl_lambda_{}", lambda_id);
 
         let mut captured_names: Vec<String> = Vec::new();
@@ -1240,6 +1452,7 @@ impl<'a> CCodegen<'a> {
         func_code.push_str("}\n\n");
 
         self.static_funcs.push(func_code);
+        self.refined_vars = saved_refined;
 
         let mut captures_code = String::new();
         for (i, name) in captured_names.iter().enumerate() {
@@ -1588,6 +1801,9 @@ impl<'a> CCodegen<'a> {
             ExpressionKind::Cast { value, .. } => {
                 self.collect_captures_from_expr(*value, param_names, captured);
             }
+            ExpressionKind::Is { value, .. } => {
+                self.collect_captures_from_expr(*value, param_names, captured);
+            }
             ExpressionKind::ResolvedAssign { value, .. } => {
                 self.collect_captures_from_expr(*value, param_names, captured);
             }
@@ -1712,5 +1928,114 @@ impl<'a> CCodegen<'a> {
             }
             _ => TypeAnnotation::Int,
         }
+    }
+
+    // Builds a map literal into a fresh temp, returning the temp name.
+    // Statement-shaped by nature: valid wherever statements are, including
+    // hoisted array elements and declaration initializers, but NOT nested
+    // inside other expressions.
+    pub(crate) fn emit_map_lit(
+        &mut self,
+        entries: &[(ExprId, ExprId)],
+    ) -> Result<String, Error> {
+        let temp = self.temp_var();
+        self.writer.write_indent();
+        self.writer
+            .write(&format!("rl_map {} = rl_map_new();\n", temp));
+        for (key_id, val_id) in entries {
+            let key_expr = self.ast.exprs.get(*key_id);
+            if let ExpressionKind::String(key_str) = &key_expr.kind {
+                let val_expr = self.ast.exprs.get(*val_id);
+                let val_type = match &val_expr.kind {
+                    ExpressionKind::Integer(_) => TypeAnnotation::Int,
+                    ExpressionKind::Float(_) => TypeAnnotation::Float,
+                    ExpressionKind::Bool(_) => TypeAnnotation::Bool,
+                    ExpressionKind::String(_) => TypeAnnotation::String,
+                    ExpressionKind::Null => TypeAnnotation::Null,
+                    ExpressionKind::ArrayLiteral(e) if !e.is_empty() => TypeAnnotation::Array(Box::new(TypeAnnotation::Infer)),
+                    _ => TypeAnnotation::Int,
+                };
+                self.writer.write_indent();
+                self.writer.write(&format!(
+                    "rl_map_set(&{}, \"{}\", ",
+                    temp, key_str
+                ));
+                self.emit_value_wrapping(&val_type, *val_id)?;
+                self.writer.write(");\n");
+            }
+        }
+        Ok(temp)
+    }
+
+    // Same statement-shaped contract as `emit_map_lit`, for set literals.
+    pub(crate) fn emit_set_lit(&mut self, items: &[ExprId]) -> Result<String, Error> {
+        let temp = self.temp_var();
+        self.writer.write_indent();
+        self.writer
+            .write(&format!("rl_set {} = rl_set_new();\n", temp));
+        for item_id in items {
+            let val_expr = self.ast.exprs.get(*item_id);
+            let val_type = match &val_expr.kind {
+                ExpressionKind::Integer(_) => TypeAnnotation::Int,
+                ExpressionKind::Float(_) => TypeAnnotation::Float,
+                ExpressionKind::Bool(_) => TypeAnnotation::Bool,
+                ExpressionKind::String(_) => TypeAnnotation::String,
+                _ => TypeAnnotation::Int,
+            };
+            self.writer.write_indent();
+            self.writer.write(&format!("rl_set_add(&{}, ", temp));
+            self.emit_value_wrapping(&val_type, *item_id)?;
+            self.writer.write(");\n");
+        }
+        Ok(temp)
+    }
+
+    // Pre-statement hoist for statement-shaped literals. Walks down
+    // through calls, arrays and map/set values (but never into lambda
+    // bodies, which compile out-of-line and walk themselves), building
+    // temps BEFORE the statement writes anything. Later emission reuses
+    // temps via the compile_expr check above.
+    pub(crate) fn hoist_stmt_literals(&mut self, id: ExprId) -> Result<(), Error> {
+        if self.hoisted_tmps.contains_key(&id) {
+            return Ok(());
+        }
+        let kind = self.ast.exprs.get(id).kind.clone();
+        match kind {
+            ExpressionKind::MapLiteral(entries) => {
+                for (_, v) in &entries {
+                    self.hoist_stmt_literals(*v)?;
+                }
+                let temp = self.emit_map_lit(&entries)?;
+                self.hoisted_tmps.insert(id, temp);
+            }
+            ExpressionKind::SetLiteral(items) => {
+                for item in &items {
+                    self.hoist_stmt_literals(*item)?;
+                }
+                let temp = self.emit_set_lit(&items)?;
+                self.hoisted_tmps.insert(id, temp);
+            }
+            ExpressionKind::ArrayLiteral(elems) => {
+                for elem in elems {
+                    self.hoist_stmt_literals(elem)?;
+                }
+            }
+            ExpressionKind::Call { args, .. } | ExpressionKind::CallExpr { args, .. } => {
+                for arg in args {
+                    self.hoist_stmt_literals(arg)?;
+                }
+            }
+            ExpressionKind::MethodCall { caller, args, .. } => {
+                self.hoist_stmt_literals(caller)?;
+                for arg in args {
+                    self.hoist_stmt_literals(arg)?;
+                }
+            }
+            ExpressionKind::ResolvedLambda { .. } | ExpressionKind::Lambda { .. } => {
+                // Out-of-line bodies walk themselves per inner statement.
+            }
+            _ => {}
+        }
+        Ok(())
     }
 }

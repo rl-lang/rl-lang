@@ -6,7 +6,8 @@ use crate::types::type_to_c;
 use rl_ast::nodes::ExpressionKind;
 use rl_ast::statements::TypeAnnotation;
 use rl_ast::ExprId;
-use rl_utils::errors::Error;
+use rl_utils::errors::{Error, Reason};
+use rl_utils::span::Span;
 
 /// File-scope storage for one global plus scope registration. The
 /// initializer runs later inside `main` (see the `in_global_init` paths
@@ -146,7 +147,21 @@ pub(super) fn compile_var_decl(
     type_annotation: &TypeAnnotation,
     value: ExprId,
 ) -> Result<(), Error> {
+    // Statement-shaped literals build their temps before anything else
+    // (notably the `name = ` prefix) is written.
+    cc.hoist_stmt_literals(value)?;
     let effective = cc.effective_decl_type(type_annotation, value);
+    // A bare unwrap of a dynamically-typed value (generic map lookup,
+    // untyped call) has no static payload: without an explicit storage
+    // type there is nothing sound to emit, so fail loudly instead of
+    // generating a mistyped assignment.
+    if cc.is_unwrap_of_dynamic(value) && CCodegen::needs_inference(&effective) {
+        return Err(Error::at(
+            Reason::Compile,
+            "dec needs an explicit type for dynamically-typed unwrap (e.g. dec arr[string] rest = ...)",
+            Span::dummy(),
+        ));
+    }
     let c_type = type_to_c(&effective);
     let c_name = emission_name(cc, name);
     let expr = cc.ast.exprs.get(value);
@@ -188,8 +203,13 @@ pub(super) fn compile_var_decl(
             TypeAnnotation::Fn | TypeAnnotation::Callback(_, _)
         );
         // Concrete scalar storage over a dynamically-typed closure call
-        // (`dec int z = add7(1)`): unwrap by the storage type.
-        let dyn_unwrap = if !unbox && cc.is_dynamic_closure_call(value) {
+        // (`dec int z = add7(1)`): unwrap by the storage type. The same
+        // applies to a bare `result_unwrap(x)` whose payload is unknown
+        // (`dec bool b = map_get(m, k).result_unwrap()` over a generic
+        // map): storage type beats the i64 default.
+        let dyn_unwrap = if !unbox
+            && (cc.is_dynamic_closure_call(value) || cc.is_unwrap_of_dynamic(value))
+        {
             match &effective {
                 TypeAnnotation::Float | TypeAnnotation::CFloat => {
                     Some("rl_result_unwrap_f64")
@@ -208,6 +228,15 @@ pub(super) fn compile_var_decl(
                 }
                 TypeAnnotation::Set(_) | TypeAnnotation::CSet(_) => {
                     Some("rl_result_unwrap_set")
+                }
+                // Dynamic payload held as a result (`dec data` over an
+                // unknown unwrap): assert ok and keep the result, so
+                // downstream uses see the payload through result-aware
+                // paths instead of a mistyped scalar.
+                TypeAnnotation::Result(inner) | TypeAnnotation::CResult(inner)
+                    if CCodegen::needs_inference(inner) =>
+                {
+                    Some("rl_result_unwrap_result")
                 }
                 _ if CCodegen::needs_inference(&effective) => None,
                 TypeAnnotation::Result(_)
@@ -229,11 +258,105 @@ pub(super) fn compile_var_decl(
             cc.writer.write("rl_result_unwrap_closure(rl_ok(");
             cc.compile_expr(value)?;
             cc.writer.write("))");
+        } else if let Some(msg) = cc.abort_message_arg(value) {
+            // `__abort` never returns: panic, then feed storage an
+            // unreachable dummy so the `-> T` contract typechecks.
+            let default: Option<String> = match &effective {
+                TypeAnnotation::Int
+                | TypeAnnotation::CInt
+                | TypeAnnotation::UInt
+                | TypeAnnotation::CUInt
+                | TypeAnnotation::SInt
+                | TypeAnnotation::CSInt
+                | TypeAnnotation::SUInt
+                | TypeAnnotation::CSUInt
+                | TypeAnnotation::Byte
+                | TypeAnnotation::CByte
+                | TypeAnnotation::SByte
+                | TypeAnnotation::CSByte
+                | TypeAnnotation::BByte
+                | TypeAnnotation::CBByte
+                | TypeAnnotation::BSByte
+                | TypeAnnotation::CBSByte => Some("0".to_string()),
+                TypeAnnotation::Float
+                | TypeAnnotation::CFloat
+                | TypeAnnotation::SFloat
+                | TypeAnnotation::CSFloat => Some("0.0".to_string()),
+                TypeAnnotation::Bool | TypeAnnotation::CBool => Some("false".to_string()),
+                TypeAnnotation::String | TypeAnnotation::CString => {
+                    Some("rl_str_literal(\"\", 0)".to_string())
+                }
+                TypeAnnotation::Array(inner) | TypeAnnotation::CArray(inner) => {
+                    Some(format!("rl_arr_new((int32_t)sizeof({}))", type_to_c(inner)))
+                }
+                TypeAnnotation::Map(_, _) | TypeAnnotation::CMap(_, _) => {
+                    Some("rl_map_new()".to_string())
+                }
+                TypeAnnotation::Set(_) | TypeAnnotation::CSet(_) => {
+                    Some("rl_set_new()".to_string())
+                }
+                TypeAnnotation::Result(_)
+                | TypeAnnotation::CResult(_)
+                | TypeAnnotation::Error
+                | TypeAnnotation::CError => Some("rl_ok_null()".to_string()),
+                _ => None,
+            };
+            match default {
+                Some(dummy) => {
+                    cc.writer.write("(rl_panic(");
+                    cc.compile_expr(msg)?;
+                    cc.writer.write(&format!("), {})", dummy));
+                }
+                None => {
+                    return Err(Error::at(
+                        Reason::Compile,
+                        "dec cannot hold __abort in this storage type",
+                        Span::dummy(),
+                    ));
+                }
+            }
         } else if let Some(unwrap_fn) = dyn_unwrap {
             cc.writer.write(&format!("{unwrap_fn}("));
-            cc.compile_expr(value)?;
+            // A bare `result_unwrap(x)` compiles its inner call directly:
+            // the storage-type unwrap here IS the unwrap, not a second one.
+            match cc.unwrap_inner_arg(value) {
+                Some(inner) => cc.compile_expr(inner)?,
+                None => cc.compile_expr(value)?,
+            }
             cc.writer.write(")");
-        } else {
+        } else if cc.core_get_needs_boxing(value) {
+            // `__arr_get` / `__map_get` over unknown layouts yield a
+            // boxed value; unbox or rewrap by storage type so the
+            // payload stays well-typed (mirrors dyn_unwrap above).
+            let wrap = match &effective {
+                TypeAnnotation::Int | TypeAnnotation::CInt => Some("rl_unbox_i64"),
+                TypeAnnotation::Float | TypeAnnotation::CFloat => Some("rl_unbox_f64"),
+                TypeAnnotation::Bool | TypeAnnotation::CBool => Some("rl_unbox_bool"),
+                TypeAnnotation::String | TypeAnnotation::CString => Some("rl_unbox_str"),
+                TypeAnnotation::Array(_) | TypeAnnotation::CArray(_) => Some("rl_unbox_arr"),
+                TypeAnnotation::Map(_, _) | TypeAnnotation::CMap(_, _) => Some("rl_unbox_map"),
+                TypeAnnotation::Result(inner) | TypeAnnotation::CResult(inner)
+                    if CCodegen::needs_inference(inner) =>
+                {
+                    Some("rl_value_to_result")
+                }
+                _ => None,
+            };
+            match wrap {
+                Some(wrap_fn) => {
+                    cc.writer.write(&format!("{wrap_fn}("));
+                    cc.compile_expr(value)?;
+                    cc.writer.write(")");
+                }
+                None => {
+                    return Err(Error::at(
+                        Reason::Compile,
+                        "dec needs an explicit type for dynamically-typed core get",
+                        Span::dummy(),
+                    ));
+                }
+            }
+        } else if !cc.box_for_any_storage(&effective, value)? {
             cc.compile_expr(value)?;
         }
         cc.writer.write(";\n");
@@ -251,6 +374,7 @@ pub(super) fn compile_const_decl(
     type_annotation: &TypeAnnotation,
     value: ExprId,
 ) -> Result<(), Error> {
+    cc.hoist_stmt_literals(value)?;
     let effective = cc.effective_decl_type(type_annotation, value);
     let c_type = type_to_c(&effective);
     let c_name = emission_name(cc, name);
@@ -293,7 +417,7 @@ pub(super) fn compile_const_decl(
             cc.writer.write("rl_result_unwrap_closure(rl_ok(");
             cc.compile_expr(value)?;
             cc.writer.write("))");
-        } else {
+        } else if !cc.box_for_any_storage(&effective, value)? {
             cc.compile_expr(value)?;
         }
         cc.writer.write(";\n");

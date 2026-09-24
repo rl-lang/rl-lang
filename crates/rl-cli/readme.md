@@ -8,8 +8,8 @@ Part of the [rl-lang](https://github.com/rl-lang/rl-lang) workspace. This is the
 
 | Subcommand | Action |
 |---|---|
-| `rl run <file>` | Lex, parse, and evaluate a single `.rl` file (`--vm` / `--cranelift` to pick a backend) |
-| `rl dev` | Read `rl.toml`, lex, parse, and evaluate the project entry point (`--vm` / `--cranelift` to pick a backend) |
+| `rl run <file>` | Lex, parse, and evaluate a single `.rl` file (`--vm` to pick the VM backend) |
+| `rl dev` | Read `rl.toml`, lex, parse, and evaluate the project entry point (`--vm` to pick the VM backend) |
 | `rl check <file>` | Lex, parse, and type-check a file, reporting errors without running it |
 | `rl new <name>` | Scaffold a new project directory |
 | `rl docs [topic]` | Print stdlib / concept / tutorial reference (Markdown, JSON, or an interactive TUI) |
@@ -31,7 +31,6 @@ Part of the [rl-lang](https://github.com/rl-lang/rl-lang) workspace. This is the
 - `default` - `repl`, `vm`, `docs`, `docs-tui`
 - `vm` - bytecode VM backend (`rl-vm`)
 - `run` - enable the corresponding execution backends
-- `cranelift` - pulls in `rl-cranelift` (implies `vm`)
 - `repl` - pulls in `rl-repl` (requires the `vm` backend)
 - `docs` - `docs` subcommand (pulls in `rl-docs`)
 - `docs-tui` - enables `rl-docs`'s `tui` feature (implies `docs`)
@@ -44,7 +43,7 @@ plus `rl_lsp`.
 
 ## Dependencies
 
-Depends on nearly every other crate in the workspace: `rl-utils`, `rl-lexer`, `rl-ast`, `rl-parser`, `rl-resolver`, `rl-vm`, `rl-checker`, `rl-docs`, `rl-tooling`, and optionally `rl-cranelift`, `rl-repl`, `rl-lsp`; plus `clap`, `toml`, and `serde`.
+Depends on nearly every other crate in the workspace: `rl-utils`, `rl-lexer`, `rl-ast`, `rl-parser`, `rl-resolver`, `rl-vm`, `rl-checker`, `rl-docs`, `rl-tooling`, and optionally `rl-repl`, `rl-lsp`; plus `clap`, `toml`, and `serde`.
 
 ## Usage
 

@@ -1,5 +1,50 @@
 //! Static name lists for every `std::*` stdlib module.
 
+pub mod crypto {
+    pub const KEYWORDS: &[&str] = &[
+        "sha256",
+        "sha512",
+        "sha1",
+        "md5",
+        "hmac_sha256",
+        "hmac_sha512",
+        "constant_time_eq",
+        "secure_random_bytes",
+        "secure_token",
+        "secure_token_hex",
+        "secure_token_urlsafe",
+        "base64_encode",
+        "base64_decode",
+        "base64_url_encode",
+        "base64_url_decode",
+        "hex_encode",
+        "hex_decode",
+        "uuid_v4",
+        "uuid_v7",
+        "uuid_parse",
+        "password_hash",
+        "password_verify",
+    ];
+}
+
+pub mod cli {
+    pub const KEYWORDS: &[&str] = &[
+        "parse_args",
+        "parse_args_or_exit",
+        "usage_string",
+        "prompt",
+        "prompt_password",
+        "prompt_confirm",
+        "prompt_choice",
+        "shell_split",
+        "shell_join",
+        "read_line_editable",
+        "read_line_with_history",
+        "progress_bar",
+        "spinner_tick",
+    ];
+}
+
 pub mod audio {
     pub const KEYWORDS: &[&str] = &[
         "play_file",
@@ -297,6 +342,26 @@ pub mod result {
         "result_map_err",
         "result_and_then",
         "result_unwrap_or_else",
+    ];
+}
+
+pub mod serialize {
+    pub const KEYWORDS: &[&str] = &[
+        "json_parse",
+        "json_stringify",
+        "json_stringify_pretty",
+        "json_is_valid",
+        "json_get",
+        "csv_parse",
+        "csv_parse_with_delimiter",
+        "csv_stringify",
+        "csv_parse_headers",
+        "toml_parse",
+        "toml_stringify",
+        "ini_parse",
+        "ini_stringify",
+        "yaml_parse",
+        "yaml_stringify",
     ];
 }
 

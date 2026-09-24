@@ -36,8 +36,14 @@ pub mod audio;
 pub mod bitwise;
 #[cfg(any(feature = "std-c", feature = "impls"))]
 pub mod c;
+#[cfg(any(feature = "std-cli", feature = "impls"))]
+pub mod cli;
 #[cfg(any(feature = "std-collections", feature = "impls"))]
 pub mod collections;
+#[cfg(any(feature = "std-core", feature = "impls"))]
+pub mod core;
+#[cfg(any(feature = "std-crypto", feature = "impls"))]
+pub mod crypto;
 #[cfg(any(feature = "std-debug", feature = "impls"))]
 pub mod debug;
 #[cfg(any(feature = "std-fs", feature = "impls"))]
@@ -60,6 +66,8 @@ pub mod process;
 pub mod random;
 #[cfg(any(feature = "std-result", feature = "impls"))]
 pub mod result;
+#[cfg(any(feature = "std-serialize", feature = "impls"))]
+pub mod serialize;
 #[cfg(any(feature = "std-string", feature = "impls"))]
 pub mod string;
 #[cfg(any(feature = "std-terminal", feature = "impls"))]
@@ -84,8 +92,16 @@ pub fn signatures() -> rl_std_core::ModuleNames {
     { m = m.with_module(bitwise::signatures()); }
     #[cfg(any(feature = "std-c", feature = "impls"))]
     { m = m.with_module(c::signatures()); }
+    #[cfg(any(feature = "std-cli", feature = "impls"))]
+    { m = m.with_module(cli::signatures()); }
     #[cfg(any(feature = "std-collections", feature = "impls"))]
     { m = m.with_module(collections::signatures()); }
+    #[cfg(any(feature = "std-core", feature = "impls"))]
+    { m = m.with_module(core::signatures()); }
+    #[cfg(any(feature = "std-core", feature = "impls"))]
+    { m = m.with_module(core::signatures()); }
+    #[cfg(any(feature = "std-crypto", feature = "impls"))]
+    { m = m.with_module(crypto::signatures()); }
     #[cfg(any(feature = "std-debug", feature = "impls"))]
     { m = m.with_module(debug::signatures()); }
     #[cfg(any(feature = "std-fs", feature = "impls"))]
@@ -108,6 +124,8 @@ pub fn signatures() -> rl_std_core::ModuleNames {
     { m = m.with_module(random::signatures()); }
     #[cfg(any(feature = "std-result", feature = "impls"))]
     { m = m.with_module(result::signatures()); }
+    #[cfg(any(feature = "std-serialize", feature = "impls"))]
+    { m = m.with_module(serialize::signatures()); }
     #[cfg(any(feature = "std-string", feature = "impls"))]
     { m = m.with_module(string::signatures()); }
     #[cfg(any(feature = "std-terminal", feature = "impls"))]

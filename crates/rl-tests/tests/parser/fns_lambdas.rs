@@ -236,3 +236,29 @@ fn test_attribute_rejects_priority() {
         "unexpected error message: {err}"
     );
 }
+
+#[test]
+fn fn_handle_return_annotation() {
+    let (_, statements) = common::parse("fn grab (string p) -> result[handle] { open(p) }");
+    match &statements[0].kind {
+        StatementKind::FunctionDeclaration { return_type, .. } => {
+            assert_eq!(
+                *return_type,
+                TypeAnnotation::Result(Box::new(TypeAnnotation::HandleInfer))
+            );
+        }
+        other => panic!("expected fn decl, got {other:?}"),
+    }
+}
+
+#[test]
+fn fn_handle_param() {
+    let (_, statements) = common::parse("fn shut (handle h) { close(h) }");
+    match &statements[0].kind {
+        StatementKind::FunctionDeclaration { params, .. } => {
+            assert_eq!(params.len(), 1);
+            assert_eq!(params[0].param_type, TypeAnnotation::HandleInfer);
+        }
+        other => panic!("expected fn decl, got {other:?}"),
+    }
+}

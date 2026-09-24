@@ -3,6 +3,7 @@ use crate::codegen::CCodegen;
 use crate::name_mangle::mangle;
 use crate::types::type_to_c;
 use rl_ast::statements::{Param, Statement, StatementKind, TypeAnnotation};
+use rl_checker::structs::CheckType;
 use rl_utils::errors::Error;
 
 /// Compiles a function body: like the VM, a trailing expression is the
@@ -51,6 +52,8 @@ pub(super) fn compile_function_decl(
     cc.writer.indent();
 
     cc.push_scope();
+    // like lambdas above: no refinements inside function bodies
+    let saved_refined = std::mem::take(&mut cc.refined_vars);
     // Locals must not leak into other functions' bodies.
     let saved_types = cc.var_types.clone();
     let saved_nullable = cc.nullable_vars.clone();
@@ -71,12 +74,25 @@ pub(super) fn compile_function_decl(
     cc.writer.dedent();
     cc.writer.write_indent();
     cc.writer.write("}\n\n");
+    cc.refined_vars = saved_refined;
     Ok(())
 }
 
 /// `impl Record { fn method(...) { ... } }` — emits each method as a
 /// top-level `impl_Record_method` C function.
 pub(super) fn compile_impl_block(
+    cc: &mut CCodegen,
+    record: &str,
+    methods: &[Statement],
+) -> Result<(), Error> {
+    // methods may outlive refinements like lambdas do
+    let saved_refined = std::mem::take(&mut cc.refined_vars);
+    let result = compile_impl_block_inner(cc, record, methods);
+    cc.refined_vars = saved_refined;
+    result
+}
+
+fn compile_impl_block_inner(
     cc: &mut CCodegen,
     record: &str,
     methods: &[Statement],
@@ -90,6 +106,18 @@ pub(super) fn compile_impl_block(
             ..
         } = &m.kind
         {
+            // Prefer the checker-inferred method return over `Null`.
+            let mut effective = return_type.clone();
+            if effective == TypeAnnotation::Null {
+                if let Some(CheckType::Function { return_type, .. }) =
+                    cc.checker.methods.get(&(record.to_string(), name.clone()))
+                {
+                    if *return_type != TypeAnnotation::Null {
+                        effective = return_type.clone();
+                    }
+                }
+            }
+            let return_type = &effective;
             let c_ret = type_to_c(return_type);
             let c_fn_name = format!("impl_{}_{}", record, name);
             cc.writer.write_indent();

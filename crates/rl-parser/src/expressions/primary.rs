@@ -103,8 +103,21 @@ impl Parser {
                 let name = path.pop().unwrap();
 
                 // --- struct literal: Name { field: value, ... } ---
-                if self.record_names.contains(&name) && self.peek() == TokenType::LeftBrace {
-                    return self.parse_struct_literal(name, start);
+                // Allman allows the `{` on following lines: peek past
+                // newlines without consuming (a bare `P` stays an rvalue).
+                if self.record_names.contains(&name) {
+                    let mut k = self.current;
+                    while k < self.tokens.len()
+                        && self.tokens[k].token == TokenType::Newline
+                    {
+                        k += 1;
+                    }
+                    if k < self.tokens.len()
+                        && self.tokens[k].token == TokenType::LeftBrace
+                    {
+                        while self.match_type(&[TokenType::Newline]) {}
+                        return self.parse_struct_literal(name, start);
+                    }
                 }
 
                 // --- enum variant reference: Name.Variant ---
@@ -572,6 +585,30 @@ impl Parser {
                             self.err(format!("cannot cast signed value {} to uint", n), span)
                         );
                     }
+                    // `as <alias>`: no constant folding (targets are
+                    // arbitrary); emit a regular checked cast instead.
+                    if let TokenType::Identifier(alias) = self.peek() {
+                        if let Some(target) =
+                            self.ast_arena.type_aliases.get(&alias).cloned()
+                        {
+                            self.advance();
+                            self.ast_arena
+                                .alias_uses
+                                .push((alias, self.previous_span()));
+                            let value = self
+                                .ast_arena
+                                .alloc_expr(ExpressionKind::Integer(n), span);
+                            let cast_span = start.join(self.previous_span());
+                            let expr = self.ast_arena.alloc_expr(
+                                ExpressionKind::Cast {
+                                    value,
+                                    target_type: target,
+                                },
+                                cast_span,
+                            );
+                            return self.parse_postfix(expr, start);
+                        }
+                    }
                     return Err(self.err("expected type after `as`", self.previous_span()));
                 }
                 // ---- cast end ----
@@ -758,6 +795,36 @@ impl Parser {
                                     span,
                                 ));
                             }
+                        }
+                    }
+                    // `as <alias>`: no constant folding; regular
+                    // checked cast over an integer value node.
+                    if let TokenType::Identifier(alias) = self.peek() {
+                        if let Some(target) =
+                            self.ast_arena.type_aliases.get(&alias).cloned()
+                        {
+                            self.advance();
+                            self.ast_arena
+                                .alias_uses
+                                .push((alias, self.previous_span()));
+                            let Ok(as_i64) = i64::try_from(n) else {
+                                return Err(self.err(
+                                    format!("value {} is out of range for int", n),
+                                    span,
+                                ));
+                            };
+                            let value = self
+                                .ast_arena
+                                .alloc_expr(ExpressionKind::Integer(as_i64), span);
+                            let cast_span = start.join(self.previous_span());
+                            let expr = self.ast_arena.alloc_expr(
+                                ExpressionKind::Cast {
+                                    value,
+                                    target_type: target,
+                                },
+                                cast_span,
+                            );
+                            return self.parse_postfix(expr, start);
                         }
                     }
                     return Err(self.err("expected type after `as`", self.previous_span()));
@@ -986,6 +1053,29 @@ impl Parser {
                             }
                         }
                     }
+                    // `as <alias>`: regular checked cast over a float node.
+                    if let TokenType::Identifier(alias) = self.peek() {
+                        if let Some(target) =
+                            self.ast_arena.type_aliases.get(&alias).cloned()
+                        {
+                            self.advance();
+                            self.ast_arena
+                                .alias_uses
+                                .push((alias, self.previous_span()));
+                            let value = self
+                                .ast_arena
+                                .alloc_expr(ExpressionKind::Float(f), span);
+                            let cast_span = start.join(self.previous_span());
+                            let expr = self.ast_arena.alloc_expr(
+                                ExpressionKind::Cast {
+                                    value,
+                                    target_type: target,
+                                },
+                                cast_span,
+                            );
+                            return self.parse_postfix(expr, start);
+                        }
+                    }
                     return Err(self.err("expected type after `as`", span));
                 }
                 // ---- cast end ----
@@ -1169,6 +1259,29 @@ impl Parser {
                                     span,
                                 ));
                             }
+                        }
+                    }
+                    // `as <alias>`: regular checked cast over a byte node.
+                    if let TokenType::Identifier(alias) = self.peek() {
+                        if let Some(target) =
+                            self.ast_arena.type_aliases.get(&alias).cloned()
+                        {
+                            self.advance();
+                            self.ast_arena
+                                .alias_uses
+                                .push((alias, self.previous_span()));
+                            let value = self
+                                .ast_arena
+                                .alloc_expr(ExpressionKind::Byte(b), span);
+                            let cast_span = start.join(self.previous_span());
+                            let expr = self.ast_arena.alloc_expr(
+                                ExpressionKind::Cast {
+                                    value,
+                                    target_type: target,
+                                },
+                                cast_span,
+                            );
+                            return self.parse_postfix(expr, start);
                         }
                     }
                     return Err(self.err("expected type after `as`", self.previous_span()));

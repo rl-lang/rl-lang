@@ -10,6 +10,93 @@
 /// `namespace` is the full path joined with "::" ("std::math::consts").
 pub fn namespace_provides(namespace: &str, name: &str) -> bool {
     match namespace {
+        "std::cli" => matches!(
+            name,
+            "parse_args"
+                | "parse_args_or_exit"
+                | "usage_string"
+                | "prompt"
+                | "prompt_password"
+                | "prompt_confirm"
+                | "prompt_choice"
+                | "shell_split"
+                | "shell_join"
+                | "read_line_editable"
+                | "read_line_with_history"
+                | "progress_bar"
+                | "spinner_tick"
+        ),
+        "core" => matches!(
+            name,
+            "__arr_new"
+                | "__arr_push"
+                | "__arr_get"
+                | "__arr_set"
+                | "__arr_remove"
+                | "__arr_len"
+                | "__map_new"
+                | "__map_get"
+                | "__map_set"
+                | "__map_remove"
+                | "__map_has"
+                | "__map_keys"
+                | "__map_len"
+                | "__set_new"
+                | "__set_add"
+                | "__set_has"
+                | "__set_remove"
+                | "__set_len"
+                | "__str_len"
+                | "__str_get_byte"
+                | "__str_slice"
+                | "__str_concat"
+                | "__syscall6"
+                | "__abort"
+                | "__type_of"
+        ),
+        "std::crypto" => matches!(
+            name,
+            "sha256"
+                | "sha512"
+                | "sha1"
+                | "md5"
+                | "hmac_sha256"
+                | "hmac_sha512"
+                | "constant_time_eq"
+                | "secure_random_bytes"
+                | "secure_token"
+                | "secure_token_hex"
+                | "secure_token_urlsafe"
+                | "base64_encode"
+                | "base64_decode"
+                | "base64_url_encode"
+                | "base64_url_decode"
+                | "hex_encode"
+                | "hex_decode"
+                | "uuid_v4"
+                | "uuid_v7"
+                | "uuid_parse"
+                | "password_hash"
+                | "password_verify"
+        ),
+        "std::serialize" => matches!(
+            name,
+            "json_parse"
+                | "json_stringify"
+                | "json_stringify_pretty"
+                | "json_is_valid"
+                | "json_get"
+                | "csv_parse"
+                | "csv_parse_with_delimiter"
+                | "csv_stringify"
+                | "csv_parse_headers"
+                | "toml_parse"
+                | "toml_stringify"
+                | "ini_parse"
+                | "ini_stringify"
+                | "yaml_parse"
+                | "yaml_stringify"
+        ),
         "std::io" => matches!(
             name,
             "print"

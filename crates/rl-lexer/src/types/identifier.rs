@@ -44,6 +44,7 @@ impl Tokenizer {
             "get" | "استورد" => self.add_token(TokenType::Get),
             "from" | "من" => self.add_token(TokenType::From),
             "in" | "في" => self.add_token(TokenType::In),
+            "is" => self.add_token(TokenType::Is),
             "or" | "أو" => self.add_token(TokenType::Or),
             "and" | "و" => self.add_token(TokenType::And),
             "null" | "فارغ" => self.add_token(TokenType::Null),
@@ -78,6 +79,7 @@ impl Tokenizer {
             "small" | "صغير" => self.add_token(TokenType::Small),
             "sbyte" | "بايت_مُوَقَّع" => self.add_token(TokenType::SByte),
             "handle" | "مقبض" => self.add_token(TokenType::Handle),
+            "type" | "نوع" => self.add_token(TokenType::Type),
 
             &_ => self.add_token(TokenType::Identifier(value)),
         }

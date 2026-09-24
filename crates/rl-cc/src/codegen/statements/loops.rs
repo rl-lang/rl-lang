@@ -3,7 +3,8 @@ use crate::types::type_to_c;
 use rl_ast::nodes::ExpressionKind;
 use rl_ast::statements::{Statement, StatementKind, TypeAnnotation};
 use rl_ast::ExprId;
-use rl_utils::errors::Error;
+use rl_utils::errors::{Error, Reason};
+use rl_utils::span::Span;
 
 /// `for item in array_expr { body }` — lowers to an index loop over the
 /// array's `.data` buffer. The element type is inferred from the iterable:
@@ -15,6 +16,68 @@ pub(super) fn compile_foreach(
     iterable: ExprId,
     body: &[Statement],
 ) -> Result<(), Error> {
+    // union storage (`any[arr[T], ...]` boxes to `rl_value`): unbox once,
+    // read elements boxed. All members are arrays (checker-enforced); the
+    // loop variable takes the merged element type.
+    if let Some(TypeAnnotation::Any(members) | TypeAnnotation::CAny(members)) =
+        cc.inferred_expr_type(iterable)
+    {
+        let mut elems: Vec<TypeAnnotation> = Vec::new();
+        for m in members.iter() {
+            match m {
+                TypeAnnotation::Array(inner) | TypeAnnotation::CArray(inner) => {
+                    if !elems.contains(inner) {
+                        elems.push((**inner).clone());
+                    }
+                }
+                other => {
+                    return Err(Error::at(
+                        Reason::Compile,
+                        format!(
+                            "for-each over a union needs every member to be an array, got {:?}",
+                            other
+                        ),
+                        Span::dummy(),
+                    ));
+                }
+            }
+        }
+        let elem_type = if elems.len() == 1 {
+            elems.into_iter().next().unwrap()
+        } else {
+            TypeAnnotation::Any(std::rc::Rc::new(elems))
+        };
+        let arr_temp = cc.temp_var();
+        let idx_temp = cc.temp_var();
+        cc.writer.write_indent();
+        cc.writer.write(&format!("rl_array {} = rl_unbox_arr(", arr_temp));
+        cc.compile_expr(iterable)?;
+        cc.writer.write(");\n");
+        cc.writer.write_indent();
+        cc.writer.write(&format!("uint64_t {} = 0;\n", idx_temp));
+        cc.writer.write_indent();
+        cc.writer.write(&format!(
+            "for (; {} < {}.len; {}++) {{\n",
+            idx_temp, arr_temp, idx_temp
+        ));
+        cc.writer.indent();
+        cc.push_scope();
+        let c_name = cc.declare_unique(variable);
+        cc.var_types.insert(variable.to_string(), elem_type);
+        cc.writer.write_indent();
+        cc.writer.write(&format!(
+            "rl_value {} = rl_core_arr_get_boxed({}, {});\n",
+            c_name, arr_temp, idx_temp
+        ));
+        for s in body {
+            cc.compile_statement(s)?;
+        }
+        cc.pop_scope();
+        cc.writer.dedent();
+        cc.writer.write_indent();
+        cc.writer.write("}\n");
+        return Ok(());
+    }
     let arr_temp = cc.temp_var();
     let idx_temp = cc.temp_var();
     cc.writer.write_indent();

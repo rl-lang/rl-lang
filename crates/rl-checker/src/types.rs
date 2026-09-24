@@ -25,6 +25,7 @@ impl ScopeItem {
             unit,
             is_const,
             decl_span,
+            decl_file: None,
             used: false,
             suppressed_lints: HashSet::new(),
             deprecated: None,
@@ -66,6 +67,10 @@ impl CheckType {
     /// - `Function { .. }` matches `Known(Fn)` and vice versa
     /// - Two `Function` types match only if params and return type are identical
     /// - Two `Known` types match if equal, or via [`null_array_elision`] or [`const_matches`]
+    /// - A value matches `any[...]` iff it matches some member; `any[...]`
+    ///   matches `any[...]` iff every member matches some expected member
+    ///   (subset); an `any` never matches a bare concrete type (narrow
+    ///   with `as` or `match`)
     pub fn matches(&self, expected: &CheckType) -> bool {
         match (self, expected) {
             // if any side is [`CheckType::Unknown`] returns true
@@ -105,6 +110,7 @@ impl CheckType {
                     || enum_matches(a, b)
                     || set_matches(a, b)
                     || handle_matches(a, b)
+                    || any_matches(a, b)
             }
 
             _ => false,
@@ -151,12 +157,41 @@ fn null_array_elision(a: &TypeAnnotation, b: &TypeAnnotation) -> bool {
     }
 }
 
-/// Returns `true` if `a` and `b` are handles from the same module.
+/// Returns `true` if two handle types are compatible: same-kind handles
+/// match, and the `handle` placeholder (`HandleInfer`, from an explicit
+/// `handle` annotation) matches any concrete kind in either position.
+/// Runtime stores reject a wrong-kind id with an error, so this is safe.
 fn handle_matches(a: &TypeAnnotation, b: &TypeAnnotation) -> bool {
     matches!(
         (a, b),
         (TypeAnnotation::Handle(x), TypeAnnotation::Handle(y)) if x == y
+    ) || matches!(
+        (a, b),
+        (TypeAnnotation::HandleInfer, TypeAnnotation::Handle(_))
+            | (TypeAnnotation::Handle(_), TypeAnnotation::HandleInfer)
+            | (TypeAnnotation::HandleInfer, TypeAnnotation::HandleInfer)
     )
+}
+
+/// Union compatibility: a value matches `any[...]` iff it matches some
+/// member; `any[...]` matches `any[...]` iff every actual member matches
+/// some expected member (subset). An `any` never matches a bare concrete
+/// type - narrowing needs `as` or `match`. Member comparison reuses the
+/// full [`CheckType::matches`] rules, so nesting and const forms compose.
+fn any_matches(a: &TypeAnnotation, b: &TypeAnnotation) -> bool {
+    use TypeAnnotation::*;
+    let member_matches = |m: &TypeAnnotation, e: &TypeAnnotation| {
+        CheckType::Known(m.clone()).matches(&CheckType::Known(e.clone()))
+    };
+    match (a, b) {
+        (Any(actual) | CAny(actual), Any(expected) | CAny(expected)) => actual
+            .iter()
+            .all(|m| expected.iter().any(|e| member_matches(m, e))),
+        (_, Any(expected) | CAny(expected)) => {
+            expected.iter().any(|e| member_matches(a, e))
+        }
+        _ => false,
+    }
 }
 
 fn null_map_elision(a: &TypeAnnotation, b: &TypeAnnotation) -> bool {
@@ -291,7 +326,28 @@ pub fn unify(
         (
             TypeAnnotation::Array(e) | TypeAnnotation::CArray(e),
             TypeAnnotation::Array(a) | TypeAnnotation::CArray(a),
-        ) => unify(e, a, bindings),
+        ) => {
+            // An empty literal adopts the needed element type (vacuously
+            // sound: no elements to violate it). Same rule as
+            // null_array_elision, which the matches-path already applies.
+            if matches!(a.as_ref(), TypeAnnotation::Null) {
+                return true;
+            }
+            // Integer elements coerce to bytes (`[104, 105]` for an
+            // array[byte] param); out-of-range values stay a runtime
+            // type error via as_u8, mirroring the numeric leniency
+            // already in as_f64.
+            if matches!(
+                e.as_ref(),
+                TypeAnnotation::Byte | TypeAnnotation::CByte
+            ) && matches!(
+                a.as_ref(),
+                TypeAnnotation::Int | TypeAnnotation::CInt
+            ) {
+                return true;
+            }
+            unify(e, a, bindings)
+        }
 
         (
             TypeAnnotation::Set(e) | TypeAnnotation::CSet(e),

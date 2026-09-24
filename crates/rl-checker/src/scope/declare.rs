@@ -64,6 +64,9 @@ impl TypeChecker {
             );
 
             let mut item = ScopeItem::new_with_unit(item_type, unit, is_const, span);
+            // capture the declaring file: deferred diagnostics (unused
+            // warnings) must route here even after an import restore
+            item.decl_file = self.source_file.clone();
             item.suppressed_lints = suppressed_lints;
             scope.insert(name, item);
             self.push_hover(span, hover_text);

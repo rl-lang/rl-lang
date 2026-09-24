@@ -107,6 +107,16 @@ fn main() {
                 cmd.arg("-lpthread");
                 cmd.arg("-ldl");
             }
+            // password hashing needs libargon2 (only when used).
+            if c_src.contains("rl_crypto_password") {
+                cmd.arg("-DRL_USE_ARGON2");
+                cmd.arg("-largon2");
+            }
+            // YAML needs libyaml (only when used).
+            if c_src.contains("rl_serialize_yaml") {
+                cmd.arg("-DRL_USE_YAML");
+                cmd.arg("-lyaml");
+            }
         }
 
         if embed_rt {

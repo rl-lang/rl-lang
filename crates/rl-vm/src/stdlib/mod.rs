@@ -30,6 +30,12 @@ pub fn root() -> Module {
 
     #[cfg(any(feature = "std-c", feature = "impls"))]
     { std = std.with_module(Module::from_std("c", rl_std::c::handles::<VmRuntime>())); }
+    #[cfg(any(feature = "std-cli", feature = "impls"))]
+    { std = std.with_module(Module::from_std("cli", rl_std::cli::handles::<VmRuntime>())); }
+    #[cfg(any(feature = "std-crypto", feature = "impls"))]
+    { std = std.with_module(Module::from_std("crypto", rl_std::crypto::handles::<VmRuntime>())); }
+    #[cfg(any(feature = "std-serialize", feature = "impls"))]
+    { std = std.with_module(Module::from_std("serialize", rl_std::serialize::handles::<VmRuntime>())); }
     #[cfg(any(feature = "std-audio", feature = "impls"))]
     { std = std.with_module(Module::from_std("audio", rl_std::audio::handles::<VmRuntime>())); }
     #[cfg(any(feature = "std-gui", feature = "impls"))]
@@ -61,5 +67,11 @@ pub fn root() -> Module {
     std = std.with_module(Module::from_std("time", rl_std::time::handles::<VmRuntime>()));
     std = std.with_module(Module::from_std("types", rl_std::types::handles::<VmRuntime>()));
 
-    Module::new("root").with_module(std)
+    // Top-level `core::` intrinsics live beside `std`, not inside it.
+    let mut root = Module::new("root").with_module(std);
+    #[cfg(any(feature = "std-core", feature = "impls"))]
+    {
+        root = root.with_module(Module::from_std("core", rl_std::core::handles::<VmRuntime>()));
+    }
+    root
 }

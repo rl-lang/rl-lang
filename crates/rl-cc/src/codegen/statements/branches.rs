@@ -24,8 +24,16 @@ pub(super) fn write_conditional(
         }
         cc.writer.indent();
         cc.push_scope();
+        // `x is T` refines x for the body (mirrors the checker; the
+        // condition gate means the entry always reflects a taken test)
+        let saved = condition
+            .and_then(|c| cc.detect_is_refinement(c))
+            .map(|(name, refined)| (name.clone(), cc.refine_var(name, refined)));
         for s in body {
             cc.compile_statement(s)?;
+        }
+        if let Some((name, prev)) = saved {
+            cc.unrefine_var(&name, prev);
         }
         cc.pop_scope();
         cc.writer.dedent();
