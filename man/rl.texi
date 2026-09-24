@@ -31,7 +31,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 @titlepage
 @title rl Programming Language Toolchain
-@subtitle Version 2.1.0
+@subtitle Version 2.2.0
 @author rl-lang contributors
 @page
 @insertcopying
@@ -55,14 +55,10 @@ programming language toolchain.
 * new Command::
 * check Command::
 * format Command::
-* compile Command::
 * print Command::
-* transpile Command::
 * package Command::
-* repl Command::
-* lsp Command::
-* docs Command::
 * workflows Command::
+* pm Command::
 * Examples::
 * Bugs::
 
@@ -76,14 +72,10 @@ Commands
 * new Command::
 * check Command::
 * format Command::
-* compile Command::
 * print Command::
-* transpile Command::
 * package Command::
-* repl Command::
-* lsp Command::
-* docs Command::
 * workflows Command::
+* pm Command::
 
 @end detailmenu
 @end menu
@@ -93,23 +85,26 @@ Commands
 @chapter Overview
 
 @command{rl} is the command-line interface for the rl programming language.
-It provides tools for running, checking, compiling, packaging, and generating
-documentation for rl source files.
+It provides tools for running, checking, scaffolding, formatting, and
+packaging rl source files, plus a package manager.
 
-If no command is given and stdin is a terminal, the interactive REPL is started.
+Compiling to bytecode, transpiling to C, the interactive REPL, the language
+server, the docs viewer, and the toolchain manager ship as separate
+binaries: @command{rlc}, @command{rlt}, @command{rlrepl}, @command{rlsp},
+@command{rldocs}, and @command{rlm}.
 
 @c ===================================================================
 @node Commands
 @chapter Commands
 
 @table @code
-@item rl run @var{file} [@option{-c} @var{code}] [@option{--vm}] [@option{--cranelift}] [@option{--} @var{args}...]
+@item rl run @var{file} [@option{-c} @var{code}] [@option{--vm}] [@option{--} @var{args}...]
 Lex, parse, and evaluate a @file{.rl} source file.
 
-@item rl dev [@option{--vm}] [@option{--cranelift}]
+@item rl dev [@option{--vm}]
 Run the current project by reading @file{rl.toml}.
 
-@item rl new @var{name} [@option{--no-git}] [@option{--script}]
+@item rl new @var{name} [@option{--no-git}] [@option{--script}] [@option{--lib}]
 Scaffold a new project directory or create a standalone script.
 
 @item rl check @var{file}
@@ -118,29 +113,18 @@ Type-check a @file{.rl} file and report errors without running it.
 @item rl format @var{file}
 Format a @file{.rl} source file in place.
 
-@item rl compile @var{file} [@option{-o} @var{output}]
-Lex, parse, resolve, and compile a @file{.rl} source file to @file{.rlc} bytecode.
-
 @item rl print @var{file} (@option{-t} | @option{-p} | @option{-a})
 Print debug information for a @file{.rl} source file.
-
-@item rl transpile @var{file} [@option{-o} @var{output}] [@option{--runtime}] [@option{-c}] [@option{--opt} @var{level}] [@option{--} @var{cc-flags}]
-Transpile a @file{.rl} source file to C99.
 
 @item rl package @var{file} [@option{-o} @var{output}] [@option{--vm}]
 Package a @file{.rl} file into a self-contained binary.
 
-@item rl repl
-Start the interactive TUI REPL.
-
-@item rl lsp
-Start the Language Server Protocol server.
-
-@item rl docs @var{topic} [@option{--tui}] [@option{--website}] [@option{--json}] [@option{--stdlib}] [@option{--concept}] [@option{--tutorial}]
-Print language reference and stdlib documentation.
-
 @item rl workflows @option{--check} | @option{--package}
 Scaffold GitHub Actions workflow files.
+
+@item rl pm @var{command}
+Manage project dependencies (@code{install}, @code{add}, @code{remove},
+@code{list}, @code{update}, @code{cache}).
 @end table
 
 @c ===================================================================
@@ -158,10 +142,7 @@ array.
 Execute inline rl code instead of a file.
 
 @item @option{--vm}
-Run through the bytecode VM. This is the default backend.
-
-@item @option{--cranelift}
-JIT compile via cranelift. Requires the @option{--cranelift} feature.
+Run through the bytecode VM (highly experimental).
 @end table
 
 @section Examples
@@ -183,10 +164,7 @@ current directory.
 
 @table @code
 @item @option{--vm}
-Run through the bytecode VM.
-
-@item @option{--cranelift}
-JIT compile via cranelift.
+Run through the bytecode VM (highly experimental).
 @end table
 
 @section Examples
@@ -211,6 +189,10 @@ Skip running @command{git init} in the new project directory.
 
 @item @option{--script}
 Create a standalone @file{.rl} script instead of a project directory.
+
+@item @option{--lib}
+Create a library project (generates @file{src/lib.rl} instead of
+@file{src/main.rl}).
 @end table
 
 @section Examples
@@ -247,28 +229,6 @@ $ rl format script.rl
 @end example
 
 @c ===================================================================
-@node compile Command
-@chapter compile Command
-
-@command{rl compile @var{file}} lexes, parses, resolves, and compiles a
-@file{.rl} source file to @file{.rlc} bytecode.
-
-@section Options
-
-@table @code
-@item @option{-o} @var{path}, @option{--output} @var{path}
-Output @file{.rlc} path. Defaults to @var{file} with its extension changed
-to @file{.rlc}.
-@end table
-
-@section Examples
-
-@example
-$ rl compile script.rl
-$ rl compile script.rl -o output.rlc
-@end example
-
-@c ===================================================================
 @node print Command
 @chapter print Command
 
@@ -298,45 +258,6 @@ $ rl print script.rl --ast
 @end example
 
 @c ===================================================================
-@node transpile Command
-@chapter transpile Command
-
-@command{rl transpile @var{file}} lexes, parses, resolves, type-checks, and
-transpiles a @file{.rl} source file to C99 source code.
-
-@section Options
-
-@table @code
-@item @option{-o} @var{path}, @option{--output} @var{path}
-Output @file{.c} path. Defaults to @var{file} with its extension changed
-to @file{.c}.
-
-@item @option{--runtime}
-Also emit @file{rl_runtime.h} and @file{rl_runtime.c} alongside the
-transpiled output.
-
-@item @option{-c}, @option{--compile}
-After transpiling, invoke @command{cc} to compile the @file{.c} file.
-
-@item @option{--opt} @var{level}
-Optimization level forwarded to @command{cc}. Accepted values: @code{O0},
-@code{O1}, @code{O2}, @code{O3}, @code{Os}, @code{Og}. Defaults to
-@code{O2} when @option{--compile} is used.
-
-@item @option{--} @var{cc-flags}
-Extra flags forwarded directly to @command{cc}.
-@end table
-
-@section Examples
-
-@example
-$ rl transpile script.rl
-$ rl transpile script.rl --runtime --compile
-$ rl transpile script.rl --runtime --compile -o output
-$ rl transpile script.rl --runtime --compile -O3 -- -lm
-@end example
-
-@c ===================================================================
 @node package Command
 @chapter package Command
 
@@ -351,9 +272,8 @@ into the compiled output.
 Output binary path. Defaults to @code{program}.
 
 @item @option{--vm}
-Compile to @file{.rlc} bytecode first and embed that instead of raw
-source text. This reduces the size of the embedded source at the cost
-of needing a @file{.rlc}-aware runtime.
+Compile to @file{.rlc} bytecode first and embed that (compressed) instead
+of the raw source text.
 @end table
 
 @section Examples
@@ -362,85 +282,6 @@ of needing a @file{.rlc}-aware runtime.
 $ rl package script.rl
 $ rl package script.rl -o myapp
 $ rl package script.rl --vm
-@end example
-
-@c ===================================================================
-@node repl Command
-@chapter repl Command
-
-@command{rl repl} starts the interactive TUI REPL (Read-Eval-Print Loop)
-with syntax highlighting, line editing, and persistent history.
-
-@section Examples
-
-@example
-$ rl repl
-@end example
-
-@c ===================================================================
-@node lsp Command
-@chapter lsp Command
-
-@command{rl lsp} starts the Language Server Protocol server over stdio.
-Use this with editors that support LSP for autocompletion, diagnostics,
-and go-to-definition.
-
-@section Examples
-
-@example
-$ rl lsp
-@end example
-
-@c ===================================================================
-@node docs Command
-@chapter docs Command
-
-@command{rl docs @var{topic}} searches names across all documentation
-categories and prints the matching entry. With no @var{topic}, it prints
-everything. Use the @option{--tui} flag for an interactive terminal browser.
-
-@section Options
-
-@table @code
-@item @option{--tui}
-Browse docs in an interactive terminal UI.
-
-@item @option{--website}
-Open docs in a web browser.
-
-@item @option{--json}
-Print output as JSON instead of Markdown.
-
-@item @option{--stdlib}
-Restrict search to stdlib docs.
-
-@item @option{--concept}
-Restrict search to concept docs.
-
-@item @option{--tutorial}
-Restrict search to tutorial docs.
-
-@item @option{--out-file} @var{path}
-Write output to a file instead of stdout.
-
-@item @option{--generate}
-Generate documentation for the current project.
-
-@item @option{--html}
-Emit an HTML version of the generated site (used with @option{--generate}).
-
-@item @option{--out-dir} @var{path}
-Output directory for @option{--generate}.
-@end table
-
-@section Examples
-
-@example
-$ rl docs
-$ rl docs map
-$ rl docs --tui
-$ rl docs --stdlib --json
-$ rl docs --generate --html --out-dir site/
 @end example
 
 @c ===================================================================
@@ -466,6 +307,20 @@ Generate a workflow that packages and releases a binary.
 $ rl workflows --check
 $ rl workflows --package
 $ rl workflows --check --package
+@end example
+
+@c ===================================================================
+@node pm Command
+@chapter pm Command
+
+@command{rl pm} manages project dependencies: it downloads tarballs,
+verifies SHA256 hashes, and links them into @file{deps/}.
+
+@section Examples
+
+@example
+$ rl pm install some-package
+$ rl pm list
 @end example
 
 @c ===================================================================
@@ -507,7 +362,7 @@ $ rl format script.rl
 @section Compiling to Bytecode
 
 @example
-$ rl compile script.rl -o output.rlc
+$ rlc compile script.rl -o output.rlc
 @end example
 
 @section Printing Tokens
@@ -519,7 +374,7 @@ $ rl print script.rl --tokens
 @section Transpiling to C
 
 @example
-$ rl transpile script.rl --runtime --compile
+$ rlt script.rl --runtime --compile
 @end example
 
 @section Packaging a Binary
@@ -531,10 +386,7 @@ $ rl package script.rl -o myapp
 @section Starting the REPL
 
 @example
-$ rl repl
-repl> 2 + 2
-4
-repl> exit
+$ rlrepl
 @end example
 
 @c ===================================================================

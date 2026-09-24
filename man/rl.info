@@ -1,4 +1,4 @@
-This is rl.info.out, produced by makeinfo version 7.3 from rl.info.
+This is rl.info, produced by makeinfo version 7.3 from rl.texi.
 
 Copyright © 2026 rl-lang contributors.
 
@@ -22,7 +22,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-File: rl.info.out,  Node: Top,  Next: Overview,  Up: (dir)
+File: rl.info,  Node: Top,  Next: Overview,  Up: (dir)
 
 rl
 **
@@ -39,14 +39,10 @@ programming language toolchain.
 * new Command::
 * check Command::
 * format Command::
-* compile Command::
 * print Command::
-* transpile Command::
 * package Command::
-* repl Command::
-* lsp Command::
-* docs Command::
 * workflows Command::
+* pm Command::
 * Examples::
 * Bugs::
 
@@ -59,41 +55,38 @@ Commands
 * new Command::
 * check Command::
 * format Command::
-* compile Command::
 * print Command::
-* transpile Command::
 * package Command::
-* repl Command::
-* lsp Command::
-* docs Command::
 * workflows Command::
+* pm Command::
 
 
-File: rl.info.out,  Node: Overview,  Next: Commands,  Prev: Top,  Up: Top
+File: rl.info,  Node: Overview,  Next: Commands,  Prev: Top,  Up: Top
 
 1 Overview
 **********
 
 ‘rl’ is the command-line interface for the rl programming language.  It
-provides tools for running, checking, compiling, packaging, and
-generating documentation for rl source files.
+provides tools for running, checking, scaffolding, formatting, and
+packaging rl source files, plus a package manager.
 
-   If no command is given and stdin is a terminal, the interactive REPL
-is started.
+   Compiling to bytecode, transpiling to C, the interactive REPL, the
+language server, the docs viewer, and the toolchain manager ship as
+separate binaries: ‘rlc’, ‘rlt’, ‘rlrepl’, ‘rlsp’, ‘rldocs’, and ‘rlm’.
 
 
-File: rl.info.out,  Node: Commands,  Next: run Command,  Prev: Overview,  Up: Top
+File: rl.info,  Node: Commands,  Next: run Command,  Prev: Overview,  Up: Top
 
 2 Commands
 **********
 
-‘rl run FILE [-c CODE] [--vm] [--cranelift] [-- ARGS...]’
+‘rl run FILE [-c CODE] [--vm] [-- ARGS...]’
      Lex, parse, and evaluate a ‘.rl’ source file.
 
-‘rl dev [--vm] [--cranelift]’
+‘rl dev [--vm]’
      Run the current project by reading ‘rl.toml’.
 
-‘rl new NAME [--no-git] [--script]’
+‘rl new NAME [--no-git] [--script] [--lib]’
      Scaffold a new project directory or create a standalone script.
 
 ‘rl check FILE’
@@ -102,33 +95,21 @@ File: rl.info.out,  Node: Commands,  Next: run Command,  Prev: Overview,  Up: To
 ‘rl format FILE’
      Format a ‘.rl’ source file in place.
 
-‘rl compile FILE [-o OUTPUT]’
-     Lex, parse, resolve, and compile a ‘.rl’ source file to ‘.rlc’
-     bytecode.
-
 ‘rl print FILE (-t | -p | -a)’
      Print debug information for a ‘.rl’ source file.
-
-‘rl transpile FILE [-o OUTPUT] [--runtime] [-c] [--opt LEVEL] [-- CC-FLAGS]’
-     Transpile a ‘.rl’ source file to C99.
 
 ‘rl package FILE [-o OUTPUT] [--vm]’
      Package a ‘.rl’ file into a self-contained binary.
 
-‘rl repl’
-     Start the interactive TUI REPL.
-
-‘rl lsp’
-     Start the Language Server Protocol server.
-
-‘rl docs TOPIC [--tui] [--website] [--json] [--stdlib] [--concept] [--tutorial]’
-     Print language reference and stdlib documentation.
-
 ‘rl workflows --check | --package’
      Scaffold GitHub Actions workflow files.
 
+‘rl pm COMMAND’
+     Manage project dependencies (‘install’, ‘add’, ‘remove’, ‘list’,
+     ‘update’, ‘cache’).
+
 
-File: rl.info.out,  Node: run Command,  Next: dev Command,  Prev: Commands,  Up: Top
+File: rl.info,  Node: run Command,  Next: dev Command,  Prev: Commands,  Up: Top
 
 3 run Command
 *************
@@ -144,10 +125,7 @@ array.
      Execute inline rl code instead of a file.
 
 ‘--vm’
-     Run through the bytecode VM. This is the default backend.
-
-‘--cranelift’
-     JIT compile via cranelift.  Requires the ‘--cranelift’ feature.
+     Run through the bytecode VM (highly experimental).
 
 3.2 Examples
 ============
@@ -157,7 +135,7 @@ array.
      $ rl run -c 'println("hello")'
 
 
-File: rl.info.out,  Node: dev Command,  Next: new Command,  Prev: run Command,  Up: Top
+File: rl.info,  Node: dev Command,  Next: new Command,  Prev: run Command,  Up: Top
 
 4 dev Command
 *************
@@ -169,10 +147,7 @@ directory.
 ===========
 
 ‘--vm’
-     Run through the bytecode VM.
-
-‘--cranelift’
-     JIT compile via cranelift.
+     Run through the bytecode VM (highly experimental).
 
 4.2 Examples
 ============
@@ -180,7 +155,7 @@ directory.
      $ rl dev
 
 
-File: rl.info.out,  Node: new Command,  Next: check Command,  Prev: dev Command,  Up: Top
+File: rl.info,  Node: new Command,  Next: check Command,  Prev: dev Command,  Up: Top
 
 5 new Command
 *************
@@ -198,6 +173,10 @@ structure and a ‘rl.toml’ configuration file.  Alternatively, with the
 ‘--script’
      Create a standalone ‘.rl’ script instead of a project directory.
 
+‘--lib’
+     Create a library project (generates ‘src/lib.rl’ instead of
+     ‘src/main.rl’).
+
 5.2 Examples
 ============
 
@@ -205,7 +184,7 @@ structure and a ‘rl.toml’ configuration file.  Alternatively, with the
      $ rl new --script my_script
 
 
-File: rl.info.out,  Node: check Command,  Next: format Command,  Prev: new Command,  Up: Top
+File: rl.info,  Node: check Command,  Next: format Command,  Prev: new Command,  Up: Top
 
 6 check Command
 ***************
@@ -219,7 +198,7 @@ without running it.
      $ rl check script.rl
 
 
-File: rl.info.out,  Node: format Command,  Next: compile Command,  Prev: check Command,  Up: Top
+File: rl.info,  Node: format Command,  Next: print Command,  Prev: check Command,  Up: Top
 
 7 format Command
 ****************
@@ -233,37 +212,15 @@ rl coding style.
      $ rl format script.rl
 
 
-File: rl.info.out,  Node: compile Command,  Next: print Command,  Prev: format Command,  Up: Top
+File: rl.info,  Node: print Command,  Next: package Command,  Prev: format Command,  Up: Top
 
-8 compile Command
-*****************
-
-‘rl compile FILE’ lexes, parses, resolves, and compiles a ‘.rl’ source
-file to ‘.rlc’ bytecode.
-
-8.1 Options
-===========
-
-‘-o PATH, --output PATH’
-     Output ‘.rlc’ path.  Defaults to FILE with its extension changed to
-     ‘.rlc’.
-
-8.2 Examples
-============
-
-     $ rl compile script.rl
-     $ rl compile script.rl -o output.rlc
-
-
-File: rl.info.out,  Node: print Command,  Next: transpile Command,  Prev: compile Command,  Up: Top
-
-9 print Command
+8 print Command
 ***************
 
 ‘rl print FILE’ prints debug information for a ‘.rl’ source file.
 Exactly one of ‘--tokens’, ‘--parser’, or ‘--ast’ must be given.
 
-9.1 Options
+8.1 Options
 ===========
 
 ‘-t, --tokens’
@@ -275,7 +232,7 @@ Exactly one of ‘--tokens’, ‘--parser’, or ‘--ast’ must be given.
 ‘-a, --ast’
      Print the type-checked AST.
 
-9.2 Examples
+8.2 Examples
 ============
 
      $ rl print script.rl --tokens
@@ -283,162 +240,41 @@ Exactly one of ‘--tokens’, ‘--parser’, or ‘--ast’ must be given.
      $ rl print script.rl --ast
 
 
-File: rl.info.out,  Node: transpile Command,  Next: package Command,  Prev: print Command,  Up: Top
+File: rl.info,  Node: package Command,  Next: workflows Command,  Prev: print Command,  Up: Top
 
-10 transpile Command
-********************
-
-‘rl transpile FILE’ lexes, parses, resolves, type-checks, and transpiles
-a ‘.rl’ source file to C99 source code.
-
-10.1 Options
-============
-
-‘-o PATH, --output PATH’
-     Output ‘.c’ path.  Defaults to FILE with its extension changed to
-     ‘.c’.
-
-‘--runtime’
-     Also emit ‘rl_runtime.h’ and ‘rl_runtime.c’ alongside the
-     transpiled output.
-
-‘-c, --compile’
-     After transpiling, invoke ‘cc’ to compile the ‘.c’ file.
-
-‘--opt LEVEL’
-     Optimization level forwarded to ‘cc’.  Accepted values: ‘O0’, ‘O1’,
-     ‘O2’, ‘O3’, ‘Os’, ‘Og’.  Defaults to ‘O2’ when ‘--compile’ is used.
-
-‘-- CC-FLAGS’
-     Extra flags forwarded directly to ‘cc’.
-
-10.2 Examples
-=============
-
-     $ rl transpile script.rl
-     $ rl transpile script.rl --runtime --compile
-     $ rl transpile script.rl --runtime --compile -o output
-     $ rl transpile script.rl --runtime --compile -O3 -- -lm
-
-
-File: rl.info.out,  Node: package Command,  Next: repl Command,  Prev: transpile Command,  Up: Top
-
-11 package Command
-******************
+9 package Command
+*****************
 
 ‘rl package FILE’ packages a ‘.rl’ file into a self-contained binary.
 The ‘.rl’ source text is embedded directly into the compiled output.
 
-11.1 Options
-============
+9.1 Options
+===========
 
 ‘-o PATH, --output PATH’
      Output binary path.  Defaults to ‘program’.
 
 ‘--vm’
-     Compile to ‘.rlc’ bytecode first and embed that instead of raw
-     source text.  This reduces the size of the embedded source at the
-     cost of needing a ‘.rlc’-aware runtime.
+     Compile to ‘.rlc’ bytecode first and embed that (compressed)
+     instead of the raw source text.
 
-11.2 Examples
-=============
+9.2 Examples
+============
 
      $ rl package script.rl
      $ rl package script.rl -o myapp
      $ rl package script.rl --vm
 
 
-File: rl.info.out,  Node: repl Command,  Next: lsp Command,  Prev: package Command,  Up: Top
+File: rl.info,  Node: workflows Command,  Next: pm Command,  Prev: package Command,  Up: Top
 
-12 repl Command
-***************
-
-‘rl repl’ starts the interactive TUI REPL (Read-Eval-Print Loop) with
-syntax highlighting, line editing, and persistent history.
-
-12.1 Examples
-=============
-
-     $ rl repl
-
-
-File: rl.info.out,  Node: lsp Command,  Next: docs Command,  Prev: repl Command,  Up: Top
-
-13 lsp Command
-**************
-
-‘rl lsp’ starts the Language Server Protocol server over stdio.  Use
-this with editors that support LSP for autocompletion, diagnostics, and
-go-to-definition.
-
-13.1 Examples
-=============
-
-     $ rl lsp
-
-
-File: rl.info.out,  Node: docs Command,  Next: workflows Command,  Prev: lsp Command,  Up: Top
-
-14 docs Command
-***************
-
-‘rl docs TOPIC’ searches names across all documentation categories and
-prints the matching entry.  With no TOPIC, it prints everything.  Use
-the ‘--tui’ flag for an interactive terminal browser.
-
-14.1 Options
-============
-
-‘--tui’
-     Browse docs in an interactive terminal UI.
-
-‘--website’
-     Open docs in a web browser.
-
-‘--json’
-     Print output as JSON instead of Markdown.
-
-‘--stdlib’
-     Restrict search to stdlib docs.
-
-‘--concept’
-     Restrict search to concept docs.
-
-‘--tutorial’
-     Restrict search to tutorial docs.
-
-‘--out-file PATH’
-     Write output to a file instead of stdout.
-
-‘--generate’
-     Generate documentation for the current project.
-
-‘--html’
-     Emit an HTML version of the generated site (used with
-     ‘--generate’).
-
-‘--out-dir PATH’
-     Output directory for ‘--generate’.
-
-14.2 Examples
-=============
-
-     $ rl docs
-     $ rl docs map
-     $ rl docs --tui
-     $ rl docs --stdlib --json
-     $ rl docs --generate --html --out-dir site/
-
-
-File: rl.info.out,  Node: workflows Command,  Next: Examples,  Prev: docs Command,  Up: Top
-
-15 workflows Command
+10 workflows Command
 ********************
 
 ‘rl workflows’ scaffolds GitHub Actions workflow files.  At least one of
 ‘--check’ or ‘--package’ must be given.
 
-15.1 Options
+10.1 Options
 ============
 
 ‘--check’
@@ -447,7 +283,7 @@ File: rl.info.out,  Node: workflows Command,  Next: Examples,  Prev: docs Comman
 ‘--package’
      Generate a workflow that packages and releases a binary.
 
-15.2 Examples
+10.2 Examples
 =============
 
      $ rl workflows --check
@@ -455,94 +291,102 @@ File: rl.info.out,  Node: workflows Command,  Next: Examples,  Prev: docs Comman
      $ rl workflows --check --package
 
 
-File: rl.info.out,  Node: Examples,  Next: Bugs,  Prev: workflows Command,  Up: Top
+File: rl.info,  Node: pm Command,  Next: Examples,  Prev: workflows Command,  Up: Top
 
-16 Examples
+11 pm Command
+*************
+
+‘rl pm’ manages project dependencies: it downloads tarballs, verifies
+SHA256 hashes, and links them into ‘deps/’.
+
+11.1 Examples
+=============
+
+     $ rl pm install some-package
+     $ rl pm list
+
+
+File: rl.info,  Node: Examples,  Next: Bugs,  Prev: pm Command,  Up: Top
+
+12 Examples
 ***********
 
-16.1 Running a Script
+12.1 Running a Script
 =====================
 
      $ rl run hello.rl
      Hello, world!
 
-16.2 Running with Arguments
+12.2 Running with Arguments
 ===========================
 
      $ rl run script.rl -- --verbose input.txt
 
-16.3 Inline Code
+12.3 Inline Code
 ================
 
      $ rl run -c 'println("hello")'
      hello
 
-16.4 Type Checking
+12.4 Type Checking
 ==================
 
      $ rl check script.rl
 
-16.5 Formatting
+12.5 Formatting
 ===============
 
      $ rl format script.rl
 
-16.6 Compiling to Bytecode
+12.6 Compiling to Bytecode
 ==========================
 
-     $ rl compile script.rl -o output.rlc
+     $ rlc compile script.rl -o output.rlc
 
-16.7 Printing Tokens
+12.7 Printing Tokens
 ====================
 
      $ rl print script.rl --tokens
 
-16.8 Transpiling to C
+12.8 Transpiling to C
 =====================
 
-     $ rl transpile script.rl --runtime --compile
+     $ rlt script.rl --runtime --compile
 
-16.9 Packaging a Binary
+12.9 Packaging a Binary
 =======================
 
      $ rl package script.rl -o myapp
 
-16.10 Starting the REPL
+12.10 Starting the REPL
 =======================
 
-     $ rl repl
-     repl> 2 + 2
-     4
-     repl> exit
+     $ rlrepl
 
 
-File: rl.info.out,  Node: Bugs,  Prev: Examples,  Up: Top
+File: rl.info,  Node: Bugs,  Prev: Examples,  Up: Top
 
-17 Bugs
+13 Bugs
 *******
 
 Report bugs at <https://github.com/rl-lang/rl-lang/issues>.
 
 
 Tag Table:
-Node: Top1143
-Node: Overview1887
-Node: Commands2259
-Node: run Command3637
-Node: dev Command4308
-Node: new Command4682
-Node: check Command5298
-Node: format Command5577
-Node: compile Command5864
-Node: print Command6357
-Node: transpile Command6984
-Node: package Command8102
-Node: repl Command8837
-Node: lsp Command9145
-Node: docs Command9477
-Node: workflows Command10645
-Node: Examples11218
-Node: Bugs12198
+Node: Top1139
+Node: Overview1725
+Node: Commands2251
+Node: run Command3234
+Node: dev Command3802
+Node: new Command4143
+Node: check Command4862
+Node: format Command5137
+Node: print Command5418
+Node: package Command6038
+Node: workflows Command6679
+Node: pm Command7253
+Node: Examples7576
+Node: Bugs8496
 
 End Tag Table
 

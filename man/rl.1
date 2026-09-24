@@ -1,5 +1,5 @@
 .\" rl man page
-.TH RL 1 "2026-09-09" "rl 2.1.0" "User Commands"
+.TH RL 1 "2026-09-24" "rl 2.2.0" "User Commands"
 .SH NAME
 rl \- the rl programming language toolchain
 .SH SYNOPSIS
@@ -10,9 +10,10 @@ rl \- the rl programming language toolchain
 .SH DESCRIPTION
 .B rl
 is the command-line interface for the rl programming language. It provides
-tools for running, checking, compiling, and packaging rl source files.
+tools for running, checking, scaffolding, and packaging rl source files.
 .PP
-If no command is given and stdin is a terminal, the interactive REPL is started.
+Standalone tools ship as separate binaries:
+.BR rlc " (compiler), " rlt " (C transpiler), " rlrepl " (REPL), " rlsp " (LSP server), " rldocs " (docs viewer), and " rlm " (toolchain manager)."
 .SH COMMANDS
 .TP
 .BI run " FILE"
@@ -28,10 +29,7 @@ Options:
 Execute inline rl code instead of a file.
 .TP
 .B \-\-vm
-Run through the bytecode VM.
-.TP
-.B \-\-cranelift
-JIT compile via cranelift.
+Run through the bytecode VM (highly experimental).
 .RE
 .TP
 .B dev
@@ -43,10 +41,7 @@ Run the current project by reading
 Options:
 .TP
 .B \-\-vm
-Run through the bytecode VM.
-.TP
-.B \-\-cranelift
-JIT compile via cranelift.
+Run through the bytecode VM (highly experimental).
 .RE
 .TP
 .BI new " NAME"
@@ -63,6 +58,9 @@ in the new project.
 .TP
 .B \-\-script
 Create a standalone .rl script instead of a project directory.
+.TP
+.B \-\-lib
+Create a library project (generates src/lib.rl instead of src/main.rl).
 .RE
 .TP
 .BI check " FILE"
@@ -70,17 +68,6 @@ Type-check a .rl file and report errors without running it.
 .TP
 .BI format " FILE"
 Format a .rl source file in place.
-.TP
-.BI compile " FILE"
-.RI [ \-o " OUTPUT"]
-Lex, parse, resolve, and compile a .rl source file to .rlc bytecode.
-.RS
-.PP
-Options:
-.TP
-.BI \-o ", \-\-output " PATH
-Output .rlc path. Defaults to FILE with its extension changed to .rlc.
-.RE
 .TP
 .BI print " FILE"
 .RI [ OPTIONS ]
@@ -101,30 +88,8 @@ Print the parsed AST (pre-type-check).
 Print the type-checked AST.
 .RE
 .TP
-.BI transpile " FILE"
-.RI [ OPTIONS ]
-.RI [ \-\- " CC_FLAGS"]
-Lex, parse, resolve, type-check, and transpile a .rl source file to C99.
-.RS
-.PP
-Options:
-.TP
-.BI \-o ", \-\-output " PATH
-Output .c path. Defaults to FILE with its extension changed to .c.
-.TP
-.B \-\-runtime
-Also emit rl_runtime.h and rl_runtime.c.
-.TP
-.BR \-c ", \-\-compile"
-After transpiling, invoke cc to compile the .c file.
-.TP
-.BI \-\-opt " LEVEL
-Optimization level forwarded to cc (O0, O1, O2, O3, Os, Og).
-Defaults to O2 when --compile is used.
-.RE
-.TP
 .BI package " FILE"
-.RI [ \-o " OUTPUT"]
+.RI [ OPTIONS ]
 Package a .rl file into a self-contained binary.
 .RS
 .PP
@@ -134,52 +99,8 @@ Options:
 Output binary path. Defaults to "program".
 .TP
 .B \-\-vm
-Compile to .rlc bytecode first and embed that instead of raw source text.
-.RE
-.TP
-.B repl
-Start the interactive TUI REPL with syntax highlighting and history.
-.TP
-.B lsp
-Start the Language Server Protocol server over stdio.
-.TP
-.BI docs " TOPIC"
-.RI [ OPTIONS ]
-Print language reference and stdlib documentation. With no TOPIC, prints
-everything. With a TOPIC, searches names across all categories.
-.RS
-.PP
-Options:
-.TP
-.B \-\-tui
-Browse docs in an interactive terminal UI.
-.TP
-.B \-\-website
-Open docs in a web browser.
-.TP
-.B \-\-json
-Print output as JSON instead of Markdown.
-.TP
-.B \-\-stdlib
-Restrict search to stdlib docs.
-.TP
-.B \-\-concept
-Restrict search to concept docs.
-.TP
-.B \-\-tutorial
-Restrict search to tutorial docs.
-.TP
-.BI \-\-out\-file " PATH
-Write output to a file instead of stdout.
-.TP
-.B \-\-generate
-Generate docs for current project.
-.TP
-.B \-\-html
-Emit an HTML version of the generated site.
-.TP
-.BI \-\-out\-dir " PATH
-Output directory for --generate.
+Compile to .rlc bytecode first and embed that (compressed) instead of the
+raw source text.
 .RE
 .TP
 .BI workflows " OPTIONS"
@@ -200,10 +121,13 @@ on push/PR.
 .B \-\-package
 Generate a workflow that packages and releases a binary.
 .RE
-.SH ENVIRONMENT
 .TP
-.B RL_VARIANT
-Comma-separated list of variants for non-interactive install script use.
+.B pm
+.I COMMAND
+Manage project dependencies (downloads tarballs, verifies SHA256, links
+into deps/). Commands:
+.BR install ", " add ", " remove ", " list ", " update ", " cache "."
+.SH ENVIRONMENT
 .TP
 .B RL_VERSION
 Version to install for non-interactive install script use.
@@ -238,7 +162,7 @@ rl run -c 'println("hello")'
 Start the REPL:
 .RS
 .PP
-rl repl
+rlrepl
 .RE
 .PP
 Type-check a file:
@@ -256,7 +180,7 @@ rl new my_project
 Transpile to C:
 .RS
 .PP
-rl transpile script.rl --runtime --compile
+rlt script.rl --runtime --compile
 .RE
 .SH EXIT STATUS
 .TP
@@ -266,7 +190,8 @@ Success.
 .B 1
 An error occurred (type errors, I/O failures, etc.).
 .SH SEE ALSO
-.BR cc (1)
+.BR rlc (1),
+.BR rlt (1)
 .SH BUGS
 Report bugs at <https://github.com/rl-lang/rl-lang/issues>.
 .SH AUTHOR
