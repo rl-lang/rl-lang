@@ -12,6 +12,8 @@ pub fn transpile_loop(
     file: &std::path::Path,
     output: Option<std::path::PathBuf>,
     embed_runtime: bool,
+    test_mode: bool,
+    match_pattern: Option<String>,
 ) -> std::path::PathBuf {
     let path = file
         .to_str()
@@ -79,6 +81,8 @@ pub fn transpile_loop(
         embed_runtime,
         output_dir,
         output_name,
+        test_mode,
+        match_pattern,
     };
 
     let result = rl_cc::transpile(&resolver.ast_arena, &resolved_statements, &checker, &config).unwrap_or_else(|e| {

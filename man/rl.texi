@@ -59,6 +59,7 @@ programming language toolchain.
 * package Command::
 * workflows Command::
 * pm Command::
+* test Command::
 * Examples::
 * Bugs::
 
@@ -76,6 +77,7 @@ Commands
 * package Command::
 * workflows Command::
 * pm Command::
+* test Command::
 
 @end detailmenu
 @end menu
@@ -125,6 +127,10 @@ Scaffold GitHub Actions workflow files.
 @item rl pm @var{command}
 Manage project dependencies (@code{install}, @code{add}, @code{remove},
 @code{list}, @code{update}, @code{cache}).
+
+@item rl test @var{file} [@option{--match} @var{pattern}] [@option{-c} @var{code}]
+Discover and run @code{!#[test]} functions with setup/teardown hooks.
+Tests never run under @command{rl run}.
 @end table
 
 @c ===================================================================
@@ -324,6 +330,31 @@ $ rl pm list
 @end example
 
 @c ===================================================================
+@node test Command
+@chapter test Command
+
+@command{rl test @var{file}} discovers @code{!#[test]} functions and runs
+them with setup/teardown hooks, reporting pass/fail/skip with a non-zero
+exit on failure.
+
+@section Options
+
+@table @code
+@item @option{--match} @var{pattern}
+Only run tests whose name, group, or register contains @var{pattern}.
+
+@item @option{-c} @var{code}, @option{--code} @var{code}
+Execute inline rl code instead of a file.
+@end table
+
+@section Examples
+
+@example
+$ rl test tests.rl
+$ rl test tests.rl --match money
+@end example
+
+@c ===================================================================
 @node Examples
 @chapter Examples
 
@@ -351,6 +382,12 @@ hello
 
 @example
 $ rl check script.rl
+@end example
+
+@section Running Tests
+
+@example
+$ rl test tests.rl
 @end example
 
 @section Formatting

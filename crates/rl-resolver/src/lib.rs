@@ -16,6 +16,7 @@ use rl_ast::{Ast, statements::Statement};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
+mod contracts;
 mod expressions;
 mod statements;
 

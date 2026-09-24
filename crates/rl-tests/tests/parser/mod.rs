@@ -1,4 +1,5 @@
 mod attributes;
+mod contracts;
 mod declarations;
 mod delimiters;
 mod flow_for;

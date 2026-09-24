@@ -43,6 +43,7 @@ programming language toolchain.
 * package Command::
 * workflows Command::
 * pm Command::
+* test Command::
 * Examples::
 * Bugs::
 
@@ -59,6 +60,7 @@ Commands
 * package Command::
 * workflows Command::
 * pm Command::
+* test Command::
 
 
 File: rl.info,  Node: Overview,  Next: Commands,  Prev: Top,  Up: Top
@@ -107,6 +109,10 @@ File: rl.info,  Node: Commands,  Next: run Command,  Prev: Overview,  Up: Top
 ‘rl pm COMMAND’
      Manage project dependencies (‘install’, ‘add’, ‘remove’, ‘list’,
      ‘update’, ‘cache’).
+
+‘rl test FILE [--match PATTERN] [-c CODE]’
+     Discover and run ‘!#[test]’ functions with setup/teardown hooks.
+     Tests never run under ‘rl run’.
 
 
 File: rl.info,  Node: run Command,  Next: dev Command,  Prev: Commands,  Up: Top
@@ -291,7 +297,7 @@ File: rl.info,  Node: workflows Command,  Next: pm Command,  Prev: package Comma
      $ rl workflows --check --package
 
 
-File: rl.info,  Node: pm Command,  Next: Examples,  Prev: workflows Command,  Up: Top
+File: rl.info,  Node: pm Command,  Next: test Command,  Prev: workflows Command,  Up: Top
 
 11 pm Command
 *************
@@ -306,59 +312,89 @@ SHA256 hashes, and links them into ‘deps/’.
      $ rl pm list
 
 
-File: rl.info,  Node: Examples,  Next: Bugs,  Prev: pm Command,  Up: Top
+File: rl.info,  Node: test Command,  Next: Examples,  Prev: pm Command,  Up: Top
 
-12 Examples
+12 test Command
+***************
+
+‘rl test FILE’ discovers ‘!#[test]’ functions and runs them with
+setup/teardown hooks, reporting pass/fail/skip with a non-zero exit on
+failure.
+
+12.1 Options
+============
+
+‘--match PATTERN’
+     Only run tests whose name, group, or register contains PATTERN.
+
+‘-c CODE, --code CODE’
+     Execute inline rl code instead of a file.
+
+12.2 Examples
+=============
+
+     $ rl test tests.rl
+     $ rl test tests.rl --match money
+
+
+File: rl.info,  Node: Examples,  Next: Bugs,  Prev: test Command,  Up: Top
+
+13 Examples
 ***********
 
-12.1 Running a Script
+13.1 Running a Script
 =====================
 
      $ rl run hello.rl
      Hello, world!
 
-12.2 Running with Arguments
+13.2 Running with Arguments
 ===========================
 
      $ rl run script.rl -- --verbose input.txt
 
-12.3 Inline Code
+13.3 Inline Code
 ================
 
      $ rl run -c 'println("hello")'
      hello
 
-12.4 Type Checking
+13.4 Type Checking
 ==================
 
      $ rl check script.rl
 
-12.5 Formatting
+13.5 Running Tests
+==================
+
+     $ rl test tests.rl
+
+13.6 Formatting
 ===============
 
      $ rl format script.rl
 
-12.6 Compiling to Bytecode
+13.7 Compiling to Bytecode
 ==========================
 
      $ rlc compile script.rl -o output.rlc
 
-12.7 Printing Tokens
+13.8 Printing Tokens
 ====================
 
      $ rl print script.rl --tokens
 
-12.8 Transpiling to C
+13.9 Transpiling to C
 =====================
 
      $ rlt script.rl --runtime --compile
 
-12.9 Packaging a Binary
-=======================
+13.10 Packaging a Binary
+========================
 
      $ rl package script.rl -o myapp
 
-12.10 Starting the REPL
+13.11 Starting the REPL
 =======================
 
      $ rlrepl
@@ -366,7 +402,7 @@ File: rl.info,  Node: Examples,  Next: Bugs,  Prev: pm Command,  Up: Top
 
 File: rl.info,  Node: Bugs,  Prev: Examples,  Up: Top
 
-13 Bugs
+14 Bugs
 *******
 
 Report bugs at <https://github.com/rl-lang/rl-lang/issues>.
@@ -374,19 +410,20 @@ Report bugs at <https://github.com/rl-lang/rl-lang/issues>.
 
 Tag Table:
 Node: Top1139
-Node: Overview1725
-Node: Commands2251
-Node: run Command3234
-Node: dev Command3802
-Node: new Command4143
-Node: check Command4862
-Node: format Command5137
-Node: print Command5418
-Node: package Command6038
-Node: workflows Command6679
-Node: pm Command7253
-Node: Examples7576
-Node: Bugs8496
+Node: Overview1759
+Node: Commands2285
+Node: run Command3431
+Node: dev Command3999
+Node: new Command4340
+Node: check Command5059
+Node: format Command5334
+Node: print Command5615
+Node: package Command6235
+Node: workflows Command6876
+Node: pm Command7450
+Node: test Command7777
+Node: Examples8334
+Node: Bugs9322
 
 End Tag Table
 

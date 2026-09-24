@@ -18,6 +18,8 @@ fn fn_simple() {
             attribute,
             body,
             item_attributes: _,
+            requires: _,
+            ensures: _,
         } => {
             assert_eq!(name, "x");
             assert_eq!(
@@ -25,6 +27,7 @@ fn fn_simple() {
                 &vec![Param {
                     param_name: "x".to_string(),
                     param_type: TypeAnnotation::Int,
+                    refinement: None,
                 }]
             );
             assert_eq!(*return_type, TypeAnnotation::Null);
@@ -58,6 +61,8 @@ fn fn_fn_param() {
             attribute,
             body,
             item_attributes: _,
+            requires: _,
+            ensures: _,
         } => {
             assert_eq!(name, "x");
             assert_eq!(
@@ -65,11 +70,13 @@ fn fn_fn_param() {
                 &vec![
                     Param {
                         param_name: "x".to_string(),
-                        param_type: TypeAnnotation::Fn
+                        param_type: TypeAnnotation::Fn,
+                        refinement: None,
                     },
                     Param {
                         param_name: "y".to_string(),
-                        param_type: TypeAnnotation::Int
+                        param_type: TypeAnnotation::Int,
+                        refinement: None,
                     },
                 ]
             );
@@ -131,7 +138,8 @@ fn dec_fn_lambda() {
                         params,
                         &vec![Param {
                             param_name: "x".to_string(),
-                            param_type: TypeAnnotation::Int
+                            param_type: TypeAnnotation::Int,
+                            refinement: None,
                         }]
                     );
                     assert_eq!(*return_type, None);

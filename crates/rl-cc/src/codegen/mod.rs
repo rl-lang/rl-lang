@@ -22,8 +22,27 @@ type ScopeSnapshot = (
     HashMap<String, TypeAnnotation>,
 );
 
-/// Entry scan result: entry name, tests, inits, finals (each in run order).
-type ScannedEntry = Option<(String, Vec<String>, Vec<String>, Vec<String>)>;
+/// One discovered `!#[test]` function: name plus the attribute params
+/// (group/register/cases) and the declared parameter count for arity
+/// and property checks.
+#[derive(Debug, Clone)]
+pub struct ScannedTest {
+    pub name: String,
+    pub params: rl_ast::statements::TestParams,
+    pub param_count: usize,
+}
+
+/// Entry scan result: optional entry name, tests, setups, teardowns,
+/// inits, finals (each in run order).
+#[derive(Debug, Clone, Default)]
+pub struct ScannedEntry {
+    pub entry: Option<String>,
+    pub tests: Vec<ScannedTest>,
+    pub setups: Vec<String>,
+    pub teardowns: Vec<String>,
+    pub inits: Vec<String>,
+    pub finals: Vec<String>,
+}
 
 /// One `get ... from std::ns` import record, kept in source order.
 /// Mirrors the VM's `stdlib_methods` table where later imports overwrite
@@ -105,6 +124,31 @@ pub struct CCodegen<'a> {
     /// statement (`dec m = {...}`, arrays holding map/set literals).
     /// `compile_expr` emits the recorded temp instead of rebuilding.
     pub hoisted_tmps: HashMap<rl_ast::ExprId, String>,
+    /// Test-driver mode (`rlt --test`): emit the test runner main
+    /// instead of the program main. Transpiled mains never call tests.
+    pub test_mode: bool,
+    /// `--match` filter for test mode (substring over name/group/register).
+    pub match_pattern: Option<String>,
+}
+
+/// Matches `--match` against a test name, group, register, or full name,
+/// mirroring the `rl test` runner filter.
+fn test_matches(name: &str, params: &rl_ast::statements::TestParams, pattern: &str) -> bool {
+    if name.contains(pattern) {
+        return true;
+    }
+    if let Some(group) = params.group.as_deref() {
+        let full = format!("{group}::{name}");
+        if group.contains(pattern) || full.contains(pattern) {
+            return true;
+        }
+    }
+    if let Some(register) = params.register.as_deref()
+        && register.contains(pattern)
+    {
+        return true;
+    }
+    false
 }
 
 impl<'a> CCodegen<'a> {
@@ -145,6 +189,8 @@ impl<'a> CCodegen<'a> {
             std_http_imports: HashSet::new(),
             std_fs_imports: HashSet::new(),
             hoisted_tmps: HashMap::new(),
+            test_mode: false,
+            match_pattern: None,
         }
     }
 
@@ -374,13 +420,16 @@ impl<'a> CCodegen<'a> {
     }
 
     /// Scans top-level function declarations for the entry point (`!#[entry]`
-    /// or `main`/`__entry__` fallback), tests, inits and finals. Mirrors the
-    /// VM's `scan_entry_points`: numbered init/final priorities run first in
-    /// ascending order, unnumbered ones last in declaration order.
+    /// or `main`/`__entry__` fallback), tests, setups, teardowns, inits and
+    /// finals. Mirrors the VM's `scan_entry_points`: numbered init/final
+    /// priorities run first in ascending order, unnumbered ones last in
+    /// declaration order. Returns `None` when there is no entry point.
     fn scan_entry(statements: &[Statement]) -> Result<ScannedEntry, Error> {
         let mut explicit_entry: Option<String> = None;
         let mut main_entry: Option<String> = None;
-        let mut tests: Vec<String> = Vec::new();
+        let mut tests: Vec<ScannedTest> = Vec::new();
+        let mut setups: Vec<String> = Vec::new();
+        let mut teardowns: Vec<String> = Vec::new();
         let mut inits: Vec<(String, Option<u32>, usize)> = Vec::new();
         let mut finals: Vec<(String, Option<u32>, usize)> = Vec::new();
 
@@ -388,6 +437,7 @@ impl<'a> CCodegen<'a> {
             let StatementKind::ResolvedFunctionDeclaration {
                 name,
                 attribute,
+                params,
                 ..
             } = &stmt.kind
             else {
@@ -404,7 +454,13 @@ impl<'a> CCodegen<'a> {
                     }
                     explicit_entry = Some(name.clone());
                 }
-                Some(FunctionAttribute::Test) => tests.push(name.clone()),
+                Some(FunctionAttribute::Test(test_params)) => tests.push(ScannedTest {
+                    name: name.clone(),
+                    params: test_params.clone(),
+                    param_count: params.len(),
+                }),
+                Some(FunctionAttribute::Setup) => setups.push(name.clone()),
+                Some(FunctionAttribute::Teardown) => teardowns.push(name.clone()),
                 Some(FunctionAttribute::Init(priority)) => {
                     inits.push((name.clone(), *priority, order));
                 }
@@ -418,19 +474,130 @@ impl<'a> CCodegen<'a> {
             }
         }
 
-        let Some(entry) = explicit_entry.or(main_entry) else {
-            return Ok(None);
-        };
         // Numbered priorities first ascending, unnumbered last in order.
         // `sort_by_key` is stable, so declaration order is preserved.
         inits.sort_by_key(|(_, p, _)| (p.is_none(), p.unwrap_or(0)));
         finals.sort_by_key(|(_, p, _)| (p.is_none(), p.unwrap_or(0)));
-        Ok(Some((
-            entry,
+        Ok(ScannedEntry {
+            entry: explicit_entry.or(main_entry),
             tests,
-            inits.into_iter().map(|(n, _, _)| n).collect(),
-            finals.into_iter().map(|(n, _, _)| n).collect(),
-        )))
+            setups,
+            teardowns,
+            inits: inits.into_iter().map(|(n, _, _)| n).collect(),
+            finals: finals.into_iter().map(|(n, _, _)| n).collect(),
+        })
+    }
+
+    /// Emits the `rlt --test` driver main: setup statements, inits, then    /// one setjmp-guarded block per test (setups, test, teardowns),
+    /// finals, a summary, and a non-zero exit on failure. Property cases
+    /// (`cases(N)`) report a runtime skip (generation lives in `rl test`);
+    /// tests with parameters but no `cases` are a transpile error.
+    fn emit_test_main(&mut self, statements: &[Statement], entry: &ScannedEntry) -> Result<(), Error> {
+        for stmt in statements {
+            match &stmt.kind {
+                StatementKind::ResolvedFunctionDeclaration { .. } => {
+                    self.compile_statement(stmt)?;
+                }
+                StatementKind::ResolvedImplBlock { .. } => {
+                    self.compile_statement(stmt)?;
+                }
+                _ => {}
+            }
+        }
+        self.writer.write("int main(int argc, char **argv) {\n");
+        self.writer.indent();
+        self.writer.writeln("rl_store_args(argc, argv);");
+        for stmt in statements {
+            if Self::is_entry_setup(&stmt.kind) {
+                self.compile_top_level(stmt)?;
+            }
+        }
+        for name in &entry.inits {
+            self.writer.write_indent();
+            self.writer.write(&format!("{}();\n", mangle(name)));
+        }
+        self.writer.writeln("uint64_t t_run = 0, t_ok = 0, t_fail = 0, t_skip = 0;");
+        for test in &entry.tests {
+            if let Some(pat) = self.match_pattern.as_deref()
+                && !test_matches(&test.name, &test.params, pat)
+            {
+                continue;
+            }
+            let c_name = mangle(&test.name);
+            // Property generation lives in `rl test`: report a skip.
+            if test.params.cases.is_some() {
+                self.writer.write_indent();
+                self.writer.write(&format!(
+                    "t_run++; t_skip++; printf(\"SKIP {} (property tests need `rl test`)\\n\");\n",
+                    test.name
+                ));
+                continue;
+            }
+            if test.param_count > 0 {
+                return Err(Error::at(
+                    Reason::Compile,
+                    format!(
+                        "test `{}` takes parameters: add cases(N) and run under `rl test`, or use zero arguments for `rlt --test`",
+                        test.name
+                    ),
+                    Span::dummy(),
+                ));
+            }
+            self.writer.write_indent();
+            self.writer.write(&format!("{{ /* test {} */\n", test.name));
+            self.writer.indent();
+            self.writer.writeln("t_run++;");
+            self.writer.writeln("uint64_t p0 = rl_test_state.passed, f0 = rl_test_state.failed;");
+            self.writer.writeln("size_t s0 = rl_test_state.skipped_len;");
+            self.writer.write(&format!("rl_test_state.current = \"{}\";\n", test.name));
+            self.writer.writeln("int code = setjmp(rl_abort_frames[rl_abort_depth++]);");
+            self.writer.writeln("if (code == 0) {");
+            self.writer.indent();
+            for name in &entry.setups {
+                self.writer.write_indent();
+                self.writer.write(&format!("{}();\n", mangle(name)));
+            }
+            self.writer.write_indent();
+            self.writer.write(&format!("{c_name}();\n"));
+            for name in &entry.teardowns {
+                self.writer.write_indent();
+                self.writer.write(&format!("{}();\n", mangle(name)));
+            }
+            self.writer.writeln("rl_abort_depth--;");
+            self.writer.dedent();
+            self.writer.writeln("}");
+            self.writer.writeln("rl_test_state.current = NULL;");
+            self.writer.writeln("if (rl_test_state.skipped_len > s0) {");
+            self.writer.indent();
+            self.writer.writeln("t_skip++;");
+            self.writer.writeln("for (size_t i = s0; i < rl_test_state.skipped_len; i++) printf(\"SKIP %s\\n\", rl_test_state.skipped[i]);");
+            self.writer.dedent();
+            self.writer.writeln("} else if (rl_test_state.failed > f0) {");
+            self.writer.indent();
+            self.writer.writeln("t_fail++;");
+            self.writer.write(&format!("printf(\"FAIL {}\\n\");\n", test.name));
+            self.writer.dedent();
+            self.writer.writeln("} else {");
+            self.writer.indent();
+            self.writer.writeln("t_ok++;");
+            self.writer.write(&format!("printf(\"ok {}\\n\");\n", test.name));
+            self.writer.dedent();
+            self.writer.writeln("}");
+            // Silence unused-variable warnings when a test has no asserts.
+            self.writer.writeln("(void)p0;");
+            self.writer.dedent();
+            self.writer.writeln("}");
+        }
+        for name in &entry.finals {
+            self.writer.write_indent();
+            self.writer.write(&format!("{}();\n", mangle(name)));
+        }
+        self.writer.writeln("printf(\"ran %llu tests: %llu ok, %llu failed, %llu skipped (%llu assertions passed, %llu failed)\\n\", (unsigned long long)t_run, (unsigned long long)t_ok, (unsigned long long)t_fail, (unsigned long long)t_skip, (unsigned long long)rl_test_state.passed, (unsigned long long)rl_test_state.failed);");
+        self.writer.writeln("for (size_t i = 0; i < rl_test_state.failures_len; i++) printf(\"%s\\n\", rl_test_state.failures[i]);");
+        self.writer.writeln("return t_fail ? 1 : 0;");
+        self.writer.dedent();
+        self.writer.writeln("}");
+        Ok(())
     }
 
     /// True for top-level statements that run in entry mode. Mirrors the
@@ -512,9 +679,12 @@ impl<'a> CCodegen<'a> {
 
         let entry = Self::scan_entry(statements)?;
 
-        // Entry mode: tests, inits, entry, finals around the setup
-        // statements. Script mode: everything runs top to bottom.
-        if let Some((entry_name, tests, inits, finals)) = entry {
+        // Test-driver mode (`rlt --test`): inits, per-test setup/test/
+        // teardown drivers, finals. Transpiled mains never call tests.
+        // Falls through to the shared file-scope tail below.
+        if self.test_mode {
+            self.emit_test_main(statements, &entry)?;
+        } else if let Some(entry_name) = entry.entry.clone() {
             let is_main_entry = entry_name == "main" || entry_name == "__entry__";
             // A `main` entry runs inline inside the C `main` wrapper, so
             // its definition is skipped during hoisting to avoid a clash.
@@ -550,11 +720,7 @@ impl<'a> CCodegen<'a> {
                     self.compile_top_level(stmt)?;
                 }
             }
-            for name in &tests {
-                self.writer.write_indent();
-                self.writer.write(&format!("{}();\n", mangle(name)));
-            }
-            for name in &inits {
+            for name in &entry.inits {
                 self.writer.write_indent();
                 self.writer.write(&format!("{}();\n", mangle(name)));
             }
@@ -567,7 +733,7 @@ impl<'a> CCodegen<'a> {
                 self.writer.write_indent();
                 self.writer.write(&format!("{}();\n", mangle(&entry_name)));
             }
-            for name in &finals {
+            for name in &entry.finals {
                 self.writer.write_indent();
                 self.writer.write(&format!("{}();\n", mangle(name)));
             }

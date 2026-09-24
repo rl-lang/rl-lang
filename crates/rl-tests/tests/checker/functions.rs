@@ -126,3 +126,124 @@ arr_map([1], fn(int x) -> string { dec cleaned = r? return cleaned })"#,
         "`?` cannot be used in a function that does not return a result",
     );
 }
+
+#[test]
+fn contracts_reject_non_bool_requires() {
+    assert_checker_msg(
+        "fn f(int x) -> int requires x { return x }",
+        "must be bool",
+    );
+}
+
+#[test]
+fn contracts_reject_non_bool_ensures() {
+    assert_checker_msg(
+        "fn f(int x) -> int ensures x { return x }",
+        "must be bool",
+    );
+}
+
+#[test]
+fn contracts_ret_unbound_outside_ensures() {
+    assert_checker_msg(
+        "fn f(int x) -> int requires ret > 0 { return x }",
+        "undefined variable",
+    );
+}
+
+#[test]
+fn contract_refinement_violation_returns_err() {
+    let result = crate::common::compile_and_run(
+        r#"
+fn withdraw(int amt: >0, int balance) -> result[int] {
+    return ok(balance - amt)
+}
+get is_err from std::res
+is_err(withdraw(0, 100))
+"#,
+    )
+    .unwrap();
+    assert_eq!(result, rl_vm::VmValue::Bool(true));
+}
+
+#[test]
+fn contract_refinement_passes() {
+    let result = crate::common::compile_and_run(
+        r#"
+fn withdraw(int amt: >0, int balance) -> result[int] {
+    return ok(balance - amt)
+}
+withdraw(30, 100)?
+"#,
+    )
+    .unwrap();
+    assert_eq!(result, rl_vm::VmValue::Int(70));
+}
+
+#[test]
+fn contract_bare_violation_aborts() {
+    let result = crate::common::compile_and_run(
+        r#"
+fn bare(int x: >0) -> int {
+    return x
+}
+bare(0)
+"#,
+    );
+    assert!(result.is_err());
+}
+
+#[test]
+fn contract_ensures_violation_returns_err() {
+    let result = crate::common::compile_and_run(
+        r#"
+fn over(int x) -> result[int]
+    ensures ret < 10
+{
+    return ok(x)
+}
+get is_err from std::res
+is_err(over(50))
+"#,
+    )
+    .unwrap();
+    assert_eq!(result, rl_vm::VmValue::Bool(true));
+}
+
+#[test]
+fn contract_ensures_skipped_on_err() {
+    let result = crate::common::compile_and_run(
+        r#"
+fn maybe(bool b) -> result[int]
+    ensures ret > 0
+{
+    if (b) { return err(0) }
+    return ok(5)
+}
+get is_err from std::res
+dec result[int] a = maybe(true)
+dec int b = maybe(false)?
+dec bool e = is_err(a)
+e
+"#,
+    )
+    .unwrap();
+    assert_eq!(result, rl_vm::VmValue::Bool(true));
+}
+
+#[test]
+fn contract_custom_message_surfaces() {
+    let result = crate::common::compile_and_run(
+        r#"
+fn m(int a) -> result[int]
+    requires a > 0, "pos", a < 100, "small"
+{
+    return ok(a)
+}
+get result_unwrap_err from std::res
+result_unwrap_err(m(500))
+"#,
+    )
+    .unwrap();
+    assert_eq!(result, rl_vm::VmValue::Str("small".into()));
+}

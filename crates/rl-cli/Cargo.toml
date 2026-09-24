@@ -65,3 +65,8 @@ pm = ["dep:rl-pm"]
 name = "cc"
 path = "tests/cc.rs"
 required-features = ["cc"]
+
+[[test]]
+name = "test_runner"
+path = "tests/test_runner.rs"
+required-features = ["vm"]

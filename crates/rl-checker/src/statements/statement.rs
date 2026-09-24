@@ -4,7 +4,7 @@
 use std::{collections::HashSet, path::PathBuf};
 
 use crate::{TypeChecker, structs::CheckType, units::Unit};
-use rl_ast::statements::{ItemAttribute, Lint, MatchPattern, Statement, StatementKind, TypeAnnotation};
+use rl_ast::statements::{ItemAttribute, Lint, MatchPattern, RefineOperand, Statement, StatementKind, TypeAnnotation};
 use rl_lexer::tokenizer::Tokenizer;
 use rl_parser::parser_logic::Parser;
 use rl_utils::{source::SourceFile, span::Span};
@@ -679,6 +679,8 @@ impl TypeChecker {
                 params,
                 return_type,
                 body,
+                requires,
+                ensures,
                 ..
             } => {
                 self.push_scope();
@@ -689,6 +691,69 @@ impl TypeChecker {
                         false,
                         statement.span,
                     );
+                }
+                // Contract predicates validate as bool here: the desugared
+                // guards only exist post-resolution, so this is where
+                // ill-typed predicates surface with proper spans. Lookups
+                // also mark contract-only params used, silencing false
+                // unused warnings (`ret` is infrastructure: never warn).
+                for clause in requires {
+                    let cond_type = self.check_expression(clause.condition);
+                    if !matches!(
+                        cond_type,
+                        CheckType::Known(TypeAnnotation::Bool | TypeAnnotation::CBool)
+                            | CheckType::Unknown
+                    ) {
+                        let span = self.ast_arena.exprs.get(clause.condition).span;
+                        self.error(
+                            format!("requires condition must be bool, got {}", cond_type.info()),
+                            span,
+                        );
+                    }
+                }
+                if !ensures.is_empty() {
+                    self.push_scope();
+                    let inner = match return_type {
+                        TypeAnnotation::Result(inner) | TypeAnnotation::CResult(inner) => {
+                            (**inner).clone()
+                        }
+                        _ => return_type.clone(),
+                    };
+                    self.declare_with_unit_and_lints(
+                        "ret".to_string(),
+                        CheckType::Known(inner),
+                        None,
+                        false,
+                        statement.span,
+                        HashSet::from([Lint::Unused]),
+                    );
+                    for clause in ensures {
+                        let cond_type = self.check_expression(clause.condition);
+                        if !matches!(
+                            cond_type,
+                            CheckType::Known(TypeAnnotation::Bool | TypeAnnotation::CBool)
+                                | CheckType::Unknown
+                        ) {
+                            let span = self.ast_arena.exprs.get(clause.condition).span;
+                            self.error(
+                                format!("ensures condition must be bool, got {}", cond_type.info()),
+                                span,
+                            );
+                        }
+                    }
+                    self.pop_scope();
+                }
+                for param in params {
+                    if let Some(refinement) = &param.refinement
+                        && let RefineOperand::Param(other) = &refinement.operand
+                        && let Some(item) = self
+                            .scopes
+                            .iter_mut()
+                            .rev()
+                            .find_map(|scope| scope.get_mut(other))
+                    {
+                        item.used = true;
+                    }
                 }
                 self.push_return_type(return_type.clone());
                 let saved_propagate = std::mem::replace(&mut self.saw_propagate, false);
@@ -715,6 +780,15 @@ impl TypeChecker {
                     if let Some(inferred) =
                         Self::infer_fn_return(returned, trailing, ends_with_expr, body_propagated)
                     {
+                        // Re-declaring resets the item: carry the used flag
+                        // over so runtime-called functions (entry/tests/...)
+                        // marked earlier don't warn as unused.
+                        let was_used = self
+                            .scopes
+                            .iter()
+                            .rev()
+                            .find_map(|s| s.get(name).map(|item| item.used))
+                            .unwrap_or(false);
                         self.declare(
                             name.clone(),
                             CheckType::Function {
@@ -727,6 +801,15 @@ impl TypeChecker {
                             false,
                             statement.span,
                         );
+                        if was_used
+                            && let Some(item) = self
+                                .scopes
+                                .iter_mut()
+                                .rev()
+                                .find_map(|s| s.get_mut(name))
+                        {
+                            item.used = true;
+                        }
                     }
                 }
             }

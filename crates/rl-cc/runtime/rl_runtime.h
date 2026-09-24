@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <setjmp.h>
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -225,6 +226,41 @@ static inline rl_result _rl_ok_null(void) { return rl_ok_null(); }
 
 // Flushes stdio and aborts; the loud failure behind checked unwraps.
 void _rl_abort(void);
+
+// ---- test framework (`std::test`, `rlt --test`) ----------------------------
+// Abort capture for `test_assert_panics` and per-test drivers: generated
+// code pushes a frame with `setjmp` directly (never hidden in a helper -
+// the frame must outlive the call), and `_rl_abort` longjmps to the
+// innermost frame instead of dying. Code 1 is a failure, 2 is a skip
+// (`_rl_skip`); anything else is a hard abort when no frame is pushed.
+#define RL_MAX_ABORT_FRAMES 64
+extern jmp_buf rl_abort_frames[RL_MAX_ABORT_FRAMES];
+extern int rl_abort_depth;
+void _rl_unwind(int code);
+void _rl_skip(void);
+
+// Per-test-runner outcome accumulation. The generated `--test` driver
+// snapshots these around each case for verdicts; asserts append here.
+typedef struct {
+    uint64_t passed;
+    uint64_t failed;
+    char **failures;
+    size_t failures_len;
+    size_t failures_cap;
+    char **skipped;
+    size_t skipped_len;
+    size_t skipped_cap;
+    const char *current;
+} rl_test_state_t;
+extern rl_test_state_t rl_test_state;
+void rl_test_record(int ok, const char *msg);
+int rl_result_equal(rl_result a, rl_result b);
+rl_result rl_test_skip(rl_string reason);
+rl_result rl_test_skip_if(bool cond, rl_string reason);
+rl_result rl_test_assert_eq(rl_result a, rl_result b, rl_string msg);
+rl_result rl_test_assert_ne(rl_result a, rl_result b, rl_string msg);
+rl_result rl_test_assert_panics(rl_closure f);
+rl_result rl_test_assert_no_panic(rl_closure f);
 
 // Unwrap helpers - extract the inner C value from a successful
 // `rl_result`. Callers must have checked `is_ok` (or `?`) first;

@@ -164,6 +164,8 @@ pub struct Vm {
     pub(crate) io_next_handle: u64,
     /// PRNG state for `std::random`, seeded from the system clock at startup.
     pub(crate) rng: rl_std_core::Xoshiro256,
+    /// Registry for `std::test` (cases, grouping, results), isolated per Vm.
+    pub(crate) test_state: rl_std_core::TestState<crate::VmValue>,
     /// Number of leading `std::env::args()` entries to skip when reporting
     /// `std::process::args()` (defaults to 1 - the program name itself).
     pub user_args_offset: usize,
@@ -203,6 +205,7 @@ impl Vm {
             io_handles: HashMap::new(),
             io_next_handle: 1,
             rng: Default::default(),
+            test_state: Default::default(),
             user_args_offset: 1,
             output_buffer: None,
         }
@@ -213,6 +216,12 @@ impl Vm {
     pub fn with_source_file(mut self, source: SourceFile) -> Self {
         self.source = Some(source);
         self
+    }
+
+    /// The `std::test` registry (cases, results, skips). The `rl test`
+    /// runner reads it after each case driver to report verdicts.
+    pub fn test_state(&mut self) -> &mut rl_std_core::TestState<VmValue> {
+        &mut self.test_state
     }
 
     /// Sets the source text on an already-constructed [`Vm`] (the builder

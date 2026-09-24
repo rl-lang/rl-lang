@@ -30,6 +30,8 @@ fn run_demo() -> String {
         embed_runtime: true,
         output_dir: tmp.path().to_path_buf(),
         output_name: "demo_test".to_string(),
+        test_mode: false,
+        match_pattern: None,
     };
     let result =
         rl_cc::transpile(&resolver.ast_arena, &resolved, &checker, &config).expect("transpile failed");
@@ -95,4 +97,82 @@ fn transpile_demo_compiles_and_runs() {
     assert!(out.contains("alice"));
     assert!(out.contains("=== Sets ==="));
     assert!(out.contains("done"));
+}
+
+#[test]
+fn transpile_test_mode_compiles_and_runs() {
+    let source = r#"
+get println from std::io
+get test_assert_eq, test_skip from std::test
+
+!#[test]
+fn addition() {
+    test_assert_eq(1 + 1, 2, "math")
+}
+
+!#[test]
+fn skipped_case() {
+    test_skip("later")
+}
+
+!#[test]
+fn failing() {
+    test_assert_eq(1, 2, "boom")
+}
+"#;
+    let file = SourceFile::new("cc_test_mode.rl", source.to_string());
+    let tokens = rl_lexer::tokenizer::Tokenizer::lex(file.clone()).expect("lex failed");
+    let (ast, stmts) =
+        rl_parser::parser_logic::Parser::parse(tokens, file.clone()).expect("parse failed");
+
+    let mut resolver = Resolver::new();
+    let resolved = resolver.resolve_program(ast, stmts);
+
+    let checker_tokens = rl_lexer::tokenizer::Tokenizer::lex(file.clone()).expect("lex failed");
+    let (checker_ast, checker_stmts) =
+        rl_parser::parser_logic::Parser::parse(checker_tokens, file).expect("parse failed");
+    let mut checker = TypeChecker::new().with_ast_arena(checker_ast);
+    let errors = checker.check(&checker_stmts);
+    assert!(errors.is_empty(), "type check errors: {:?}", errors);
+
+    let tmp = tempfile::tempdir().unwrap();
+    let config = rl_cc::TranspileConfig {
+        embed_runtime: true,
+        output_dir: tmp.path().to_path_buf(),
+        output_name: "cc_test_mode".to_string(),
+        test_mode: true,
+        match_pattern: None,
+    };
+    let result =
+        rl_cc::transpile(&resolver.ast_arena, &resolved, &checker, &config).expect("transpile failed");
+
+    let cc_output = std::process::Command::new("cc")
+        .args([
+            "-std=c99",
+            "-o",
+            tmp.path().join("cc_test_mode").to_str().unwrap(),
+            result.c_path.to_str().unwrap(),
+            tmp.path().join("rl_runtime.c").to_str().unwrap(),
+            "-I",
+            tmp.path().to_str().unwrap(),
+            "-lm",
+        ])
+        .output()
+        .expect("failed to run cc");
+    assert!(
+        cc_output.status.success(),
+        "cc failed:\n{}",
+        String::from_utf8_lossy(&cc_output.stderr)
+    );
+
+    // One failure: non-zero exit, verdicts plus summary on stdout.
+    let run_output = std::process::Command::new(tmp.path().join("cc_test_mode"))
+        .output()
+        .expect("failed to run cc_test_mode");
+    assert!(!run_output.status.success());
+    let out = String::from_utf8(run_output.stdout).unwrap();
+    assert!(out.contains("ok addition"));
+    assert!(out.contains("SKIP [skipped_case] skipped: later"));
+    assert!(out.contains("FAIL failing"));
+    assert!(out.contains("ran 3 tests: 1 ok, 1 failed, 1 skipped"));
 }

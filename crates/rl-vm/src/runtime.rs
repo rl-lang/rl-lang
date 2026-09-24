@@ -441,6 +441,9 @@ impl Runtime for VmRuntime {
     fn rng(cx: &mut Self::Cx) -> &mut rl_std_core::Xoshiro256 {
         &mut cx.rng
     }
+    fn test_state(cx: &mut Self::Cx) -> &mut rl_std_core::TestState<Self::Value> {
+        &mut cx.test_state
+    }
     fn output_buffer(cx: &mut Self::Cx) -> &mut Option<String> {
         &mut cx.output_buffer
     }

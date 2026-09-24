@@ -158,7 +158,7 @@ impl TypeChecker {
                 // not user code - mark as used to suppress unused warnings.
                 if matches!(
                     attribute,
-                    Some(FunctionAttribute::Entry | FunctionAttribute::Init(_) | FunctionAttribute::Final(_) | FunctionAttribute::Test)
+                    Some(FunctionAttribute::Entry | FunctionAttribute::Init(_) | FunctionAttribute::Final(_) | FunctionAttribute::Test(_) | FunctionAttribute::Setup | FunctionAttribute::Teardown)
                 )
                     && let Some(scope) = self.scopes.last_mut()
                         && let Some(item) = scope.get_mut(name) {

@@ -26,7 +26,7 @@ mod while_statement;
 use crate::parser_logic::Parser;
 use rl_ast::{
     nodes::ExpressionKind,
-    statements::{FunctionAttribute, ItemAttribute, Lint, Statement, StatementKind},
+    statements::{FunctionAttribute, ItemAttribute, Lint, Statement, StatementKind, TestParams},
 };
 use rl_lexer::tokentypes::TokenType;
 use rl_utils::{errors::Error, span::Span};
@@ -300,7 +300,21 @@ impl Parser {
                     if self.check(&TokenType::Assign) {
                         return Err(self.err("`!#[test]` does not take a priority", self.peek_span()));
                     }
-                    function_attr = Some(FunctionAttribute::Test);
+                    function_attr = Some(FunctionAttribute::Test(self.parse_test_params()?));
+                }
+                TokenType::Identifier(name) if name == "setup" => {
+                    self.advance();
+                    if self.check(&TokenType::LeftParen) || self.check(&TokenType::Assign) {
+                        return Err(self.err("`!#[setup]` takes no arguments", self.peek_span()));
+                    }
+                    function_attr = Some(FunctionAttribute::Setup);
+                }
+                TokenType::Identifier(name) if name == "teardown" => {
+                    self.advance();
+                    if self.check(&TokenType::LeftParen) || self.check(&TokenType::Assign) {
+                        return Err(self.err("`!#[teardown]` takes no arguments", self.peek_span()));
+                    }
+                    function_attr = Some(FunctionAttribute::Teardown);
                 }
                 // new: allow(unused, deprecated, ...)
                 TokenType::Identifier(name) if name == "allow" => {
@@ -452,6 +466,74 @@ impl Parser {
             return Err(self.err("expected `)`", self.peek_span()));
         }
         Ok(Some(msg))
+    }
+
+    /// Parses the optional `(...)` after `!#[test]`: `group("name")`,
+    /// `register("name")`, `cases(n)`, comma-separated, freely composable.
+    /// A bare `!#[test]` yields default (empty) params. Duplicates overwrite.
+    fn parse_test_params(&mut self) -> Result<TestParams, Error> {
+        let mut params = TestParams::default();
+        if !self.match_type(&[TokenType::LeftParen]) {
+            return Ok(params);
+        }
+        loop {
+            while self.match_type(&[TokenType::Newline]) {}
+            match self.peek() {
+                TokenType::Identifier(name) if name == "group" || name == "register" => {
+                    let is_group = name == "group";
+                    self.advance();
+                    if !self.match_type(&[TokenType::LeftParen]) {
+                        return Err(self.err("expected `(` with a string literal", self.peek_span()));
+                    }
+                    match self.peek() {
+                        TokenType::StringLiteral(s) => {
+                            let s = s.clone();
+                            self.advance();
+                            if is_group {
+                                params.group = Some(s);
+                            } else {
+                                params.register = Some(s);
+                            }
+                        }
+                        _ => return Err(self.err("expected a string literal", self.peek_span())),
+                    }
+                    if !self.match_type(&[TokenType::RightParen]) {
+                        return Err(self.err("expected `)`", self.peek_span()));
+                    }
+                }
+                TokenType::Identifier(name) if name == "cases" => {
+                    self.advance();
+                    if !self.match_type(&[TokenType::LeftParen]) {
+                        return Err(self.err("expected `(` with a number literal", self.peek_span()));
+                    }
+                    match self.peek() {
+                        TokenType::NumberLiteral(n) => {
+                            params.cases = Some(n);
+                            self.advance();
+                        }
+                        _ => return Err(self.err("expected a number literal", self.peek_span())),
+                    }
+                    if !self.match_type(&[TokenType::RightParen]) {
+                        return Err(self.err("expected `)`", self.peek_span()));
+                    }
+                }
+                TokenType::Identifier(name) => {
+                    return Err(self.err(format!("unknown test parameter `{}`", name), self.peek_span()));
+                }
+                _ => return Err(self.err("expected a test parameter", self.peek_span())),
+            }
+            while self.match_type(&[TokenType::Newline]) {}
+            if self.match_type(&[TokenType::Comma]) {
+                while self.match_type(&[TokenType::Newline]) {}
+                continue;
+            }
+            break;
+        }
+        while self.match_type(&[TokenType::Newline]) {}
+        if !self.match_type(&[TokenType::RightParen]) {
+            return Err(self.err("expected `)` after test parameters", self.peek_span()));
+        }
+        Ok(params)
     }
 
     /// Parses an optional `=n` priority suffix for `!#[init=n]` / `!#[final=n]`.

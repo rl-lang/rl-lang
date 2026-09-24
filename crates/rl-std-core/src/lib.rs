@@ -11,6 +11,7 @@
 //! - [`StdFn`] / [`ModuleNames`] - the checker signature types (moved here from
 //!   `rl-commons`),
 //! - [`Xoshiro256`] - the shared PRNG.
+//! - [`TestState`] / [`TestCase`] - the `std::test` registry types.
 
 pub mod convert;
 pub mod handle;
@@ -19,9 +20,11 @@ pub mod module;
 pub mod rng;
 pub mod runtime;
 pub mod signatures;
+pub mod test_state;
 
 pub use convert::{Bytes, FromValueR, IntoValueR, ValueType};
 pub use handle::{Arity, NativeHandle, NativeThunk};
 pub use rng::Xoshiro256;
 pub use runtime::{HandleStore, Runtime};
 pub use signatures::{ModuleNames, StdFn};
+pub use test_state::{TestCase, TestState};

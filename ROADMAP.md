@@ -104,7 +104,7 @@ rl-lang
 |   +-- [DONE] 24 per-module feature flags (std-array, std-audio, std-bitwise, std-c, std-cli, std-collections, std-core, std-crypto, std-debug, std-fs, std-gui, std-http, std-io, std-math, std-net, std-path, std-process, std-random, std-result, std-serialize, std-string, std-terminal, std-time, std-types) with `impls` meta-feature
 |   +-- [DONE] #431 - std functions aliasing (wildcard imports + aliased imports)
 |   +-- [DONE] #338 - std functions tests
-|   +-- [TODO] std::test - test framework (14 fn: test_case, test_run_all, test_assert_eq, test_group, test_bench)
+|   +-- [DONE] std::test - test framework (attributes, runner, 6 runtime fns)
 |   +-- [DONE] std::serialize - JSON/CSV/TOML/INI/YAML interop (shipped 2.2.0)
 |   +-- [DONE] std::crypto - hashing, HMAC, tokens, UUID, Argon2 (shipped 2.2.0)
 |   +-- [DONE] std::cli - arg parsing, prompts, progress bars (shipped 2.2.0)
@@ -257,8 +257,7 @@ Heavy deps that must stay but are properly feature-gated:
 
 ## Active Work
 
-1. **`std::test` test framework** - user-facing test module (`test_case`, `test_run_all`, `test_assert_eq`, `test_group`, `test_bench`)
-2. **Self-hosted buffers** - RL-side renderer, lexer, and C-emitter over safe buffers (no raw pointers)
+1. **Self-hosted buffers** - RL-side renderer, lexer, and C-emitter over safe buffers (no raw pointers)
 
 ## Planned (After Self-Host)
 

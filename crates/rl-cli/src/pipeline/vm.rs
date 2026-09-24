@@ -24,6 +24,7 @@ pub fn compile_to_chunk(source: SourceFile, ast: Ast, statements: Vec<Statement>
 
     match Compiler::new(&_arena)
         .with_source_file(source.clone())
+        .with_tests(false)
         .compile(&resolved)
     {
         Ok(c) => c,

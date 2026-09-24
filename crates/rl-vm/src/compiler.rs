@@ -4,7 +4,7 @@ use crate::chunk::{Chunk, OpCode};
 use crate::native::Module;
 use crate::stdlib;
 use crate::values::{VmFunction, VmValue};
-use rl_ast::statements::{FunctionAttribute, MatchPattern, TypeAnnotation};
+use rl_ast::statements::{FunctionAttribute, MatchPattern, TestParams, TypeAnnotation};
 use rl_ast::{
     Ast, ExprId, nodes::ExpressionKind, statements::Statement, statements::StatementKind,
 };
@@ -35,6 +35,29 @@ struct EntryPoint {
     tests: Vec<(u16, Span)>,
     inits: Vec<(u16, Span, Option<u32>)>,
     finals: Vec<(u16, Span, Option<u32>)>,
+}
+
+/// One `!#[test]` function discovered for the `rl test` runner, with the
+/// resolver-assigned global slot that the compiled chunk stores it at.
+#[derive(Debug, Clone)]
+pub struct TestTarget {
+    pub name: String,
+    pub slot: u16,
+    pub span: Span,
+    pub params: TestParams,
+    /// Declared function parameters (types drive `cases(N)` generation).
+    pub fn_params: Vec<rl_ast::statements::Param>,
+}
+
+/// Everything the `rl test` runner needs: cases plus the setup/teardown
+/// hooks and inits/finals (priority-sorted, like entry mode).
+#[derive(Debug, Clone, Default)]
+pub struct TestPlan {
+    pub tests: Vec<TestTarget>,
+    pub setups: Vec<(u16, Span)>,
+    pub teardowns: Vec<(u16, Span)>,
+    pub inits: Vec<(u16, Span, Option<u32>)>,
+    pub finals: Vec<(u16, Span, Option<u32>)>,
 }
 
 /// Whether a top-level statement runs in entry mode. Mirrors the filter in the
@@ -135,6 +158,7 @@ pub struct Compiler<'a> {
     stdlib: Module,
     loop_stack: Vec<LoopCtx>,
     source: Option<SourceFile>,
+    include_tests: bool,
 }
 
 impl<'a> Compiler<'a> {
@@ -147,7 +171,15 @@ impl<'a> Compiler<'a> {
             stdlib: stdlib::root(),
             loop_stack: Vec::new(),
             source: None,
+            include_tests: true,
         }
+    }
+
+    /// Whether entry mode calls `!#[test]` functions. Defaults to true;
+    /// the `rl run` pipeline disables it (tests only run under `rl test`).
+    pub fn with_tests(mut self, include_tests: bool) -> Self {
+        self.include_tests = include_tests;
+        self
     }
 
     /// Attaches the original source text so compile errors can render
@@ -324,7 +356,7 @@ impl<'a> Compiler<'a> {
                     }
                     explicit_entry = Some((statement.span, slot));
                 }
-                Some(FunctionAttribute::Test) => tests.push((slot, statement.span)),
+                Some(FunctionAttribute::Test(_)) => tests.push((slot, statement.span)),
                 Some(FunctionAttribute::Init(priority)) => {
                     inits.push((slot, statement.span, *priority))
                 }
@@ -361,8 +393,10 @@ impl<'a> Compiler<'a> {
             finals,
         } = entry;
 
-        for (test_slot, test_span) in tests {
-            self.emit_entry_call(test_slot, test_span, true)?;
+        if self.include_tests {
+            for (test_slot, test_span) in tests {
+                self.emit_entry_call(test_slot, test_span, true)?;
+            }
         }
         for (init_slot, init_span, _) in sort_entry_calls_by_priority(inits) {
             self.emit_entry_call(init_slot, init_span, true)?;
@@ -374,10 +408,97 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
+    /// Collects the `rl test` plan: cases (with params), setups, teardowns,
+    /// and priority-sorted inits/finals. Unlike [`Compiler::compile`], this
+    /// never emits code - the runner compiles drivers per case.
+    pub fn scan_tests(statements: &[Statement]) -> TestPlan {
+        let mut plan = TestPlan::default();
+        for statement in statements {
+            let StatementKind::ResolvedFunctionDeclaration {
+                name,
+                attribute,
+                slot,
+                params: fn_params,
+                ..
+            } = &statement.kind
+            else {
+                continue;
+            };
+            let slot = *slot as u16;
+            match attribute {
+                Some(FunctionAttribute::Test(test_params)) => plan.tests.push(TestTarget {
+                    name: name.clone(),
+                    slot,
+                    span: statement.span,
+                    params: test_params.clone(),
+                    fn_params: fn_params.clone(),
+                }),
+                Some(FunctionAttribute::Setup) => plan.setups.push((slot, statement.span)),
+                Some(FunctionAttribute::Teardown) => plan.teardowns.push((slot, statement.span)),
+                Some(FunctionAttribute::Init(priority)) => {
+                    plan.inits.push((slot, statement.span, *priority))
+                }
+                Some(FunctionAttribute::Final(priority)) => {
+                    plan.finals.push((slot, statement.span, *priority))
+                }
+                _ => {}
+            }
+        }
+        plan.inits = sort_entry_calls_by_priority(plan.inits);
+        plan.finals = sort_entry_calls_by_priority(plan.finals);
+        plan
+    }
+
+    /// Compiles only the setup statements (declarations and imports) into a
+    /// chunk that defines every global. The runner executes it once, then
+    /// invokes cases through per-case [`Compiler::compile_call`] drivers on
+    /// the same `Vm`, so cases observe shared global state like a program.
+    pub fn compile_definitions(&mut self, statements: &[Statement]) -> Result<Chunk, CompileError> {
+        for stmt in statements {
+            if is_program_setup_statement(&stmt.kind) {
+                self.compile_statement(stmt)?;
+            }
+        }
+        let end_span = statements.last().map(|s| s.span).unwrap_or_default();
+        self.chunk.write_op(OpCode::Return, end_span);
+        Ok(std::mem::take(&mut self.chunk))
+    }
+
+    /// Compiles a driver chunk that calls the function at global `slot`
+    /// with zero arguments, optionally discarding its result.
+    pub fn compile_call(&mut self, slot: u16, span: Span, discard: bool) -> Result<Chunk, CompileError> {
+        self.emit_entry_call(slot, span, discard)?;
+        self.chunk.write_op(OpCode::Return, span);
+        Ok(std::mem::take(&mut self.chunk))
+    }
+
+    /// Compiles a driver chunk that calls the function at global `slot`
+    /// with the given argument values, keeping the result for the caller.
+    /// Used by the property runner (`cases(N)`) to invoke cases with
+    /// generated inputs.
+    pub fn compile_call_with_args(
+        &mut self,
+        slot: u16,
+        span: Span,
+        args: Vec<VmValue>,
+    ) -> Result<Chunk, CompileError> {
+        // Callee below the arguments, mirroring user-call emission.
+        self.chunk.write_op(OpCode::GetGlobal, span);
+        self.chunk.write_u16(slot, span);
+        for arg in &args {
+            let idx = self.chunk.add_constant(arg.clone());
+            self.chunk.write_op(OpCode::Const, span);
+            self.chunk.write_u16(idx, span);
+        }
+        self.chunk.write_op(OpCode::Call, span);
+        self.chunk.write_u16(args.len() as u16, span);
+        self.chunk.write_op(OpCode::Return, span);
+        Ok(std::mem::take(&mut self.chunk))
+    }
+
     /// Emits a zero-argument call to the function stored at global `slot`,
     /// optionally popping its (discarded) result off the stack.
-    fn emit_entry_call(
-        &mut self,
+    fn emit_entry_call(        &mut self,
         slot: u16,
         span: Span,
         discard: bool,
@@ -997,7 +1118,7 @@ impl<'a> Compiler<'a> {
                 self.chunk.write_op(op, span);
             }
 
-            ExpressionKind::ResolvedIdentifier { depth, slot, .. } => {
+            ExpressionKind::ResolvedIdentifier { depth, slot, name: _ } => {
                 match self.resolve(*depth, *slot) {
                     Some(s) => {
                         self.chunk.write_op(OpCode::GetLocal, span);

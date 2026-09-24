@@ -48,9 +48,10 @@ rl_closure rl_closure_new_heap(rl_closure_fn fn, rl_result *captures, uint64_t c
 // Abort loud failures only after flushing pending output, so earlier
 // prints are never lost when stdout is block-buffered (pipes).
 void _rl_abort(void) {
-    fflush(stdout);
-    fflush(stderr);
-    abort();
+    // Unwinds to the innermost test frame when one is pushed
+    // (`rlt --test` drivers, `test_assert_panics`); otherwise aborts
+    // exactly like before.
+    _rl_unwind(1);
 }
 
 
@@ -15400,4 +15401,230 @@ rl_result rl_is_gui_handle(rl_result x) {
 rl_result rl_is_file_handle(rl_result x) {
     if (!x.is_ok || x.tag != RL_TAG_I64) return rl_ok_bool(false);
     return rl_ok_bool(_rl_id_in_range(x.data.i64, RL_HANDLE_FILE_BASE, _rl_fs_handle_count));
+}
+
+// ---- test framework (`std::test`, `rlt --test`) ----------------------------
+
+jmp_buf rl_abort_frames[RL_MAX_ABORT_FRAMES];
+int rl_abort_depth = 0;
+rl_test_state_t rl_test_state = {0, 0, NULL, 0, 0, NULL, 0, 0, NULL};
+
+void _rl_unwind(int code) {
+    fflush(stdout);
+    fflush(stderr);
+    if (rl_abort_depth > 0) {
+        rl_abort_depth--;
+        longjmp(rl_abort_frames[rl_abort_depth], code ? code : 1);
+    }
+    abort();
+}
+
+void _rl_skip(void) {
+    _rl_unwind(2);
+}
+
+// Re-raises a skip to the next outer frame without consuming one: the
+// inner frame was already popped by the `_rl_unwind` that delivered it.
+void _rl_propagate_skip(void) {
+    fflush(stdout);
+    fflush(stderr);
+    if (rl_abort_depth > 0) {
+        longjmp(rl_abort_frames[rl_abort_depth - 1], 2);
+    }
+    abort();
+}
+
+static void rl_test_push(char ***list, size_t *len, size_t *cap, const char *msg) {
+    if (*len >= *cap) {
+        size_t ncap = *cap ? *cap * 2 : 8;
+        char **nlist = realloc(*list, ncap * sizeof(char *));
+        if (!nlist) {
+            fprintf(stderr, "error: out of memory in test registry\n");
+            _rl_abort();
+        }
+        *list = nlist;
+        *cap = ncap;
+    }
+    (*list)[*len] = strdup(msg ? msg : "");
+    if (!(*list)[*len]) {
+        fprintf(stderr, "error: out of memory in test registry\n");
+        _rl_abort();
+    }
+    (*len)++;
+}
+
+void rl_test_record(int ok, const char *msg) {
+    if (ok) {
+        rl_test_state.passed++;
+        return;
+    }
+    rl_test_state.failed++;
+    const char *ctx = rl_test_state.current ? rl_test_state.current : "top-level";
+    size_t need = strlen(ctx) + (msg ? strlen(msg) : 0) + 4;
+    char *full = malloc(need);
+    if (!full) {
+        fprintf(stderr, "error: out of memory in test registry\n");
+        _rl_abort();
+    }
+    snprintf(full, need, "[%s] %s", ctx, msg ? msg : "");
+    rl_test_push(&rl_test_state.failures, &rl_test_state.failures_len, &rl_test_state.failures_cap, full);
+    free(full);
+}
+
+// Structural equality mirroring the VM's derived `==`: strict tags,
+// payload compare, strings by bytes, arrays recursive, ok/err by inner.
+static int rl_value_bytes_equal(const void *a, const void *b, size_t n) {
+    return memcmp(a, b, n) == 0;
+}
+
+int rl_result_equal(rl_result a, rl_result b) {
+    if (a.is_ok != b.is_ok || a.tag != b.tag) {
+        return 0;
+    }
+    if (!a.is_ok) {
+        // Both err: compare payloads by tag below (err_code ignored,
+        // mirroring derived equality over the wrapped value).
+    }
+    switch (a.tag) {
+    case RL_TAG_NULL:
+        return 1;
+    case RL_TAG_I64:
+        return a.data.i64 == b.data.i64;
+    case RL_TAG_F64:
+        return a.data.f64 == b.data.f64;
+    case RL_TAG_BOOL:
+        return a.data.boolean == b.data.boolean;
+    case RL_TAG_CHAR:
+        return 0;
+    case RL_TAG_STR:
+        if (a.data.str.len != b.data.str.len) {
+            return 0;
+        }
+        return rl_value_bytes_equal(a.data.str.data, b.data.str.data, (size_t)a.data.str.len);
+    case RL_TAG_ARR: {
+        if (a.data.arr.len != b.data.arr.len || a.data.arr.type_tag != b.data.arr.type_tag) {
+            return 0;
+        }
+        // Element-wise compare for the primitive tags; anything fancier
+        // (nested maps/sets/closures) compares by presence only.
+        for (uint64_t i = 0; i < a.data.arr.len; i++) {
+            const char *pa = (const char *)a.data.arr.data + i * (uint64_t)a.data.arr.elem_size;
+            const char *pb = (const char *)b.data.arr.data + i * (uint64_t)b.data.arr.elem_size;
+            if (a.data.arr.type_tag == RL_TAG_STR) {
+                const rl_string *sa = (const rl_string *)pa;
+                const rl_string *sb = (const rl_string *)pb;
+                if (sa->len != sb->len || !rl_value_bytes_equal(sa->data, sb->data, (size_t)sa->len)) {
+                    return 0;
+                }
+            } else if (!rl_value_bytes_equal(pa, pb, (size_t)a.data.arr.elem_size)) {
+                return 0;
+            }
+        }
+        return 1;
+    }
+    default:
+        return 0;
+    }
+}
+
+rl_result rl_test_skip(rl_string reason) {
+    const char *ctx = rl_test_state.current ? rl_test_state.current : "top-level";
+    size_t need = strlen(ctx) + (size_t)reason.len + 16;
+    char *msg = malloc(need);
+    if (!msg) {
+        fprintf(stderr, "error: out of memory in test registry\n");
+        _rl_abort();
+    }
+    snprintf(msg, need, "[%s] skipped: %.*s", ctx, (int)reason.len, reason.data);
+    rl_test_push(&rl_test_state.skipped, &rl_test_state.skipped_len, &rl_test_state.skipped_cap, msg);
+    free(msg);
+    _rl_unwind(2);
+    return rl_ok_null();
+}
+
+rl_result rl_test_skip_if(bool cond, rl_string reason) {
+    if (cond) {
+        return rl_test_skip(reason);
+    }
+    return rl_ok_null();
+}
+
+static void rl_test_eq_fail(const char *name, rl_result a, rl_result b, rl_string msg, int equal) {
+    rl_result sa = rl_types_to_string(a);
+    rl_result sb = rl_types_to_string(b);
+    const char *da = (sa.is_ok && sa.tag == RL_TAG_STR) ? sa.data.str.data : "?";
+    const char *db = (sb.is_ok && sb.tag == RL_TAG_STR) ? sb.data.str.data : "?";
+    size_t la = (sa.is_ok && sa.tag == RL_TAG_STR) ? (size_t)sa.data.str.len : 1;
+    size_t lb = (sb.is_ok && sb.tag == RL_TAG_STR) ? (size_t)sb.data.str.len : 1;
+    const char *op = equal ? "!=" : "==";
+    size_t need = strlen(name) + (size_t)msg.len + la + lb + 64;
+    char *buf = malloc(need);
+    if (!buf) {
+        fprintf(stderr, "error: out of memory in test registry\n");
+        _rl_abort();
+    }
+    snprintf(buf, need, "%s failed: %.*s (left `%.*s` %s right `%.*s`)",
+        name, (int)msg.len, msg.data, (int)la, da, op, (int)lb, db);
+    rl_test_record(0, buf);
+    free(buf);
+}
+
+rl_result rl_test_assert_eq(rl_result a, rl_result b, rl_string msg) {
+    if (rl_result_equal(a, b)) {
+        rl_test_record(1, "");
+    } else {
+        rl_test_eq_fail("test_assert_eq", a, b, msg, 1);
+    }
+    return rl_ok_null();
+}
+
+rl_result rl_test_assert_ne(rl_result a, rl_result b, rl_string msg) {
+    if (!rl_result_equal(a, b)) {
+        rl_test_record(1, "");
+    } else {
+        rl_test_eq_fail("test_assert_ne", a, b, msg, 0);
+    }
+    return rl_ok_null();
+}
+
+rl_result rl_test_assert_panics(rl_closure f) {
+    if (f.fn == NULL) {
+        fprintf(stderr, "error: test_assert_panics expects a function or lambda\n");
+        _rl_abort();
+    }
+    int code = setjmp(rl_abort_frames[rl_abort_depth++]);
+    if (code == 2) {
+        // A skip inside f propagates outward, never passes.
+        _rl_propagate_skip();
+        return rl_ok_null();
+    }
+    if (code != 0) {
+        // Aborted inside f: expected outcome, pass.
+        rl_test_record(1, "");
+        return rl_ok_null();
+    }
+    rl_closure_call(f, NULL, 0);
+    rl_abort_depth--;
+    rl_test_record(0, "test_assert_panics failed: block did not fail");
+    return rl_ok_null();
+}
+
+rl_result rl_test_assert_no_panic(rl_closure f) {
+    if (f.fn == NULL) {
+        fprintf(stderr, "error: test_assert_no_panic expects a function or lambda\n");
+        _rl_abort();
+    }
+    int code = setjmp(rl_abort_frames[rl_abort_depth++]);
+    if (code == 2) {
+        _rl_propagate_skip();
+        return rl_ok_null();
+    }
+    if (code != 0) {
+        rl_test_record(0, "test_assert_no_panic failed");
+        return rl_ok_null();
+    }
+    rl_closure_call(f, NULL, 0);
+    rl_abort_depth--;
+    rl_test_record(1, "");
+    return rl_ok_null();
 }
