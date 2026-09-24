@@ -24,6 +24,8 @@ The project tree uses plain ASCII:
   - Use `[TODO]` for planned work not yet started.
   - Use `[WIP]` for work in progress.
   - Use `[BLOCKED]` for work blocked on another task (note the dependency).
+  - Use `[CLOSED]` for issues closed without the work landing (wontfix/superseded).
+  - Use `[UNDECIDED]` for items awaiting a DONE-vs-CLOSED decision.
 
 ### Active Work section
 
@@ -50,32 +52,30 @@ rl-lang
 +-- rl-lexer          (tokenization)
 |   +-- [DONE] Arabic keyword aliases (all 38 keywords)
 |   +-- [DONE] pipe operator `|>` token
-|   +-- [TODO] #427 - allow more statements to have newlines
-|   +-- [TODO] lexer edge case unit tests (Unicode identifiers, mixed scripts)
+|   +-- [DONE] #427 - allow more statements to have newlines
+|   +-- [DONE] lexer edge case unit tests (Unicode identifiers, mixed scripts)
 +-- rl-ast            (AST node types, arena)
-|   +-- [TODO] #190 - refactor AST
-|   +-- [TODO] arena allocation tests
+|   +-- [CLOSED] #190 - refactor AST
+|   +-- [UNDECIDED] arena allocation tests
 +-- rl-parser         (source to AST)
 |   +-- [DONE] optional semicolons as statement terminators
 |   +-- [DONE] pipe operator `|>` desugaring (a |> f() -> a.f())
 |   +-- [DONE] wildcard imports (`get * from std::ns`)
 |   +-- [DONE] aliased imports (`get X as Y from std::ns`)
-|   +-- [TODO] #341 - parser tests
-|   +-- [TODO] parser internal unit tests (individual parse functions)
+|   +-- [DONE] #341 - parser tests
+|   +-- [UNDECIDED] parser internal unit tests (individual parse functions)
 +-- rl-resolver       (name resolution, imports)
-|   +-- [TODO] #342 - resolver tests
+|   +-- [UNDECIDED] #342 - resolver tests
 |   +-- [TODO] shadowing, scoping, import resolution edge cases
 +-- rl-checker        (type checking)
 |   +-- [DONE] #471 - `?` propagation constraint (reject outside result/cresult functions)
 |   +-- [TODO] #348 - refinement and contracts
 +-- rl-vm             (bytecode VM)
-|   +-- [TODO] #345 - vm tests
+|   +-- [DONE] #345 - vm tests
 |   +-- [TODO] #349 - property-based testing
-|   +-- [TODO] compiler unit tests (compiler.rs, bytecode generation)
-|   +-- [TODO] VM execution loop tests (vm_logic.rs)
-|   +-- [TODO] native function dispatch tests
-+-- rl-cranelift      (JIT compilation via Cranelift)
-|   +-- [TODO] JIT backend unit tests
+|   +-- [UNDECIDED] compiler unit tests (compiler.rs, bytecode generation)
+|   +-- [UNDECIDED] VM execution loop tests (vm_logic.rs)
+|   +-- [UNDECIDED] native function dispatch tests
 +-- rl-std-core       (core stdlib modules)
 |   +-- [DONE] #425 - new math and consts functions
 |   +-- [DONE] #414 - more string std functions
@@ -101,16 +101,13 @@ rl-lang
 |   +-- [DONE] std::io - handle-based I/O (open, close, read_handle, write_handle, seek, flush, read_all, readline) with HandleKind::File, plus read_all_stdin, decode_utf8, encode_utf8, isatty
 |   +-- [DONE] HandleKind::File - new handle variant in rl-ast with IoStore trait
 |   +-- [DONE] extended stdlib (72 new functions across 11 modules)
-|   +-- [DONE] 20 per-module feature flags (std-array, std-audio, std-bitwise, std-c, std-collections, std-debug, std-fs, std-gui, std-http, std-io, std-math, std-net, std-path, std-process, std-random, std-result, std-string, std-terminal, std-time, std-types) with `impls` meta-feature
+|   +-- [DONE] 24 per-module feature flags (std-array, std-audio, std-bitwise, std-c, std-cli, std-collections, std-core, std-crypto, std-debug, std-fs, std-gui, std-http, std-io, std-math, std-net, std-path, std-process, std-random, std-result, std-serialize, std-string, std-terminal, std-time, std-types) with `impls` meta-feature
 |   +-- [DONE] #431 - std functions aliasing (wildcard imports + aliased imports)
-|   +-- [TODO] #338 - std functions tests
+|   +-- [DONE] #338 - std functions tests
 |   +-- [TODO] std::test - test framework (14 fn: test_case, test_run_all, test_assert_eq, test_group, test_bench)
-|   +-- [TODO] std::serialize - JSON/CSV/TOML/INI/YAML (15 fn)
-|   +-- [TODO] std::crypto - hashing, tokens, passwords (22 fn)
-|   +-- [TODO] std::compression - gzip/zip/tar (24 fn)
-|   +-- [TODO] std::cli - arg parsing, prompts, progress bars (13 fn)
-|   +-- [TODO] std::threads - OS thread spawn/join (requires VmValue Send+Sync)
-|   +-- [TODO] std::sync - mutex, channels (requires VmShared + fork_shared)
+|   +-- [DONE] std::serialize - JSON/CSV/TOML/INI/YAML interop (shipped 2.2.0)
+|   +-- [DONE] std::crypto - hashing, HMAC, tokens, UUID, Argon2 (shipped 2.2.0)
+|   +-- [DONE] std::cli - arg parsing, prompts, progress bars (shipped 2.2.0)
 +-- rl-commons        (shared utilities)
 |   +-- [TODO] keyword edge case tests (Unicode identifiers, mixed scripts, keyword-prefix identifiers)
 +-- rl-cli            (CLI binary: run, check, new, dev, format, print, package, workflows, pm)
@@ -120,25 +117,25 @@ rl-lang
 |   +-- [DONE] `rl pm` subcommand (install, add, remove, list, update, cache)
 |   +-- [DONE] standalone binaries split (rl, rlc, rlt, rlrepl, rlsp, rldocs)
 |   +-- [DONE] optional feature gates (vm, repl, docs, pm, cc)
-|   +-- [TODO] #426 - add support for more OS
+|   +-- [DONE] #426 - add support for more OS
 +-- rl-repl           (interactive REPL)
 |   +-- [DONE] standalone rlrepl binary
 +-- rl-lsp            (language server)
 |   +-- [DONE] standalone rlsp binary
-|   +-- [TODO] #298 - LSP module
-|   +-- [TODO] hover, goto definition, rename, references tests
-|   +-- [TODO] diagnostic conversion tests
+|   +-- [DONE] #298 - LSP module
+|   +-- [DONE] hover, goto definition, rename, references tests
+|   +-- [DONE] diagnostic conversion tests
 +-- rl-docs           (documentation generator)
 |   +-- [DONE] standalone rldocs binary
 |   +-- [DONE] package_manager and toolchain_manager concept entries
-|   +-- [TODO] #188 - update notes/
+|   +-- [DONE] #188 - update notes/
 +-- rl-pm             (package manager)
 |   +-- [DONE] cache management (~/.cache/rlpm/)
 |   +-- [DONE] download and symlink logic
 |   +-- [DONE] rl.toml [dependencies] parsing
 |   +-- [DONE] import resolution (deps/{name}/lib.rl fallback)
-|   +-- [TODO] download, cache, resolve, symlink tests
-|   +-- [TODO] toml parsing edge case tests
+|   +-- [UNDECIDED] download, cache, resolve, symlink tests
+|   +-- [UNDECIDED] toml parsing edge case tests
 +-- rl-manager        (toolchain manager)
 |   +-- [DONE] TUI version/variant picker
 |   +-- [DONE] self-update capability
@@ -223,13 +220,9 @@ rl-lang
 |   +-- [DONE] multi-file / module transpilation
 +-- (language)
 |   +-- [DONE] pipe operator |>
-|   +-- [TODO] #429 - type aliasing
-|   +-- [TODO] #375 - more types
-+-- (meta)
-|   +-- [TODO] #280 - related issues tracker
-|   +-- [TODO] minimize deps: shell-words (hand-write ~20-line shell-arg splitter in rl-std/src/process.rs)
-|   +-- [TODO] minimize deps: dirs (replace dirs::cache_dir() in rl-pm/src/cache.rs with std::env helper)
-|   +-- [TODO] remove deps: walkdir (declared in rl-pm but never imported or used anywhere)
+|   +-- [DONE] #429 - type aliasing
+|   +-- [DONE] #375 - more types
+|   +-- [TODO] self-hosted buffers - RL-side renderer, lexer, and C-emitter over safe buffers (no raw pointers), in that order
 +-- scripts/
     +-- [DONE] scripts/build-local.sh (--release/--nightly/--dev, --clean, output to target-bins/)
     +-- [DONE] scripts/bump-version.sh (patch/minor/major/explicit)
@@ -248,36 +241,28 @@ Heavy deps that must stay but are properly feature-gated:
 | ureq + tiny_http | 124 | std-http | rl-std |
 | ratatui + crossterm | 106 | tui | rl-docs, rl-manager |
 | zip | 66 | - | rl-manager |
-| cranelift-* | 56 | cranelift | rl-cli |
 | libffi + libloading | 12 | std-c | rl-std |
 
 ## Open Issues (github.com/rl-lang/rl-lang/issues)
 
 | # | Title | Labels |
 |---|-------|--------|
-| 437 | refactor `term_set_title` | documentation, enhancement, stdlib, good first issue |
-| 431 | feat: std functions aliasing | ~~enhancement, language~~ **DONE** |
-| 471 | `?` does not propagate properly | ~~bug, checker~~ **DONE** |
-| 429 | feat: add `type` aliasing | enhancement, language |
-| 427 | Allow more statements to have newlines | enhancement, good first issue |
-| 426 | Add support for more OS | enhancement, help wanted |
-| 425 | New `math` and its `consts` functions | ~~enhancement, stdlib, good first issue~~ **DONE** |
-| 414 | feat Some more str std functions | ~~-~~ **DONE** |
-| 375 | feat more types | enhancement, language |
-| 349 | feat `Property-based testing` | language |
-| 348 | feat `Refinement and Contracts` | language |
-| 345 | `vm` tests | - |
-| 344 | `interpreter` tests | - |
-| 342 | `resolver` tests | - |
-| 341 | `parser` tests | - |
-| 338 | `std` functions tests | - |
-| 337 | Tests edge cases coverage | - |
-| 333 | `Test Units` | tracking |
-| 298 | `LSP` module | help wanted, internals, refactor |
 | 280 | related issues tracker | tracking |
-| 190 | Refactor `AST` | internals, performance |
-| 188 | Update `notes/` | documentation |
+| 333 | `Test Units` | tracking |
+| 337 | Tests edge cases coverage | - |
+| 338 | `std` functions tests | - |
+| 342 | `resolver` tests | - |
+| 348 | feat `Refinement and Contracts` | language |
+| 349 | feat `Property-based testing` | language |
 
 ## Active Work
 
-_No active work tracked for rl-cc. See the [DONE] items in the project tree for what has been completed._
+1. **`std::test` test framework** - user-facing test module (`test_case`, `test_run_all`, `test_assert_eq`, `test_group`, `test_bench`)
+2. **Self-hosted buffers** - RL-side renderer, lexer, and C-emitter over safe buffers (no raw pointers)
+
+## Planned (After Self-Host)
+
+Deferred until the self-hosted toolchain lands:
+
+- `std::threads` - OS thread spawn/join (requires VmValue Send+Sync)
+- `std::sync` - mutex, channels (requires VmShared + fork_shared)
