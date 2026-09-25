@@ -43,6 +43,21 @@ pub fn format_tokens_with(tokens: &[Token], opts: &FormatOptions) -> String {
     Formatter::new(*opts).format(tokens)
 }
 
+/// Formats tokens, preserving a leading `#!` shebang line from `source`.
+/// Mirrors the lexer's strip rule (`#!` unless `#[!`), so `rl format`
+/// round-trips script files created by `rl new --script`.
+pub fn format_source_with_shebang(source: &str, tokens: &[Token]) -> String {
+    let formatted = format_tokens(tokens);
+    let Some(first) = source.split('\n').next() else {
+        return formatted;
+    };
+    if first.starts_with("#!") && !first.starts_with("#![") {
+        format!("{first}\n{formatted}")
+    } else {
+        formatted
+    }
+}
+
 struct Formatter {
     opts: FormatOptions,
     out: String,

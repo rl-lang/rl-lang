@@ -28,7 +28,7 @@ const RL_STYLES: Styles = Styles::styled()
 use rl_tooling::new::create_project;
 use rl_tooling::package::{find_embedded, package};
 use rl_tooling::workflows::generate;
-use rl_tooling::{format::format_tokens, package::EmbeddedProgram};
+use rl_tooling::{format::format_source_with_shebang, package::EmbeddedProgram};
 use std::path::PathBuf;
 
 use pipeline::lex::lex;
@@ -710,10 +710,10 @@ fn main() {
                 eprintln!("error: could not read file '{}'", file.display());
                 std::process::exit(1);
             });
-            let source = SourceFile::new(&*path, source_text);
+            let source = SourceFile::new(&*path, source_text.clone());
 
-            let tokens = lex(source);
-            let formatted = format_tokens(&tokens);
+            let tokens = lex(source.clone());
+            let formatted = format_source_with_shebang(&source_text, &tokens);
             if let Err(e) = std::fs::write(path, formatted) {
                 eprintln!("error: {}", e);
             };
