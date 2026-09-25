@@ -130,6 +130,11 @@ fn outer() {
     dec int f = test_run_registered("inner")
     test_assert_eq(f, 0, "lookup")
 }
+
+!#[test(cases(20))]
+fn prop_squares(int x) {
+    test_assert_eq(x * x >= 0, true, "sq")
+}
 "#;
     let file = SourceFile::new("cc_test_mode.rl", source.to_string());
     let tokens = rl_lexer::tokenizer::Tokenizer::lex(file.clone()).expect("lex failed");
@@ -187,5 +192,6 @@ fn outer() {
     assert!(out.contains("FAIL failing"));
     assert!(out.contains("ok inner_case"));
     assert!(out.contains("ok outer"));
-    assert!(out.contains("ran 5 tests: 3 ok, 1 failed, 1 skipped"));
+    assert!(out.contains("ok prop_squares"));
+    assert!(out.contains("ran 6 tests: 4 ok, 1 failed, 1 skipped"));
 }

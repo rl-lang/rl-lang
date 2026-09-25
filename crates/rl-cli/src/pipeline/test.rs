@@ -366,12 +366,21 @@ fn num_from_ty(ty: &TypeAnnotation, v: i64) -> Result<VmValue, String> {
 /// progress (cap 50 rounds). Strings halve, arrays drop half, numbers
 /// move toward zero.
 fn shrink_candidates(v: &VmValue) -> Vec<VmValue> {
+    // Toward zero only: outward neighbors oscillate (32<->33) instead
+    // of converging, and aborts revert rather than keep.
     match v {
-        VmValue::Int(i) => [0, i / 2, i - 1, i + 1]
-            .into_iter()
-            .filter(|c| *c != *i)
-            .map(VmValue::Int)
-            .collect(),
+        VmValue::Int(i) => {
+            let mut out = vec![0, i / 2];
+            if *i > 0 {
+                out.push(i - 1);
+            } else if *i < 0 {
+                out.push(i + 1);
+            }
+            out.into_iter()
+                .filter(|c| *c != *i)
+                .map(VmValue::Int)
+                .collect()
+        }
         VmValue::UInt(u) => [0, u / 2, u.saturating_sub(1)]
             .into_iter()
             .filter(|c| *c != *u)
@@ -430,13 +439,15 @@ fn run_property_case(
     let (p0, f0, fl0, s0) = (st.passed, st.failed, st.failures.len(), st.skipped.len());
     vm.test_state().current = Some(full.to_string());
 
-    // One iteration: generate, run setups + case + teardowns, report a
-    // failure as Some((inputs, message)). Iteration noise is always
-    // truncated back; the case records one summary failure at the end.
+    // One iteration: generate, run setups + case + teardowns. Returns
+    // the failure plus whether it aborted (aborts short-circuit
+    // shrinking: only assert-style failures shrink toward minima).
+    // Iteration noise is always truncated back; the case records one
+    // summary failure at the end.
     let run_once = |vm: &mut Vm,
                         compiler: &mut Compiler,
                         args: &[VmValue]|
-     -> Option<(Vec<VmValue>, String)> {
+     -> Option<(Vec<VmValue>, String, bool)> {
         let invoke = |vm: &mut Vm, compiler: &mut Compiler| -> Result<VmValue, String> {
             let driver = compiler
                 .compile_call_with_args(target.slot, target.span, args.to_vec())
@@ -445,25 +456,31 @@ fn run_property_case(
         };
         for (slot, span) in &plan.setups {
             if let Some(msg) = run_driver(vm, compiler, *slot, *span, full) {
-                return Some((args.to_vec(), format!("setup failed: {msg}")));
+                return Some((args.to_vec(), format!("setup failed: {msg}"), true));
             }
         }
         let failures_before = vm.test_state().failures.len();
         let outcome = invoke(vm, compiler);
         for (slot, span) in &plan.teardowns {
             if let Some(msg) = run_driver(vm, compiler, *slot, *span, full) {
-                return Some((args.to_vec(), format!("teardown failed: {msg}")));
+                let found = Some((
+                    args.to_vec(),
+                    format!("teardown failed: {msg}"),
+                    true,
+                ));
+                vm.test_state().failures.truncate(failures_before);
+                return found;
             }
         }
         let found = match outcome {
-            Err(msg) => Some((args.to_vec(), msg)),
+            Err(msg) => Some((args.to_vec(), msg, true)),
             Ok(VmValue::Bool(false)) => {
-                Some((args.to_vec(), "case returned false".to_string()))
+                Some((args.to_vec(), "case returned false".to_string(), false))
             }
             Ok(_) => {
                 if vm.test_state().failures.len() > failures_before {
                     let msg = vm.test_state().failures.last().cloned().unwrap_or_default();
-                    Some((args.to_vec(), msg))
+                    Some((args.to_vec(), msg, false))
                 } else {
                     None
                 }
@@ -473,7 +490,7 @@ fn run_property_case(
         found
     };
 
-    let mut failing: Option<(Vec<VmValue>, String)> = None;
+    let mut failing: Option<(Vec<VmValue>, String, bool)> = None;
     for _ in 0..n {
         let mut bound = Vec::new();
         let mut args = Vec::new();
@@ -491,7 +508,7 @@ fn run_property_case(
             }
         }
         if let Some(e) = gen_error {
-            failing = Some((args, e));
+            failing = Some((args, e, true));
             break;
         }
         if let Some(found) = run_once(vm, compiler, &args) {
@@ -501,29 +518,37 @@ fn run_property_case(
     }
 
     // Greedy shrinking toward minimal failing inputs (cap 50 rounds).
-    if let Some((inputs, msg)) = failing {
+    // Aborted failures keep their original inputs: shrinking toward
+    // contract violations would report a different failure.
+    if let Some((inputs, msg, aborted)) = failing {
         let mut best = inputs;
         let mut best_msg = msg;
-        for _ in 0..50 {
-            let mut progressed = false;
-            for i in 0..best.len() {
-                let mut trial = best.clone();
-                let mut shrunk = false;
-                for candidate in shrink_candidates(&best[i]) {
-                    trial[i] = candidate;
-                    if run_once(vm, compiler, &trial.clone()).is_some() {
-                        best = trial.clone();
-                        shrunk = true;
-                        progressed = true;
+        if !aborted {
+            for _ in 0..50 {
+                let mut progressed = false;
+                for i in 0..best.len() {
+                    let mut trial = best.clone();
+                    let mut shrunk = false;
+                    for candidate in shrink_candidates(&best[i]) {
+                        trial[i] = candidate;
+                        match run_once(vm, compiler, &trial.clone()) {
+                            Some((_, _, true)) => continue,
+                            Some(_) => {
+                                best = trial.clone();
+                                shrunk = true;
+                                progressed = true;
+                                break;
+                            }
+                            None => {}
+                        }
+                    }
+                    if shrunk {
                         break;
                     }
                 }
-                if shrunk {
+                if !progressed {
                     break;
                 }
-            }
-            if !progressed {
-                break;
             }
         }
         best_msg = format!("{} (inputs: {})", best_msg, format_inputs(&best));

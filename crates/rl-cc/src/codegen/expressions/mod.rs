@@ -77,7 +77,9 @@ impl<'a> CCodegen<'a> {
                 self.writer.write(&format!("(float){}", v));
             }
             ExpressionKind::Bool(v) => {
-                self.writer.write(if *v { "true" } else { "false" });
+                // Cast explicitly: bare `true`/`false` are `int` in C,
+                // which misdispatches `_Generic` boxing/printing.
+                self.writer.write(if *v { "((bool)true)" } else { "((bool)false)" });
             }
             ExpressionKind::Character(v) => {
                 self.writer.write(&escape_c_char(*v));

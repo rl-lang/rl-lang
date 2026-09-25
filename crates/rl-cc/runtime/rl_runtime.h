@@ -255,6 +255,25 @@ typedef struct {
 extern rl_test_state_t rl_test_state;
 void rl_test_record(int ok, const char *msg);
 int rl_result_equal(rl_result a, rl_result b);
+// Deterministic property generation (fixed seed, replayable failures).
+void rl_test_rng_reset(void);
+uint64_t rl_test_rand_below(uint64_t n);
+int64_t rl_test_rand_range(int64_t lo, int64_t hi);
+double rl_test_rand_f64(void);
+rl_string rl_test_rand_string(void);
+int64_t rl_test_rand_range_ne(int64_t lo, int64_t hi, int64_t neq);
+rl_string rl_test_rand_string_ne(const char *s, uint64_t len);
+// Runs one property case: `n` generated iterations through `gen`/
+// `invoke`, greedy shrinking, one summary failure. `args` is the
+// shared boxed-argument buffer of length `nargs`.
+void rl_test_run_property(
+    const char *name,
+    void (*gen)(void),
+    rl_result (*invoke)(void),
+    rl_result *args,
+    size_t nargs,
+    uint64_t n
+);
 rl_result rl_test_skip(rl_string reason);
 rl_result rl_test_skip_if(bool cond, rl_string reason);
 rl_result rl_test_assert_eq(rl_result a, rl_result b, rl_string msg);

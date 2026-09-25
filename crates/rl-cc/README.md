@@ -11,6 +11,7 @@ rlt file.rl -o out             # output out.c
 rlt file.rl --compile --opt 2  # compile the C with -O2
 rlt file.rl --runtime          # also emit rl_runtime.h + rl_runtime.c next to the output
 rlt file.rl --compile -lm      # extra flags are forwarded to cc
+rlt file.rl --compile --test # build the test-driver binary instead (runs !#[test] cases, exits non-zero on failure)
 ```
 
 ## Supported Features

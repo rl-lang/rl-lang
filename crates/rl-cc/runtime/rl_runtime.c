@@ -15750,3 +15750,322 @@ int64_t rl_test_run_registered(rl_string reg) {
     }
     return (int64_t)(rl_test_state.failed - failed_before);
 }
+
+// ---- property generation (`cases(N)`, deterministic replay) --------------
+
+// Fixed-seed xorshift64*: property inputs replay identically across runs.
+static uint64_t rl_test_rng_state = (uint64_t)0x9E3779B97F4A7C15;
+
+void rl_test_rng_reset(void) {
+    rl_test_rng_state = (uint64_t)0x9E3779B97F4A7C15;
+}
+
+static uint64_t rl_test_rand_next(void) {
+    uint64_t x = rl_test_rng_state;
+    x ^= x >> 12;
+    x ^= x << 25;
+    x ^= x >> 27;
+    rl_test_rng_state = x;
+    return x * (uint64_t)0x2545F4914F6CDD1D;
+}
+
+uint64_t rl_test_rand_below(uint64_t n) {
+    if (n == 0) {
+        return 0;
+    }
+    return rl_test_rand_next() % n;
+}
+
+int64_t rl_test_rand_range(int64_t lo, int64_t hi) {
+    uint64_t span;
+    if (lo >= hi) {
+        return lo;
+    }
+    span = (uint64_t)(hi - lo) + 1u;
+    return lo + (int64_t)rl_test_rand_below(span);
+}
+
+double rl_test_rand_f64(void) {
+    int64_t v = rl_test_rand_range(-10000, 10000);
+    return (double)v / 100.0;
+}
+
+rl_string rl_test_rand_string(void) {
+    static const char alpha[] = "abcdefghijklmnopqrstuvwxyz0123456789";
+    uint64_t len = rl_test_rand_below(9);
+    char *buf = malloc(len + 1);
+    if (!buf) {
+        fprintf(stderr, "error: out of memory generating test input\n");
+        _rl_abort();
+    }
+    for (uint64_t i = 0; i < len; i++) {
+        buf[i] = alpha[rl_test_rand_below((uint64_t)sizeof(alpha) - 1)];
+    }
+    buf[len] = '\0';
+    rl_string s = { .data = buf, .len = len, .rc = 1 };
+    return s;
+}
+
+int64_t rl_test_rand_range_ne(int64_t lo, int64_t hi, int64_t neq) {
+    int64_t v = rl_test_rand_range(lo, hi);
+    for (int t = 0; t < 10 && v == neq; t++) {
+        v = rl_test_rand_range(lo, hi);
+    }
+    return v;
+}
+
+rl_string rl_test_rand_string_ne(const char *s, uint64_t len) {
+    rl_string v = rl_test_rand_string();
+    for (int t = 0; t < 10 && v.len == len && memcmp(v.data, s, (size_t)len) == 0; t++) {
+        v = rl_test_rand_string();
+    }
+    return v;
+}
+
+// Renders boxed inputs as `a, b, c` for failure reports.
+static void rl_test_render_inputs(rl_result *args, size_t nargs, char *out, size_t out_len) {
+    size_t pos = 0;
+    for (size_t i = 0; i < nargs; i++) {
+        rl_result rendered = rl_types_to_string(args[i]);
+        const char *text = "?";
+        size_t text_len = 1;
+        if (rendered.is_ok && rendered.tag == RL_TAG_STR) {
+            text = rendered.data.str.data;
+            text_len = (size_t)rendered.data.str.len;
+        }
+        if (i > 0 && pos + 2 < out_len) {
+            out[pos++] = ',';
+            out[pos++] = ' ';
+        }
+        size_t room = (out_len > pos + 1) ? out_len - pos - 1 : 0;
+        size_t take = text_len < room ? text_len : room;
+        if (take > 0) {
+            memcpy(out + pos, text, take);
+            pos += take;
+        }
+    }
+    if (pos < out_len) {
+        out[pos] = '\0';
+    }
+}
+
+// State snapshot for trial reconciliation: shrink probes must not
+// pollute the totals; only the final summary failure is recorded.
+typedef struct {
+    uint64_t passed;
+    uint64_t failed;
+    size_t failures_len;
+    size_t skipped_len;
+} rl_test_snap_t;
+
+static rl_test_snap_t rl_test_snap(void) {
+    rl_test_snap_t s;
+    s.passed = rl_test_state.passed;
+    s.failed = rl_test_state.failed;
+    s.failures_len = rl_test_state.failures_len;
+    s.skipped_len = rl_test_state.skipped_len;
+    return s;
+}
+
+static void rl_test_restore(rl_test_snap_t s) {
+    size_t i;
+    for (i = s.failures_len; i < rl_test_state.failures_len; i++) {
+        free(rl_test_state.failures[i]);
+    }
+    for (i = s.skipped_len; i < rl_test_state.skipped_len; i++) {
+        free(rl_test_state.skipped[i]);
+    }
+    rl_test_state.passed = s.passed;
+    rl_test_state.failed = s.failed;
+    rl_test_state.failures_len = s.failures_len;
+    rl_test_state.skipped_len = s.skipped_len;
+}
+
+// Trial outcomes for one guarded invocation. Aborts stay distinct
+// from assert failures: shrinking only keeps assert-style failures, so
+// it never walks into contract-violation territory to report those.
+#define RL_T_OK 0
+#define RL_T_FAIL 1
+#define RL_T_SKIP 2
+#define RL_T_ABORT 3
+
+// Runs invoke() under abort capture. Assert failures and a literal
+// `false` return count as failure; aborts and skips propagate distinctly.
+// Recorded state noise is left in place for the caller to reconcile.
+static int rl_test_trial(rl_result (*invoke)(void), rl_result *ret) {
+    uint64_t failed_before = rl_test_state.failed;
+    size_t skipped_before = rl_test_state.skipped_len;
+    int code = setjmp(rl_abort_frames[rl_abort_depth++]);
+    if (code == 2) {
+        *ret = rl_ok_null();
+        return RL_T_SKIP;
+    }
+    if (code != 0) {
+        *ret = rl_ok_null();
+        return RL_T_ABORT;
+    }
+    *ret = invoke();
+    rl_abort_depth--;
+    if (rl_test_state.skipped_len > skipped_before) {
+        return RL_T_SKIP;
+    }
+    if (rl_test_state.failed > failed_before) {
+        return RL_T_FAIL;
+    }
+    if (ret->is_ok && ret->tag == RL_TAG_BOOL && !ret->data.boolean) {
+        return RL_T_FAIL;
+    }
+    return RL_T_OK;
+}
+
+// Candidate inputs for one boxed arg, simplest first. Returns the count
+// written to `out` (capacity 4). Ints/floats move toward zero, strings
+// shorten, arrays empty-then-halve, bools flip once.
+static int rl_test_candidates(rl_result v, rl_result *out) {
+    int n = 0;
+    if (!v.is_ok) {
+        return 0;
+    }
+    if (v.tag == RL_TAG_I64 && v.data.i64 != 0) {
+        // Toward zero only: outward neighbors oscillate instead of
+        // converging (mirrors the VM shrinker).
+        int64_t cands[3];
+        cands[0] = 0;
+        cands[1] = v.data.i64 / 2;
+        cands[2] = v.data.i64 > 0 ? v.data.i64 - 1 : v.data.i64 + 1;
+        for (int k = 0; k < 3; k++) {
+            if (cands[k] != v.data.i64) {
+                out[n++] = rl_ok_i64(cands[k]);
+            }
+        }
+    } else if (v.tag == RL_TAG_F64) {
+        double cands[2] = {0.0, v.data.f64 / 2.0};
+        for (int k = 0; k < 2; k++) {
+            if (cands[k] != v.data.f64) {
+                out[n++] = rl_ok_f64(cands[k]);
+            }
+        }
+    } else if (v.tag == RL_TAG_BOOL) {
+        out[n++] = rl_ok_bool(!v.data.boolean);
+    } else if (v.tag == RL_TAG_STR) {
+        out[n++] = rl_ok_str(rl_str_literal("", 0));
+        if (v.data.str.len > 1) {
+            uint64_t half = v.data.str.len / 2;
+            char *buf = malloc((size_t)half + 1);
+            if (!buf) {
+                fprintf(stderr, "error: out of memory shrinking test input\n");
+                _rl_abort();
+            }
+            memcpy(buf, v.data.str.data, (size_t)half);
+            buf[half] = '\0';
+            rl_string s = { .data = buf, .len = half, .rc = 1 };
+            out[n++] = rl_ok_str(s);
+        }
+    } else if (v.tag == RL_TAG_ARR) {
+        if (v.data.arr.len > 0) {
+            rl_array empty = v.data.arr;
+            empty.len = 0;
+            out[n++] = rl_ok_arr(empty);
+        }
+    }
+    return n;
+}
+
+// Runs one property case end to end: `n` generated iterations through
+// `gen`/`invoke`, greedy shrinking on the first failure, one summary
+// failure recorded. `gen` fills `args` (length `nargs`); `invoke` runs
+// setups, the case, and teardowns for the current buffer contents.
+// Skips inside any iteration mark the whole case skipped.
+void rl_test_run_property(
+    const char *name,
+    void (*gen)(void),
+    rl_result (*invoke)(void),
+    rl_result *args,
+    size_t nargs,
+    uint64_t n
+) {
+    size_t capped = nargs < 64 ? nargs : 64;
+    rl_test_rng_reset();
+    for (uint64_t iter = 0; iter < n; iter++) {
+        rl_test_snap_t base = rl_test_snap();
+        gen();
+        rl_result ret;
+        int outcome = rl_test_trial(invoke, &ret);
+        if (outcome == RL_T_SKIP) {
+            return;
+        }
+        if (outcome == RL_T_OK) {
+            // Passing iterations keep their assertion counts.
+            continue;
+        }
+        // First failure: shrink to minimal inputs, then record one
+        // summary failure with the rendered pair. Aborts keep their
+        // original inputs (shrinking toward violations would report a
+        // different failure).
+        rl_test_restore(base);
+        if (outcome == RL_T_ABORT) {
+            rl_test_state.failed++;
+            {
+                const char *ctx = rl_test_state.current ? rl_test_state.current : name;
+                size_t need = strlen(ctx) + 32;
+                char *full = malloc(need);
+                if (!full) {
+                    fprintf(stderr, "error: out of memory in test registry\n");
+                    _rl_abort();
+                }
+                snprintf(full, need, "[%s] aborted (see error above)", ctx);
+                rl_test_push(&rl_test_state.failures, &rl_test_state.failures_len, &rl_test_state.failures_cap, full);
+                free(full);
+            }
+            return;
+        }
+        for (int round = 0; round < 50; round++) {
+            int progressed = 0;
+            for (size_t i = 0; i < capped; i++) {
+                rl_result cands[4];
+                int ncand = rl_test_candidates(args[i], cands);
+                for (int k = 0; k < ncand; k++) {
+                    rl_result saved = args[i];
+                    args[i] = cands[k];
+                    rl_test_snap_t probe = rl_test_snap();
+                    rl_result probe_ret;
+                    int trial = rl_test_trial(invoke, &probe_ret);
+                    // Keep only assert-style failures; aborts and skips
+                    // revert (a shrunk contract violation is noise, and
+                    // skips are not failures at all).
+                    if (trial == RL_T_FAIL) {
+                        rl_test_restore(probe);
+                        progressed = 1;
+                        break;
+                    }
+                    args[i] = saved;
+                    rl_test_restore(probe);
+                }
+                if (progressed) {
+                    break;
+                }
+            }
+            if (!progressed) {
+                break;
+            }
+        }
+        char rendered[1024];
+        rl_test_render_inputs(args, capped, rendered, sizeof(rendered));
+        char msg[1280];
+        snprintf(msg, sizeof(msg), "property failed (inputs: %s)", rendered);
+        rl_test_state.failed++;
+        {
+            const char *ctx = rl_test_state.current ? rl_test_state.current : name;
+            size_t need = strlen(ctx) + strlen(msg) + 4;
+            char *full = malloc(need);
+            if (!full) {
+                fprintf(stderr, "error: out of memory in test registry\n");
+                _rl_abort();
+            }
+            snprintf(full, need, "[%s] %s", ctx, msg);
+            rl_test_push(&rl_test_state.failures, &rl_test_state.failures_len, &rl_test_state.failures_cap, full);
+            free(full);
+        }
+        return;
+    }
+}

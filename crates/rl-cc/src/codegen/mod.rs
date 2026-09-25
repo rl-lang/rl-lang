@@ -30,6 +30,11 @@ pub struct ScannedTest {
     pub name: String,
     pub params: rl_ast::statements::TestParams,
     pub param_count: usize,
+    /// Declared function parameters (types drive `cases(N)` generation).
+    pub fn_params: Vec<Param>,
+    /// Declared return type (for forward declarations; the effective
+    /// type prefers `user_fn_returns` inference like definitions do).
+    pub ret: TypeAnnotation,
 }
 
 /// Entry scan result: optional entry name, tests, setups, teardowns,
@@ -438,6 +443,7 @@ impl<'a> CCodegen<'a> {
                 name,
                 attribute,
                 params,
+                return_type,
                 ..
             } = &stmt.kind
             else {
@@ -458,16 +464,22 @@ impl<'a> CCodegen<'a> {
                     name: name.clone(),
                     params: test_params.clone(),
                     param_count: params.len(),
+                    fn_params: params.clone(),
+                    ret: return_type.clone(),
                 }),
                 Some(FunctionAttribute::Setup) => setups.push(ScannedTest {
                     name: name.clone(),
                     params: rl_ast::statements::TestParams::default(),
                     param_count: params.len(),
+                    fn_params: params.clone(),
+                    ret: return_type.clone(),
                 }),
                 Some(FunctionAttribute::Teardown) => teardowns.push(ScannedTest {
                     name: name.clone(),
                     params: rl_ast::statements::TestParams::default(),
                     param_count: params.len(),
+                    fn_params: params.clone(),
+                    ret: return_type.clone(),
                 }),
                 Some(FunctionAttribute::Init(priority)) => {
                     inits.push((name.clone(), *priority, order));
@@ -539,7 +551,388 @@ impl<'a> CCodegen<'a> {
         }
     }
 
-    /// Emits the `rlt --test` driver main: setup statements, inits, then    /// one setjmp-guarded block per test (setups, test, teardowns),
+    /// C type for a generatable parameter, or `None` when the type is
+    /// outside the C property scope (maps, sets, tuples, records, chars,
+    /// non-string numerics beyond int/float/bool, functions, handles).
+    /// Arrays recurse one level into scalar elements only.
+    fn prop_c_type(ty: &TypeAnnotation) -> Option<&'static str> {
+        match ty {
+            TypeAnnotation::Int | TypeAnnotation::CInt => Some("int64_t"),
+            TypeAnnotation::Float | TypeAnnotation::CFloat => Some("double"),
+            TypeAnnotation::Bool | TypeAnnotation::CBool => Some("bool"),
+            TypeAnnotation::String | TypeAnnotation::CString => Some("rl_string"),
+            TypeAnnotation::Array(inner) | TypeAnnotation::CArray(inner) => {
+                match inner.as_ref() {
+                    TypeAnnotation::Int
+                    | TypeAnnotation::CInt
+                    | TypeAnnotation::Float
+                    | TypeAnnotation::CFloat
+                    | TypeAnnotation::Bool
+                    | TypeAnnotation::CBool
+                    | TypeAnnotation::String
+                    | TypeAnnotation::CString => Some("rl_array"),
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// Why a property test cannot run under `rlt --test`, for the skip
+    /// message. `None` means generatable.
+    fn prop_unsupported_reason(test: &ScannedTest) -> Option<String> {
+        for param in &test.fn_params {
+            if Self::prop_c_type(&param.param_type).is_none() {
+                return Some(format!(
+                    "cannot generate `{}`",
+                    match &param.param_type {
+                        TypeAnnotation::Array(inner) | TypeAnnotation::CArray(inner) => {
+                            format!("array[{:?}]", inner.as_ref())
+                        }
+                        other => format!("{other:?}"),
+                    }
+                ));
+            }
+        }
+        None
+    }
+
+
+    /// Emits file-scope support for one property test: the boxed-argument
+    /// buffer, the generator, and the zero-arg trampoline (setups, test
+    /// call with unboxed args, teardowns). The driver invokes the
+    /// trampoline through `rl_test_run_property`, which owns iteration,
+    /// shrinking, and reporting.
+    fn emit_prop_support(
+        &mut self,
+        entry: &ScannedEntry,
+        test: &ScannedTest,
+    ) -> Result<(), Error> {
+        let base = mangle(&test.name);
+        let nargs = test.fn_params.len();
+        // Boxed argument buffer shared by generator, trampoline, and the
+        // runtime shrinker (never empty: strict C99 has no zero arrays).
+        self.globals_code.push_str(&format!(
+            "\nstatic rl_result _tp_args_{base}[{}];\n",
+            nargs.max(1)
+        ));
+        // Forward declaration: the definition hoists later in file
+        // order. Mirrors the definition-site effective type
+        // (inferred returns over the unresolved `Null` default).
+        let effective = match self.user_fn_returns.get(&test.name) {
+            Some(rt) if test.ret == TypeAnnotation::Null => rt.clone(),
+            _ => test.ret.clone(),
+        };
+        let proto_params: Vec<String> = test
+            .fn_params
+            .iter()
+            .map(|p| {
+                format!("{} {}", type_to_c(&p.param_type), mangle(&p.param_name))
+            })
+            .collect();
+        self.static_funcs.push(format!(
+            "{} {}({});\n",
+            type_to_c(&effective),
+            base,
+            proto_params.join(", ")
+        ));
+        // Generator: one statement block per parameter (later bounds read
+        // earlier locals), then boxing into the shared buffer.
+        let mut gen_fn = format!("static void prop_gen_{base}(void) {{\n");
+        for (i, _param) in test.fn_params.iter().enumerate() {
+            gen_fn.push_str(&self.prop_gen_stmts(test, i, &base)?);
+        }
+        gen_fn.push_str("}\n");
+        self.static_funcs.push(gen_fn);
+        // Trampoline: setups, unboxed call, teardowns, boxed return.
+        let mut tramp = format!("static rl_result prop_invoke_{base}(void) {{\n");
+        for hook in &entry.setups {
+            if hook.param_count > 0 {
+                continue;
+            }
+            tramp.push_str(&format!("    {}();\n", mangle(&hook.name)));
+        }
+        let call = format!(
+            "{}({})",
+            base,
+            (0..nargs)
+                .map(|i| {
+                    let unbox = match &test.fn_params[i].param_type {
+                        TypeAnnotation::String | TypeAnnotation::CString => "rl_unwrap_str",
+                        TypeAnnotation::Float | TypeAnnotation::CFloat => "rl_unwrap_f64",
+                        TypeAnnotation::Bool | TypeAnnotation::CBool => "rl_unwrap_bool",
+                        TypeAnnotation::Array(_) | TypeAnnotation::CArray(_) => "rl_unwrap_arr",
+                        _ => "rl_unwrap_i64",
+                    };
+                    format!("{unbox}(_tp_args_{base}[{i}])")
+                })
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        match self.user_fn_returns.get(&test.name) {
+            None | Some(TypeAnnotation::Null) => {
+                tramp.push_str(&format!("    {call};\n    return rl_ok_null();\n"));
+            }
+            Some(TypeAnnotation::Result(_)) | Some(TypeAnnotation::CResult(_)) => {
+                tramp.push_str(&format!("    return {call};\n"));
+            }
+            Some(TypeAnnotation::Int) | Some(TypeAnnotation::CInt) => {
+                tramp.push_str(&format!("    return rl_ok_i64({call});\n"));
+            }
+            Some(TypeAnnotation::Float) | Some(TypeAnnotation::CFloat) => {
+                tramp.push_str(&format!("    return rl_ok_f64({call});\n"));
+            }
+            Some(TypeAnnotation::Bool) | Some(TypeAnnotation::CBool) => {
+                tramp.push_str(&format!("    return rl_ok_bool({call});\n"));
+            }
+            Some(TypeAnnotation::String) | Some(TypeAnnotation::CString) => {
+                tramp.push_str(&format!("    return rl_ok_str({call});\n"));
+            }
+            Some(_) => {
+                // Exotic returns: verdicts come from asserts/aborts only.
+                tramp.push_str(&format!("    {call};\n    return rl_ok_null();\n"));
+            }
+        }
+        for hook in &entry.teardowns {
+            if hook.param_count > 0 {
+                continue;
+            }
+            tramp.push_str(&format!("    {}();\n", mangle(&hook.name)));
+        }
+        tramp.push_str("}\n");
+        self.static_funcs.push(tramp);
+        Ok(())
+    }
+
+    /// Boxing expression for a generated local of the given type.
+    fn prop_box_expr(&self, ty: &TypeAnnotation, local: &str) -> Result<String, Error> {
+        Ok(match ty {
+            TypeAnnotation::String | TypeAnnotation::CString => format!("rl_ok_str({local})"),
+            TypeAnnotation::Float | TypeAnnotation::CFloat => format!("rl_ok_f64({local})"),
+            TypeAnnotation::Bool | TypeAnnotation::CBool => format!("rl_ok_bool({local})"),
+            TypeAnnotation::Array(_) | TypeAnnotation::CArray(_) => format!("rl_ok_arr({local})"),
+            _ => format!("rl_ok_i64({local})"),
+        })
+    }
+
+    /// Generation statements for parameter `i`: declares the unboxed
+    /// local `_tp_a{i}`, fills it (narrowed bounds, pinned equality,
+    /// retry loops), then boxes it into the shared buffer. Cross-parameter
+    /// bounds read earlier locals; later or unknown parameters fall back
+    /// to defaults (the runtime guard still enforces correctness).
+    fn prop_gen_stmts(&self, test: &ScannedTest, i: usize, base: &str) -> Result<String, Error> {
+        use rl_ast::statements::{RefineOp, RefineOperand};
+        // Unresolvable equality pins (later/unknown parameters) degrade
+        // to plain generation; the runtime guard still enforces them.
+        let owned;
+        let param = match &test.fn_params[i].refinement {
+            Some(r) if r.op == RefineOp::Eq && matches!(&r.operand, RefineOperand::Param(p) if test.fn_params[..i].iter().position(|q| &q.param_name == p).is_none()) => {
+                owned = rl_ast::statements::Param {
+                    refinement: None,
+                    ..test.fn_params[i].clone()
+                };
+                &owned
+            }
+            _ => &test.fn_params[i],
+        };
+        let c_ty = Self::prop_c_type(&param.param_type).expect("checked");
+        let mut out = String::new();
+        // Equality pins the value outright.
+        if let Some(r) = param.refinement.as_ref()
+            && r.op == RefineOp::Eq
+        {
+            let value = match &r.operand {
+                RefineOperand::Integer(v) => v.to_string(),
+                RefineOperand::Bool(b) => b.to_string(),
+                RefineOperand::Str(s) => {
+                    // Box string literals directly; no local needed.
+                    let lit = format!("rl_str_literal(\"{}\", {})", escape_c_string(s), s.len());
+                    out.push_str(&format!("    _tp_args_{base}[{i}] = rl_ok_str({lit});\n"));
+                    return Ok(out);
+                }
+                RefineOperand::Param(p) => match test.fn_params[..i]
+                    .iter()
+                    .position(|q| &q.param_name == p)
+                {
+                    Some(j) => format!("_tp_a{j}"),
+                    // Unreachable: normalized above.
+                    None => unreachable!(),
+                },
+            };
+            out.push_str(&format!("    {c_ty} _tp_a{i} = {value};\n"));
+            out.push_str(&format!("    _tp_args_{base}[{i}] = "));
+            out.push_str(&self.prop_box_expr(&param.param_type, &format!("_tp_a{i}"))?);
+            out.push_str(";\n");
+            return Ok(out);
+        }
+        match &param.param_type {
+            TypeAnnotation::String | TypeAnnotation::CString => {
+                if let Some(r) = param.refinement.as_ref()
+                    && r.op == RefineOp::Ne
+                    && let RefineOperand::Str(s) = &r.operand
+                {
+                    out.push_str(&format!(
+                        "    rl_string _tp_a{i} = rl_test_rand_string_ne(\"{e}\", {n});\n",
+                        n = s.len(),
+                        e = escape_c_string(s),
+                    ));
+                } else {
+                    out.push_str(&format!("    rl_string _tp_a{i} = rl_test_rand_string();\n"));
+                }
+                out.push_str(&format!("    _tp_args_{base}[{i}] = rl_ok_str(_tp_a{i});\n"));
+                return Ok(out);
+            }
+            TypeAnnotation::Bool | TypeAnnotation::CBool => {
+                out.push_str(&format!("    bool _tp_a{i} = (rl_test_rand_below(2) == 0);\n"));
+                out.push_str(&format!("    _tp_args_{base}[{i}] = rl_ok_bool(_tp_a{i});\n"));
+                return Ok(out);
+            }
+            TypeAnnotation::Float | TypeAnnotation::CFloat => {
+                // Integer bounds apply numerically (the grammar only
+                // expresses integer refinement operands).
+                let (lo_s, hi_s) = self.prop_int_range(test, i)?;
+                out.push_str(&format!(
+                    "    double _tp_a{i} = ((double)rl_test_rand_range(({lo_s}) * 100, ({hi_s}) * 100) / 100.0);\n"
+                ));
+                out.push_str(&format!("    _tp_args_{base}[{i}] = rl_ok_f64(_tp_a{i});\n"));
+                return Ok(out);
+            }
+            TypeAnnotation::Array(inner) | TypeAnnotation::CArray(inner) => {
+                let (c_elem, sizeof_elem, tag, elem_gen) = match inner.as_ref() {
+                    TypeAnnotation::Int | TypeAnnotation::CInt => (
+                        "int64_t", "sizeof(int64_t)", "RL_TAG_I64",
+                        "rl_test_rand_range(-100, 100)".to_string(),
+                    ),
+                    TypeAnnotation::Float | TypeAnnotation::CFloat => (
+                        "double", "sizeof(double)", "RL_TAG_F64",
+                        "((double)rl_test_rand_range(-10000, 10000) / 100.0)".to_string(),
+                    ),
+                    TypeAnnotation::Bool | TypeAnnotation::CBool => (
+                        "bool", "sizeof(bool)", "RL_TAG_BOOL",
+                        "(rl_test_rand_below(2) == 0)".to_string(),
+                    ),
+                    TypeAnnotation::String | TypeAnnotation::CString => (
+                        "rl_string", "sizeof(rl_string)", "RL_TAG_STR",
+                        "rl_test_rand_string()".to_string(),
+                    ),
+                    _ => unreachable!(),
+                };
+                out.push_str(&format!("    {c_elem} _tp_e{i}[3];\n"));
+                out.push_str(&format!("    int _tp_n{i} = (int)rl_test_rand_below(4);\n"));
+                out.push_str(&format!(
+                    "    for (int _tp_k{i} = 0; _tp_k{i} < _tp_n{i}; _tp_k{i}++) _tp_e{i}[_tp_k{i}] = {elem_gen};\n"
+                ));
+                out.push_str(&format!(
+                    "    rl_array _tp_a{i} = rl_arr_from_vals_tag(_tp_e{i}, (uint64_t)_tp_n{i}, (int32_t){sizeof_elem}, {tag});\n"
+                ));
+                out.push_str(&format!("    _tp_args_{base}[{i}] = rl_ok_arr(_tp_a{i});\n"));
+                return Ok(out);
+            }
+            _ => {}
+        }
+        // Integer family (default -100..100, narrowed below).
+        let mut ne_lit: Option<String> = None;
+        if let Some(r) = param.refinement.as_ref()
+            && r.op == RefineOp::Ne
+            && let RefineOperand::Integer(v) = &r.operand
+        {
+            ne_lit = Some(v.to_string());
+        }
+        let (lo_s, hi_s) = self.prop_int_range(test, i)?;
+        if let Some(lit) = ne_lit {
+            out.push_str(&format!(
+                "    int64_t _tp_a{i} = rl_test_rand_range_ne({lo_s}, {hi_s}, {lit});\n"
+            ));
+        } else {
+            out.push_str(&format!("    int64_t _tp_a{i} = rl_test_rand_range({lo_s}, {hi_s});\n"));
+        }
+        out.push_str(&format!("    _tp_args_{base}[{i}] = rl_ok_i64(_tp_a{i});\n"));
+        Ok(out)
+    }
+
+    /// Integer bound range as C expressions `(lo, hi)`, narrowed by the
+    /// parameter's refinement. Literals embed directly; earlier
+    /// parameters read their locals; later or unknown parameters keep
+    /// defaults (the runtime guard still enforces correctness).
+    /// Contradictory static bounds are a transpile error.
+    fn prop_int_range(&self, test: &ScannedTest, i: usize) -> Result<(String, String), Error> {
+        use rl_ast::statements::{RefineOp, RefineOperand};
+        let param = &test.fn_params[i];
+        let (mut lo, mut hi) = ("-100".to_string(), "100".to_string());
+        let mut lo_num: Option<i64> = Some(-100);
+        let mut hi_num: Option<i64> = Some(100);
+        if let Some(r) = param.refinement.as_ref()
+            && r.op != RefineOp::Eq
+            && r.op != RefineOp::Ne
+        {
+            // Static narrowing only when both sides are literals (so
+            // contradictions are provable); cross-parameter bounds emit
+            // locals and skip the static check.
+            let bound_num = match &r.operand {
+                RefineOperand::Integer(v) => Some(*v),
+                _ => None,
+            };
+            let bound_s = match &r.operand {
+                RefineOperand::Integer(v) => v.to_string(),
+                RefineOperand::Param(p) => match test.fn_params[..i]
+                    .iter()
+                    .position(|q| &q.param_name == p)
+                {
+                    Some(j) => format!("(int64_t)_tp_a{j}"),
+                    None => return Ok((lo, hi)),
+                },
+                _ => return Ok((lo, hi)),
+            };
+            match r.op {
+                RefineOp::Gt => {
+                    if let Some(v) = bound_num {
+                        lo_num = Some(v.saturating_add(1));
+                        lo = lo_num.unwrap().to_string();
+                    } else {
+                        lo = format!("{bound_s}+1");
+                    }
+                }
+                RefineOp::Ge => {
+                    lo = bound_s.clone();
+                    if let Some(v) = bound_num {
+                        lo_num = Some(v);
+                        lo = v.to_string();
+                    }
+                }
+                RefineOp::Lt => {
+                    if let Some(v) = bound_num {
+                        hi_num = Some(v.saturating_sub(1));
+                        hi = hi_num.unwrap().to_string();
+                    } else {
+                        hi = format!("{bound_s}-1");
+                    }
+                }
+                RefineOp::Le => {
+                    hi = bound_s.clone();
+                    if let Some(v) = bound_num {
+                        hi_num = Some(v);
+                        hi = v.to_string();
+                    }
+                }
+                RefineOp::Eq | RefineOp::Ne => unreachable!(),
+            }
+            if let (Some(lo_n), Some(hi_n)) = (lo_num, hi_num)
+                && lo_n > hi_n
+            {
+                return Err(Error::at(
+                    Reason::Compile,
+                    format!(
+                        "property test `{}`: contradictory bounds for `{}`",
+                        test.name, param.param_name
+                    ),
+                    Span::dummy(),
+                ));
+            }
+        }
+        Ok((lo, hi))
+    }
+    /// Emits the `rlt --test` driver main: setup statements, inits, then
+    /// one setjmp-guarded block per test (setups, test, teardowns),
     /// finals, a summary, and a non-zero exit on failure. Property cases
     /// (`cases(N)`) report a runtime skip (generation lives in `rl test`);
     /// tests with parameters but no `cases` are a transpile error.
@@ -577,13 +970,52 @@ impl<'a> CCodegen<'a> {
                 continue;
             }
             let c_name = mangle(&test.name);
-            // Property generation lives in `rl test`: report a skip.
-            if test.params.cases.is_some() {
+            // Property cases generate inputs in C: emit support code
+            // once, then drive iterations through the runtime engine.
+            // Unsupported parameter types report a runtime skip.
+            if let Some(n) = test.params.cases {
+                if let Some(reason) = Self::prop_unsupported_reason(test) {
+                    self.writer.write_indent();
+                    self.writer.write(&format!(
+                        "t_run++; t_skip++; printf(\"SKIP {} ({})\\n\");\n",
+                        test.name, reason
+                    ));
+                    continue;
+                }
+                self.emit_prop_support(entry, test)?;
+                let base = mangle(&test.name);
+                let nargs = test.fn_params.len();
                 self.writer.write_indent();
+                self.writer.write(&format!("{{ /* property {} */\n", test.name));
+                self.writer.indent();
+                self.writer.writeln("t_run++;");
+                self.writer.writeln("uint64_t p0 = rl_test_state.passed, f0 = rl_test_state.failed;");
+                self.writer.writeln("size_t s0 = rl_test_state.skipped_len;");
+                self.writer.write(&format!("rl_test_state.current = \"{}\";\n", test.name));
                 self.writer.write(&format!(
-                    "t_run++; t_skip++; printf(\"SKIP {} (property tests need `rl test`)\\n\");\n",
+                    "rl_test_run_property(\"{}\", prop_gen_{base}, prop_invoke_{base}, _tp_args_{base}, {nargs}, {n}ULL);\n",
                     test.name
                 ));
+                self.writer.writeln("rl_test_state.current = NULL;");
+                self.writer.writeln("if (rl_test_state.skipped_len > s0) {");
+                self.writer.indent();
+                self.writer.writeln("t_skip++;");
+                self.writer.writeln("for (size_t i = s0; i < rl_test_state.skipped_len; i++) printf(\"SKIP %s\\n\", rl_test_state.skipped[i]);");
+                self.writer.dedent();
+                self.writer.writeln("} else if (rl_test_state.failed > f0) {");
+                self.writer.indent();
+                self.writer.writeln("t_fail++;");
+                self.writer.write(&format!("printf(\"FAIL {}\\n\");\n", test.name));
+                self.writer.dedent();
+                self.writer.writeln("} else {");
+                self.writer.indent();
+                self.writer.writeln("t_ok++;");
+                self.writer.write(&format!("printf(\"ok {}\\n\");\n", test.name));
+                self.writer.dedent();
+                self.writer.writeln("}");
+                self.writer.writeln("(void)p0;");
+                self.writer.dedent();
+                self.writer.writeln("}");
                 continue;
             }
             if test.param_count > 0 {

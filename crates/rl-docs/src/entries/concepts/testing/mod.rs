@@ -50,7 +50,7 @@ pub static TESTING: ConceptEntry = ConceptEntry {
         DescriptionEntry {
             kind: DescriptionKind::Explanation,
             title: Some("property tests"),
-            description: "`cases(N)` derives generators from parameter types (ints bounded, strings randomized, arrays recurse) narrowed by refinements (`>0` bounds the range instead of generate-then-filter). Failures shrink greedily and the runner reports the minimal failing inputs. Maps, sets, tuples, records, and chars are explicitly out of scope and fail cleanly. `cases(0)` is valid and runs zero iterations (vacuous ok) - useful for temporarily disabling a property without deleting it. Register lookup, static proving, and full C-side generation are deferred to phase 2",
+            description: "`cases(N)` derives generators from parameter types (ints bounded, strings randomized, arrays recurse) narrowed by refinements (`>0` bounds the range instead of generate-then-filter). Failures shrink greedily and the runner reports the minimal failing inputs. Maps, sets, tuples, records, and chars are explicitly out of scope and fail cleanly. `cases(0)` is valid and runs zero iterations (vacuous ok) - useful for temporarily disabling a property without deleting it. Generation is deterministic (fixed seed) on both backends; `rlt --test` runs properties natively in C with the same shrinking",
             examples: &[
                 "!#[test(cases(100))]\nfn withdraw_never_negative(int amt: >0, int balance: >=amt) { }",
             ],
