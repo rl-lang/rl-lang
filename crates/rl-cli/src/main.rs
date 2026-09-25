@@ -144,11 +144,12 @@ enum Commands {
     /// Scaffold GitHub Actions workflow files
     #[command(
         long_about = "Generate GitHub Actions workflow YAML for this project.\n\n\
-                       At least one of --check or --package must be given.",
+                       At least one of --check, --package, --test, --transpile, or --format must be given.",
         after_help = "EXAMPLES:\n    \
                        rl workflows --check\n    \
-                       rl workflows --package\n    \
-                       rl workflows --check --package"
+                       rl workflows --check --package\n    \
+                       rl workflows --test --transpile --format\n    \
+                       rl workflows --check --rl-version v2.2.0"
     )]
     Workflows {
         /// Generate a workflow that runs `rl check` on push/PR
@@ -158,6 +159,23 @@ enum Commands {
         /// Generate a workflow that packages and releases a binary
         #[arg(long)]
         package: bool,
+
+        /// Generate a workflow that runs `rl test` on push/PR
+        #[arg(long)]
+        test: bool,
+
+        /// Generate a workflow that transpiles to C on push/PR
+        #[arg(long)]
+        transpile: bool,
+
+        /// Generate a workflow that checks formatting on push/PR
+        #[arg(long)]
+        format: bool,
+
+        /// RL version pinned into the generated workflows
+        /// (latest, nightly, or vX.Y.Z)
+        #[arg(long = "rl-version", value_name = "VERSION")]
+        rl_version: Option<String>,
     },
 
     /// Package a .rl file into a self-contained binary
@@ -620,12 +638,19 @@ fn main() {
             }
         }
 
-        Commands::Workflows { check, package } => {
-            if !check && !package {
-                eprintln!("error: specify at least --check or --package");
+        Commands::Workflows {
+            check,
+            package,
+            test,
+            transpile,
+            format,
+            rl_version,
+        } => {
+            if !check && !package && !test && !transpile && !format {
+                eprintln!("error: specify at least --check, --package, --test, --transpile, or --format");
                 std::process::exit(1);
             }
-            generate(check, package);
+            generate(check, package, test, transpile, format, rl_version);
         }
 
         Commands::New { name, no_git, script, lib } => {
