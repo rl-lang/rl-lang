@@ -269,12 +269,25 @@ impl Resolver {
                 body,
                 attribute,
                 item_attributes: _,
+                requires,
+                ensures,
             } => {
                 let slot = self.declare(name.clone());
                 self.push_scope();
                 for p in &params {
                     self.declare(p.param_name.clone());
                 }
+                // Contracts lower to plain guards before resolution so the
+                // checker and every backend see only ordinary code.
+                let body = crate::contracts::desugar_fn_contracts(
+                    &mut self.ast_arena,
+                    &params,
+                    &return_type,
+                    body,
+                    &requires,
+                    &ensures,
+                    span,
+                );
                 let body = self.resolve_statements(body);
                 self.pop_scope();
                 StatementKind::ResolvedFunctionDeclaration {
@@ -284,6 +297,8 @@ impl Resolver {
                     return_type,
                     body,
                     attribute,
+                    requires,
+                    ensures,
                 }
             }
             StatementKind::ImplBlock { record, methods } => {
@@ -299,11 +314,25 @@ impl Resolver {
                                 body,
                                 attribute,
                                 item_attributes: _,
+                                requires,
+                                ensures,
                             } => {
                                 self.push_scope();
                                 for p in &params {
                                     self.declare(p.param_name.clone());
                                 }
+                                // Methods never carry contracts (the parser
+                                // does not accept clauses there), but route
+                                // through the same desugar for uniformity.
+                                let body = crate::contracts::desugar_fn_contracts(
+                                    &mut self.ast_arena,
+                                    &params,
+                                    &return_type,
+                                    body,
+                                    &requires,
+                                    &ensures,
+                                    m_span,
+                                );
                                 let body = self.resolve_statements(body);
                                 self.pop_scope();
                                 Statement::new(
@@ -318,6 +347,8 @@ impl Resolver {
                                         return_type,
                                         body,
                                         attribute,
+                                        requires,
+                                        ensures,
                                     },
                                     m_span,
                                 )

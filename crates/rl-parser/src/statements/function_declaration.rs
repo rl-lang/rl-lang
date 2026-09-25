@@ -13,7 +13,7 @@
 //! preceded by a `!#[entry]` attribute, marking it as the program entry point.
 
 use crate::parser_logic::Parser;
-use rl_ast::statements::{FunctionAttribute, ItemAttribute, Param, Statement, StatementKind, TypeAnnotation};
+use rl_ast::statements::{ContractClause, FunctionAttribute, ItemAttribute, Param, ParamRefinement, RefineOp, RefineOperand, Statement, StatementKind, TypeAnnotation};
 use rl_lexer::tokentypes::TokenType;
 use rl_utils::{errors::Error, span::Span};
 
@@ -70,9 +70,16 @@ impl Parser {
             match self.peek() {
                 TokenType::Identifier(p) => {
                     self.advance();
+                    // Optional refinement predicate (`int amt: >0`).
+                    let refinement = if self.match_type(&[TokenType::Colon]) {
+                        Some(self.parse_param_refinement()?)
+                    } else {
+                        None
+                    };
                     params.push(Param {
                         param_name: p,
                         param_type,
+                        refinement,
                     });
                 }
                 _ => return Err(self.err("expected parameter name", self.peek_span())),
@@ -100,6 +107,25 @@ impl Parser {
             TypeAnnotation::Null
         };
 
+        // optional contract clauses (`requires`/`ensures`) before the body
+        while self.match_type(&[TokenType::Newline]) {}
+        let mut requires = Vec::new();
+        let mut ensures = Vec::new();
+        loop {
+            match self.peek() {
+                TokenType::Identifier(name) if name == "requires" => {
+                    self.advance();
+                    requires.extend(self.parse_contract_items("requires")?);
+                }
+                TokenType::Identifier(name) if name == "ensures" => {
+                    self.advance();
+                    ensures.extend(self.parse_contract_items("ensures")?);
+                }
+                _ => break,
+            }
+            while self.match_type(&[TokenType::Newline]) {}
+        }
+
         while self.match_type(&[TokenType::Newline]) {}
         let body = self.parse_block()?;
 
@@ -112,8 +138,113 @@ impl Parser {
                 body,
                 attribute,
                 item_attributes,
+                requires,
+                ensures,
             },
             span,
         ))
+    }
+
+    /// Parses one parameter refinement predicate (`>0`, `>=amt`, `=="x"`).
+    /// Called after the `:` following a parameter name.
+    fn parse_param_refinement(&mut self) -> Result<ParamRefinement, Error> {
+        while self.match_type(&[TokenType::Newline]) {}
+        let op = match self.peek() {
+            TokenType::Greater => RefineOp::Gt,
+            TokenType::GreaterEqual => RefineOp::Ge,
+            TokenType::Less => RefineOp::Lt,
+            TokenType::LessEqual => RefineOp::Le,
+            TokenType::Compare => RefineOp::Eq,
+            TokenType::BangEqual => RefineOp::Ne,
+            _ => return Err(self.err("expected a comparison operator", self.peek_span())),
+        };
+        self.advance();
+        while self.match_type(&[TokenType::Newline]) {}
+        let operand = match self.peek() {
+            TokenType::NumberLiteral(n) => {
+                let v = i64::try_from(n).map_err(|_| {
+                    self.err(
+                        format!(
+                            "value {} is out of range for int ({}..={})",
+                            n,
+                            i64::MIN,
+                            i64::MAX
+                        ),
+                        self.peek_span(),
+                    )
+                })?;
+                self.advance();
+                RefineOperand::Integer(v)
+            }
+            TokenType::StringLiteral(s) => {
+                self.advance();
+                RefineOperand::Str(s)
+            }
+            TokenType::BoolLiteral(b) => {
+                self.advance();
+                RefineOperand::Bool(b)
+            }
+            TokenType::Identifier(p) => {
+                self.advance();
+                RefineOperand::Param(p)
+            }
+            _ => {
+                return Err(self.err(
+                    "expected a literal or parameter name",
+                    self.peek_span(),
+                ))
+            }
+        };
+        Ok(ParamRefinement { op, operand })
+    }
+
+    /// Parses one `requires`/`ensures` item list: comma-separated
+    /// `condition [, "message"]` pairs. A string literal right after a
+    /// comma belongs to the preceding condition as its message; otherwise
+    /// the comma starts the next condition.
+    fn parse_contract_items(&mut self, kind: &str) -> Result<Vec<ContractClause>, Error> {
+        let mut items = Vec::new();
+        loop {
+            while self.match_type(&[TokenType::Newline]) {}
+            let condition = self.parse_expression()?;
+            let mut message = None;
+            while self.match_type(&[TokenType::Newline]) {}
+            if self.match_type(&[TokenType::Comma]) {
+                while self.match_type(&[TokenType::Newline]) {}
+                if let TokenType::StringLiteral(s) = self.peek() {
+                    self.advance();
+                    let span = self.previous_span();
+                    message = Some(self.ast_arena.alloc_expr(
+                        rl_ast::nodes::ExpressionKind::String(s),
+                        span,
+                    ));
+                    while self.match_type(&[TokenType::Newline]) {}
+                    if self.match_type(&[TokenType::Comma]) {
+                        items.push(ContractClause { condition, message });
+                        while self.match_type(&[TokenType::Newline]) {}
+                        continue;
+                    }
+                } else {
+                    items.push(ContractClause { condition, message });
+                    while self.match_type(&[TokenType::Newline]) {}
+                    continue;
+                }
+            }
+            items.push(ContractClause { condition, message });
+            match self.peek() {
+                TokenType::LeftBrace => break,
+                TokenType::Identifier(name) if name == "requires" || name == "ensures" => break,
+                _ => {
+                    return Err(self.err(
+                        format!("expected `{{` or another contract clause after `{kind}` item"),
+                        self.peek_span(),
+                    ))
+                }
+            }
+        }
+        if items.is_empty() {
+            return Err(self.err(format!("`{kind}` needs at least one condition"), self.peek_span()));
+        }
+        Ok(items)
     }
 }

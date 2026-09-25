@@ -273,6 +273,11 @@ impl TypeChecker {
                         (t, a_span)
                     })
                     .collect();
+                // Static proving (phase 2): literal arguments against the
+                // callee's contracts. Misses (stdlib, unknown) stay silent.
+                if let Some(name) = path.last() {
+                    self.prove_call(name, args.as_slice(), expr_span);
+                }
                 CheckedExpr::new(self.check_call_path(&path, &arg_types, expr_span), None)
             }
 
@@ -288,6 +293,17 @@ impl TypeChecker {
                         (t, a_span)
                     })
                     .collect();
+                // Same proving for calls through a callee expression that
+                // names a contracted function.
+                let callee_name = match &self.ast_arena.exprs.get(callee).kind {
+                    ExpressionKind::Identifier(name) | ExpressionKind::ResolvedIdentifier { name, .. } => {
+                        Some(name.clone())
+                    }
+                    _ => None,
+                };
+                if let Some(name) = callee_name {
+                    self.prove_call(&name, args.as_slice(), expr_span);
+                }
                 CheckedExpr::new(
                     self.check_call_value(callee_type, &arg_types, expr_span),
                     None,

@@ -50,6 +50,8 @@ pub fn root() -> Module {
     { std = std.with_module(Module::from_std("process", rl_std::process::handles::<VmRuntime>())); }
     #[cfg(any(feature = "std-terminal", feature = "impls"))]
     { std = std.with_module(Module::from_std("term", rl_std::terminal::handles::<VmRuntime>())); }
+    #[cfg(any(feature = "std-test", feature = "impls"))]
+    { std = std.with_module(Module::from_std("test", rl_std::test::handles::<VmRuntime>())); }
 
     // Always available (no OS-facing deps)
     std = std.with_module(Module::from_std("bitwise", rl_std::bitwise::handles::<VmRuntime>()));

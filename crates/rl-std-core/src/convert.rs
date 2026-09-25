@@ -105,20 +105,31 @@ impl<T: ValueType> ValueType for Vec<T> {
 }
 impl<R: Runtime, T: FromValueR<R>> FromValueR<R> for Vec<T> {
     fn from_value(v: R::Value) -> Result<Self, R::Value> {
-        // Clone the elements out first so the borrow of `v` ends before the
-        // error path (which moves `v`).
-        let items = match R::as_array(&v) {
-            Some((items, _)) => items.to_vec(),
-            None => return Err(v),
-        };
-        let mut out = Vec::with_capacity(items.len());
-        for item in items {
-            match T::from_value(item) {
-                Ok(x) => out.push(x),
-                Err(_) => return Err(v),
+        // Borrow and clone per element instead of `to_vec()` up front:
+        // a full pre-clone keeps two 85M-element copies alive at once.
+        // The flag dance ends the borrow before `Err(v)` moves `v`.
+        let out = {
+            let (items, _) = match R::as_array(&v) {
+                Some(x) => x,
+                None => return Err(v),
+            };
+            let mut out = Vec::with_capacity(items.len());
+            let mut ok = true;
+            for item in items {
+                match T::from_value(item.clone()) {
+                    Ok(x) => out.push(x),
+                    Err(_) => {
+                        ok = false;
+                        break;
+                    }
+                }
             }
+            ok.then_some(out)
+        };
+        match out {
+            Some(out) => Ok(out),
+            None => Err(v),
         }
-        Ok(out)
     }
 }
 impl<R: Runtime, T: IntoValueR<R> + ValueType> IntoValueR<R> for Vec<T> {
@@ -144,24 +155,38 @@ impl ValueType for Bytes {
 }
 impl<R: Runtime> FromValueR<R> for Bytes {
     fn from_value(v: R::Value) -> Result<Self, R::Value> {
-        let items = match R::as_array(&v) {
-            Some((items, _)) => items.to_vec(),
-            None => return Err(v),
-        };
-        let mut out = Vec::with_capacity(items.len());
-        for item in items {
-            if let Some(b) = R::as_u8(&item) {
-                out.push(b);
-            } else if let Some(i) = R::as_i64(&item) {
-                match u8::try_from(i) {
-                    Ok(b) => out.push(b),
-                    Err(_) => return Err(v),
+        // Borrow the slice directly: cloning 85M `VmValue`s here (≈2.7GB)
+        // OOM-kills large inputs before hashing even starts. The flag
+        // dance below ends the borrow before `Err(v)` moves `v`.
+        let out = {
+            let (items, _) = match R::as_array(&v) {
+                Some(x) => x,
+                None => return Err(v),
+            };
+            let mut out = Vec::with_capacity(items.len());
+            let mut ok = true;
+            for item in items {
+                if let Some(b) = R::as_u8(item) {
+                    out.push(b);
+                } else if let Some(i) = R::as_i64(item) {
+                    match u8::try_from(i) {
+                        Ok(b) => out.push(b),
+                        Err(_) => {
+                            ok = false;
+                            break;
+                        }
+                    }
+                } else {
+                    ok = false;
+                    break;
                 }
-            } else {
-                return Err(v);
             }
+            ok.then_some(out)
+        };
+        match out {
+            Some(out) => Ok(Bytes(out)),
+            None => Err(v),
         }
-        Ok(Bytes(out))
     }
 }
 impl<R: Runtime> IntoValueR<R> for Bytes {

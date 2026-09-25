@@ -34,6 +34,7 @@ std-io = ["rl-std/std-io"]
 std-net = ["rl-std/std-net"]
 std-process = ["rl-std/std-process"]
 std-terminal = ["rl-std/std-terminal"]
+std-test = ["rl-std/std-test"]
 # The OS-facing stdlib dependencies (eframe, rodio, libffi, crossterm, ...) now
 # live in `rl-std` (pulled in transitively via its `impls` feature); the VM no
 # longer depends on them directly.

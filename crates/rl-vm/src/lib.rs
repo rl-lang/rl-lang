@@ -9,7 +9,7 @@ pub mod vm_logic;
 
 pub use bytecode::{deserialize_chunk, serialize_chunk};
 pub use chunk::{Chunk, OpCode};
-pub use compiler::{CompileError, Compiler};
+pub use compiler::{CompileError, Compiler, TestPlan, TestTarget};
 pub use native::{Module, NativeFn};
 pub use runtime::VmRuntime;
 pub use values::{VmNative, VmNativeFn, VmValue};

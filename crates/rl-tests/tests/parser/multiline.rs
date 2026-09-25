@@ -23,8 +23,8 @@ fn add(
             assert_eq!(
                 params,
                 &vec![
-                    Param { param_name: "x".to_string(), param_type: TypeAnnotation::Int },
-                    Param { param_name: "y".to_string(), param_type: TypeAnnotation::Int },
+                    Param { param_name: "x".to_string(), param_type: TypeAnnotation::Int, refinement: None },
+                    Param { param_name: "y".to_string(), param_type: TypeAnnotation::Int, refinement: None },
                 ]
             );
             assert_eq!(*return_type, TypeAnnotation::Int);
@@ -86,8 +86,8 @@ dec fn add = fn(
                     assert_eq!(
                         params,
                         &vec![
-                            Param { param_name: "x".to_string(), param_type: TypeAnnotation::Int },
-                            Param { param_name: "y".to_string(), param_type: TypeAnnotation::Int },
+                            Param { param_name: "x".to_string(), param_type: TypeAnnotation::Int, refinement: None },
+                            Param { param_name: "y".to_string(), param_type: TypeAnnotation::Int, refinement: None },
                         ]
                     );
                     assert_eq!(body.len(), 1);

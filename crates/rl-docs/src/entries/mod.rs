@@ -34,6 +34,7 @@ pub fn stdlib_entries() -> Vec<&'static StdEntry> {
         &stdlib::serialize::SERIALIZE,
         &stdlib::str::STR,
         &stdlib::term::TERM,
+        &stdlib::test::TEST,
         &stdlib::time::TIME,
         &stdlib::types::TYPES,
     ]
@@ -46,6 +47,7 @@ pub fn concept_entries() -> Vec<&'static ConceptEntry> {
         &concepts::arrays::ARRAYS,
         &concepts::bytes::BYTES,
         &concepts::casts::CASTING,
+        &concepts::contracts::CONTRACTS,
         &concepts::generals::COMMENTS,
         &concepts::constants::CONSTANTS,
         &concepts::flow_control::CONTROL_FLOW,
@@ -67,6 +69,7 @@ pub fn concept_entries() -> Vec<&'static ConceptEntry> {
         &concepts::semicolons::SEMICOLONS,
         &concepts::sets::SETS,
         &concepts::tags::TAGS,
+        &concepts::testing::TESTING,
         &concepts::tooling::TOOLING,
         &concepts::package_manager::PACKAGE_MANAGER,
         &concepts::toolchain_manager::TOOLCHAIN_MANAGER,

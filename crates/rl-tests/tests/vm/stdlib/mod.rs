@@ -11,4 +11,5 @@ mod random;
 mod result;
 mod serialize;
 mod string;
+mod test;
 mod types;

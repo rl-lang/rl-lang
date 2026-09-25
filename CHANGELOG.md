@@ -4,6 +4,14 @@ All notable changes to the rl-lang toolchain are documented here. The format is 
 
 ## [Unreleased]
 
+### Added
+
+- **Test framework (`std::test`, `rl test`)** - attribute-driven tests: `!#[test]` (plain or with `group("g")` / `register("r")` / `cases(N)` params), `!#[setup]` / `!#[teardown]` hooks, and a 6-function runtime API (`test_skip`, `test_skip_if`, `test_assert_eq`, `test_assert_ne`, `test_assert_panics`, `test_assert_no_panic`) with non-fatal accumulation. `rl test` discovers, filters (`--match`), and runs them with setup/case/teardown and a non-zero exit on failure; tests never run under `rl run`. `rlt --test` builds the same runner as a C binary (setjmp/longjmp abort capture, native property generation with shrinking).
+- **Contracts (`requires`/`ensures`/refinements)** - runtime-checked contracts: parameter refinements (`int amt: >0`, cross-parameter like `balance: >=amt`), `requires` preconditions with messages, `ensures` postconditions over `ret` (inner value for `result[T]`, skipped on `Err`). Violations return `Err` for `result` functions and abort otherwise. Desugared pre-resolution, so VM and C backends enforce identically.
+- **Property tests (`cases(N)`)** - type-directed generators (bounded ints narrowed by refinements, floats, bools, strings, arrays; maps/sets/tuples/records/chars fail cleanly as out of scope), deterministic fixed-seed replay, greedy shrinking to minimal failing inputs reported by the runner.
+- **Static contract proving (phase 2)** - parameter refinements and `requires` clauses with constant arguments prove at compile time: violations are errors, satisfied and unknown predicates stay silent for the runtime guards. Literals only; `ensures` stays runtime-only.
+- **Registry lookup (`test_run_registered`)** - runs one named registry in-program (re-run semantics, no cached verdicts) with setup/teardown hooks, returning the failure count. The compiler records every test/setup/teardown as definitions execute, so lookup works under `rl run` too; `rlt --test` drivers and C programs share the same registry.
+
 ### Removed
 
 - **Deprecated stdlib dupes** - removed `std::array::len` (use top-level `std::len`), the `std::io` file ops (`read_file`, `read_lines`, `read_bytes`, `write_file`, `append_file`, `delete_file`) and the `std::path` syscall ops (`path_exists`, `path_is_dir`, `path_is_file`, `path_canonicalize`, `path_absolute`, `path_expand_home`, `path_relative`) in favor of their `std::fs` canonical paths. Old paths now fail with `undefined function`; their checker deprecation entries, docs pages, and in-repo callers (including `transpile_demo.rl`) are migrated. `std::rl` deprecations are untouched.

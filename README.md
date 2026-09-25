@@ -139,11 +139,13 @@ rl new example-project
 rl dev              # run project
 rl run src/main.rl  # run file directly
 rl check            # type-check only
+rl test tests.rl    # run !#[test] functions (never run under rl run)
 
 # standalone binaries
 rlc compile src/main.rl  # compile to .rlc bytecode
 rlc run src/main.rl      # lex+parse+check+compile+run
 rlt src/main.rl --compile  # transpile to C and compile
+rlt src/main.rl --compile --test  # build the test-driver binary instead
 rlrepl                   # interactive REPL
 rldocs --tui             # browse docs in TUI
 rlsp                     # LSP server for editors
@@ -209,7 +211,7 @@ Feature flags:
 
 Per-module std feature flags (all on by default, disable for custom builds):
 
-`std-array`, `std-audio`, `std-bitwise`, `std-c`, `std-cli`, `std-collections`, `std-core`, `std-crypto`, `std-debug`, `std-fs`, `std-gui`, `std-http`, `std-io`, `std-math`, `std-net`, `std-path`, `std-process`, `std-random`, `std-result`, `std-serialize`, `std-string`, `std-terminal`, `std-time`, `std-types`
+`std-array`, `std-audio`, `std-bitwise`, `std-c`, `std-cli`, `std-collections`, `std-core`, `std-crypto`, `std-debug`, `std-fs`, `std-gui`, `std-http`, `std-io`, `std-math`, `std-net`, `std-path`, `std-process`, `std-random`, `std-result`, `std-serialize`, `std-string`, `std-terminal`, `std-test`, `std-time`, `std-types`
 
 ## Contributors
 

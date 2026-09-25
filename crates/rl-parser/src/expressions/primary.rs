@@ -1541,6 +1541,7 @@ impl Parser {
                 params.push(rl_ast::statements::Param {
                     param_name,
                     param_type,
+                    refinement: None,
                 });
                 while self.match_type(&[TokenType::Newline]) {}
                 if !self.match_type(&[TokenType::Comma]) {

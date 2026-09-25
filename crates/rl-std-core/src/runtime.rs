@@ -204,6 +204,10 @@ pub trait Runtime: Sized + 'static {
     fn rng(cx: &mut Self::Cx) -> &mut Xoshiro256;
     fn output_buffer(cx: &mut Self::Cx) -> &mut Option<String>;
 
+    /// The `std::test` registry (cases, grouping, results). Each runtime
+    /// context owns one, so test runs stay isolated per `Vm`.
+    fn test_state(cx: &mut Self::Cx) -> &mut crate::TestState<Self::Value>;
+
     /// The handle id inside `v`, if it is a `Handle` of the given `kind`.
     fn as_handle(v: &Self::Value, kind: HandleKind) -> Option<u64>;
     /// Builds an opaque resource handle value of the given `kind`.
