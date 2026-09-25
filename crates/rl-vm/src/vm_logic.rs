@@ -162,6 +162,10 @@ pub struct Vm {
     pub(crate) io_handles: HashMap<u64, rl_std::io::IoFileHandle>,
     /// Next handle id to hand out for `std::io` resources; only ever increments.
     pub(crate) io_next_handle: u64,
+    /// Side-table of byte buffers (`core::__buf_*`), keyed by handle id.
+    pub(crate) buf_handles: HashMap<u64, Vec<u8>>,
+    /// Next handle id to hand out for buffers; only ever increments.
+    pub(crate) buf_next_handle: u64,
     /// PRNG state for `std::random`, seeded from the system clock at startup.
     pub(crate) rng: rl_std_core::Xoshiro256,
     /// Registry for `std::test` (cases, grouping, results), isolated per Vm.
@@ -204,6 +208,8 @@ impl Vm {
             http_next_handle: 1,
             io_handles: HashMap::new(),
             io_next_handle: 1,
+            buf_handles: HashMap::new(),
+            buf_next_handle: 1,
             rng: Default::default(),
             test_state: Default::default(),
             user_args_offset: 1,

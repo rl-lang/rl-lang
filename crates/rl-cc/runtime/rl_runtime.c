@@ -9949,6 +9949,219 @@ int64_t rl_core_syscall6(int64_t nr, int64_t a1, int64_t a2, int64_t a3,
     return (int64_t)ret;
 }
 
+// ---- byte buffers (core::__buf_*) ----
+// Fixed table like the other handle kinds: ids are slot+1, stable for the
+// run, never reused while live. Growth doubles from 16 (amortized-O(1)
+// append); shrink and clear keep capacity.
+
+#define _RL_BUF_MAX_HANDLES 256
+
+typedef struct {
+    uint8_t *data;
+    size_t len;
+    size_t cap;
+    int live;
+} _rl_buf;
+
+static _rl_buf _rl_bufs[_RL_BUF_MAX_HANDLES];
+
+static _rl_buf *_rl_buf_at(int64_t id, const char *name) {
+    if (id >= 1 && id <= _RL_BUF_MAX_HANDLES && _rl_bufs[id - 1].live)
+        return &_rl_bufs[id - 1];
+    fprintf(stderr, "error: %s: invalid buffer handle\n", name);
+    _rl_abort();
+    return NULL;
+}
+
+static void _rl_buf_reserve(_rl_buf *b, size_t extra, const char *name) {
+    if (b->len + extra <= b->cap) return;
+    size_t cap = b->cap ? b->cap : 16;
+    while (cap < b->len + extra) cap *= 2;
+    uint8_t *nd = realloc(b->data, cap);
+    if (!nd) {
+        fprintf(stderr, "error: %s: out of memory\n", name);
+        _rl_abort();
+    }
+    b->data = nd;
+    b->cap = cap;
+}
+
+// Lossy UTF-8 decode: invalid bytes become U+FFFD, never abort.
+static rl_string _rl_buf_lossy(const uint8_t *d, size_t n) {
+    char *out = malloc(n * 3 + 1);
+    if (!out) {
+        fprintf(stderr, "error: __buf: out of memory\n");
+        _rl_abort();
+    }
+    size_t w = 0, i = 0;
+    while (i < n) {
+        unsigned char c = d[i];
+        size_t need = 0;
+        uint32_t cp = 0;
+        if (c < 0x80) {
+            out[w++] = (char)c;
+            i++;
+            continue;
+        } else if ((c & 0xe0) == 0xc0) {
+            need = 1;
+            cp = c & 0x1f;
+        } else if ((c & 0xf0) == 0xe0) {
+            need = 2;
+            cp = c & 0x0f;
+        } else if ((c & 0xf8) == 0xf0) {
+            need = 3;
+            cp = c & 0x07;
+        }
+        int ok = need > 0 && i + need < n + 1;
+        for (size_t k = 1; ok && k <= need; k++) {
+            unsigned char t = d[i + k];
+            if ((t & 0xc0) != 0x80) {
+                ok = 0;
+                break;
+            }
+            cp = (cp << 6) | (t & 0x3f);
+        }
+        if (ok) {
+            if ((need == 1 && cp < 0x80) || (need == 2 && cp < 0x800) ||
+                (need == 3 && cp < 0x10000) || cp > 0x10ffff ||
+                (cp >= 0xd800 && cp <= 0xdfff)) {
+                ok = 0;
+            }
+        }
+        if (ok) {
+            memcpy(out + w, d + i, need + 1);
+            w += need + 1;
+            i += need + 1;
+        } else {
+            out[w++] = (char)0xef;
+            out[w++] = (char)0xbf;
+            out[w++] = (char)0xbd;
+            i++;
+        }
+    }
+    out[w] = '\0';
+    rl_string s = { .data = out, .len = w };
+    return s;
+}
+
+int64_t rl_buf_new(void) {
+    for (int64_t i = 0; i < _RL_BUF_MAX_HANDLES; i++) {
+        if (!_rl_bufs[i].live) {
+            _rl_bufs[i].data = NULL;
+            _rl_bufs[i].len = 0;
+            _rl_bufs[i].cap = 0;
+            _rl_bufs[i].live = 1;
+            return i + 1;
+        }
+    }
+    fprintf(stderr, "error: __buf_new: out of buffer handles\n");
+    _rl_abort();
+    return 0;
+}
+
+int64_t rl_buf_len(int64_t id) {
+    return (int64_t)_rl_buf_at(id, "__buf_len")->len;
+}
+
+void rl_buf_push_byte(int64_t id, uint8_t byte) {
+    _rl_buf *b = _rl_buf_at(id, "__buf_push_byte");
+    _rl_buf_reserve(b, 1, "__buf_push_byte");
+    b->data[b->len++] = byte;
+}
+
+uint8_t rl_buf_get_byte(int64_t id, int64_t i) {
+    _rl_buf *b = _rl_buf_at(id, "__buf_get_byte");
+    if (i < 0 || (uint64_t)i >= b->len) {
+        fprintf(stderr, "error: __buf_get_byte: index %lld out of bounds (len %llu)\n",
+            (long long)i, (unsigned long long)b->len);
+        _rl_abort();
+    }
+    return b->data[(uint64_t)i];
+}
+
+void rl_buf_set_byte(int64_t id, int64_t i, uint8_t byte) {
+    _rl_buf *b = _rl_buf_at(id, "__buf_set_byte");
+    if (i < 0 || (uint64_t)i >= b->len) {
+        fprintf(stderr, "error: __buf_set_byte: index %lld out of bounds (len %llu)\n",
+            (long long)i, (unsigned long long)b->len);
+        _rl_abort();
+    }
+    b->data[(uint64_t)i] = byte;
+}
+
+void rl_buf_append(int64_t id, rl_string s) {
+    _rl_buf *b = _rl_buf_at(id, "__buf_append");
+    if (s.len == 0) return;
+    _rl_buf_reserve(b, s.len, "__buf_append");
+    memcpy(b->data + b->len, s.data, s.len);
+    b->len += s.len;
+}
+
+rl_string rl_buf_slice(int64_t id, int64_t start, int64_t end) {
+    _rl_buf *b = _rl_buf_at(id, "__buf_slice");
+    int64_t len = (int64_t)b->len;
+    if (start < 0 || end < start || end > len) {
+        fprintf(stderr, "error: __buf_slice: bad range %lld..%lld for len %lld\n",
+            (long long)start, (long long)end, (long long)len);
+        _rl_abort();
+    }
+    const unsigned char *d = b->data;
+    if ((start > 0 && start < len && _rl_core_is_continuation(d[start]))
+        || (end > 0 && end < len && _rl_core_is_continuation(d[end]))) {
+        fprintf(stderr, "error: __buf_slice: range splits a UTF-8 codepoint\n");
+        _rl_abort();
+    }
+    return _rl_buf_lossy(d + start, (size_t)(end - start));
+}
+
+void rl_buf_clear(int64_t id) {
+    _rl_buf_at(id, "__buf_clear")->len = 0;
+}
+
+rl_string rl_buf_to_string(int64_t id) {
+    _rl_buf *b = _rl_buf_at(id, "__buf_to_string");
+    if (b->len == 0) {
+        char *empty = malloc(1);
+        if (!empty) {
+            fprintf(stderr, "error: __buf_to_string: out of memory\n");
+            _rl_abort();
+        }
+        empty[0] = '\0';
+        rl_string s = { .data = empty, .len = 0 };
+        return s;
+    }
+    return _rl_buf_lossy(b->data, b->len);
+}
+
+void rl_buf_free(int64_t id) {
+    _rl_buf *b = _rl_buf_at(id, "__buf_free");
+    free(b->data);
+    b->data = NULL;
+    b->len = 0;
+    b->cap = 0;
+    b->live = 0;
+}
+
+int64_t rl_buf_addr(int64_t id) {
+    _rl_buf *b = _rl_buf_at(id, "__buf_addr");
+    if (b->len == 0 || b->data == NULL) return 0;
+    return (int64_t)(uintptr_t)b->data;
+}
+
+void rl_buf_resize(int64_t id, int64_t n) {
+    _rl_buf *b = _rl_buf_at(id, "__buf_resize");
+    if (n < 0) {
+        fprintf(stderr, "error: __buf_resize: negative size %lld\n", (long long)n);
+        _rl_abort();
+    }
+    size_t want = (size_t)n;
+    if (want > b->len) {
+        _rl_buf_reserve(b, want - b->len, "__buf_resize");
+        memset(b->data + b->len, 0, want - b->len);
+    }
+    b->len = want;
+}
+
 // ---- time ----
 
 // Format a Unix timestamp with a strftime-style `pattern`.

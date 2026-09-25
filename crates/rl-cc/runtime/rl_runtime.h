@@ -1009,6 +1009,22 @@ rl_string rl_core_str_concat(rl_string a, rl_string b);
 int64_t rl_core_syscall6(int64_t nr, int64_t a1, int64_t a2, int64_t a3,
     int64_t a4, int64_t a5, int64_t a6);
 
+// ---- byte buffers (core::__buf_*) ----
+// Fixed table of 256 live buffers; ids are slot+1. Growth doubles from
+// 16 bytes; shrink and clear keep capacity.
+int64_t rl_buf_new(void);
+int64_t rl_buf_len(int64_t id);
+void rl_buf_push_byte(int64_t id, uint8_t byte);
+uint8_t rl_buf_get_byte(int64_t id, int64_t i);
+void rl_buf_set_byte(int64_t id, int64_t i, uint8_t byte);
+void rl_buf_append(int64_t id, rl_string s);
+rl_string rl_buf_slice(int64_t id, int64_t start, int64_t end);
+void rl_buf_clear(int64_t id);
+rl_string rl_buf_to_string(int64_t id);
+void rl_buf_free(int64_t id);
+int64_t rl_buf_addr(int64_t id);
+void rl_buf_resize(int64_t id, int64_t n);
+
 // ---- cli ----
 // Mirrors `std::cli`. The arg parser drops everything through the first
 // `--`, reads spec maps with string values, and returns string/bool/array

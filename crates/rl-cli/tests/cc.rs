@@ -195,3 +195,83 @@ fn prop_squares(int x) {
     assert!(out.contains("ok prop_squares"));
     assert!(out.contains("ran 6 tests: 4 ok, 1 failed, 1 skipped"));
 }
+
+#[test]
+fn transpile_buffers_match_vm() {
+    let source = r#"
+get __buf_new, __buf_push_byte, __buf_append from core
+get __buf_get_byte, __buf_set_byte, __buf_slice from core
+get __buf_to_string, __buf_len, __buf_clear from core
+get __buf_resize, __buf_addr, __buf_free from core
+get to_int from std::types
+get result_unwrap from std::res
+get println from std::io
+
+dec b = __buf_new()
+__buf_push_byte(b, 72 as byte)
+__buf_push_byte(b, 105 as byte)
+__buf_append(b, "!")
+println(__buf_len(b))
+println(result_unwrap(to_int(__buf_get_byte(b, 0))))
+__buf_set_byte(b, 0, 104 as byte)
+println(__buf_slice(b, 0, 3))
+println(__buf_to_string(b))
+__buf_clear(b)
+println(__buf_len(b))
+__buf_resize(b, 4)
+println(__buf_len(b))
+println(__buf_addr(b) != 0)
+__buf_free(b)
+"#;
+    let file = SourceFile::new("cc_buffers.rl", source.to_string());
+    let tokens = rl_lexer::tokenizer::Tokenizer::lex(file.clone()).expect("lex failed");
+    let (ast, stmts) =
+        rl_parser::parser_logic::Parser::parse(tokens, file.clone()).expect("parse failed");
+
+    let mut resolver = Resolver::new();
+    let resolved = resolver.resolve_program(ast, stmts);
+
+    let checker_tokens = rl_lexer::tokenizer::Tokenizer::lex(file.clone()).expect("lex failed");
+    let (checker_ast, checker_stmts) =
+        rl_parser::parser_logic::Parser::parse(checker_tokens, file).expect("parse failed");
+    let mut checker = TypeChecker::new().with_ast_arena(checker_ast);
+    let errors = checker.check(&checker_stmts);
+    assert!(errors.is_empty(), "type check errors: {:?}", errors);
+
+    let tmp = tempfile::tempdir().unwrap();
+    let config = rl_cc::TranspileConfig {
+        embed_runtime: true,
+        output_dir: tmp.path().to_path_buf(),
+        output_name: "cc_buffers".to_string(),
+        test_mode: false,
+        match_pattern: None,
+    };
+    let result =
+        rl_cc::transpile(&resolver.ast_arena, &resolved, &checker, &config).expect("transpile failed");
+
+    let cc_output = std::process::Command::new("cc")
+        .args([
+            "-std=c99",
+            "-o",
+            tmp.path().join("cc_buffers").to_str().unwrap(),
+            result.c_path.to_str().unwrap(),
+            tmp.path().join("rl_runtime.c").to_str().unwrap(),
+            "-I",
+            tmp.path().to_str().unwrap(),
+            "-lm",
+        ])
+        .output()
+        .expect("failed to run cc");
+    assert!(
+        cc_output.status.success(),
+        "cc failed:\n{}",
+        String::from_utf8_lossy(&cc_output.stderr)
+    );
+
+    let run_output = std::process::Command::new(tmp.path().join("cc_buffers"))
+        .output()
+        .expect("failed to run cc_buffers");
+    assert!(run_output.status.success());
+    let out = String::from_utf8(run_output.stdout).unwrap();
+    assert_eq!(out, "3\n72\nhi!\nhi!\n0\n4\ntrue\n");
+}

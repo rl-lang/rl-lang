@@ -25,6 +25,18 @@ mod str_concat;
 mod str_get_byte;
 mod str_len;
 mod str_slice;
+mod buf_new;
+mod buf_len;
+mod buf_push_byte;
+mod buf_get_byte;
+mod buf_set_byte;
+mod buf_append;
+mod buf_slice;
+mod buf_clear;
+mod buf_to_string;
+mod buf_free;
+mod buf_addr;
+mod buf_resize;
 mod syscall6;
 mod type_of;
 
@@ -59,6 +71,18 @@ static FUNCTIONS: &[&FnEntry] = &[
     &str_get_byte::STR_GET_BYTE,
     &str_slice::STR_SLICE,
     &str_concat::STR_CONCAT,
+    &buf_new::BUF_NEW,
+    &buf_len::BUF_LEN,
+    &buf_push_byte::BUF_PUSH_BYTE,
+    &buf_get_byte::BUF_GET_BYTE,
+    &buf_set_byte::BUF_SET_BYTE,
+    &buf_append::BUF_APPEND,
+    &buf_slice::BUF_SLICE,
+    &buf_clear::BUF_CLEAR,
+    &buf_to_string::BUF_TO_STRING,
+    &buf_free::BUF_FREE,
+    &buf_addr::BUF_ADDR,
+    &buf_resize::BUF_RESIZE,
     &syscall6::SYSCALL6,
     &abort::ABORT,
     &type_of::TYPE_OF,

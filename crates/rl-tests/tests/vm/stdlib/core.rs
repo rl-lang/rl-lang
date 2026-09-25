@@ -289,3 +289,133 @@ has1
     .unwrap();
     assert_eq!(result, VmValue::Bool(true));
 }
+
+#[test]
+fn buf_push_append_slice_to_string() {
+    let result = compile_and_run(
+        r#"
+get __buf_new, __buf_push_byte, __buf_append from core
+get __buf_get_byte, __buf_slice, __buf_to_string, __buf_len from core
+get to_int from std::types
+get result_unwrap from std::res
+dec b = __buf_new()
+__buf_push_byte(b, 72 as byte)
+__buf_push_byte(b, 105 as byte)
+__buf_append(b, "!")
+__buf_len(b) + result_unwrap(to_int(__buf_get_byte(b, 0)))
+"#,
+    )
+    .unwrap();
+    assert_eq!(result, VmValue::Int(75));
+}
+
+#[test]
+fn buf_set_clear_resize_addr() {
+    let result = compile_and_run(
+        r#"
+get __buf_new, __buf_push_byte, __buf_set_byte from core
+get __buf_get_byte, __buf_clear, __buf_len from core
+get __buf_resize, __buf_addr from core
+get to_int from std::types
+get result_unwrap from std::res
+dec b = __buf_new()
+__buf_push_byte(b, 72 as byte)
+__buf_set_byte(b, 0, 104 as byte)
+dec int g = result_unwrap(to_int(__buf_get_byte(b, 0)))
+__buf_clear(b)
+__buf_resize(b, 4)
+__buf_len(b) + g
+"#,
+    )
+    .unwrap();
+    assert_eq!(result, VmValue::Int(108));
+}
+
+#[test]
+fn buf_to_string_roundtrip() {
+    let result = compile_and_run(
+        r#"
+get __buf_new, __buf_append, __buf_to_string from core
+dec b = __buf_new()
+__buf_append(b, "hi")
+__buf_to_string(b)
+"#,
+    )
+    .unwrap();
+    assert_eq!(result, VmValue::Str(std::rc::Rc::from("hi")));
+}
+
+#[test]
+fn buf_get_out_of_bounds_aborts() {
+    let result = compile_and_run(
+        r#"
+get __buf_new, __buf_get_byte from core
+dec b = __buf_new()
+__buf_get_byte(b, 0)
+"#,
+    );
+    assert!(result.is_err());
+}
+
+#[test]
+fn buf_set_out_of_bounds_aborts() {
+    let result = compile_and_run(
+        r#"
+get __buf_new, __buf_set_byte from core
+dec b = __buf_new()
+__buf_set_byte(b, 3, 65 as byte)
+"#,
+    );
+    assert!(result.is_err());
+}
+
+#[test]
+fn buf_slice_bad_range_aborts() {
+    let result = compile_and_run(
+        r#"
+get __buf_new, __buf_append, __buf_slice from core
+dec b = __buf_new()
+__buf_append(b, "hi")
+__buf_slice(b, 1, 5)
+"#,
+    );
+    assert!(result.is_err());
+}
+
+#[test]
+fn buf_slice_split_codepoint_aborts() {
+    let result = compile_and_run(
+        r#"
+get __buf_new, __buf_append, __buf_slice from core
+dec b = __buf_new()
+__buf_append(b, "é")
+__buf_slice(b, 0, 1)
+"#,
+    );
+    assert!(result.is_err());
+}
+
+#[test]
+fn buf_use_after_free_aborts() {
+    let result = compile_and_run(
+        r#"
+get __buf_new, __buf_free, __buf_len from core
+dec b = __buf_new()
+__buf_free(b)
+__buf_len(b)
+"#,
+    );
+    assert!(result.is_err());
+}
+
+#[test]
+fn buf_resize_negative_aborts() {
+    let result = compile_and_run(
+        r#"
+get __buf_new, __buf_resize from core
+dec b = __buf_new()
+__buf_resize(b, -1)
+"#,
+    );
+    assert!(result.is_err());
+}

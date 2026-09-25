@@ -19,7 +19,6 @@
 //! dec int x = __map_get(m, "a")
 //! ```
 
-#[cfg(feature = "impls")]
 use rl_std_core::Runtime;
 use rl_std_macros::native_fn;
 #[cfg(feature = "impls")]
@@ -457,6 +456,260 @@ pub fn __str_concat(a: String, b: String) -> String {
     out
 }
 
+// ---- byte buffers ---------------------------------------------------------------
+// Incremental accumulation without the O(n^2) of repeated `arr_push` /
+// `__str_concat`: amortized-O(1) push and bulk append behind an integer
+// handle. The primitive floor for an RL-written renderer, lexer, and
+// C-emitter. Misuse aborts (bad handle, out-of-bounds), like the rest
+// of `core::`.
+
+/// Per-runtime access to the `core` buffer table. Implemented by `VmRuntime`.
+pub trait BufStore: Runtime {
+    fn buf_insert(cx: &mut Self::Cx, buf: Vec<u8>) -> u64;
+    fn buf_get(cx: &Self::Cx, id: u64) -> Option<&Vec<u8>>;
+    fn buf_get_mut(cx: &mut Self::Cx, id: u64) -> Option<&mut Vec<u8>>;
+    fn buf_remove(cx: &mut Self::Cx, id: u64) -> Option<Vec<u8>>;
+}
+
+/// Extracts a `Buffer` handle id from a value, or returns a type error.
+#[cfg(feature = "impls")]
+pub fn extract_buffer<R: Runtime>(v: &R::Value, name: &str) -> Result<u64, String> {
+    match R::as_handle(v, rl_ast::statements::HandleKind::Buffer) {
+        Some(id) => Ok(id),
+        None => Err(format!(
+            "{}: expected a buffer handle, got {}",
+            name,
+            R::type_name(v)
+        )),
+    }
+}
+
+#[cfg(feature = "impls")]
+fn buf_lookup<R: BufStore>(
+    cx: &mut R::Cx,
+    handle: &R::Value,
+    name: &str,
+    span: R::Span,
+) -> Result<u64, Error> {
+    match extract_buffer::<R>(handle, name) {
+        Ok(id) => match R::buf_get(cx, id) {
+            Some(_) => Ok(id),
+            None => Err(R::error(
+                cx,
+                format!("{}: invalid buffer handle", name),
+                span,
+            )),
+        },
+        Err(e) => Err(R::error(cx, e, span)),
+    }
+}
+
+#[native_fn(module = "core", bound = "BufStore", sig( -> handle(Buffer)))]
+pub fn __buf_new<R: BufStore>(cx: &mut R::Cx) -> R::Value {
+    let id = R::buf_insert(cx, Vec::new());
+    R::make_handle(rl_ast::statements::HandleKind::Buffer, id)
+}
+
+#[native_fn(module = "core", bound = "BufStore", sig(handle(Buffer) -> int))]
+pub fn __buf_len<R: BufStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    span: R::Span,
+) -> Result<i64, Error> {
+    let id = buf_lookup::<R>(cx, &handle, "__buf_len", span)?;
+    Ok(R::buf_get(cx, id).map(|b| b.len() as i64).unwrap_or(0))
+}
+
+#[native_fn(module = "core", bound = "BufStore", sig(handle(Buffer), byte -> null))]
+pub fn __buf_push_byte<R: BufStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    byte: u8,
+    span: R::Span,
+) -> Result<R::Value, Error> {
+    let id = buf_lookup::<R>(cx, &handle, "__buf_push_byte", span)?;
+    if let Some(buf) = R::buf_get_mut(cx, id) {
+        buf.push(byte);
+    }
+    Ok(R::null())
+}
+
+#[native_fn(module = "core", bound = "BufStore", sig(handle(Buffer), int -> byte))]
+pub fn __buf_get_byte<R: BufStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    idx: i64,
+    span: R::Span,
+) -> Result<u8, Error> {
+    let id = buf_lookup::<R>(cx, &handle, "__buf_get_byte", span)?;
+    let buf = R::buf_get(cx, id).ok_or_else(|| {
+        R::error(cx, "__buf_get_byte: invalid buffer handle".to_string(), span)
+    })?;
+    if idx < 0 || (idx as usize) >= buf.len() {
+        return Err(R::error(
+            cx,
+            format!(
+                "__buf_get_byte: index {idx} out of bounds (len {})",
+                buf.len()
+            ),
+            span,
+        ));
+    }
+    Ok(buf[idx as usize])
+}
+
+#[native_fn(module = "core", bound = "BufStore", sig(handle(Buffer), int, byte -> null))]
+pub fn __buf_set_byte<R: BufStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    idx: i64,
+    byte: u8,
+    span: R::Span,
+) -> Result<R::Value, Error> {
+    let id = buf_lookup::<R>(cx, &handle, "__buf_set_byte", span)?;
+    let len = R::buf_get(cx, id).map(|b| b.len()).unwrap_or(0);
+    if idx < 0 || (idx as usize) >= len {
+        return Err(R::error(
+            cx,
+            format!("__buf_set_byte: index {idx} out of bounds (len {len})"),
+            span,
+        ));
+    }
+    if let Some(buf) = R::buf_get_mut(cx, id) {
+        buf[idx as usize] = byte;
+    }
+    Ok(R::null())
+}
+
+#[native_fn(module = "core", bound = "BufStore", sig(handle(Buffer), string -> null))]
+pub fn __buf_append<R: BufStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    text: String,
+    span: R::Span,
+) -> Result<R::Value, Error> {
+    let id = buf_lookup::<R>(cx, &handle, "__buf_append", span)?;
+    if let Some(buf) = R::buf_get_mut(cx, id) {
+        buf.extend_from_slice(text.as_bytes());
+    }
+    Ok(R::null())
+}
+
+#[native_fn(module = "core", bound = "BufStore", sig(handle(Buffer), int, int -> string))]
+pub fn __buf_slice<R: BufStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    start: i64,
+    end: i64,
+    span: R::Span,
+) -> Result<String, Error> {
+    let id = buf_lookup::<R>(cx, &handle, "__buf_slice", span)?;
+    let buf = R::buf_get(cx, id).ok_or_else(|| {
+        R::error(cx, "__buf_slice: invalid buffer handle".to_string(), span)
+    })?;
+    let len = buf.len() as i64;
+    if start < 0 || end < start || end > len {
+        return Err(R::error(
+            cx,
+            format!("__buf_slice: bad range {start}..{end} for len {len}"),
+            span,
+        ));
+    }
+    // Byte slicing must not split a UTF-8 codepoint.
+    let is_continuation = |b: u8| b & 0xc0 == 0x80;
+    if (start > 0 && start < len && is_continuation(buf[start as usize]))
+        || (end > 0 && end < len && is_continuation(buf[end as usize]))
+    {
+        return Err(R::error(
+            cx,
+            "__buf_slice: range splits a UTF-8 codepoint".to_string(),
+            span,
+        ));
+    }
+    Ok(String::from_utf8_lossy(&buf[start as usize..end as usize]).into_owned())
+}
+
+#[native_fn(module = "core", bound = "BufStore", sig(handle(Buffer) -> null))]
+pub fn __buf_clear<R: BufStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    span: R::Span,
+) -> Result<R::Value, Error> {
+    let id = buf_lookup::<R>(cx, &handle, "__buf_clear", span)?;
+    if let Some(buf) = R::buf_get_mut(cx, id) {
+        buf.clear();
+    }
+    Ok(R::null())
+}
+
+#[native_fn(module = "core", bound = "BufStore", sig(handle(Buffer) -> string))]
+pub fn __buf_to_string<R: BufStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    span: R::Span,
+) -> Result<String, Error> {
+    let id = buf_lookup::<R>(cx, &handle, "__buf_to_string", span)?;
+    Ok(R::buf_get(cx, id)
+        .map(|b| String::from_utf8_lossy(b).into_owned())
+        .unwrap_or_default())
+}
+
+#[native_fn(module = "core", bound = "BufStore", sig(handle(Buffer) -> null))]
+pub fn __buf_free<R: BufStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    span: R::Span,
+) -> Result<R::Value, Error> {
+    let id = buf_lookup::<R>(cx, &handle, "__buf_free", span)?;
+    match R::buf_remove(cx, id) {
+        Some(_) => Ok(R::null()),
+        None => Err(R::error(
+            cx,
+            "__buf_free: invalid buffer handle".to_string(),
+            span,
+        )),
+    }
+}
+
+#[native_fn(module = "core", bound = "BufStore", sig(handle(Buffer) -> int))]
+pub fn __buf_addr<R: BufStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    span: R::Span,
+) -> Result<i64, Error> {
+    let id = buf_lookup::<R>(cx, &handle, "__buf_addr", span)?;
+    Ok(R::buf_get(cx, id)
+        .map(|b| {
+            if b.is_empty() {
+                0
+            } else {
+                b.as_ptr() as i64
+            }
+        })
+        .unwrap_or(0))
+}
+
+#[native_fn(module = "core", bound = "BufStore", sig(handle(Buffer), int -> null))]
+pub fn __buf_resize<R: BufStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    size: i64,
+    span: R::Span,
+) -> Result<R::Value, Error> {
+    let id = buf_lookup::<R>(cx, &handle, "__buf_resize", span)?;
+    if size < 0 {
+        return Err(R::error(
+            cx,
+            format!("__buf_resize: negative size {size}"),
+            span,
+        ));
+    }
+    if let Some(buf) = R::buf_get_mut(cx, id) {
+        buf.resize(size as usize, 0);
+    }
+    Ok(R::null())
+}
+
 // ---- raw syscall (Linux only) -------------------------------------------------------
 // Escape hatch for libc-free binaries and exotic ioctls. Portable code
 // uses std::fs / std::io; raw numbers are Linux-only by construction.
@@ -568,11 +821,15 @@ pub fn __result_err_value<R: Runtime>(
 // ---- module registration --------------------------------------------------
 
 rl_std_core::native_module!("core";
+    bound: BufStore;
     funcs: [
         __arr_new, __arr_push, __arr_get, __arr_set, __arr_remove, __arr_len,
         __map_new, __map_get, __map_set, __map_remove, __map_has, __map_keys, __map_len,
         __set_new, __set_add, __set_has, __set_remove, __set_len,
         __str_len, __str_get_byte, __str_slice, __str_concat,
+        __buf_new, __buf_len, __buf_push_byte, __buf_get_byte,
+        __buf_set_byte, __buf_append, __buf_slice, __buf_clear,
+        __buf_to_string, __buf_free, __buf_addr, __buf_resize,
         __syscall6,
         __abort, __type_of,
         __result_ok_value, __result_err_value,

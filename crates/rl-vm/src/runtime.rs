@@ -580,3 +580,21 @@ impl rl_std::io::IoStore for VmRuntime {
         cx.io_handles.remove(&id)
     }
 }
+
+impl rl_std::core::BufStore for VmRuntime {
+    fn buf_insert(cx: &mut Vm, buf: Vec<u8>) -> u64 {
+        let id = cx.buf_next_handle;
+        cx.buf_next_handle += 1;
+        cx.buf_handles.insert(id, buf);
+        id
+    }
+    fn buf_get(cx: &Vm, id: u64) -> Option<&Vec<u8>> {
+        cx.buf_handles.get(&id)
+    }
+    fn buf_get_mut(cx: &mut Vm, id: u64) -> Option<&mut Vec<u8>> {
+        cx.buf_handles.get_mut(&id)
+    }
+    fn buf_remove(cx: &mut Vm, id: u64) -> Option<Vec<u8>> {
+        cx.buf_handles.remove(&id)
+    }
+}
