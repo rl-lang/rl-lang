@@ -3892,7 +3892,7 @@ dependencies = [
 
 [[package]]
 name = "rl-ast"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "rl-lexer",
  "rl-utils",
@@ -3900,7 +3900,7 @@ dependencies = [
 
 [[package]]
 name = "rl-benches"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "criterion",
  "rl-ast",
@@ -3913,7 +3913,7 @@ dependencies = [
 
 [[package]]
 name = "rl-cc"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "rl-ast",
  "rl-checker",
@@ -3925,7 +3925,7 @@ dependencies = [
 
 [[package]]
 name = "rl-checker"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "rl-ast",
  "rl-commons",
@@ -3937,7 +3937,7 @@ dependencies = [
 
 [[package]]
 name = "rl-cli"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "clap",
  "env_logger",
@@ -3963,7 +3963,7 @@ dependencies = [
 
 [[package]]
 name = "rl-commons"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "rl-ast",
  "rl-std",
@@ -3972,7 +3972,7 @@ dependencies = [
 
 [[package]]
 name = "rl-docs"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "clap",
  "crossterm",
@@ -3985,7 +3985,7 @@ dependencies = [
 
 [[package]]
 name = "rl-lexer"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "log",
  "rl-utils",
@@ -3993,7 +3993,7 @@ dependencies = [
 
 [[package]]
 name = "rl-lsp"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "clap",
  "rl-checker",
@@ -4007,7 +4007,7 @@ dependencies = [
 
 [[package]]
 name = "rl-manager"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "clap",
  "crossterm",
@@ -4023,7 +4023,7 @@ dependencies = [
 
 [[package]]
 name = "rl-parser"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "log",
  "rl-ast",
@@ -4033,7 +4033,7 @@ dependencies = [
 
 [[package]]
 name = "rl-pm"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "dirs",
  "flate2",
@@ -4047,7 +4047,7 @@ dependencies = [
 
 [[package]]
 name = "rl-repl"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "clap",
  "crossterm",
@@ -4063,7 +4063,7 @@ dependencies = [
 
 [[package]]
 name = "rl-resolver"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "rl-ast",
  "rl-lexer",
@@ -4073,7 +4073,7 @@ dependencies = [
 
 [[package]]
 name = "rl-std"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "argon2",
  "base64",
@@ -4114,7 +4114,7 @@ dependencies = [
 
 [[package]]
 name = "rl-std-core"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "rl-ast",
  "rl-utils",
@@ -4122,7 +4122,7 @@ dependencies = [
 
 [[package]]
 name = "rl-std-macros"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4131,7 +4131,7 @@ dependencies = [
 
 [[package]]
 name = "rl-tests"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "rl-ast",
  "rl-checker",
@@ -4147,7 +4147,7 @@ dependencies = [
 
 [[package]]
 name = "rl-tooling"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "rl-ast",
  "rl-lexer",
@@ -4159,7 +4159,7 @@ dependencies = [
 
 [[package]]
 name = "rl-utils"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "ariadne",
  "log",
@@ -4167,7 +4167,7 @@ dependencies = [
 
 [[package]]
 name = "rl-vm"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "rl-ast",
  "rl-checker",
