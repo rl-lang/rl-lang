@@ -3,6 +3,11 @@ use crate::entry::{FnEntry, StdEntry};
 mod gui_button;
 mod gui_clipboard_copy;
 mod gui_clipboard_paste;
+mod gui_canvas;
+mod gui_draw_line;
+mod gui_draw_rect;
+mod gui_draw_circle;
+mod gui_draw_text;
 mod gui_checkbox;
 mod gui_close;
 mod gui_dropdown;
@@ -91,6 +96,11 @@ static FUNCTIONS: &[&FnEntry] = &[
         &gui_clipboard_copy::GUI_CLIPBOARD_COPY,
     &gui_clipboard_paste::GUI_CLIPBOARD_PASTE,
 &gui_checkbox::GUI_CHECKBOX,
+    &gui_canvas::GUI_CANVAS,
+    &gui_draw_line::GUI_DRAW_LINE,
+    &gui_draw_rect::GUI_DRAW_RECT,
+    &gui_draw_circle::GUI_DRAW_CIRCLE,
+    &gui_draw_text::GUI_DRAW_TEXT,
     &gui_close::GUI_CLOSE,
     &gui_dropdown::GUI_DROPDOWN,
     &gui_get_pos::GUI_GET_POS,

@@ -58,6 +58,59 @@ pub enum GuiHandle<V> {
     Separator(SeparatorState),
     Image(ImageState),
     Container(ContainerState),
+    Canvas(CanvasState),
+}
+
+/// One vector draw command on a canvas, issued fresh every frame from RL
+/// (the list clears after each render  -  draw in `on_frame` for animation).
+#[cfg(feature = "impls")]
+#[derive(Clone)]
+pub enum DrawCmd {
+    Line {
+        x1: f32,
+        y1: f32,
+        x2: f32,
+        y2: f32,
+        color: (u8, u8, u8),
+        thickness: f32,
+    },
+    Rect {
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        color: (u8, u8, u8),
+        filled: bool,
+    },
+    Circle {
+        x: f32,
+        y: f32,
+        radius: f32,
+        color: (u8, u8, u8),
+        filled: bool,
+    },
+    Text {
+        text: String,
+        x: f32,
+        y: f32,
+        size: f32,
+        color: (u8, u8, u8),
+    },
+}
+
+/// A drawable region: RL issues `gui_draw_*` calls into its command list
+/// every frame, and the renderer replays them with the painter. Coordinates
+/// are local to the canvas origin.
+#[cfg(feature = "impls")]
+pub struct CanvasState {
+    pub window: u64,
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub visible: bool,
+    pub z: i32,
+    pub commands: Vec<DrawCmd>,
 }
 
 /// Stacking direction plus cross-axis alignment for a container. `Start`
@@ -710,6 +763,176 @@ pub fn gui_spinner<R: GuiStore>(
     attach_child::<R>(cx, window_id, spinner_id);
 
     R::ok(handle)
+}
+
+/// Creates a drawable region at (x, y) of the given size. Issue
+/// `gui_draw_*` calls every frame (typically from `on_frame`); the
+/// command list clears after each render, so static scenes redraw too.
+#[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui), int, int, int, int -> result[handle(Gui)]))]
+pub fn gui_canvas<R: GuiStore>(
+    cx: &mut R::Cx,
+    window: R::Value,
+    x: i64,
+    y: i64,
+    width: i64,
+    height: i64,
+) -> R::Value {
+    let window_id = match extract_handle::<R>(&window, "gui_canvas") {
+        Ok(id) => id,
+        Err(e) => return R::err(R::from_string(e)),
+    };
+
+    if let Err(e) = require_window::<R>(cx, window_id, "gui_canvas") {
+        return R::err(R::from_string(e));
+    }
+
+    if width <= 0 || height <= 0 {
+        return R::err(R::from_string(format!(
+            "gui_canvas: width ({}) and height ({}) must be positive",
+            width, height
+        )));
+    }
+
+    let handle = insert_handle::<R>(
+        cx,
+        GuiHandle::Canvas(CanvasState {
+            window: window_id,
+            x: x as f32,
+            y: y as f32,
+            width: width as f32,
+            height: height as f32,
+            visible: true,
+            z: 0,
+            commands: Vec::new(),
+        }),
+    );
+
+    let canvas_id = R::as_handle(&handle, HandleKind::Gui).unwrap();
+    attach_child::<R>(cx, window_id, canvas_id);
+
+    R::ok(handle)
+}
+
+/// Pushes one draw command onto a canvas. All coordinates are local to
+/// the canvas origin; colors are 0-255.
+#[cfg(feature = "impls")]
+fn push_draw<R: GuiStore>(
+    cx: &mut R::Cx,
+    handle: &R::Value,
+    name: &str,
+    cmd: DrawCmd,
+) -> R::Value {
+    let id = match extract_handle::<R>(handle, name) {
+        Ok(id) => id,
+        Err(e) => return R::err(R::from_string(e)),
+    };
+
+    match R::gui_handles(cx).get_mut(&id) {
+        Some(GuiHandle::Canvas(c)) => {
+            c.commands.push(cmd);
+            R::ok(R::null())
+        }
+        Some(_) => R::err(R::from_string(format!(
+            "{name}: handle {id} is not a canvas",
+        ))),
+        None => R::err(R::from_string(format!("{name}: unknown handle {id}"))),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+#[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui), int, int, int, int, int, int, int, int -> result[null]))]
+pub fn gui_draw_line<R: GuiStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    x1: i64,
+    y1: i64,
+    x2: i64,
+    y2: i64,
+    r: i64,
+    g: i64,
+    b: i64,
+    thickness: i64,
+) -> R::Value {
+    let cmd = DrawCmd::Line {
+        x1: x1 as f32,
+        y1: y1 as f32,
+        x2: x2 as f32,
+        y2: y2 as f32,
+        color: (r.clamp(0, 255) as u8, g.clamp(0, 255) as u8, b.clamp(0, 255) as u8),
+        thickness: (thickness.max(1)) as f32,
+    };
+    push_draw::<R>(cx, &handle, "gui_draw_line", cmd)
+}
+
+#[allow(clippy::too_many_arguments)]
+#[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui), int, int, int, int, int, int, int, bool -> result[null]))]
+pub fn gui_draw_rect<R: GuiStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    x: i64,
+    y: i64,
+    w: i64,
+    h: i64,
+    r: i64,
+    g: i64,
+    b: i64,
+    filled: bool,
+) -> R::Value {
+    let cmd = DrawCmd::Rect {
+        x: x as f32,
+        y: y as f32,
+        w: w as f32,
+        h: h as f32,
+        color: (r.clamp(0, 255) as u8, g.clamp(0, 255) as u8, b.clamp(0, 255) as u8),
+        filled,
+    };
+    push_draw::<R>(cx, &handle, "gui_draw_rect", cmd)
+}
+
+#[allow(clippy::too_many_arguments)]
+#[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui), int, int, int, int, int, int, bool -> result[null]))]
+pub fn gui_draw_circle<R: GuiStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    x: i64,
+    y: i64,
+    radius: i64,
+    r: i64,
+    g: i64,
+    b: i64,
+    filled: bool,
+) -> R::Value {
+    let cmd = DrawCmd::Circle {
+        x: x as f32,
+        y: y as f32,
+        radius: (radius.max(1)) as f32,
+        color: (r.clamp(0, 255) as u8, g.clamp(0, 255) as u8, b.clamp(0, 255) as u8),
+        filled,
+    };
+    push_draw::<R>(cx, &handle, "gui_draw_circle", cmd)
+}
+
+#[allow(clippy::too_many_arguments)]
+#[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui), string, int, int, int, int, int, int -> result[null]))]
+pub fn gui_draw_text<R: GuiStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    text: String,
+    x: i64,
+    y: i64,
+    size: i64,
+    r: i64,
+    g: i64,
+    b: i64,
+) -> R::Value {
+    let cmd = DrawCmd::Text {
+        text,
+        x: x as f32,
+        y: y as f32,
+        size: (size.max(1)) as f32,
+        color: (r.clamp(0, 255) as u8, g.clamp(0, 255) as u8, b.clamp(0, 255) as u8),
+    };
+    push_draw::<R>(cx, &handle, "gui_draw_text", cmd)
 }
 
 #[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui), string, bool, int, int -> result[handle(Gui)]))]
@@ -1621,6 +1844,7 @@ fn widget_window_ref<V>(handle: &GuiHandle<V>) -> Option<u64> {
         GuiHandle::Window(_) | GuiHandle::Container(_) => None,
         GuiHandle::Button(w) => Some(w.window),
         GuiHandle::Hyperlink(w) => Some(w.window),
+        GuiHandle::Canvas(w) => Some(w.window),
         GuiHandle::Spinner(w) => Some(w.window),
         GuiHandle::Selectable(w) => Some(w.window),
         GuiHandle::Label(w) => Some(w.window),
@@ -1806,6 +2030,7 @@ pub fn gui_set_visible<R: GuiStore>(cx: &mut R::Cx, handle: R::Value, visible: b
         Some(GuiHandle::Window(w)) => w.visible = visible,
         Some(GuiHandle::Button(b)) => b.visible = visible,
         Some(GuiHandle::Hyperlink(h)) => h.visible = visible,
+        Some(GuiHandle::Canvas(c)) => c.visible = visible,
         Some(GuiHandle::Container(c)) => c.visible = visible,
         Some(GuiHandle::Selectable(s)) => s.visible = visible,
         Some(GuiHandle::Spinner(s)) => s.visible = visible,
@@ -1840,6 +2065,7 @@ pub fn gui_is_visible<R: GuiStore>(cx: &mut R::Cx, handle: R::Value) -> R::Value
         Some(GuiHandle::Window(w)) => R::ok(R::from_bool(w.visible)),
         Some(GuiHandle::Button(w)) => R::ok(R::from_bool(w.visible)),
         Some(GuiHandle::Hyperlink(h)) => R::ok(R::from_bool(h.visible)),
+        Some(GuiHandle::Canvas(c)) => R::ok(R::from_bool(c.visible)),
         Some(GuiHandle::Container(c)) => R::ok(R::from_bool(c.visible)),
         Some(GuiHandle::Selectable(s)) => R::ok(R::from_bool(s.visible)),
         Some(GuiHandle::Spinner(s)) => R::ok(R::from_bool(s.visible)),
@@ -2419,6 +2645,10 @@ pub fn gui_set_pos<R: GuiStore>(cx: &mut R::Cx, handle: R::Value, x: i64, y: i64
             h.x = x as f32;
             h.y = y as f32;
         }
+        Some(GuiHandle::Canvas(c)) => {
+            c.x = x as f32;
+            c.y = y as f32;
+        }
         Some(GuiHandle::Container(c)) => {
             c.x = x as f32;
             c.y = y as f32;
@@ -2494,6 +2724,7 @@ pub fn gui_get_pos<R: GuiStore>(cx: &mut R::Cx, handle: R::Value) -> R::Value {
     let (x, y) = match R::gui_handles_ref(cx).get(&id) {
         Some(GuiHandle::Button(w)) => (w.x, w.y),
         Some(GuiHandle::Hyperlink(h)) => (h.x, h.y),
+        Some(GuiHandle::Canvas(c)) => (c.x, c.y),
         Some(GuiHandle::Container(c)) => (c.x, c.y),
         Some(GuiHandle::Selectable(s)) => (s.x, s.y),
         Some(GuiHandle::Spinner(s)) => (s.x, s.y),
@@ -2539,6 +2770,9 @@ pub fn gui_set_z<R: GuiStore>(cx: &mut R::Cx, handle: R::Value, z: i64) -> R::Va
     match R::gui_handles(cx).get_mut(&id) {
         Some(GuiHandle::Button(w)) => w.z = z,
         Some(GuiHandle::Hyperlink(h)) => h.z = z,
+        Some(GuiHandle::Canvas(_)) => {
+            return R::err(R::from_string("gui_set_z: canvases have no z-order".to_string()));
+        }
         Some(GuiHandle::Container(_)) => {
             return R::err(R::from_string("gui_set_z: containers have no z-order".to_string()));
         }
@@ -2577,6 +2811,9 @@ pub fn gui_get_z<R: GuiStore>(cx: &mut R::Cx, handle: R::Value) -> R::Value {
     let z = match R::gui_handles_ref(cx).get(&id) {
         Some(GuiHandle::Button(w)) => w.z,
         Some(GuiHandle::Hyperlink(h)) => h.z,
+        Some(GuiHandle::Canvas(_)) => {
+            return R::err(R::from_string("gui_get_z: canvases have no z-order".to_string()));
+        }
         Some(GuiHandle::Container(_)) => {
             return R::err(R::from_string("gui_get_z: containers have no z-order".to_string()));
         }
@@ -2617,6 +2854,7 @@ pub fn gui_remove<R: GuiStore>(cx: &mut R::Cx, handle: R::Value) -> R::Value {
     let window_id = match R::gui_handles_ref(cx).get(&id) {
         Some(GuiHandle::Button(w)) => w.window,
         Some(GuiHandle::Hyperlink(h)) => h.window,
+        Some(GuiHandle::Canvas(c)) => c.window,
         Some(GuiHandle::Container(c)) => c.window,
         Some(GuiHandle::Selectable(s)) => s.window,
         Some(GuiHandle::Spinner(s)) => s.window,
@@ -2991,6 +3229,15 @@ enum WidgetSnapshot {
         bg_color: Option<(u8, u8, u8)>,
         tooltip: Option<String>,
     },
+    Canvas {
+        id: u64,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        z: i32,
+        commands: Vec<DrawCmd>,
+    },
     Spinner {
         id: u64,
         x: f32,
@@ -3121,6 +3368,7 @@ impl WidgetSnapshot {
             WidgetSnapshot::Button { z, .. }
             | WidgetSnapshot::Hyperlink { z, .. }
             | WidgetSnapshot::Selectable { z, .. }
+            | WidgetSnapshot::Canvas { z, .. }
             | WidgetSnapshot::Spinner { z, .. }
             | WidgetSnapshot::Label { z, .. }
             | WidgetSnapshot::Checkbox { z, .. }
@@ -3204,10 +3452,18 @@ fn render_window<R: GuiStore>(cx: &mut R::Cx, ctx: &egui::Context, window_id: u6
             );
         });
 
+    // Drain canvas draw commands up front: each frame's commands replay
+    // exactly once, so RL redraws every frame (typically from on_frame).
+    let mut drained: HashMap<u64, Vec<DrawCmd>> = HashMap::new();
+    for (id, handle) in R::gui_handles(cx).iter_mut() {
+        if let GuiHandle::Canvas(c) = handle {
+            drained.insert(*id, std::mem::take(&mut c.commands));
+        }
+    }
+
     let mut snapshots: Vec<WidgetSnapshot> = children
         .iter()
-        .filter_map(|id| match R::gui_handles_ref(cx).get(id) {
-            Some(GuiHandle::Button(b)) if b.visible => Some(WidgetSnapshot::Button {
+        .filter_map(|id| match R::gui_handles_ref(cx).get(id) {            Some(GuiHandle::Button(b)) if b.visible => Some(WidgetSnapshot::Button {
                 id: *id,
                 label: b.label.clone(),
                 x: b.x,
@@ -3241,6 +3497,15 @@ fn render_window<R: GuiStore>(cx: &mut R::Cx, ctx: &egui::Context, window_id: u6
                 color: s.color,
                 bg_color: s.bg_color,
                 tooltip: s.tooltip.clone(),
+            }),
+            Some(GuiHandle::Canvas(c)) if c.visible => Some(WidgetSnapshot::Canvas {
+                id: *id,
+                x: c.x,
+                y: c.y,
+                width: c.width,
+                height: c.height,
+                z: 0,
+                commands: drained.remove(id).unwrap_or_default(),
             }),
             Some(GuiHandle::Spinner(s)) if s.visible => Some(WidgetSnapshot::Spinner {
                 id: *id,
@@ -3494,6 +3759,104 @@ fn render_window<R: GuiStore>(cx: &mut R::Cx, ctx: &egui::Context, window_id: u6
                     .show(ctx, |ui| {
                         ui.add(egui::Spinner::new().size(*size));
                     });
+                R::widget_sizes(cx).insert(*id, (*size, *size));
+            }
+            WidgetSnapshot::Canvas {
+                id,
+                x,
+                y,
+                width,
+                height,
+                commands,
+                ..
+            } => {
+                egui::Area::new(egui::Id::new(("rl_gui_canvas", *id)))
+                    .fixed_pos(egui::pos2(*x, *y))
+                    .show(ctx, |ui| {
+                        ui.set_min_size(egui::vec2(*width, *height));
+                        let painter = ui.painter().clone();
+                        let origin = ui.min_rect().min;
+                        for cmd in commands {
+                            match cmd {
+                                DrawCmd::Line {
+                                    x1, y1, x2, y2, color, thickness,
+                                } => {
+                                    let (r, g, b) = *color;
+                                    painter.line_segment(
+                                        [
+                                            origin + egui::vec2(*x1, *y1),
+                                            origin + egui::vec2(*x2, *y2),
+                                        ],
+                                        egui::Stroke::new(
+                                            *thickness,
+                                            egui::Color32::from_rgb(r, g, b),
+                                        ),
+                                    );
+                                }
+                                DrawCmd::Rect {
+                                    x, y, w, h, color, filled,
+                                } => {
+                                    let (r, g, b) = *color;
+                                    let rect = egui::Rect::from_min_size(
+                                        origin + egui::vec2(*x, *y),
+                                        egui::vec2(*w, *h),
+                                    );
+                                    if *filled {
+                                        painter.rect_filled(
+                                            rect,
+                                            0.0,
+                                            egui::Color32::from_rgb(r, g, b),
+                                        );
+                                    } else {
+                                        painter.rect_stroke(
+                                            rect,
+                                            0.0,
+                                            egui::Stroke::new(
+                                                1.0,
+                                                egui::Color32::from_rgb(r, g, b),
+                                            ),
+                                            egui::StrokeKind::Inside,
+                                        );
+                                    }
+                                }
+                                DrawCmd::Circle {
+                                    x, y, radius, color, filled,
+                                } => {
+                                    let (r, g, b) = *color;
+                                    let center = origin + egui::vec2(*x, *y);
+                                    if *filled {
+                                        painter.circle_filled(
+                                            center,
+                                            *radius,
+                                            egui::Color32::from_rgb(r, g, b),
+                                        );
+                                    } else {
+                                        painter.circle_stroke(
+                                            center,
+                                            *radius,
+                                            egui::Stroke::new(
+                                                1.0,
+                                                egui::Color32::from_rgb(r, g, b),
+                                            ),
+                                        );
+                                    }
+                                }
+                                DrawCmd::Text {
+                                    text, x, y, size, color,
+                                } => {
+                                    let (r, g, b) = *color;
+                                    painter.text(
+                                        origin + egui::vec2(*x, *y),
+                                        egui::Align2::LEFT_TOP,
+                                        text.clone(),
+                                        egui::FontId::proportional(*size),
+                                        egui::Color32::from_rgb(r, g, b),
+                                    );
+                                }
+                            }
+                        }
+                    });
+                R::widget_sizes(cx).insert(*id, (*width, *height));
             }
             WidgetSnapshot::Label {
                 id,
@@ -4099,6 +4462,7 @@ fn child_pos<V>(handle: &GuiHandle<V>) -> Option<(f32, f32)> {
         GuiHandle::Container(w) => Some((w.x, w.y)),
         GuiHandle::Button(w) => Some((w.x, w.y)),
         GuiHandle::Hyperlink(w) => Some((w.x, w.y)),
+        GuiHandle::Canvas(w) => Some((w.x, w.y)),
         GuiHandle::Spinner(w) => Some((w.x, w.y)),
         GuiHandle::Selectable(w) => Some((w.x, w.y)),
         GuiHandle::Label(w) => Some((w.x, w.y)),
@@ -4126,6 +4490,10 @@ fn set_widget_pos<V>(handle: &mut GuiHandle<V>, x: f32, y: f32) {
             w.y = y;
         }
         GuiHandle::Hyperlink(w) => {
+            w.x = x;
+            w.y = y;
+        }
+        GuiHandle::Canvas(w) => {
             w.x = x;
             w.y = y;
         }
@@ -4594,6 +4962,9 @@ pub fn gui_set_font_size<R: GuiStore>(cx: &mut R::Cx, handle: R::Value, size: f6
     match R::gui_handles(cx).get_mut(&id) {
         Some(GuiHandle::Button(b)) => { b.font_size = Some(size as f32); }
         Some(GuiHandle::Hyperlink(h)) => { h.font_size = Some(size as f32); }
+        Some(GuiHandle::Canvas(_)) => {
+            return R::err(R::from_string("gui_set_font_size: canvases have no text".to_string()));
+        }
         Some(GuiHandle::Container(_)) => {
             return R::err(R::from_string("gui_set_font_size: containers have no text".to_string()));
         }
@@ -4640,6 +5011,9 @@ pub fn gui_set_color<R: GuiStore>(
     match R::gui_handles(cx).get_mut(&id) {
         Some(GuiHandle::Button(bh)) => { bh.color = Some((r, g, b)); }
         Some(GuiHandle::Hyperlink(h)) => { h.color = Some((r, g, b)); }
+        Some(GuiHandle::Canvas(_)) => {
+            return R::err(R::from_string("gui_set_color: canvases have no text".to_string()));
+        }
         Some(GuiHandle::Container(_)) => {
             return R::err(R::from_string("gui_set_color: containers have no text".to_string()));
         }
@@ -4686,6 +5060,9 @@ pub fn gui_set_bg_color<R: GuiStore>(
     match R::gui_handles(cx).get_mut(&id) {
         Some(GuiHandle::Button(bh)) => { bh.bg_color = Some((r, g, b)); }
         Some(GuiHandle::Hyperlink(h)) => { h.bg_color = Some((r, g, b)); }
+        Some(GuiHandle::Canvas(_)) => {
+            return R::err(R::from_string("gui_set_bg_color: canvases have no background".to_string()));
+        }
         Some(GuiHandle::Container(_)) => {
             return R::err(R::from_string("gui_set_bg_color: containers have no background".to_string()));
         }
@@ -4730,6 +5107,9 @@ pub fn gui_set_tooltip<R: GuiStore>(
     match R::gui_handles(cx).get_mut(&id) {
         Some(GuiHandle::Button(bh)) => { bh.tooltip = Some(text); }
         Some(GuiHandle::Hyperlink(h)) => { h.tooltip = Some(text); }
+        Some(GuiHandle::Canvas(_)) => {
+            return R::err(R::from_string("gui_set_tooltip: canvases show no tooltip".to_string()));
+        }
         Some(GuiHandle::Container(_)) => {
             return R::err(R::from_string("gui_set_tooltip: containers show no tooltip".to_string()));
         }
@@ -4812,6 +5192,11 @@ rl_std_core::native_module!("gui";
         gui_selectable,
         gui_set_selected,
         gui_is_selected,
+        gui_canvas,
+        gui_draw_line,
+        gui_draw_rect,
+        gui_draw_circle,
+        gui_draw_text,
         gui_label,
         gui_checkbox,
         gui_textbox,
