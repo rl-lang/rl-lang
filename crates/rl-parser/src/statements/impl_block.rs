@@ -104,6 +104,7 @@ impl Parser {
             params.push(Param {
                 param_name: "self".to_string(),
                 param_type: TypeAnnotation::Record(record.clone()),
+                refinement: None,
             });
             while self.match_type(&[TokenType::Newline]) {}
             self.match_type(&[TokenType::Comma]);
@@ -119,6 +120,7 @@ impl Parser {
                     params.push(Param {
                         param_name: p,
                         param_type,
+                        refinement: None,
                     });
                 }
                 _ => return Err(self.err("expected parameter name", self.peek_span())),
@@ -157,6 +159,8 @@ impl Parser {
                 body,
                 attribute: None as Option<FunctionAttribute>,
                 item_attributes: Vec::new(),
+                requires: Vec::new(),
+                ensures: Vec::new(),
             },
             span,
         ))

@@ -161,3 +161,20 @@ mod tests {
         assert!(groups[0].1.is_empty(), "{:?}", groups[0].1);
     }
 }
+
+    /// A shebang header must not shift diagnostics: the undefined-name
+    /// error on document line 3 (0-based line 2) must squiggle there,
+    /// not one line up where the stripped header used to collapse spans.
+    #[test]
+    fn shebang_does_not_shift_diagnostic_lines() {
+        let src = "#!/usr/bin/env rl run\nget println from std::io\nprintln(undefined_var_xyz)\n";
+        let uri = Url::parse("file:///tmp/shebang_test.rl").unwrap();
+        let groups = run_pipeline(src, &uri);
+        assert_eq!(groups.len(), 1);
+        let diag = groups[0]
+            .1
+            .iter()
+            .find(|d| d.message.contains("undefined_var_xyz"))
+            .expect("expected the undefined-name error");
+        assert_eq!(diag.range.start.line, 2, "range: {:?}", diag.range);
+    }

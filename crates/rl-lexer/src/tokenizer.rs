@@ -68,11 +68,16 @@ impl Tokenizer {
     /// assert_eq!(tokens[3].token, TokenType::Eof);
     /// ```
     pub fn lex(source_file: SourceFile) -> Result<Vec<Token>, Error> {
+        // Shebang scripts (`rl new --script`): blank the `#!` header instead
+        // of removing it, so every later span still matches the original
+        // document. Removing the line shifts all offsets up by one line,
+        // which misplaces LSP squiggles and CLI line numbers. `#![...]`
+        // inner attributes are not shebangs and pass through untouched.
         let text = if source_file.text.starts_with("#!")
             && !source_file.text.starts_with("#![")
         {
-            let skip = source_file.text.find('\n').map(|i| i + 1).unwrap_or(source_file.text.len());
-            source_file.text[skip..].to_string()
+            let skip = source_file.text.find('\n').unwrap_or(source_file.text.len());
+            " ".repeat(skip) + &source_file.text[skip..]
         } else {
             source_file.text.to_string()
         };

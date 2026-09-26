@@ -45,6 +45,9 @@ pub struct TypeChecker {
     pub imported_std_fns: HashMap<String, rl_commons::StdFn>,
     /// Stdlib function deprecation map: full path -> deprecation message.
     pub deprecated_stdlib: HashMap<Vec<String>, String>,
+    /// User-function contracts (parameter refinements + `requires`) for
+    /// call-site proving. Populated as declarations are checked.
+    pub fn_contracts: HashMap<String, crate::contracts::FnContracts>,
     /// Canonical stdlib path per visible imported name (aliases resolve to
     /// their original path, wildcards to their namespace). Used to warn on
     /// deprecated functions called by bare name.

@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <setjmp.h>
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -225,6 +226,66 @@ static inline rl_result _rl_ok_null(void) { return rl_ok_null(); }
 
 // Flushes stdio and aborts; the loud failure behind checked unwraps.
 void _rl_abort(void);
+
+// ---- test framework (`std::test`, `rlt --test`) ----------------------------
+// Abort capture for `test_assert_panics` and per-test drivers: generated
+// code pushes a frame with `setjmp` directly (never hidden in a helper -
+// the frame must outlive the call), and `_rl_abort` longjmps to the
+// innermost frame instead of dying. Code 1 is a failure, 2 is a skip
+// (`_rl_skip`); anything else is a hard abort when no frame is pushed.
+#define RL_MAX_ABORT_FRAMES 64
+extern jmp_buf rl_abort_frames[RL_MAX_ABORT_FRAMES];
+extern int rl_abort_depth;
+void _rl_unwind(int code);
+void _rl_skip(void);
+
+// Per-test-runner outcome accumulation. The generated `--test` driver
+// snapshots these around each case for verdicts; asserts append here.
+typedef struct {
+    uint64_t passed;
+    uint64_t failed;
+    char **failures;
+    size_t failures_len;
+    size_t failures_cap;
+    char **skipped;
+    size_t skipped_len;
+    size_t skipped_cap;
+    const char *current;
+} rl_test_state_t;
+extern rl_test_state_t rl_test_state;
+void rl_test_record(int ok, const char *msg);
+int rl_result_equal(rl_result a, rl_result b);
+// Deterministic property generation (fixed seed, replayable failures).
+void rl_test_rng_reset(void);
+uint64_t rl_test_rand_below(uint64_t n);
+int64_t rl_test_rand_range(int64_t lo, int64_t hi);
+double rl_test_rand_f64(void);
+rl_string rl_test_rand_string(void);
+int64_t rl_test_rand_range_ne(int64_t lo, int64_t hi, int64_t neq);
+rl_string rl_test_rand_string_ne(const char *s, uint64_t len);
+// Runs one property case: `n` generated iterations through `gen`/
+// `invoke`, greedy shrinking, one summary failure. `args` is the
+// shared boxed-argument buffer of length `nargs`.
+void rl_test_run_property(
+    const char *name,
+    void (*gen)(void),
+    rl_result (*invoke)(void),
+    rl_result *args,
+    size_t nargs,
+    uint64_t n
+);
+rl_result rl_test_skip(rl_string reason);
+rl_result rl_test_skip_if(bool cond, rl_string reason);
+rl_result rl_test_assert_eq(rl_result a, rl_result b, rl_string msg);
+rl_result rl_test_assert_ne(rl_result a, rl_result b, rl_string msg);
+rl_result rl_test_assert_panics(rl_closure f);
+rl_result rl_test_assert_no_panic(rl_closure f);
+// Test registry for `test_run_registered` and `rlt --test` drivers.
+// `fn` is a zero-argument test/setup/teardown function; only zero-arg
+// functions are registered (parameterized ones cannot be invoked).
+typedef void (*rl_test_fn_t)(void);
+void rl_test_register(const char *kind, const char *name, const char *group, const char *reg, rl_test_fn_t fn);
+int64_t rl_test_run_registered(rl_string name);
 
 // Unwrap helpers - extract the inner C value from a successful
 // `rl_result`. Callers must have checked `is_ok` (or `?`) first;
@@ -947,6 +1008,22 @@ rl_string rl_core_str_slice(rl_string s, int64_t start, int64_t end);
 rl_string rl_core_str_concat(rl_string a, rl_string b);
 int64_t rl_core_syscall6(int64_t nr, int64_t a1, int64_t a2, int64_t a3,
     int64_t a4, int64_t a5, int64_t a6);
+
+// ---- byte buffers (core::__buf_*) ----
+// Fixed table of 256 live buffers; ids are slot+1. Growth doubles from
+// 16 bytes; shrink and clear keep capacity.
+int64_t rl_buf_new(void);
+int64_t rl_buf_len(int64_t id);
+void rl_buf_push_byte(int64_t id, uint8_t byte);
+uint8_t rl_buf_get_byte(int64_t id, int64_t i);
+void rl_buf_set_byte(int64_t id, int64_t i, uint8_t byte);
+void rl_buf_append(int64_t id, rl_string s);
+rl_string rl_buf_slice(int64_t id, int64_t start, int64_t end);
+void rl_buf_clear(int64_t id);
+rl_string rl_buf_to_string(int64_t id);
+void rl_buf_free(int64_t id);
+int64_t rl_buf_addr(int64_t id);
+void rl_buf_resize(int64_t id, int64_t n);
 
 // ---- cli ----
 // Mirrors `std::cli`. The arg parser drops everything through the first

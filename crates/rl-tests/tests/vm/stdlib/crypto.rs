@@ -227,7 +227,7 @@ fn secure_random_bytes_length() {
         r#"
 get secure_random_bytes from std::crypto
 get result_unwrap from std::res
-get len from std::array
+get len from std
 dec arr[byte] b = secure_random_bytes(16)
 result_unwrap(len(b))
 "#,
@@ -242,7 +242,7 @@ fn secure_token_lengths() {
         r#"
 get secure_token, secure_token_hex, secure_token_urlsafe from std::crypto
 get result_unwrap from std::res
-get len from std::array
+get len from std
 dec arr[byte] raw = secure_token(16)
 dec string hex = secure_token_hex(16)
 dec string url = secure_token_urlsafe(16)
@@ -260,7 +260,7 @@ fn uuid_v4_shape() {
         r#"
 get uuid_v4 from std::crypto
 get result_unwrap from std::res
-get len from std::array
+get len from std
 result_unwrap(len(uuid_v4()))
 "#,
     )

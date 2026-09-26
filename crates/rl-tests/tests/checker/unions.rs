@@ -85,7 +85,7 @@ fn union_method_untyped_callees_stay_lenient() {
     // `len` is untyped: same leniency as non-union calls, even though
     // string has no len (a runtime error there, like plain values)
     assert_checker_clean(
-        "get len from std::array\ndec any[arr[int], string] a = [1]\ndec n = a.len()\n",
+        "get len from std\ndec any[arr[int], string] a = [1]\ndec n = a.len()\n",
     );
 }
 

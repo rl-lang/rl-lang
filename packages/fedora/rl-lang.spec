@@ -1,5 +1,5 @@
 Name:           rl-lang
-Version:        2.1.0
+Version:        2.3.0
 Release:        1%{?dist}
 Summary:        Programming language with first-class VM and C transpiler
 
@@ -39,5 +39,5 @@ install -Dm644 man/rl.info %{buildroot}%{_infodir}/rl.info
 %{_infodir}/rl.info
 
 %changelog
-* Mon Sep 09 2026 rl-lang maintainers <https://github.com/rl-lang/rl-lang> - 2.1.0-1
+* Mon Sep 09 2026 rl-lang maintainers <https://github.com/rl-lang/rl-lang> - 2.3.0-1
 - Initial RPM package

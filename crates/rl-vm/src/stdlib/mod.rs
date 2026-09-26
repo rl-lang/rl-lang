@@ -22,10 +22,10 @@ pub fn root() -> Module {
         "collections",
         rl_std::collections::handles::<VmRuntime>(),
     ));
-    std = std.with_module(
-        Module::from_std("array", rl_std::array::handles::<VmRuntime>())
-            .with_function("len", len::std_len),
-    );
+    std = std.with_module(Module::from_std(
+        "array",
+        rl_std::array::handles::<VmRuntime>(),
+    ));
     std = std.with_function("len", len::std_len);
 
     #[cfg(any(feature = "std-c", feature = "impls"))]
@@ -50,6 +50,8 @@ pub fn root() -> Module {
     { std = std.with_module(Module::from_std("process", rl_std::process::handles::<VmRuntime>())); }
     #[cfg(any(feature = "std-terminal", feature = "impls"))]
     { std = std.with_module(Module::from_std("term", rl_std::terminal::handles::<VmRuntime>())); }
+    #[cfg(any(feature = "std-test", feature = "impls"))]
+    { std = std.with_module(Module::from_std("test", rl_std::test::handles::<VmRuntime>())); }
 
     // Always available (no OS-facing deps)
     std = std.with_module(Module::from_std("bitwise", rl_std::bitwise::handles::<VmRuntime>()));

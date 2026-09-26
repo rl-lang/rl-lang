@@ -5,7 +5,8 @@
 //!
 //! | Subcommand | Action |
 //! |---|---|
-//! | `run <file>` | lex -> parse -> eval a `.rl` file |
+//! //! | `run <file>` | lex -> parse -> eval a `.rl` file |
+//! | `test <file>` | discover and run `!#[test]` functions |
 //! | `dev` | read `rl.toml`, lex -> parse -> eval the project entry |
 //! | `check <file>` | lex -> parse -> type-check, report errors |
 //! | `new <name>` | scaffold a new project directory |
@@ -27,11 +28,12 @@ const RL_STYLES: Styles = Styles::styled()
 use rl_tooling::new::create_project;
 use rl_tooling::package::{find_embedded, package};
 use rl_tooling::workflows::generate;
-use rl_tooling::{format::format_tokens, package::EmbeddedProgram};
+use rl_tooling::{format::format_source_with_shebang, package::EmbeddedProgram};
 use std::path::PathBuf;
 
 use pipeline::lex::lex;
 use pipeline::parse::parse;
+use rl_ast::{Ast, statements::Statement};
 use rl_tooling::dev::read_rl_toml;
 use rl_utils::source::SourceFile;
 
@@ -71,6 +73,28 @@ enum Commands {
         /// Arguments forwarded to the script (accessible as argv inside .rl)
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         extra_args: Vec<String>,
+    },
+
+    /// Run `!#[test]` functions in a .rl source file
+    #[command(
+        long_about = "Discover `!#[test]` functions and run them with setup/teardown hooks.\n\n\
+                       Tests never run under `rl run`; this command is the only entry point that executes them.",
+        after_help = "EXAMPLES:\n    \
+                       rl test tests.rl\n    \
+                       rl test tests.rl --match money"
+    )]
+    Test {
+        /// Path to the .rl file holding the tests
+        #[arg(value_name = "FILE", required_unless_present = "code")]
+        file: Option<PathBuf>,
+
+        /// Execute inline rl code instead of a file
+        #[arg(short = 'c', long = "code", value_name = "CODE")]
+        code: Option<String>,
+
+        /// Only run tests whose name, group, or register contains PATTERN
+        #[arg(long = "match", value_name = "PATTERN")]
+        match_pattern: Option<String>,
     },
 
     /// Run the current project (reads rl.toml)
@@ -120,11 +144,12 @@ enum Commands {
     /// Scaffold GitHub Actions workflow files
     #[command(
         long_about = "Generate GitHub Actions workflow YAML for this project.\n\n\
-                       At least one of --check or --package must be given.",
+                       At least one of --check, --package, --test, --transpile, or --format must be given.",
         after_help = "EXAMPLES:\n    \
                        rl workflows --check\n    \
-                       rl workflows --package\n    \
-                       rl workflows --check --package"
+                       rl workflows --check --package\n    \
+                       rl workflows --test --transpile --format\n    \
+                       rl workflows --check --rl-version v2.2.0"
     )]
     Workflows {
         /// Generate a workflow that runs `rl check` on push/PR
@@ -134,6 +159,23 @@ enum Commands {
         /// Generate a workflow that packages and releases a binary
         #[arg(long)]
         package: bool,
+
+        /// Generate a workflow that runs `rl test` on push/PR
+        #[arg(long)]
+        test: bool,
+
+        /// Generate a workflow that transpiles to C on push/PR
+        #[arg(long)]
+        transpile: bool,
+
+        /// Generate a workflow that checks formatting on push/PR
+        #[arg(long)]
+        format: bool,
+
+        /// RL version pinned into the generated workflows
+        /// (latest, nightly, or vX.Y.Z)
+        #[arg(long = "rl-version", value_name = "VERSION")]
+        rl_version: Option<String>,
     },
 
     /// Package a .rl file into a self-contained binary
@@ -250,10 +292,46 @@ enum CacheCommands {
     Clean,
 }
 
+/// Loads a `.rl` source from a file path or `-c` inline code, shared by
+/// commands that need `(source, ast, statements, base_dir)`.
+fn load_source(
+    file: Option<PathBuf>,
+    code: Option<String>,
+) -> (SourceFile, Ast, Vec<Statement>, std::path::PathBuf) {
+    if let Some(code_str) = code {
+        let source = SourceFile::new("<eval>", code_str);
+        let tokens = lex(source.clone());
+        let (ast, statements) = parse(source.clone(), tokens);
+        return (source, ast, statements, std::path::PathBuf::from("."));
+    }
+    let file = file.unwrap_or_else(|| {
+        eprintln!("error: either a file path or -c/--code is required");
+        std::process::exit(1);
+    });
+    let path = file
+        .to_str()
+        .unwrap_or_else(|| {
+            eprintln!("error: invalid file path");
+            std::process::exit(1);
+        })
+        .to_string();
+    let source_text = std::fs::read_to_string(&file).unwrap_or_else(|_| {
+        eprintln!("error: could not read file '{}'", file.display());
+        std::process::exit(1);
+    });
+    let source = SourceFile::new(&*path, source_text);
+    let tokens = lex(source.clone());
+    let (ast, statements) = parse(source.clone(), tokens);
+    let base_dir = file
+        .parent()
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_else(|| std::path::PathBuf::from("."));
+    (source, ast, statements, base_dir)
+}
+
 fn main() {
     #[cfg(feature = "debug")]
     env_logger::init();
-
     // ADR-0002: the Cranelift backend is gone. Catch the old flag before
     // clap rejects it so the error points at the replacement. Only scan
     // rl's own flags (everything after `--` belongs to the script).
@@ -432,6 +510,51 @@ fn main() {
             }
         }
 
+        Commands::Test {
+            file,
+            code,
+            match_pattern,
+        } => {
+            let (source, ast, statements, base_dir) = load_source(file, code);
+            {
+                let tokens = lex(source.clone());
+                let (checker_ast, checker_statements) = parse(source.clone(), tokens);
+                use rl_checker::TypeChecker;
+                let mut checker = TypeChecker::new()
+                    .with_source_file(source.clone())
+                    .with_ast_arena(checker_ast)
+                    .with_base_dir(base_dir);
+                checker.check(&checker_statements);
+                for w in &checker.warnings {
+                    w.report_to_stderr();
+                }
+                if !checker.errors.is_empty() {
+                    for e in &checker.errors {
+                        e.report_to_stderr();
+                    }
+                    std::process::exit(1);
+                }
+            }
+            #[cfg(feature = "vm")]
+            {
+                let (arena, resolved) = pipeline::vm::resolve(&source, ast, statements);
+                let report = pipeline::test::run_tests(
+                    &source,
+                    &arena,
+                    &resolved,
+                    match_pattern.as_deref(),
+                );
+                if report.failed > 0 {
+                    std::process::exit(1);
+                }
+            }
+            #[cfg(not(feature = "vm"))]
+            {
+                eprintln!("error: `rl test` requires the `vm` feature");
+                std::process::exit(1);
+            }
+        }
+
         Commands::Dev { vm } => {
             let config = read_rl_toml();
 
@@ -515,12 +638,19 @@ fn main() {
             }
         }
 
-        Commands::Workflows { check, package } => {
-            if !check && !package {
-                eprintln!("error: specify at least --check or --package");
+        Commands::Workflows {
+            check,
+            package,
+            test,
+            transpile,
+            format,
+            rl_version,
+        } => {
+            if !check && !package && !test && !transpile && !format {
+                eprintln!("error: specify at least --check, --package, --test, --transpile, or --format");
                 std::process::exit(1);
             }
-            generate(check, package);
+            generate(check, package, test, transpile, format, rl_version);
         }
 
         Commands::New { name, no_git, script, lib } => {
@@ -605,10 +735,10 @@ fn main() {
                 eprintln!("error: could not read file '{}'", file.display());
                 std::process::exit(1);
             });
-            let source = SourceFile::new(&*path, source_text);
+            let source = SourceFile::new(&*path, source_text.clone());
 
-            let tokens = lex(source);
-            let formatted = format_tokens(&tokens);
+            let tokens = lex(source.clone());
+            let formatted = format_source_with_shebang(&source_text, &tokens);
             if let Err(e) = std::fs::write(path, formatted) {
                 eprintln!("error: {}", e);
             };

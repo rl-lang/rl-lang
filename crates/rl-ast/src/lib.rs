@@ -301,9 +301,28 @@ fn remap_stmt_kind(kind: &mut StatementKind, offset: u32, target_arena_id: u32) 
             }
         }
 
-        FunctionDeclaration { body, .. }
-        | ResolvedFunctionDeclaration { body, .. }
-        | ResolvedImportFile { body, .. } => {
+        FunctionDeclaration {
+            body,
+            requires,
+            ensures,
+            ..
+        }
+        | ResolvedFunctionDeclaration {
+            body,
+            requires,
+            ensures,
+            ..
+        } => {
+            remap_stmts(body, offset, target_arena_id);
+            for clause in requires.iter_mut().chain(ensures.iter_mut()) {
+                remap_id(&mut clause.condition, offset, target_arena_id);
+                if let Some(msg) = clause.message.as_mut() {
+                    remap_id(msg, offset, target_arena_id);
+                }
+            }
+        }
+
+        ResolvedImportFile { body, .. } => {
             remap_stmts(body, offset, target_arena_id);
         }
 

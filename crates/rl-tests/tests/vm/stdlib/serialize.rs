@@ -108,7 +108,7 @@ fn csv_round_trip() {
         r#"
 get csv_parse, csv_stringify from std::serialize
 get result_unwrap from std::res
-get len from std::array
+get len from std
 dec rows = result_unwrap(csv_parse("a,b\n1,2\n\"x,y\",3"))
 result_unwrap(len(rows))
 "#,

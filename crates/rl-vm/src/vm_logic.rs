@@ -146,6 +146,13 @@ pub struct Vm {
     pub(crate) gui_handles: HashMap<u64, GuiHandle<VmValue>>,
     /// Next handle id to hand out for `std::gui` resources; only ever increments.
     pub(crate) gui_next_handle: u64,
+    /// Uploaded texture versions per image widget id: `(loaded_version,
+    /// managed texture id)`. Lets the renderer skip GPU re-uploads of
+    /// unchanged images. Plain `u64` pair (not `egui::TextureId`) because
+    /// OS deps live in `rl-std`; all ids here are `Managed`.
+    pub(crate) texture_cache: HashMap<u64, (u64, u64)>,
+    /// Last rendered size per widget id for the container layout pass.
+    pub(crate) widget_sizes: HashMap<u64, (f32, f32)>,
     /// Set by `gui_quit`; checked by `gui_run`'s frame loop after that frame's
     /// click callbacks have run, so the window closes on the next frame instead
     /// of being torn down mid-callback.
@@ -162,8 +169,22 @@ pub struct Vm {
     pub(crate) io_handles: HashMap<u64, rl_std::io::IoFileHandle>,
     /// Next handle id to hand out for `std::io` resources; only ever increments.
     pub(crate) io_next_handle: u64,
+    /// Side-table of byte buffers (`core::__buf_*`), keyed by handle id.
+    pub(crate) buf_handles: HashMap<u64, Vec<u8>>,
+    /// Next handle id to hand out for buffers; only ever increments.
+    pub(crate) buf_next_handle: u64,
+    /// Worker-thread receivers (`core::__spawn`), keyed by job id. Only
+    /// receivers live here; each worker owns its `Vm` on its own thread.
+    pub(crate) thread_jobs: HashMap<u64, std::sync::mpsc::Receiver<rl_std::core::ThreadMsg>>,
+    /// Next job id to hand out for workers; only ever increments.
+    pub(crate) thread_next_handle: u64,
+    /// Progress channel of THIS vm when it is a worker (`core::__emit`
+    /// sends here). `None` on main vms, where `__emit` fails.
+    pub(crate) worker_tx: Option<std::sync::mpsc::Sender<rl_std::core::ThreadMsg>>,
     /// PRNG state for `std::random`, seeded from the system clock at startup.
     pub(crate) rng: rl_std_core::Xoshiro256,
+    /// Registry for `std::test` (cases, grouping, results), isolated per Vm.
+    pub(crate) test_state: rl_std_core::TestState<crate::VmValue>,
     /// Number of leading `std::env::args()` entries to skip when reporting
     /// `std::process::args()` (defaults to 1 - the program name itself).
     pub user_args_offset: usize,
@@ -195,6 +216,8 @@ impl Vm {
             audio_master_volume: 1.0,
             gui_handles: HashMap::new(),
             gui_next_handle: 1,
+            texture_cache: HashMap::new(),
+            widget_sizes: HashMap::new(),
             gui_quit_requested: false,
             net_handles: HashMap::new(),
             net_next_handle: 1,
@@ -202,7 +225,13 @@ impl Vm {
             http_next_handle: 1,
             io_handles: HashMap::new(),
             io_next_handle: 1,
+            buf_handles: HashMap::new(),
+            buf_next_handle: 1,
+            thread_jobs: HashMap::new(),
+            thread_next_handle: 1,
+            worker_tx: None,
             rng: Default::default(),
+            test_state: Default::default(),
             user_args_offset: 1,
             output_buffer: None,
         }
@@ -213,6 +242,12 @@ impl Vm {
     pub fn with_source_file(mut self, source: SourceFile) -> Self {
         self.source = Some(source);
         self
+    }
+
+    /// The `std::test` registry (cases, results, skips). The `rl test`
+    /// runner reads it after each case driver to report verdicts.
+    pub fn test_state(&mut self) -> &mut rl_std_core::TestState<VmValue> {
+        &mut self.test_state
     }
 
     /// Sets the source text on an already-constructed [`Vm`] (the builder

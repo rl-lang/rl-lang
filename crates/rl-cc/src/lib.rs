@@ -15,6 +15,11 @@ pub struct TranspileConfig {
     pub embed_runtime: bool,
     pub output_dir: std::path::PathBuf,
     pub output_name: String,
+    /// Test-driver mode: emit the `rl test` runner main instead of the
+    /// program main (`rlt --test`). Transpiled mains never call tests.
+    pub test_mode: bool,
+    /// `--match` filter for test mode (substring over name/group/register).
+    pub match_pattern: Option<String>,
 }
 
 pub struct TranspileResult {
@@ -30,6 +35,8 @@ pub fn transpile(
     config: &TranspileConfig,
 ) -> Result<TranspileResult, Vec<Error>> {
     let mut codegen = codegen::CCodegen::new(ast, checker);
+    codegen.test_mode = config.test_mode;
+    codegen.match_pattern = config.match_pattern.clone();
 
     let c_source = codegen.emit_program(statements).map_err(|e| vec![e])?;
 

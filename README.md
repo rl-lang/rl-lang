@@ -6,7 +6,7 @@
 </div>
 
 <!-- Static Project Info -->
-[![Discord](https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/9T9mB4VJB)
+[![Discord](https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/AHvVbKjJN7)
 [![Rust](https://img.shields.io/badge/Made%20with-Rust-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue?style=for-the-badge)](https://github.com/rl-lang/rl-lang/blob/main/LICENSE)
 
@@ -71,14 +71,7 @@ The pipe operator `|>` chains function calls left-to-right. With `get to_upper f
 
 Prebuilt binaries are published for every [release](https://github.com/rl-lang/rl-lang/releases). The install script downloads the build you pick (or the latest stable) and puts it on your PATH.
 
-**Linux / WSL** (installs to `$HOME/.local/bin`; set `RL_INSTALL_DIR` to override):
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/rl-lang/rl-lang/main/install.sh -o install.sh
-bash install.sh
-```
-
-**Android (Termux)** - works the same way on aarch64 devices (install script detects Termux and downloads the Android build):
+**Linux / macOS / Android (Termux)** (installs to `$HOME/.local/bin`; set `RL_INSTALL_DIR` to override; Termux on aarch64 is auto-detected and gets the Android build):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/rl-lang/rl-lang/main/install.sh -o install.sh
@@ -95,7 +88,7 @@ Pick specific binaries (`-b`) or a pinned version instead:
 
 ```bash
 bash install.sh -b rl,rlc,rlt latest
-bash install.sh v2.2.0
+bash install.sh v2.3.0
 ```
 
 **Windows (PowerShell)** (installs to `%LOCALAPPDATA%\rl-lang\bin` and adds it to your user PATH - restart your terminal afterwards):
@@ -105,7 +98,7 @@ Invoke-WebRequest https://raw.githubusercontent.com/rl-lang/rl-lang/main/install
 .\install.ps1
 ```
 
-The installer lets you pick which binaries to install: `rl`, `rlc`, `rlt`, `rlrepl`, `rlsp`, `rldocs`, `rlm`.
+Both scripts install the SHA256-verified `rlm` toolchain manager. The Linux script then hands off to `rlm install`, where you pick the rest: `rl`, `rlc`, `rlt`, `rlrepl`, `rlsp`, `rldocs` (pass `--bootstrapper-only` to stop after `rlm`). On Windows, run `rlm install` yourself after the script finishes.
 
 ### From source
 
@@ -139,11 +132,13 @@ rl new example-project
 rl dev              # run project
 rl run src/main.rl  # run file directly
 rl check            # type-check only
+rl test tests.rl    # run !#[test] functions (never run under rl run)
 
 # standalone binaries
 rlc compile src/main.rl  # compile to .rlc bytecode
 rlc run src/main.rl      # lex+parse+check+compile+run
 rlt src/main.rl --compile  # transpile to C and compile
+rlt src/main.rl --compile --test  # build the test-driver binary instead
 rlrepl                   # interactive REPL
 rldocs --tui             # browse docs in TUI
 rlsp                     # LSP server for editors
@@ -209,7 +204,7 @@ Feature flags:
 
 Per-module std feature flags (all on by default, disable for custom builds):
 
-`std-array`, `std-audio`, `std-bitwise`, `std-c`, `std-cli`, `std-collections`, `std-core`, `std-crypto`, `std-debug`, `std-fs`, `std-gui`, `std-http`, `std-io`, `std-math`, `std-net`, `std-path`, `std-process`, `std-random`, `std-result`, `std-serialize`, `std-string`, `std-terminal`, `std-time`, `std-types`
+`std-array`, `std-audio`, `std-bitwise`, `std-c`, `std-cli`, `std-collections`, `std-core`, `std-crypto`, `std-debug`, `std-fs`, `std-gui`, `std-http`, `std-io`, `std-math`, `std-net`, `std-path`, `std-process`, `std-random`, `std-result`, `std-serialize`, `std-string`, `std-terminal`, `std-test`, `std-time`, `std-types`
 
 ## Contributors
 

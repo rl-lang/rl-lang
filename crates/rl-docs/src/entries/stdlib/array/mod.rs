@@ -41,7 +41,6 @@ mod arr_unique;
 mod arr_windows;
 mod arr_zip;
 mod arr_zip_longest;
-mod len;
 
 pub static ARRAY: StdEntry = StdEntry {
     name: "array",
@@ -71,7 +70,6 @@ static FUNCTIONS: &[&FnEntry] = &[
     &arr_insert::ARR_INSERT,
     &arr_is_empty::ARR_IS_EMPTY,
     &arr_last::ARR_LAST,
-    &len::LEN,
     &arr_map::ARR_MAP,
     &arr_max::ARR_MAX,
     &arr_max_by::ARR_MAX_BY,

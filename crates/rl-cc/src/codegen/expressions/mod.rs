@@ -17,6 +17,7 @@ mod result;
 mod serialize;
 mod string;
 mod terminal;
+mod test;
 mod types;
 
 use crate::codegen::CCodegen;
@@ -76,7 +77,9 @@ impl<'a> CCodegen<'a> {
                 self.writer.write(&format!("(float){}", v));
             }
             ExpressionKind::Bool(v) => {
-                self.writer.write(if *v { "true" } else { "false" });
+                // Cast explicitly: bare `true`/`false` are `int` in C,
+                // which misdispatches `_Generic` boxing/printing.
+                self.writer.write(if *v { "((bool)true)" } else { "((bool)false)" });
             }
             ExpressionKind::Character(v) => {
                 self.writer.write(&escape_c_char(*v));
@@ -805,6 +808,9 @@ impl<'a> CCodegen<'a> {
 
         match func_name {
             "println" | "print" => return self::io::compile_print(self, func_name, args),
+            "test_skip" | "test_skip_if" | "test_assert_eq" | "test_assert_ne" | "test_assert_panics" | "test_assert_no_panic" | "test_run_registered" => {
+                return self::test::compile_test_fn(self, func_name, args)
+            }
             "read_file" => return self::io::compile_read_file(self, args),
             "read_lines" => return self::io::compile_read_lines(self, args),
             "read_bytes" => return self::io::compile_read_bytes(self, args),
@@ -962,6 +968,26 @@ impl<'a> CCodegen<'a> {
             "__str_get_byte" => return self::core::compile_str_get_byte(self, args),
             "__str_slice" => return self::core::compile_str_slice(self, args),
             "__str_concat" => return self::core::compile_str_concat(self, args),
+            "__buf_new" => return self::core::compile_buf_new(self),
+            "__buf_len" => return self::core::compile_buf_len(self, args),
+            "__buf_push_byte" => return self::core::compile_buf_push_byte(self, args),
+            "__buf_get_byte" => return self::core::compile_buf_get_byte(self, args),
+            "__buf_set_byte" => return self::core::compile_buf_set_byte(self, args),
+            "__buf_append" => return self::core::compile_buf_append(self, args),
+            "__buf_slice" => return self::core::compile_buf_slice(self, args),
+            "__buf_clear" => return self::core::compile_buf_clear(self, args),
+            "__buf_to_string" => return self::core::compile_buf_to_string(self, args),
+            "__buf_free" => return self::core::compile_buf_free(self, args),
+            "__buf_addr" => return self::core::compile_buf_addr(self, args),
+            "__buf_resize" => return self::core::compile_buf_resize(self, args),
+            // Worker threads need the interpreter; transpiled C has none.
+            "__spawn" | "__emit" | "__poll" => {
+                return Err(Error::at(
+                    Reason::Compile,
+                    format!("std::core::{func_name} is VM-only and cannot run in transpiled programs"),
+                    Span::dummy(),
+                ));
+            }
             "__syscall6" => return self::core::compile_syscall6(self, args),
             "__type_of" => return self::core::compile_type_of(self, args),
             "__result_ok_value" => return self::core::compile_result_ok_value(self, args),

@@ -441,6 +441,9 @@ impl Runtime for VmRuntime {
     fn rng(cx: &mut Self::Cx) -> &mut rl_std_core::Xoshiro256 {
         &mut cx.rng
     }
+    fn test_state(cx: &mut Self::Cx) -> &mut rl_std_core::TestState<Self::Value> {
+        &mut cx.test_state
+    }
     fn output_buffer(cx: &mut Self::Cx) -> &mut Option<String> {
         &mut cx.output_buffer
     }
@@ -558,6 +561,12 @@ impl rl_std::gui::GuiStore for VmRuntime {
     fn gui_quit_requested(cx: &mut Vm) -> &mut bool {
         &mut cx.gui_quit_requested
     }
+    fn texture_cache(cx: &mut Vm) -> &mut std::collections::HashMap<u64, (u64, u64)> {
+        &mut cx.texture_cache
+    }
+    fn widget_sizes(cx: &mut Vm) -> &mut std::collections::HashMap<u64, (f32, f32)> {
+        &mut cx.widget_sizes
+    }
 }
 
 impl rl_std::io::IoStore for VmRuntime {
@@ -575,5 +584,195 @@ impl rl_std::io::IoStore for VmRuntime {
     }
     fn io_remove(cx: &mut Vm, id: u64) -> Option<rl_std::io::IoFileHandle> {
         cx.io_handles.remove(&id)
+    }
+}
+
+impl rl_std::core::BufStore for VmRuntime {
+    fn buf_insert(cx: &mut Vm, buf: Vec<u8>) -> u64 {
+        let id = cx.buf_next_handle;
+        cx.buf_next_handle += 1;
+        cx.buf_handles.insert(id, buf);
+        id
+    }
+    fn buf_get(cx: &Vm, id: u64) -> Option<&Vec<u8>> {
+        cx.buf_handles.get(&id)
+    }
+    fn buf_get_mut(cx: &mut Vm, id: u64) -> Option<&mut Vec<u8>> {
+        cx.buf_handles.get_mut(&id)
+    }
+    fn buf_remove(cx: &mut Vm, id: u64) -> Option<Vec<u8>> {
+        cx.buf_handles.remove(&id)
+    }
+}
+
+/// One unit of worker-thread work: RL source plus the channel its
+/// progress and outcome travel on.
+struct PoolJob {
+    source: String,
+    out: std::sync::mpsc::Sender<rl_std::core::ThreadMsg>,
+}
+
+/// Process-wide worker pool: fixed threads (CPU count, at least 2),
+/// bounded queue (256). Saturation fails the spawn loudly instead of
+/// growing memory without limit.
+struct ThreadPool {
+    tx: std::sync::mpsc::SyncSender<PoolJob>,
+}
+
+fn global_pool() -> &'static ThreadPool {
+    static POOL: std::sync::OnceLock<ThreadPool> = std::sync::OnceLock::new();
+    POOL.get_or_init(|| {
+        let size = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(4)
+            .max(2);
+        let (tx, rx) = std::sync::mpsc::sync_channel::<PoolJob>(256);
+        let rx = std::sync::Arc::new(std::sync::Mutex::new(rx));
+        for _ in 0..size {
+            let rx = rx.clone();
+            std::thread::spawn(move || pool_worker(rx));
+        }
+        ThreadPool { tx }
+    })
+}
+
+fn source_hash(source: &str) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    source.hash(&mut h);
+    h.finish()
+}
+
+/// Pool worker loop: take jobs until the pool dies. Compiled chunks are
+/// memoized per thread by source hash, so repeat spawns of the same
+/// source skip lex through compile (running still executes every time).
+fn pool_worker(
+    rx: std::sync::Arc<std::sync::Mutex<std::sync::mpsc::Receiver<PoolJob>>>,
+) {
+    thread_local! {
+        static CHUNKS: std::cell::RefCell<std::collections::HashMap<u64, crate::Chunk>> =
+            std::cell::RefCell::new(std::collections::HashMap::new());
+    }
+    loop {
+        let job = match rx.lock() {
+            Ok(rx) => match rx.recv() {
+                Ok(job) => job,
+                Err(_) => break,
+            },
+            Err(_) => break,
+        };
+        run_pooled_job(&job.source, &job.out);
+    }
+
+    fn run_pooled_job(
+        source: &str,
+        out: &std::sync::mpsc::Sender<rl_std::core::ThreadMsg>,
+    ) {
+        use rl_utils::source::SourceFile;
+        let compile = || -> Result<crate::Chunk, String> {
+            let file = SourceFile::new("spawn", source.to_string());
+            let tokens = match rl_lexer::tokenizer::Tokenizer::lex(file.clone()) {
+                Ok(t) => t,
+                Err(e) => return Err(format!("spawn: lex failed: {e:?}")),
+            };
+            let (ast, stmts) =
+                match rl_parser::parser_logic::Parser::parse(tokens, file.clone()) {
+                    Ok(p) => p,
+                    Err(e) => return Err(format!("spawn: parse failed: {e:?}")),
+                };
+            let mut resolver = rl_resolver::Resolver::new();
+            let resolved = resolver.resolve_program(ast, stmts);
+            let checker_tokens = match rl_lexer::tokenizer::Tokenizer::lex(file.clone())
+            {
+                Ok(t) => t,
+                Err(e) => return Err(format!("spawn: lex failed: {e:?}")),
+            };
+            let (checker_ast, checker_stmts) =
+                match rl_parser::parser_logic::Parser::parse(checker_tokens, file) {
+                    Ok(p) => p,
+                    Err(e) => return Err(format!("spawn: parse failed: {e:?}")),
+                };
+            let mut checker = rl_checker::TypeChecker::new().with_ast_arena(checker_ast);
+            let errors = checker.check(&checker_stmts);
+            if !errors.is_empty() {
+                return Err(format!("spawn: check failed: {:?}", errors[0]));
+            }
+            match crate::Compiler::new(&resolver.ast_arena).compile(&resolved) {
+                Ok(c) => Ok(c),
+                Err(e) => Err(format!("spawn: compile failed: {e:?}")),
+            }
+        };
+        let outcome = CHUNKS.with(|cache| {
+            use std::collections::hash_map::Entry;
+            let mut cache = cache.borrow_mut();
+            let chunk = match cache.entry(source_hash(source)) {
+                Entry::Occupied(o) => o.into_mut(),
+                Entry::Vacant(v) => match compile() {
+                    Ok(c) => v.insert(c),
+                    Err(e) => return Err(e),
+                },
+            };
+            // Borrowed across the run: safe because worker code cannot
+            // re-enter this function (nested spawn is refused, and nothing
+            // else touches the cache).
+            let mut vm = crate::Vm::new();
+            vm.output_buffer = Some(String::new());
+            vm.worker_tx = Some(out.clone());
+            let outcome = match vm.run_and_return(chunk) {
+                Ok(v) => Ok(v.to_string()),
+                Err(e) => Err(format!("spawn: runtime failed: {}", e.message())),
+            };
+            if let Some(buf) = vm.output_buffer.take().filter(|b| !b.is_empty()) {
+                let _ = out.send(rl_std::core::ThreadMsg::Progress(buf));
+            }
+            outcome
+        });
+        let _ = out.send(rl_std::core::ThreadMsg::Done(outcome));
+    }
+}
+
+impl rl_std::core::ThreadStore for VmRuntime {
+    fn thread_spawn(cx: &mut Vm, source: String) -> Result<u64, String> {
+        if cx.worker_tx.is_some() {
+            return Err("__spawn: workers cannot spawn".to_string());
+        }
+        let id = cx.thread_next_handle;
+        cx.thread_next_handle += 1;
+        let (tx, rx) = std::sync::mpsc::channel();
+        cx.thread_jobs.insert(id, rx);
+        match global_pool().tx.try_send(PoolJob { source, out: tx }) {
+            Ok(()) => Ok(id),
+            Err(_) => {
+                cx.thread_jobs.remove(&id);
+                Err("__spawn: pool full".to_string())
+            }
+        }
+    }
+    fn thread_poll(cx: &mut Vm, id: u64) -> rl_std::core::ThreadPoll {
+        use rl_std::core::{ThreadMsg, ThreadPoll};
+        let Some(rx) = cx.thread_jobs.get(&id) else {
+            return ThreadPoll::Unknown;
+        };
+        match rx.try_recv() {
+            Ok(ThreadMsg::Progress(text)) => ThreadPoll::Message(text),
+            Ok(ThreadMsg::Done(outcome)) => {
+                cx.thread_jobs.remove(&id);
+                ThreadPoll::Done(outcome)
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => ThreadPoll::Pending,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                cx.thread_jobs.remove(&id);
+                ThreadPoll::Done(Err("spawn: worker thread died".to_string()))
+            }
+        }
+    }
+    fn thread_emit(cx: &mut Self::Cx, text: String) -> bool {
+        match &cx.worker_tx {
+            Some(tx) => tx.send(rl_std::core::ThreadMsg::Progress(text)).is_ok(),
+            None => false,
+        }
+    }
+    fn thread_is_worker(cx: &Self::Cx) -> bool {
+        cx.worker_tx.is_some()
     }
 }

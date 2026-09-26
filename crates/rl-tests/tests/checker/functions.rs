@@ -126,3 +126,255 @@ arr_map([1], fn(int x) -> string { dec cleaned = r? return cleaned })"#,
         "`?` cannot be used in a function that does not return a result",
     );
 }
+
+#[test]
+fn contracts_reject_non_bool_requires() {
+    assert_checker_msg(
+        "fn f(int x) -> int requires x { return x }",
+        "must be bool",
+    );
+}
+
+#[test]
+fn contracts_reject_non_bool_ensures() {
+    assert_checker_msg(
+        "fn f(int x) -> int ensures x { return x }",
+        "must be bool",
+    );
+}
+
+#[test]
+fn contracts_ret_unbound_outside_ensures() {
+    assert_checker_msg(
+        "fn f(int x) -> int requires ret > 0 { return x }",
+        "undefined variable",
+    );
+}
+
+#[test]
+fn contract_refinement_violation_returns_err() {
+    let result = crate::common::compile_and_run(
+        r#"
+fn withdraw(int amt: >0, int balance) -> result[int] {
+    return ok(balance - amt)
+}
+get is_err from std::res
+is_err(withdraw(0, 100))
+"#,
+    )
+    .unwrap();
+    assert_eq!(result, rl_vm::VmValue::Bool(true));
+}
+
+#[test]
+fn contract_refinement_passes() {
+    let result = crate::common::compile_and_run(
+        r#"
+fn withdraw(int amt: >0, int balance) -> result[int] {
+    return ok(balance - amt)
+}
+withdraw(30, 100)?
+"#,
+    )
+    .unwrap();
+    assert_eq!(result, rl_vm::VmValue::Int(70));
+}
+
+#[test]
+fn contract_bare_violation_aborts() {
+    let result = crate::common::compile_and_run(
+        r#"
+fn bare(int x: >0) -> int {
+    return x
+}
+bare(0)
+"#,
+    );
+    assert!(result.is_err());
+}
+
+#[test]
+fn contract_ensures_violation_returns_err() {
+    let result = crate::common::compile_and_run(
+        r#"
+fn over(int x) -> result[int]
+    ensures ret < 10
+{
+    return ok(x)
+}
+get is_err from std::res
+is_err(over(50))
+"#,
+    )
+    .unwrap();
+    assert_eq!(result, rl_vm::VmValue::Bool(true));
+}
+
+#[test]
+fn contract_ensures_skipped_on_err() {
+    let result = crate::common::compile_and_run(
+        r#"
+fn maybe(bool b) -> result[int]
+    ensures ret > 0
+{
+    if (b) { return err(0) }
+    return ok(5)
+}
+get is_err from std::res
+dec result[int] a = maybe(true)
+dec int b = maybe(false)?
+dec bool e = is_err(a)
+e
+"#,
+    )
+    .unwrap();
+    assert_eq!(result, rl_vm::VmValue::Bool(true));
+}
+
+#[test]
+fn contract_custom_message_surfaces() {
+    let result = crate::common::compile_and_run(
+        r#"
+fn m(int a) -> result[int]
+    requires a > 0, "pos", a < 100, "small"
+{
+    return ok(a)
+}
+get result_unwrap_err from std::res
+result_unwrap_err(m(500))
+"#,
+    )
+    .unwrap();
+    assert_eq!(result, rl_vm::VmValue::Str("small".into()));
+}
+
+#[test]
+fn contracts_proven_refinement_violation_errors() {
+    assert_checker_msg(
+        "fn withdraw(int amt: >0, int balance) -> result[int] {\n    return ok(balance - amt)\n}\nwithdraw(0, 100)",
+        "contract violation (proven at compile time): refinement failed: amt > 0",
+    );
+}
+
+#[test]
+fn contracts_proven_requires_violation_uses_message() {
+    assert_checker_msg(
+        "fn withdraw(int amt, int balance) -> result[int]\n    requires amt > 0, \"positive\"\n{\n    return ok(balance - amt)\n}\nwithdraw(0, 100)",
+        "contract violation (proven at compile time): positive",
+    );
+}
+
+#[test]
+fn contracts_proven_cross_param_violation_errors() {
+    assert_checker_msg(
+        "fn withdraw(int amt, int balance: >=amt) -> result[int] {\n    return ok(balance - amt)\n}\nwithdraw(50, 10)",
+        "refinement failed: balance >= amt",
+    );
+}
+
+#[test]
+fn contracts_satisfied_call_is_clean() {
+    assert_checker_clean(
+        "fn withdraw(int amt: >0, int balance) -> result[int] {\n    return ok(balance - amt)\n}\nwithdraw(30, 100)",
+    );
+}
+
+#[test]
+fn contracts_dynamic_args_stay_silent() {
+    assert_checker_clean(
+        "fn withdraw(int amt: >0, int balance) -> result[int] {\n    return ok(balance - amt)\n}\ndec int n = 0\nwithdraw(n, 100)",
+    );
+}
+
+#[test]
+fn contracts_proven_arithmetic_requires() {
+    assert_checker_msg(
+        "fn f(int a, int b) -> int\n    requires a + b > 10, \"sum\"\n{\n    return a\n}\nf(3, 4)",
+        "contract violation (proven at compile time): sum",
+    );
+}
+
+#[test]
+fn contracts_proven_float_refinement() {
+    assert_checker_msg(
+        "fn f(float x: >0) -> float { return x }\nf(-1.5)",
+        "refinement failed",
+    );
+}
+
+#[test]
+fn contracts_proven_string_eq() {
+    assert_checker_msg(
+        "fn f(string s: ==\"hi\") -> string { return s }\nf(\"bye\")",
+        "refinement failed",
+    );
+}
+
+#[test]
+fn contracts_proven_bool_eq() {
+    assert_checker_msg(
+        "fn f(bool b: ==true) -> bool { return b }\nf(false)",
+        "refinement failed",
+    );
+}
+
+#[test]
+fn contracts_proven_ne_operator() {
+    assert_checker_msg(
+        "fn f(int x: !=0) -> int { return x }\nf(0)",
+        "refinement failed: x != 0",
+    );
+}
+
+#[test]
+fn contracts_cross_param_bails_when_late() {
+    assert_checker_clean(
+        "fn f(int a, int b: >=a) -> int { return b }\ndec int n = 1\nf(n, 5)",
+    );
+}
+
+#[test]
+fn contracts_ret_in_requires_errors() {
+    assert_checker_msg(
+        "fn f(int x) -> int\n    requires ret > 0\n{\n    return x\n}\nf(1)",
+        "undefined variable",
+    );
+}
+
+#[test]
+fn contracts_division_by_zero_stays_silent() {
+    assert_checker_clean(
+        "fn f(int x) -> int\n    requires 1 / (x - x) > 0\n{\n    return x\n}\nf(5)",
+    );
+}
+
+#[test]
+fn contracts_proven_through_alias() {
+    assert_checker_msg(
+        "fn withdraw(int amt: >0) -> int { return amt }\ndec f = withdraw\nf(0)",
+        "refinement failed: amt > 0",
+    );
+}
+
+#[test]
+fn contracts_multiple_violations_all_reported() {
+    let msgs = crate::common::checker_messages(
+        "fn f(int a: >0, int b: >0) -> int { return a }\nf(0, 0)",
+    );
+    let hits = msgs.iter().filter(|m| m.contains("refinement failed")).count();
+    assert_eq!(hits, 2, "expected both violations, got: {msgs:?}");
+}
+
+#[test]
+fn contracts_logical_shapes_stay_silent() {
+    assert_checker_clean(
+        "fn f(bool a, bool b) -> bool\n    requires a and b\n{\n    return a\n}\nf(true, false)",
+    );
+}
+
+#[test]
+fn contracts_plain_calls_unaffected() {
+    assert_checker_clean(
+        "fn f(int x) -> int { return x }\nf(0)",
+    );
+}

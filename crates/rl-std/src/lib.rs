@@ -72,6 +72,8 @@ pub mod serialize;
 pub mod string;
 #[cfg(any(feature = "std-terminal", feature = "impls"))]
 pub mod terminal;
+#[cfg(any(feature = "std-test", feature = "impls"))]
+pub mod test;
 #[cfg(any(feature = "std-time", feature = "impls"))]
 pub mod time;
 pub mod types;
@@ -85,7 +87,7 @@ pub fn signatures() -> rl_std_core::ModuleNames {
     let mut m = rl_std_core::ModuleNames::new("std")
         .with_functions(&["len"]);
     #[cfg(any(feature = "std-array", feature = "impls"))]
-    { m = m.with_module(array::signatures().with_functions(&["len"])); }
+    { m = m.with_module(array::signatures()); }
     #[cfg(any(feature = "std-audio", feature = "impls"))]
     { m = m.with_module(audio::signatures()); }
     #[cfg(any(feature = "std-bitwise", feature = "impls"))]
@@ -130,6 +132,8 @@ pub fn signatures() -> rl_std_core::ModuleNames {
     { m = m.with_module(string::signatures()); }
     #[cfg(any(feature = "std-terminal", feature = "impls"))]
     { m = m.with_module(terminal::signatures()); }
+    #[cfg(any(feature = "std-test", feature = "impls"))]
+    { m = m.with_module(test::signatures()); }
     #[cfg(any(feature = "std-time", feature = "impls"))]
     { m = m.with_module(time::signatures()); }
     #[cfg(any(feature = "std-types", feature = "impls"))]

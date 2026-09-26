@@ -19,7 +19,6 @@
 //! dec int x = __map_get(m, "a")
 //! ```
 
-#[cfg(feature = "impls")]
 use rl_std_core::Runtime;
 use rl_std_macros::native_fn;
 #[cfg(feature = "impls")]
@@ -457,6 +456,337 @@ pub fn __str_concat(a: String, b: String) -> String {
     out
 }
 
+// ---- byte buffers ---------------------------------------------------------------
+// Incremental accumulation without the O(n^2) of repeated `arr_push` /
+// `__str_concat`: amortized-O(1) push and bulk append behind an integer
+// handle. The primitive floor for an RL-written renderer, lexer, and
+// C-emitter. Misuse aborts (bad handle, out-of-bounds), like the rest
+// of `core::`.
+
+/// Per-runtime access to the `core` buffer table. Implemented by `VmRuntime`.
+pub trait BufStore: Runtime {
+    fn buf_insert(cx: &mut Self::Cx, buf: Vec<u8>) -> u64;
+    fn buf_get(cx: &Self::Cx, id: u64) -> Option<&Vec<u8>>;
+    fn buf_get_mut(cx: &mut Self::Cx, id: u64) -> Option<&mut Vec<u8>>;
+    fn buf_remove(cx: &mut Self::Cx, id: u64) -> Option<Vec<u8>>;
+}
+
+/// Outcome of a finished worker thread: the displayed final value on
+/// success, or the displayed error on failure. Only strings cross the
+/// thread boundary; values never do (`Vm` is `!Send` by design).
+pub type JobOutcome = Result<String, String>;
+
+/// One message on a worker's channel: streamed progress, or the final
+/// outcome (after which the worker's sender is gone).
+pub enum ThreadMsg {
+    Progress(String),
+    Done(JobOutcome),
+}
+
+/// One poll of a worker thread: unknown id, nothing new, a progress
+/// message, or the finished outcome (which reaps the job).
+pub enum ThreadPoll {
+    Unknown,
+    Pending,
+    Message(String),
+    Done(JobOutcome),
+}
+
+/// Per-runtime access to the worker-thread table. Implemented by
+/// `VmRuntime`: each worker owns a fresh `Vm` on its own pooled thread,
+/// so no `Send` bounds leak into the VM itself.
+pub trait ThreadStore: BufStore {
+    /// Queue source on the shared pool. Err on nested spawn (workers
+    /// cannot spawn) or a saturated pool; the id is only valid on success.
+    fn thread_spawn(cx: &mut Self::Cx, source: String) -> Result<u64, String>;
+    fn thread_poll(cx: &mut Self::Cx, id: u64) -> ThreadPoll;
+    /// Sends a progress message from inside a worker. Returns false on a
+    /// main `Vm` (which has no worker channel).
+    fn thread_emit(cx: &mut Self::Cx, text: String) -> bool;
+    /// True when `cx` is a worker Vm (has a worker channel).
+    fn thread_is_worker(cx: &Self::Cx) -> bool;
+}
+/// Extracts a `Buffer` handle id from a value, or returns a type error.
+#[cfg(feature = "impls")]
+pub fn extract_buffer<R: Runtime>(v: &R::Value, name: &str) -> Result<u64, String> {
+    match R::as_handle(v, rl_ast::statements::HandleKind::Buffer) {
+        Some(id) => Ok(id),
+        None => Err(format!(
+            "{}: expected a buffer handle, got {}",
+            name,
+            R::type_name(v)
+        )),
+    }
+}
+
+#[cfg(feature = "impls")]
+fn buf_lookup<R: BufStore>(
+    cx: &mut R::Cx,
+    handle: &R::Value,
+    name: &str,
+    span: R::Span,
+) -> Result<u64, Error> {
+    match extract_buffer::<R>(handle, name) {
+        Ok(id) => match R::buf_get(cx, id) {
+            Some(_) => Ok(id),
+            None => Err(R::error(
+                cx,
+                format!("{}: invalid buffer handle", name),
+                span,
+            )),
+        },
+        Err(e) => Err(R::error(cx, e, span)),
+    }
+}
+
+#[native_fn(module = "core", bound = "BufStore", sig( -> handle(Buffer)))]
+pub fn __buf_new<R: BufStore>(cx: &mut R::Cx) -> R::Value {
+    let id = R::buf_insert(cx, Vec::new());
+    R::make_handle(rl_ast::statements::HandleKind::Buffer, id)
+}
+
+#[native_fn(module = "core", bound = "BufStore", sig(handle(Buffer) -> int))]
+pub fn __buf_len<R: BufStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    span: R::Span,
+) -> Result<i64, Error> {
+    let id = buf_lookup::<R>(cx, &handle, "__buf_len", span)?;
+    Ok(R::buf_get(cx, id).map(|b| b.len() as i64).unwrap_or(0))
+}
+
+#[native_fn(module = "core", bound = "BufStore", sig(handle(Buffer), byte -> null))]
+pub fn __buf_push_byte<R: BufStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    byte: u8,
+    span: R::Span,
+) -> Result<R::Value, Error> {
+    let id = buf_lookup::<R>(cx, &handle, "__buf_push_byte", span)?;
+    if let Some(buf) = R::buf_get_mut(cx, id) {
+        buf.push(byte);
+    }
+    Ok(R::null())
+}
+
+#[native_fn(module = "core", bound = "BufStore", sig(handle(Buffer), int -> byte))]
+pub fn __buf_get_byte<R: BufStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    idx: i64,
+    span: R::Span,
+) -> Result<u8, Error> {
+    let id = buf_lookup::<R>(cx, &handle, "__buf_get_byte", span)?;
+    let buf = R::buf_get(cx, id).ok_or_else(|| {
+        R::error(cx, "__buf_get_byte: invalid buffer handle".to_string(), span)
+    })?;
+    if idx < 0 || (idx as usize) >= buf.len() {
+        return Err(R::error(
+            cx,
+            format!(
+                "__buf_get_byte: index {idx} out of bounds (len {})",
+                buf.len()
+            ),
+            span,
+        ));
+    }
+    Ok(buf[idx as usize])
+}
+
+#[native_fn(module = "core", bound = "BufStore", sig(handle(Buffer), int, byte -> null))]
+pub fn __buf_set_byte<R: BufStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    idx: i64,
+    byte: u8,
+    span: R::Span,
+) -> Result<R::Value, Error> {
+    let id = buf_lookup::<R>(cx, &handle, "__buf_set_byte", span)?;
+    let len = R::buf_get(cx, id).map(|b| b.len()).unwrap_or(0);
+    if idx < 0 || (idx as usize) >= len {
+        return Err(R::error(
+            cx,
+            format!("__buf_set_byte: index {idx} out of bounds (len {len})"),
+            span,
+        ));
+    }
+    if let Some(buf) = R::buf_get_mut(cx, id) {
+        buf[idx as usize] = byte;
+    }
+    Ok(R::null())
+}
+
+#[native_fn(module = "core", bound = "BufStore", sig(handle(Buffer), string -> null))]
+pub fn __buf_append<R: BufStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    text: String,
+    span: R::Span,
+) -> Result<R::Value, Error> {
+    let id = buf_lookup::<R>(cx, &handle, "__buf_append", span)?;
+    if let Some(buf) = R::buf_get_mut(cx, id) {
+        buf.extend_from_slice(text.as_bytes());
+    }
+    Ok(R::null())
+}
+
+#[native_fn(module = "core", bound = "BufStore", sig(handle(Buffer), int, int -> string))]
+pub fn __buf_slice<R: BufStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    start: i64,
+    end: i64,
+    span: R::Span,
+) -> Result<String, Error> {
+    let id = buf_lookup::<R>(cx, &handle, "__buf_slice", span)?;
+    let buf = R::buf_get(cx, id).ok_or_else(|| {
+        R::error(cx, "__buf_slice: invalid buffer handle".to_string(), span)
+    })?;
+    let len = buf.len() as i64;
+    if start < 0 || end < start || end > len {
+        return Err(R::error(
+            cx,
+            format!("__buf_slice: bad range {start}..{end} for len {len}"),
+            span,
+        ));
+    }
+    // Byte slicing must not split a UTF-8 codepoint.
+    let is_continuation = |b: u8| b & 0xc0 == 0x80;
+    if (start > 0 && start < len && is_continuation(buf[start as usize]))
+        || (end > 0 && end < len && is_continuation(buf[end as usize]))
+    {
+        return Err(R::error(
+            cx,
+            "__buf_slice: range splits a UTF-8 codepoint".to_string(),
+            span,
+        ));
+    }
+    Ok(String::from_utf8_lossy(&buf[start as usize..end as usize]).into_owned())
+}
+
+#[native_fn(module = "core", bound = "BufStore", sig(handle(Buffer) -> null))]
+pub fn __buf_clear<R: BufStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    span: R::Span,
+) -> Result<R::Value, Error> {
+    let id = buf_lookup::<R>(cx, &handle, "__buf_clear", span)?;
+    if let Some(buf) = R::buf_get_mut(cx, id) {
+        buf.clear();
+    }
+    Ok(R::null())
+}
+
+#[native_fn(module = "core", bound = "BufStore", sig(handle(Buffer) -> string))]
+pub fn __buf_to_string<R: BufStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    span: R::Span,
+) -> Result<String, Error> {
+    let id = buf_lookup::<R>(cx, &handle, "__buf_to_string", span)?;
+    Ok(R::buf_get(cx, id)
+        .map(|b| String::from_utf8_lossy(b).into_owned())
+        .unwrap_or_default())
+}
+
+#[native_fn(module = "core", bound = "BufStore", sig(handle(Buffer) -> null))]
+pub fn __buf_free<R: BufStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    span: R::Span,
+) -> Result<R::Value, Error> {
+    let id = buf_lookup::<R>(cx, &handle, "__buf_free", span)?;
+    match R::buf_remove(cx, id) {
+        Some(_) => Ok(R::null()),
+        None => Err(R::error(
+            cx,
+            "__buf_free: invalid buffer handle".to_string(),
+            span,
+        )),
+    }
+}
+
+#[native_fn(module = "core", bound = "BufStore", sig(handle(Buffer) -> int))]
+pub fn __buf_addr<R: BufStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    span: R::Span,
+) -> Result<i64, Error> {
+    let id = buf_lookup::<R>(cx, &handle, "__buf_addr", span)?;
+    Ok(R::buf_get(cx, id)
+        .map(|b| {
+            if b.is_empty() {
+                0
+            } else {
+                b.as_ptr() as i64
+            }
+        })
+        .unwrap_or(0))
+}
+
+#[native_fn(module = "core", bound = "BufStore", sig(handle(Buffer), int -> null))]
+pub fn __buf_resize<R: BufStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    size: i64,
+    span: R::Span,
+) -> Result<R::Value, Error> {
+    let id = buf_lookup::<R>(cx, &handle, "__buf_resize", span)?;
+    if size < 0 {
+        return Err(R::error(
+            cx,
+            format!("__buf_resize: negative size {size}"),
+            span,
+        ));
+    }
+    if let Some(buf) = R::buf_get_mut(cx, id) {
+        buf.resize(size as usize, 0);
+    }
+    Ok(R::null())
+}
+
+// ---- worker threads ---------------------------------------------------------------
+// Task parallelism without shared memory: `__spawn` runs RL source on a
+// fresh `Vm` on a new OS thread; only strings cross the boundary. Poll
+// protocol: `err("pending")` while running, `ok(text)` with the displayed
+// final value when done, `err(text)` when the worker failed. Unknown ids
+// abort, like bad buffer handles.
+
+#[native_fn(module = "core", bound = "ThreadStore", sig(string -> int))]
+pub fn __spawn<R: ThreadStore>(
+    cx: &mut R::Cx,
+    source: String,
+    span: R::Span,
+) -> Result<i64, Error> {
+    match R::thread_spawn(cx, source) {
+        Ok(id) => Ok(id as i64),
+        Err(e) => Err(R::error(cx, e, span)),
+    }
+}
+
+#[native_fn(module = "core", bound = "ThreadStore", sig(string -> null))]
+pub fn __emit<R: ThreadStore>(cx: &mut R::Cx, text: String) -> R::Value {
+    if R::thread_emit(cx, text) {
+        R::null()
+    } else {
+        R::err(R::from_string("__emit: only a worker thread can emit".to_string()))
+    }
+}
+
+#[native_fn(module = "core", bound = "ThreadStore", sig(int -> result[string]))]
+pub fn __poll<R: ThreadStore>(cx: &mut R::Cx, job: i64) -> R::Value {
+    if job < 0 {
+        return R::err(R::from_string(format!("__poll: invalid job {job}")));
+    }
+    match R::thread_poll(cx, job as u64) {
+        ThreadPoll::Unknown => R::err(R::from_string(format!("__poll: unknown job {job}"))),
+        ThreadPoll::Pending => R::err(R::from_string("pending".to_string())),
+        ThreadPoll::Message(text) => R::ok(R::from_string(text)),
+        ThreadPoll::Done(Ok(text)) => R::ok(R::from_string(text)),
+        ThreadPoll::Done(Err(text)) => R::err(R::from_string(text)),
+    }
+}
+
 // ---- raw syscall (Linux only) -------------------------------------------------------
 // Escape hatch for libc-free binaries and exotic ioctls. Portable code
 // uses std::fs / std::io; raw numbers are Linux-only by construction.
@@ -568,11 +898,16 @@ pub fn __result_err_value<R: Runtime>(
 // ---- module registration --------------------------------------------------
 
 rl_std_core::native_module!("core";
+    bound: ThreadStore;
     funcs: [
         __arr_new, __arr_push, __arr_get, __arr_set, __arr_remove, __arr_len,
         __map_new, __map_get, __map_set, __map_remove, __map_has, __map_keys, __map_len,
         __set_new, __set_add, __set_has, __set_remove, __set_len,
         __str_len, __str_get_byte, __str_slice, __str_concat,
+        __buf_new, __buf_len, __buf_push_byte, __buf_get_byte,
+        __buf_set_byte, __buf_append, __buf_slice, __buf_clear,
+        __buf_to_string, __buf_free, __buf_addr, __buf_resize,
+        __spawn, __emit, __poll,
         __syscall6,
         __abort, __type_of,
         __result_ok_value, __result_err_value,

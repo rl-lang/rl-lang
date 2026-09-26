@@ -162,11 +162,11 @@ path_is_file("/tmp")
 }
 
 #[test]
-fn deprecated_io_read_file_warns() {
+fn fs_read_file_resolves_without_warning() {
     let checker = crate::common::check(
         r#"
 fn test_fn() -> string {
-    dec result[string] r = std::io::read_file("x.txt")
+    dec result[string] r = std::fs::read_file("x.txt")
     dec string x = std::res::result_unwrap(r)
     return x
 }
@@ -174,25 +174,25 @@ fn test_fn() -> string {
     );
     let warnings: Vec<String> = checker.warnings.iter().map(|w| w.message().to_string()).collect();
     assert!(
-        warnings.iter().any(|m| m.contains("deprecated") && m.contains("std::io::read_file")),
-        "expected deprecation warning for std::io::read_file, got: {:?}",
+        !warnings.iter().any(|m| m.contains("deprecated")),
+        "expected no deprecation warnings, got: {:?}",
         warnings
     );
 }
 
 #[test]
-fn deprecated_path_path_exists_warns() {
+fn fs_path_exists_resolves_without_warning() {
     let checker = crate::common::check(
         r#"
 fn test_fn() -> bool {
-    return std::path::path_exists("/tmp")
+    return std::fs::path_exists("/tmp")
 }
 "#,
     );
     let warnings: Vec<String> = checker.warnings.iter().map(|w| w.message().to_string()).collect();
     assert!(
-        warnings.iter().any(|m| m.contains("deprecated") && m.contains("std::path::path_exists")),
-        "expected deprecation warning for std::path::path_exists, got: {:?}",
+        !warnings.iter().any(|m| m.contains("deprecated")),
+        "expected no deprecation warnings, got: {:?}",
         warnings
     );
 }

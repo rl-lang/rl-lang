@@ -36,6 +36,7 @@ pub enum HandleKind {
     Audio = 3,
     Gui = 4,
     File = 5,
+    Buffer = 6,
 }
 
 impl Statement {
@@ -273,6 +274,10 @@ pub enum StatementKind {
         attribute: Option<FunctionAttribute>,
         /// Item-level attributes (e.g. `!#[allow(unused)]`).
         item_attributes: Vec<ItemAttribute>,
+        /// `requires` contract clauses (checked at entry by desugared guards).
+        requires: Vec<ContractClause>,
+        /// `ensures` contract clauses (checked at every return by desugared guards).
+        ensures: Vec<ContractClause>,
     },
     /// Resolver-annotated function declaration. `slot` is the function's
     /// index in the current environment frame.
@@ -283,6 +288,8 @@ pub enum StatementKind {
         return_type: TypeAnnotation,
         body: Vec<Statement>,
         attribute: Option<FunctionAttribute>,
+        requires: Vec<ContractClause>,
+        ensures: Vec<ContractClause>,
     },
     /// A `return expr` or bare `return` statement.
     Return(Option<ExprId>),
@@ -383,7 +390,23 @@ pub enum FunctionAttribute {
     Init(Option<u32>),
     /// `!#[final]` (no priority) or `!#[final=n]` (same ordering as `init`).
     Final(Option<u32>),
-    Test,
+    /// `!#[test]` or `!#[test(group("g"), register("r"), cases(n))]`.
+    Test(TestParams),
+    /// `!#[setup]` - runs before each `!#[test]` case in the file.
+    Setup,
+    /// `!#[teardown]` - runs after each `!#[test]` case in the file.
+    Teardown,
+}
+
+/// Parameters for `!#[test(...)]`. All optional and freely composable:
+/// `group` attaches the case to a named group (filtering, reporting),
+/// `register` puts it in a named registry (dynamic lookup, benchmarks),
+/// `cases(n)` turns it into a property test over `n` generated inputs.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct TestParams {
+    pub group: Option<String>,
+    pub register: Option<String>,
+    pub cases: Option<u64>,
 }
 
 /// A lint name recognized by `!#[allow(...)]`.
@@ -508,11 +531,49 @@ pub enum TypeAnnotation {
     CAny(Rc<Vec<TypeAnnotation>>),
 }
 
-/// A single function or lambda parameter: a name and its type annotation.
+/// A single function or lambda parameter: a name, its type annotation,
+/// and an optional refinement predicate (`int amt: >0`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Param {
     pub param_name: String,
     pub param_type: TypeAnnotation,
+    pub refinement: Option<ParamRefinement>,
+}
+
+/// Comparison operator in a parameter refinement (`: >0`, `: >=amt`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RefineOp {
+    Gt,
+    Ge,
+    Lt,
+    Le,
+    Eq,
+    Ne,
+}
+
+/// Right-hand side of a parameter refinement: a literal, or another
+/// parameter's name (e.g. `int balance: >=amt`).
+#[derive(Debug, Clone, PartialEq)]
+pub enum RefineOperand {
+    Integer(i64),
+    Str(String),
+    Bool(bool),
+    Param(String),
+}
+
+/// A parameter refinement predicate (`amt: >0` on `int amt`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ParamRefinement {
+    pub op: RefineOp,
+    pub operand: RefineOperand,
+}
+
+/// One `requires`/`ensures` contract clause: a boolean condition over the
+/// parameters (plus `ret` in `ensures`) with an optional failure message.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ContractClause {
+    pub condition: ExprId,
+    pub message: Option<ExprId>,
 }
 
 impl TypeAnnotation {

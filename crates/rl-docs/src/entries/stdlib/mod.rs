@@ -24,5 +24,6 @@ pub mod rl;
 pub mod serialize;
 pub mod str;
 pub mod term;
+pub mod test;
 pub mod time;
 pub mod types;

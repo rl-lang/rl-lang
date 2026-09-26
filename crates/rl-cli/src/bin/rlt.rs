@@ -51,6 +51,17 @@ struct Cli {
     #[arg(long, value_name = "LEVEL")]
     opt: Option<String>,
 
+    /// Emit the `rl test` runner main instead of the program main.
+    /// Transpiled mains never call tests; combine with --compile to
+    /// build a test binary (exits non-zero on failure).
+    #[arg(long)]
+    test: bool,
+
+    /// Only run tests whose name, group, or register contains PATTERN
+    /// (only meaningful with --test).
+    #[arg(long = "match", value_name = "PATTERN")]
+    match_pattern: Option<String>,
+
     /// Extra flags forwarded to cc (only used with --compile)
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     cc_flags: Vec<String>,
@@ -60,7 +71,13 @@ fn main() {
     let cli = Cli::parse();
 
     let embed_rt = cli.runtime || cli.compile;
-    let c_path = rl_cli::pipeline::cc::transpile_loop(&cli.file, cli.output, embed_rt);
+    let c_path = rl_cli::pipeline::cc::transpile_loop(
+        &cli.file,
+        cli.output,
+        embed_rt,
+        cli.test,
+        cli.match_pattern,
+    );
 
     if cli.compile {
         let opt_flag = match cli.opt.as_deref() {
