@@ -95,7 +95,7 @@ Pick specific binaries (`-b`) or a pinned version instead:
 
 ```bash
 bash install.sh -b rl,rlc,rlt latest
-bash install.sh v2.2.0
+bash install.sh v2.3.0
 ```
 
 **Windows (PowerShell)** (installs to `%LOCALAPPDATA%\rl-lang\bin` and adds it to your user PATH - restart your terminal afterwards):

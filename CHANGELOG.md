@@ -4,6 +4,8 @@ All notable changes to the rl-lang toolchain are documented here. The format is 
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-09-26
+
 ### Added
 
 - **Test framework (`std::test`, `rl test`)** - attribute-driven tests: `!#[test]` (plain or with `group("g")` / `register("r")` / `cases(N)` params), `!#[setup]` / `!#[teardown]` hooks, and a 6-function runtime API (`test_skip`, `test_skip_if`, `test_assert_eq`, `test_assert_ne`, `test_assert_panics`, `test_assert_no_panic`) with non-fatal accumulation. `rl test` discovers, filters (`--match`), and runs them with setup/case/teardown and a non-zero exit on failure; tests never run under `rl run`. `rlt --test` builds the same runner as a C binary (setjmp/longjmp abort capture, native property generation with shrinking).
