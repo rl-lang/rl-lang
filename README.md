@@ -98,7 +98,7 @@ Invoke-WebRequest https://raw.githubusercontent.com/rl-lang/rl-lang/main/install
 .\install.ps1
 ```
 
-The Linux script lets you pick which binaries to install: `rl`, `rlc`, `rlt`, `rlrepl`, `rlsp`, `rldocs`, `rlm`. The Windows script installs only the SHA256-verified `rlm` toolchain manager - then run `rlm install` to pick the rest.
+Both scripts install the SHA256-verified `rlm` toolchain manager. The Linux script then hands off to `rlm install`, where you pick the rest: `rl`, `rlc`, `rlt`, `rlrepl`, `rlsp`, `rldocs` (pass `--bootstrapper-only` to stop after `rlm`). On Windows, run `rlm install` yourself after the script finishes.
 
 ### From source
 
