@@ -25,7 +25,6 @@ rodio = { workspace = true, optional = true }
 cpal = { workspace = true, optional = true }
 symphonia = { workspace = true, optional = true }
 eframe = { workspace = true, optional = true }
-arboard = { version = "3", optional = true }
 shell-words = { workspace = true, optional = true }
 rpassword = { workspace = true, optional = true }
 rustyline = { workspace = true, optional = true }
@@ -48,6 +47,13 @@ serde_yaml = { workspace = true, optional = true }
 libc = { workspace = true, optional = true }
 tempfile = { workspace = true, optional = true }
 glob = { workspace = true, optional = true }
+
+# arboard (system clipboard) has no Android backend, so it is only an
+# optional dependency off Android. `std-gui` still lists `dep:arboard`;
+# cargo ignores that edge where the dep does not apply, and gui.rs
+# cfg-gates the call sites with Android stubs instead.
+[target.'cfg(not(target_os = "android"))'.dependencies]
+arboard = { version = "3", optional = true }
 
 [features]
 default = ["signatures"]

@@ -5,6 +5,7 @@ mod collections;
 mod core;
 mod crypto;
 mod fs;
+mod gui;
 mod io;
 mod math;
 mod random;

@@ -5433,7 +5433,11 @@ pub fn gui_quit<R: GuiStore>(cx: &mut R::Cx) -> R::Value {
 }
 
 // ---- clipboard (system-wide, no window needed) --------------------------------------
+// arboard has no Android backend, so off Android these talk to the real
+// clipboard; on Android they keep their signatures (checker, docs, and the
+// C backend see one surface) and fail with a clear err instead.
 
+#[cfg(not(target_os = "android"))]
 #[native_fn(module = "gui", bound = "GuiStore", sig(string -> result[null]))]
 pub fn gui_clipboard_copy<R: GuiStore>(text: String) -> R::Value {
     match arboard::Clipboard::new() {
@@ -5445,6 +5449,15 @@ pub fn gui_clipboard_copy<R: GuiStore>(text: String) -> R::Value {
     }
 }
 
+#[cfg(target_os = "android")]
+#[native_fn(module = "gui", bound = "GuiStore", sig(string -> result[null]))]
+pub fn gui_clipboard_copy<R: GuiStore>(_text: String) -> R::Value {
+    R::err(R::from_string(
+        "gui_clipboard_copy: clipboard is not supported on android".to_string(),
+    ))
+}
+
+#[cfg(not(target_os = "android"))]
 #[native_fn(module = "gui", bound = "GuiStore", sig( -> result[string]))]
 pub fn gui_clipboard_paste<R: GuiStore>() -> R::Value {
     match arboard::Clipboard::new() {
@@ -5454,6 +5467,14 @@ pub fn gui_clipboard_paste<R: GuiStore>() -> R::Value {
         },
         Err(e) => R::err(R::from_string(format!("gui_clipboard_paste: {e}"))),
     }
+}
+
+#[cfg(target_os = "android")]
+#[native_fn(module = "gui", bound = "GuiStore", sig( -> result[string]))]
+pub fn gui_clipboard_paste<R: GuiStore>() -> R::Value {
+    R::err(R::from_string(
+        "gui_clipboard_paste: clipboard is not supported on android".to_string(),
+    ))
 }
 
 // ---- style setters ----------------------------------------------------------
