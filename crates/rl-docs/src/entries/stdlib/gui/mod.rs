@@ -30,6 +30,10 @@ mod gui_detach;
 mod gui_set_spacing;
 mod gui_set_padding;
 mod gui_set_align;
+mod gui_grid;
+mod gui_scroll;
+mod gui_scroll_to;
+mod gui_scroll_pos;
 mod gui_is_selected;
 mod gui_is_checked;
 mod gui_is_visible;
@@ -116,6 +120,10 @@ static FUNCTIONS: &[&FnEntry] = &[
 &gui_image::GUI_IMAGE,
     &gui_update_image::GUI_UPDATE_IMAGE,
     &gui_set_align::GUI_SET_ALIGN,
+    &gui_grid::GUI_GRID,
+    &gui_scroll::GUI_SCROLL,
+    &gui_scroll_to::GUI_SCROLL_TO,
+    &gui_scroll_pos::GUI_SCROLL_POS,
     &gui_set_padding::GUI_SET_PADDING,
     &gui_set_spacing::GUI_SET_SPACING,
     &gui_detach::GUI_DETACH,

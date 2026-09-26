@@ -59,6 +59,8 @@ pub enum GuiHandle<V> {
     Image(ImageState),
     Container(ContainerState),
     Canvas(CanvasState),
+    Grid(GridState),
+    Scroll(ScrollState),
 }
 
 /// One vector draw command on a canvas, issued fresh every frame from RL
@@ -98,10 +100,43 @@ pub enum DrawCmd {
     },
 }
 
+/// A grid: children flow left-to-right into a fixed column count; each
+/// row is as tall as its tallest child, each column as wide as its
+/// widest. Cells are top-left aligned; use nested boxes for fancier
+/// alignment. Like containers, positions recompute every frame.
+#[cfg(feature = "impls")]
+pub struct GridState {
+    pub window: u64,
+    pub x: f32,
+    pub y: f32,
+    pub columns: usize,
+    pub spacing: f32,
+    pub padding: f32,
+    pub visible: bool,
+    pub children: Vec<u64>,
+}
+
+/// A scroll viewport: children stack vertically like a box, but only the
+/// slice intersecting `[scroll_y, scroll_y + height]` renders  -  the rest
+/// go invisible for the frame (virtualized paging, no pixel scrolling).
+/// Scroll with `gui_scroll_to` (typically from `on_scroll`).
+#[cfg(feature = "impls")]
+pub struct ScrollState {
+    pub window: u64,
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub spacing: f32,
+    pub scroll_y: f32,
+    pub content_bottom: f32,
+    pub visible: bool,
+    pub children: Vec<u64>,
+}
+#[cfg(feature = "impls")]
 /// A drawable region: RL issues `gui_draw_*` calls into its command list
 /// every frame, and the renderer replays them with the painter. Coordinates
 /// are local to the canvas origin.
-#[cfg(feature = "impls")]
 pub struct CanvasState {
     pub window: u64,
     pub x: f32,
@@ -1692,8 +1727,9 @@ pub fn gui_hbox<R: GuiStore>(
     gui_container::<R>(cx, window, x, y, spacing, true, "gui_hbox")
 }
 
-/// Moves a widget into a container. The widget leaves the window's
-/// top-level children and is positioned by the layout pass from then on.
+/// Moves a widget into a container, grid, or scroll. The widget leaves
+/// the window's top-level children and is positioned by the layout pass
+/// from then on.
 /// Containers nest freely, but cycles are refused: a container cannot
 /// hold itself or one of its own ancestors.
 #[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui), handle(Gui) -> result[null]))]
@@ -1713,9 +1749,11 @@ pub fn gui_add<R: GuiStore>(
 
     let window_id = match R::gui_handles_ref(cx).get(&container_id) {
         Some(GuiHandle::Container(c)) => c.window,
+        Some(GuiHandle::Grid(g)) => g.window,
+        Some(GuiHandle::Scroll(s)) => s.window,
         Some(_) => {
             return R::err(R::from_string(format!(
-                "gui_add: handle {} is not a container",
+                "gui_add: handle {} is not a container, grid, or scroll",
                 container_id
             )));
         }
@@ -1741,7 +1779,7 @@ pub fn gui_add<R: GuiStore>(
     // Cycle check: adding W into C is a cycle iff C is reachable from W.
     if container_id == widget_id || reaches::<R>(cx, widget_id, container_id) {
         return R::err(R::from_string(
-            "gui_add: containers cannot hold themselves or their ancestors".to_string(),
+            "gui_add: parents cannot hold themselves or their ancestors".to_string(),
         ));
     }
 
@@ -1751,27 +1789,49 @@ pub fn gui_add<R: GuiStore>(
     // A widget lives in exactly one place: evict from any other container.
     let mut elsewhere = Vec::new();
     for (id, h) in R::gui_handles(cx).iter_mut() {
-        if let GuiHandle::Container(c) = h
-            && *id != container_id
-            && c.children.contains(&widget_id)
-        {
+        let holds = match h {
+            GuiHandle::Container(c) => *id != container_id && c.children.contains(&widget_id),
+            GuiHandle::Grid(g) => *id != container_id && g.children.contains(&widget_id),
+            GuiHandle::Scroll(s) => *id != container_id && s.children.contains(&widget_id),
+            _ => false,
+        };
+        if holds {
             elsewhere.push(*id);
         }
     }
     for id in elsewhere {
-        if let Some(GuiHandle::Container(c)) = R::gui_handles(cx).get_mut(&id) {
-            c.children.retain(|c| *c != widget_id);
+        match R::gui_handles(cx).get_mut(&id) {
+            Some(GuiHandle::Container(c)) => {
+                c.children.retain(|c| *c != widget_id);
+            }
+            Some(GuiHandle::Grid(g)) => {
+                g.children.retain(|c| *c != widget_id);
+            }
+            Some(GuiHandle::Scroll(s)) => {
+                s.children.retain(|c| *c != widget_id);
+            }
+            _ => {}
         }
     }
-    if let Some(GuiHandle::Container(c)) = R::gui_handles(cx).get_mut(&container_id)
-        && !c.children.contains(&widget_id)
-    {
-        c.children.push(widget_id);
+    match R::gui_handles(cx).get_mut(&container_id) {
+        Some(GuiHandle::Container(c)) if !c.children.contains(&widget_id) => {
+            c.children.push(widget_id);
+        }
+        Some(GuiHandle::Grid(g)) if !g.children.contains(&widget_id) => {
+            g.children.push(widget_id);
+        }
+        Some(GuiHandle::Scroll(s)) if !s.children.contains(&widget_id) => {
+            s.children.push(widget_id);
+        }
+        Some(GuiHandle::Container(_))
+        | Some(GuiHandle::Grid(_))
+        | Some(GuiHandle::Scroll(_)) => {}
+        _ => {}
     }
     R::ok(R::null())
 }
 
-/// Whether `target` is reachable from `root` through container children.
+/// Whether `target` is reachable from `root` through parent children.
 #[cfg(feature = "impls")]
 fn reaches<R: GuiStore>(cx: &R::Cx, root: u64, target: u64) -> bool {
     let mut stack = vec![root];
@@ -1783,8 +1843,11 @@ fn reaches<R: GuiStore>(cx: &R::Cx, root: u64, target: u64) -> bool {
         if !seen.insert(id) {
             continue;
         }
-        if let Some(GuiHandle::Container(c)) = R::gui_handles_ref(cx).get(&id) {
-            stack.extend(c.children.iter().copied());
+        match R::gui_handles_ref(cx).get(&id) {
+            Some(GuiHandle::Container(c)) => stack.extend(c.children.iter().copied()),
+            Some(GuiHandle::Grid(g)) => stack.extend(g.children.iter().copied()),
+            Some(GuiHandle::Scroll(s)) => stack.extend(s.children.iter().copied()),
+            _ => {}
         }
     }
     false
@@ -1810,22 +1873,28 @@ pub fn gui_detach<R: GuiStore>(cx: &mut R::Cx, handle: R::Value) -> R::Value {
     };
     let Some(window_id) = window_id else {
         return R::err(R::from_string(format!(
-            "gui_detach: handle {} is a window or container",
+            "gui_detach: handle {} is a window or a parent, not a child",
             id
         )));
     };
 
     let mut found = false;
     for h in R::gui_handles(cx).values_mut() {
-        if let GuiHandle::Container(c) = h {
-            let before = c.children.len();
-            c.children.retain(|c| *c != id);
-            found = found || c.children.len() != before;
+        let kids: Option<&mut Vec<u64>> = match h {
+            GuiHandle::Container(c) => Some(&mut c.children),
+            GuiHandle::Grid(g) => Some(&mut g.children),
+            GuiHandle::Scroll(s) => Some(&mut s.children),
+            _ => None,
+        };
+        if let Some(kids) = kids {
+            let before = kids.len();
+            kids.retain(|c| *c != id);
+            found = found || kids.len() != before;
         }
     }
     if !found {
         return R::err(R::from_string(format!(
-            "gui_detach: handle {} is not in a container",
+            "gui_detach: handle {} is in no container, grid, or scroll",
             id
         )));
     }
@@ -1837,11 +1906,12 @@ pub fn gui_detach<R: GuiStore>(cx: &mut R::Cx, handle: R::Value) -> R::Value {
     R::ok(R::null())
 }
 
-/// Reads a widget's owning window id. Windows and containers have none.
+/// Reads a widget's owning window id. Windows and parents (containers,
+/// grids, scrolls) have none.
 #[cfg(feature = "impls")]
 fn widget_window_ref<V>(handle: &GuiHandle<V>) -> Option<u64> {
     match handle {
-        GuiHandle::Window(_) | GuiHandle::Container(_) => None,
+        GuiHandle::Window(_) | GuiHandle::Container(_) | GuiHandle::Grid(_) | GuiHandle::Scroll(_) => None,
         GuiHandle::Button(w) => Some(w.window),
         GuiHandle::Hyperlink(w) => Some(w.window),
         GuiHandle::Canvas(w) => Some(w.window),
@@ -1875,6 +1945,14 @@ pub fn gui_set_spacing<R: GuiStore>(
             c.spacing = spacing.max(0) as f32;
             R::ok(R::null())
         }
+        Some(GuiHandle::Grid(g)) => {
+            g.spacing = spacing.max(0) as f32;
+            R::ok(R::null())
+        }
+        Some(GuiHandle::Scroll(s)) => {
+            s.spacing = spacing.max(0) as f32;
+            R::ok(R::null())
+        }
         Some(_) => R::err(R::from_string(format!(
             "gui_set_spacing: handle {} is not a container",
             id
@@ -1900,6 +1978,10 @@ pub fn gui_set_padding<R: GuiStore>(
     match R::gui_handles(cx).get_mut(&id) {
         Some(GuiHandle::Container(c)) => {
             c.padding = padding.max(0) as f32;
+            R::ok(R::null())
+        }
+        Some(GuiHandle::Grid(g)) => {
+            g.padding = padding.max(0) as f32;
             R::ok(R::null())
         }
         Some(_) => R::err(R::from_string(format!(
@@ -1947,6 +2029,148 @@ pub fn gui_set_align<R: GuiStore>(
         ))),
         None => R::err(R::from_string(format!(
             "gui_set_align: unknown handle {}",
+            id
+        ))),
+    }
+}
+
+// ============================================================================
+// Grid and scroll containers.
+// ============================================================================
+
+#[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui), int, int, int -> result[handle(Gui)]))]
+pub fn gui_grid<R: GuiStore>(
+    cx: &mut R::Cx,
+    window: R::Value,
+    x: i64,
+    y: i64,
+    columns: i64,
+) -> R::Value {
+    let window_id = match extract_handle::<R>(&window, "gui_grid") {
+        Ok(id) => id,
+        Err(e) => return R::err(R::from_string(e)),
+    };
+
+    if let Err(e) = require_window::<R>(cx, window_id, "gui_grid") {
+        return R::err(R::from_string(e));
+    }
+
+    if columns <= 0 {
+        return R::err(R::from_string(format!(
+            "gui_grid: columns ({}) must be positive",
+            columns
+        )));
+    }
+
+    let handle = insert_handle::<R>(
+        cx,
+        GuiHandle::Grid(GridState {
+            window: window_id,
+            x: x as f32,
+            y: y as f32,
+            columns: columns as usize,
+            spacing: 8.0,
+            padding: 0.0,
+            visible: true,
+            children: Vec::new(),
+        }),
+    );
+
+    let grid_id = R::as_handle(&handle, HandleKind::Gui).unwrap();
+    attach_child::<R>(cx, window_id, grid_id);
+
+    R::ok(handle)
+}
+
+#[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui), int, int, int, int -> result[handle(Gui)]))]
+pub fn gui_scroll<R: GuiStore>(
+    cx: &mut R::Cx,
+    window: R::Value,
+    x: i64,
+    y: i64,
+    width: i64,
+    height: i64,
+) -> R::Value {
+    let window_id = match extract_handle::<R>(&window, "gui_scroll") {
+        Ok(id) => id,
+        Err(e) => return R::err(R::from_string(e)),
+    };
+
+    if let Err(e) = require_window::<R>(cx, window_id, "gui_scroll") {
+        return R::err(R::from_string(e));
+    }
+
+    if width <= 0 || height <= 0 {
+        return R::err(R::from_string(format!(
+            "gui_scroll: width ({}) and height ({}) must be positive",
+            width, height
+        )));
+    }
+
+    let handle = insert_handle::<R>(
+        cx,
+        GuiHandle::Scroll(ScrollState {
+            window: window_id,
+            x: x as f32,
+            y: y as f32,
+            width: width as f32,
+            height: height as f32,
+            spacing: 4.0,
+            scroll_y: 0.0,
+            content_bottom: 0.0,
+            visible: true,
+            children: Vec::new(),
+        }),
+    );
+
+    let scroll_id = R::as_handle(&handle, HandleKind::Gui).unwrap();
+    attach_child::<R>(cx, window_id, scroll_id);
+
+    R::ok(handle)
+}
+
+#[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui), int -> result[null]))]
+pub fn gui_scroll_to<R: GuiStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    px: i64,
+) -> R::Value {
+    let id = match extract_handle::<R>(&handle, "gui_scroll_to") {
+        Ok(id) => id,
+        Err(e) => return R::err(R::from_string(e)),
+    };
+
+    match R::gui_handles(cx).get_mut(&id) {
+        Some(GuiHandle::Scroll(s)) => {
+            s.scroll_y = (px.max(0)) as f32;
+            R::ok(R::null())
+        }
+        Some(_) => R::err(R::from_string(format!(
+            "gui_scroll_to: handle {} is not a scroll",
+            id
+        ))),
+        None => R::err(R::from_string(format!(
+            "gui_scroll_to: unknown handle {}",
+            id
+        ))),
+    }
+}
+
+#[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui) -> result[int]))]
+pub fn gui_scroll_pos<R: GuiStore>(cx: &mut R::Cx, handle: R::Value) -> R::Value {
+    let id = match extract_handle::<R>(&handle, "gui_scroll_pos") {
+        Ok(id) => id,
+        Err(e) => return R::err(R::from_string(e)),
+    };
+
+    match R::gui_handles_ref(cx).get(&id) {
+        Some(GuiHandle::Scroll(s)) => R::ok(R::from_i64(s.scroll_y as i64)),
+        Some(_) => R::err(R::from_string(format!(
+            "gui_scroll_pos: handle {} is not a scroll",
+            id
+        ))),
+        None => R::err(R::from_string(format!(
+            "gui_scroll_pos: unknown handle {}",
             id
         ))),
     }
@@ -2030,6 +2254,8 @@ pub fn gui_set_visible<R: GuiStore>(cx: &mut R::Cx, handle: R::Value, visible: b
         Some(GuiHandle::Window(w)) => w.visible = visible,
         Some(GuiHandle::Button(b)) => b.visible = visible,
         Some(GuiHandle::Hyperlink(h)) => h.visible = visible,
+        Some(GuiHandle::Grid(g)) => g.visible = visible,
+        Some(GuiHandle::Scroll(s)) => s.visible = visible,
         Some(GuiHandle::Canvas(c)) => c.visible = visible,
         Some(GuiHandle::Container(c)) => c.visible = visible,
         Some(GuiHandle::Selectable(s)) => s.visible = visible,
@@ -2065,6 +2291,8 @@ pub fn gui_is_visible<R: GuiStore>(cx: &mut R::Cx, handle: R::Value) -> R::Value
         Some(GuiHandle::Window(w)) => R::ok(R::from_bool(w.visible)),
         Some(GuiHandle::Button(w)) => R::ok(R::from_bool(w.visible)),
         Some(GuiHandle::Hyperlink(h)) => R::ok(R::from_bool(h.visible)),
+        Some(GuiHandle::Grid(g)) => R::ok(R::from_bool(g.visible)),
+        Some(GuiHandle::Scroll(s)) => R::ok(R::from_bool(s.visible)),
         Some(GuiHandle::Canvas(c)) => R::ok(R::from_bool(c.visible)),
         Some(GuiHandle::Container(c)) => R::ok(R::from_bool(c.visible)),
         Some(GuiHandle::Selectable(s)) => R::ok(R::from_bool(s.visible)),
@@ -2645,6 +2873,14 @@ pub fn gui_set_pos<R: GuiStore>(cx: &mut R::Cx, handle: R::Value, x: i64, y: i64
             h.x = x as f32;
             h.y = y as f32;
         }
+        Some(GuiHandle::Grid(g)) => {
+            g.x = x as f32;
+            g.y = y as f32;
+        }
+        Some(GuiHandle::Scroll(s)) => {
+            s.x = x as f32;
+            s.y = y as f32;
+        }
         Some(GuiHandle::Canvas(c)) => {
             c.x = x as f32;
             c.y = y as f32;
@@ -2724,6 +2960,8 @@ pub fn gui_get_pos<R: GuiStore>(cx: &mut R::Cx, handle: R::Value) -> R::Value {
     let (x, y) = match R::gui_handles_ref(cx).get(&id) {
         Some(GuiHandle::Button(w)) => (w.x, w.y),
         Some(GuiHandle::Hyperlink(h)) => (h.x, h.y),
+        Some(GuiHandle::Grid(g)) => (g.x, g.y),
+        Some(GuiHandle::Scroll(s)) => (s.x, s.y),
         Some(GuiHandle::Canvas(c)) => (c.x, c.y),
         Some(GuiHandle::Container(c)) => (c.x, c.y),
         Some(GuiHandle::Selectable(s)) => (s.x, s.y),
@@ -2787,6 +3025,9 @@ pub fn gui_set_z<R: GuiStore>(cx: &mut R::Cx, handle: R::Value, z: i64) -> R::Va
         Some(GuiHandle::ProgressBar(w)) => w.z = z,
         Some(GuiHandle::Separator(w)) => w.z = z,
         Some(GuiHandle::Image(w)) => w.z = z,
+        Some(GuiHandle::Grid(_)) | Some(GuiHandle::Scroll(_)) => {
+            return R::err(R::from_string("gui_set_z: parents have no z-order".to_string()));
+        }
         Some(GuiHandle::Window(_)) => {
             return R::err(R::from_string(format!(
                 "gui_set_z: handle {} is a window and has no z-level - z-level controls draw order between widgets inside a window, not between windows",
@@ -2828,6 +3069,9 @@ pub fn gui_get_z<R: GuiStore>(cx: &mut R::Cx, handle: R::Value) -> R::Value {
         Some(GuiHandle::ProgressBar(w)) => w.z,
         Some(GuiHandle::Separator(w)) => w.z,
         Some(GuiHandle::Image(w)) => w.z,
+        Some(GuiHandle::Grid(_)) | Some(GuiHandle::Scroll(_)) => {
+            return R::err(R::from_string("gui_get_z: parents have no z-order".to_string()));
+        }
         Some(GuiHandle::Window(_)) => {
             return R::err(R::from_string(format!(
                 "gui_get_z: handle {} is a window",
@@ -2854,6 +3098,8 @@ pub fn gui_remove<R: GuiStore>(cx: &mut R::Cx, handle: R::Value) -> R::Value {
     let window_id = match R::gui_handles_ref(cx).get(&id) {
         Some(GuiHandle::Button(w)) => w.window,
         Some(GuiHandle::Hyperlink(h)) => h.window,
+        Some(GuiHandle::Grid(g)) => g.window,
+        Some(GuiHandle::Scroll(s)) => s.window,
         Some(GuiHandle::Canvas(c)) => c.window,
         Some(GuiHandle::Container(c)) => c.window,
         Some(GuiHandle::Selectable(s)) => s.window,
@@ -2881,12 +3127,29 @@ pub fn gui_remove<R: GuiStore>(cx: &mut R::Cx, handle: R::Value) -> R::Value {
     if let Some(GuiHandle::Window(w)) = R::gui_handles(cx).get_mut(&window_id) {
         w.children.retain(|c| *c != id);
     }
-    // Removing a container cascades to its children (and their texture
-    // entries), so no orphaned handles or GPU uploads linger.
-    let orphans: Vec<u64> = match R::gui_handles_ref(cx).get(&id) {
+    // Removing a parent cascades to its whole subtree (and their texture
+    // and size entries), so no orphaned handles or GPU uploads linger.
+    // Collect transitively: nested parents reached through children.
+    let mut orphans: Vec<u64> = Vec::new();
+    let mut stack: Vec<u64> = match R::gui_handles_ref(cx).get(&id) {
         Some(GuiHandle::Container(c)) => c.children.clone(),
+        Some(GuiHandle::Grid(g)) => g.children.clone(),
+        Some(GuiHandle::Scroll(s)) => s.children.clone(),
         _ => Vec::new(),
     };
+    let mut seen_cascade = std::collections::HashSet::new();
+    while let Some(child) = stack.pop() {
+        if !seen_cascade.insert(child) {
+            continue;
+        }
+        orphans.push(child);
+        match R::gui_handles_ref(cx).get(&child) {
+            Some(GuiHandle::Container(c)) => stack.extend(c.children.iter().copied()),
+            Some(GuiHandle::Grid(g)) => stack.extend(g.children.iter().copied()),
+            Some(GuiHandle::Scroll(s)) => stack.extend(s.children.iter().copied()),
+            _ => {}
+        }
+    }
     R::gui_handles(cx).remove(&id);
     R::texture_cache(cx).remove(&id);
     R::widget_sizes(cx).remove(&id);
@@ -3399,10 +3662,14 @@ fn render_window<R: GuiStore>(cx: &mut R::Cx, ctx: &egui::Context, window_id: u6
     let background = win.background;
     let children = win.children.clone();
 
-    // Splice visible containers' children into the flat walk, recursing
-    // through nested containers, so contained widgets snapshot and render
-    // exactly like top-level ones (at the positions the layout pass
-    // computed). Hidden containers hide their whole subtree.
+    // Splice visible parents' children into the flat walk, recursing
+    // through nesting, so contained widgets snapshot and render exactly
+    // like top-level ones (at the positions the layout pass computed).
+    // Hidden parents hide their whole subtree. Scroll viewports additionally
+    // filter to the visible slice: children outside [scroll_y,
+    // scroll_y + height] never snapshot, so long lists cost only their
+    // visible rows per frame.
+    let sizes_now = R::widget_sizes(cx).clone();
     let children: Vec<u64> = {
         let mut flat = Vec::with_capacity(children.len());
         let mut stack: Vec<u64> = children.into_iter().rev().collect();
@@ -3416,6 +3683,28 @@ fn render_window<R: GuiStore>(cx: &mut R::Cx, ctx: &egui::Context, window_id: u6
                     stack.extend(c.children.iter().rev().copied());
                 }
                 Some(GuiHandle::Container(_)) => {}
+                Some(GuiHandle::Grid(g)) if g.visible => {
+                    stack.extend(g.children.iter().rev().copied());
+                }
+                Some(GuiHandle::Grid(_)) => {}
+                Some(GuiHandle::Scroll(s)) if s.visible => {
+                    let top = s.y + s.scroll_y;
+                    let bottom = top + s.height;
+                    let mut in_view: Vec<u64> = Vec::new();
+                    for child in &s.children {
+                        let h = sizes_now.get(child).copied().unwrap_or((0.0, 0.0)).1;
+                        let y = R::gui_handles_ref(cx)
+                            .get(child)
+                            .and_then(child_pos)
+                            .map(|p| p.1)
+                            .unwrap_or(top);
+                        if y + h > top && y < bottom {
+                            in_view.push(*child);
+                        }
+                    }
+                    stack.extend(in_view.into_iter().rev());
+                }
+                Some(GuiHandle::Scroll(_)) => {}
                 _ => flat.push(id),
             }
         }
@@ -3885,10 +4174,11 @@ fn render_window<R: GuiStore>(cx: &mut R::Cx, ctx: &egui::Context, window_id: u6
                             ui.add(widget);
                         }
                     });
+                let sz = resp.response.rect.size();
                 if let Some(tip) = tooltip {
-                    R::widget_sizes(cx).insert(*id, (resp.response.rect.width(), resp.response.rect.height()));
                     resp.response.on_hover_text(tip);
                 }
+                R::widget_sizes(cx).insert(*id, (sz.x, sz.y));
             }
             WidgetSnapshot::Checkbox {
                 id,
@@ -4016,10 +4306,11 @@ fn render_window<R: GuiStore>(cx: &mut R::Cx, ctx: &egui::Context, window_id: u6
                             combo(ui);
                         }
                     });
+                let sz = resp.response.rect.size();
                 if let Some(text) = &tooltip_clone {
-                    R::widget_sizes(cx).insert(*id, (resp.response.rect.width(), resp.response.rect.height()));
                     resp.response.on_hover_text(text);
                 }
+                R::widget_sizes(cx).insert(*id, (sz.x, sz.y));
                 if sel != *selected {
                     changed_selection.push((*id, sel));
                 }
@@ -4061,10 +4352,11 @@ fn render_window<R: GuiStore>(cx: &mut R::Cx, ctx: &egui::Context, window_id: u6
                             radios(ui);
                         }
                     });
+                let sz = resp.response.rect.size();
                 if let Some(text) = &tooltip_clone {
-                    R::widget_sizes(cx).insert(*id, (resp.response.rect.width(), resp.response.rect.height()));
                     resp.response.on_hover_text(text);
                 }
+                R::widget_sizes(cx).insert(*id, (sz.x, sz.y));
                 if sel != *selected {
                     changed_selection.push((*id, sel));
                 }
@@ -4165,10 +4457,11 @@ fn render_window<R: GuiStore>(cx: &mut R::Cx, ctx: &egui::Context, window_id: u6
                             }
                         });
                     });
+                let sz = resp.response.rect.size();
                 if let Some(text) = &tooltip_clone {
-                    R::widget_sizes(cx).insert(*id, (resp.response.rect.width(), resp.response.rect.height()));
                     resp.response.on_hover_text(text);
                 }
+                R::widget_sizes(cx).insert(*id, (sz.x, sz.y));
             }
             WidgetSnapshot::Image {
                 id,
@@ -4219,10 +4512,11 @@ fn render_window<R: GuiStore>(cx: &mut R::Cx, ctx: &egui::Context, window_id: u6
                         paint_bg(ui.painter(), bg_color, widget.rect);
                         widget
                     });
+                let sz = resp.response.rect.size();
                 if let Some(text) = &tooltip_clone {
-                    R::widget_sizes(cx).insert(*id, (resp.response.rect.width(), resp.response.rect.height()));
                     resp.response.on_hover_text(text);
                 }
+                R::widget_sizes(cx).insert(*id, (sz.x, sz.y));
             }
         }
     }
@@ -4462,6 +4756,8 @@ fn child_pos<V>(handle: &GuiHandle<V>) -> Option<(f32, f32)> {
         GuiHandle::Container(w) => Some((w.x, w.y)),
         GuiHandle::Button(w) => Some((w.x, w.y)),
         GuiHandle::Hyperlink(w) => Some((w.x, w.y)),
+        GuiHandle::Grid(w) => Some((w.x, w.y)),
+        GuiHandle::Scroll(w) => Some((w.x, w.y)),
         GuiHandle::Canvas(w) => Some((w.x, w.y)),
         GuiHandle::Spinner(w) => Some((w.x, w.y)),
         GuiHandle::Selectable(w) => Some((w.x, w.y)),
@@ -4490,6 +4786,14 @@ fn set_widget_pos<V>(handle: &mut GuiHandle<V>, x: f32, y: f32) {
             w.y = y;
         }
         GuiHandle::Hyperlink(w) => {
+            w.x = x;
+            w.y = y;
+        }
+        GuiHandle::Grid(w) => {
+            w.x = x;
+            w.y = y;
+        }
+        GuiHandle::Scroll(w) => {
             w.x = x;
             w.y = y;
         }
@@ -4619,8 +4923,9 @@ fn layout_containers<R: GuiStore>(cx: &mut R::Cx) {
             if let Some(handle) = R::gui_handles(cx).get_mut(&child) {
                 set_widget_pos(handle, x, y);
             }
-            layout_one::<R>(cx, child);
         }
+        // (Nested parents are reached by layout_any's own recursion below,
+        // so each lays out after its parent positioned it.)
         // Container extents derive bottom-up from laid-out children, so
         // parents stacking this container read a real size next frame.
         // Without this, containers measure zero and their siblings overlap.
@@ -4655,9 +4960,154 @@ fn layout_containers<R: GuiStore>(cx: &mut R::Cx) {
         })
         .flatten()
         .collect();
-    for id in roots {
-        layout_one::<R>(cx, id);
+    /// Dispatches one layout step to whichever parent kind `id` is.
+    /// Non-parents are no-ops, so parents lay out before children and
+    /// nested origins are always current.
+    #[cfg(feature = "impls")]
+    fn layout_any<R: GuiStore>(cx: &mut R::Cx, id: u64) {
+        let is_grid = matches!(
+            R::gui_handles_ref(cx).get(&id),
+            Some(GuiHandle::Grid(_))
+        );
+        let is_scroll = matches!(
+            R::gui_handles_ref(cx).get(&id),
+            Some(GuiHandle::Scroll(_))
+        );
+        if is_grid {
+            layout_grid_one::<R>(cx, id);
+        } else if is_scroll {
+            layout_scroll_one::<R>(cx, id);
+        } else {
+            layout_one::<R>(cx, id);
+        }
+        // Recurse into nested parents regardless of kind.
+        let kids: Vec<u64> = match R::gui_handles_ref(cx).get(&id) {
+            Some(GuiHandle::Container(c)) => c.children.clone(),
+            Some(GuiHandle::Grid(g)) => g.children.clone(),
+            Some(GuiHandle::Scroll(s)) => s.children.clone(),
+            _ => Vec::new(),
+        };
+        for child in kids {
+            layout_any::<R>(cx, child);
+        }
     }
+
+    for id in roots {
+        layout_any::<R>(cx, id);
+    }
+}
+
+
+#[cfg(feature = "impls")]
+/// Grid pass: children flow left-to-right into a fixed column count.
+/// Each row is as tall as its tallest child, each column as wide as its
+/// widest; cells are top-left aligned. Extents derive bottom-up like
+/// containers so parents stacking a grid read a real size.
+fn layout_grid_one<R: GuiStore>(cx: &mut R::Cx, id: u64) {
+    struct Grid {
+        x: f32,
+        y: f32,
+        columns: usize,
+        spacing: f32,
+        padding: f32,
+        children: Vec<u64>,
+    }
+    let grid = match R::gui_handles_ref(cx).get(&id) {
+        Some(GuiHandle::Grid(g)) if g.visible => Grid {
+            x: g.x,
+            y: g.y,
+            columns: g.columns.max(1),
+            spacing: g.spacing,
+            padding: g.padding,
+            children: g.children.clone(),
+        },
+        _ => return,
+    };
+    let sizes = R::widget_sizes(cx).clone();
+    let rows = grid.children.len().div_ceil(grid.columns);
+    let mut col_w = vec![0.0f32; grid.columns];
+    let mut row_h = vec![0.0f32; rows.max(1)];
+    for (i, child) in grid.children.iter().enumerate() {
+        let (w, h) = sizes.get(child).copied().unwrap_or((0.0, 0.0));
+        let (r, c) = (i / grid.columns, i % grid.columns);
+        col_w[c] = col_w[c].max(w);
+        row_h[r] = row_h[r].max(h);
+    }
+    let mut plans: Vec<(u64, f32, f32)> = Vec::with_capacity(grid.children.len());
+    let mut y = grid.y + grid.padding;
+    for (r, row) in grid.children.chunks(grid.columns).enumerate() {
+        let mut x = grid.x + grid.padding;
+        for (c, child) in row.iter().enumerate() {
+            plans.push((*child, x, y));
+            x += col_w[c] + grid.spacing;
+        }
+        y += row_h[r] + grid.spacing;
+    }
+    for (child, x, y) in plans {
+        if let Some(handle) = R::gui_handles(cx).get_mut(&child) {
+            set_widget_pos(handle, x, y);
+        }
+    }
+    let total_w: f32 = col_w.iter().sum::<f32>()
+        + grid.spacing * (grid.columns.max(1) - 1) as f32;
+    let total_h: f32 = row_h.iter().sum::<f32>()
+        + grid.spacing * (rows.max(1) - 1) as f32;
+    R::widget_sizes(cx).insert(
+        id,
+        (
+            (total_w + grid.padding * 2.0).max(0.0),
+            (total_h + grid.padding * 2.0).max(0.0),
+        ),
+    );
+}
+
+#[cfg(feature = "impls")]
+/// Scroll pass: children stack vertically like a box, then the viewport
+/// window `[scroll_y, scroll_y + height]` decides nothing here  -  the
+/// snapshot walk filters by these same positions (see below). Clamps the
+/// offset into range and records the content extent for clamping.
+fn layout_scroll_one<R: GuiStore>(cx: &mut R::Cx, id: u64) {
+    struct View {
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        spacing: f32,
+        scroll_y: f32,
+        children: Vec<u64>,
+    }
+    let view = match R::gui_handles_ref(cx).get(&id) {
+        Some(GuiHandle::Scroll(s)) if s.visible => View {
+            x: s.x,
+            y: s.y,
+            width: s.width,
+            height: s.height,
+            spacing: s.spacing,
+            scroll_y: s.scroll_y,
+            children: s.children.clone(),
+        },
+        _ => return,
+    };
+    let sizes = R::widget_sizes(cx).clone();
+    let mut cursor = view.y;
+    let mut plans: Vec<(u64, f32, f32)> = Vec::with_capacity(view.children.len());
+    for child in &view.children {
+        plans.push((*child, view.x, cursor));
+        cursor += sizes.get(child).copied().unwrap_or((0.0, 0.0)).1 + view.spacing;
+    }
+    for (child, x, y) in plans {
+        if let Some(handle) = R::gui_handles(cx).get_mut(&child) {
+            set_widget_pos(handle, x, y);
+        }
+    }
+    let bottom = (cursor - view.spacing - view.y).max(0.0);
+    let max_off = (bottom - view.height).max(0.0);
+    let clamped = view.scroll_y.clamp(0.0, max_off);
+    if let Some(GuiHandle::Scroll(s)) = R::gui_handles(cx).get_mut(&id) {
+        s.content_bottom = bottom;
+        s.scroll_y = clamped;
+    }
+    R::widget_sizes(cx).insert(id, (view.width, view.height));
 }
 
 #[cfg(feature = "impls")]
@@ -4962,6 +5412,9 @@ pub fn gui_set_font_size<R: GuiStore>(cx: &mut R::Cx, handle: R::Value, size: f6
     match R::gui_handles(cx).get_mut(&id) {
         Some(GuiHandle::Button(b)) => { b.font_size = Some(size as f32); }
         Some(GuiHandle::Hyperlink(h)) => { h.font_size = Some(size as f32); }
+        Some(GuiHandle::Grid(_)) | Some(GuiHandle::Scroll(_)) => {
+            return R::err(R::from_string("gui_set_font_size: parents have no text".to_string()));
+        }
         Some(GuiHandle::Canvas(_)) => {
             return R::err(R::from_string("gui_set_font_size: canvases have no text".to_string()));
         }
@@ -5011,6 +5464,9 @@ pub fn gui_set_color<R: GuiStore>(
     match R::gui_handles(cx).get_mut(&id) {
         Some(GuiHandle::Button(bh)) => { bh.color = Some((r, g, b)); }
         Some(GuiHandle::Hyperlink(h)) => { h.color = Some((r, g, b)); }
+        Some(GuiHandle::Grid(_)) | Some(GuiHandle::Scroll(_)) => {
+            return R::err(R::from_string("gui_set_color: parents have no text".to_string()));
+        }
         Some(GuiHandle::Canvas(_)) => {
             return R::err(R::from_string("gui_set_color: canvases have no text".to_string()));
         }
@@ -5060,6 +5516,9 @@ pub fn gui_set_bg_color<R: GuiStore>(
     match R::gui_handles(cx).get_mut(&id) {
         Some(GuiHandle::Button(bh)) => { bh.bg_color = Some((r, g, b)); }
         Some(GuiHandle::Hyperlink(h)) => { h.bg_color = Some((r, g, b)); }
+        Some(GuiHandle::Grid(_)) | Some(GuiHandle::Scroll(_)) => {
+            return R::err(R::from_string("gui_set_bg_color: parents have no background".to_string()));
+        }
         Some(GuiHandle::Canvas(_)) => {
             return R::err(R::from_string("gui_set_bg_color: canvases have no background".to_string()));
         }
@@ -5107,6 +5566,9 @@ pub fn gui_set_tooltip<R: GuiStore>(
     match R::gui_handles(cx).get_mut(&id) {
         Some(GuiHandle::Button(bh)) => { bh.tooltip = Some(text); }
         Some(GuiHandle::Hyperlink(h)) => { h.tooltip = Some(text); }
+        Some(GuiHandle::Grid(_)) | Some(GuiHandle::Scroll(_)) => {
+            return R::err(R::from_string("gui_set_tooltip: parents show no tooltip".to_string()));
+        }
         Some(GuiHandle::Canvas(_)) => {
             return R::err(R::from_string("gui_set_tooltip: canvases show no tooltip".to_string()));
         }
@@ -5212,6 +5674,10 @@ rl_std_core::native_module!("gui";
         gui_vbox,
         gui_hbox,
         gui_add,
+        gui_grid,
+        gui_scroll,
+        gui_scroll_to,
+        gui_scroll_pos,
         gui_detach,
         gui_set_spacing,
         gui_set_padding,
