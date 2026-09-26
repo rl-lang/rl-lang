@@ -37,6 +37,9 @@ mod buf_to_string;
 mod buf_free;
 mod buf_addr;
 mod buf_resize;
+mod spawn;
+mod emit;
+mod poll;
 mod syscall6;
 mod type_of;
 
@@ -83,6 +86,9 @@ static FUNCTIONS: &[&FnEntry] = &[
     &buf_free::BUF_FREE,
     &buf_addr::BUF_ADDR,
     &buf_resize::BUF_RESIZE,
+    &spawn::SPAWN,
+    &emit::EMIT,
+    &poll::POLL,
     &syscall6::SYSCALL6,
     &abort::ABORT,
     &type_of::TYPE_OF,

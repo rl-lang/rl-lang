@@ -166,6 +166,14 @@ pub struct Vm {
     pub(crate) buf_handles: HashMap<u64, Vec<u8>>,
     /// Next handle id to hand out for buffers; only ever increments.
     pub(crate) buf_next_handle: u64,
+    /// Worker-thread receivers (`core::__spawn`), keyed by job id. Only
+    /// receivers live here; each worker owns its `Vm` on its own thread.
+    pub(crate) thread_jobs: HashMap<u64, std::sync::mpsc::Receiver<rl_std::core::ThreadMsg>>,
+    /// Next job id to hand out for workers; only ever increments.
+    pub(crate) thread_next_handle: u64,
+    /// Progress channel of THIS vm when it is a worker (`core::__emit`
+    /// sends here). `None` on main vms, where `__emit` fails.
+    pub(crate) worker_tx: Option<std::sync::mpsc::Sender<rl_std::core::ThreadMsg>>,
     /// PRNG state for `std::random`, seeded from the system clock at startup.
     pub(crate) rng: rl_std_core::Xoshiro256,
     /// Registry for `std::test` (cases, grouping, results), isolated per Vm.
@@ -210,6 +218,9 @@ impl Vm {
             io_next_handle: 1,
             buf_handles: HashMap::new(),
             buf_next_handle: 1,
+            thread_jobs: HashMap::new(),
+            thread_next_handle: 1,
+            worker_tx: None,
             rng: Default::default(),
             test_state: Default::default(),
             user_args_offset: 1,

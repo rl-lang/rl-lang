@@ -21,6 +21,7 @@ mod gui_number_input;
 mod gui_on_change;
 mod gui_on_click;
 mod gui_on_close;
+mod gui_on_frame;
 mod gui_on_key;
 mod gui_on_submit;
 mod gui_progress_bar;
@@ -86,6 +87,7 @@ static FUNCTIONS: &[&FnEntry] = &[
     &gui_on_change::GUI_ON_CHANGE,
     &gui_on_click::GUI_ON_CLICK,
     &gui_on_close::GUI_ON_CLOSE,
+    &gui_on_frame::GUI_ON_FRAME,
     &gui_on_key::GUI_ON_KEY,
     &gui_on_submit::GUI_ON_SUBMIT,
     &gui_progress_bar::GUI_PROGRESS_BAR,

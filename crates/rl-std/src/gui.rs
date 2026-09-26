@@ -84,6 +84,10 @@ pub struct WindowState<V> {
     /// Called with the pressed key's name (e.g. `"Enter"`, `"Escape"`) for
     /// every non-repeat key press while this window has focus.
     pub on_key: Option<V>,
+    /// Called with no arguments every frame while set. Enables polling
+    /// patterns (worker threads, animations) and implies continuous
+    /// repaint. Pass `null` to unset.
+    pub on_frame: Option<V>,
 }
 
 #[cfg(feature = "impls")]
@@ -470,6 +474,7 @@ pub fn gui_window<R: GuiStore>(cx: &mut R::Cx, title: String, width: i64, height
             icon: None,
             on_close: None,
             on_key: None,
+            on_frame: None,
         }),
     );
     R::ok(handle)
@@ -1338,6 +1343,44 @@ pub fn gui_on_close<R: GuiStore>(cx: &mut R::Cx, handle: R::Value, function: R::
         ))),
         None => R::err(R::from_string(format!(
             "gui_on_close: unknown handle {}",
+            id
+        ))),
+    }
+}
+
+// ---- per-frame callback ---------------------------------------------------------------
+
+#[native_fn(module = "gui", bound = "GuiStore",
+    sig(handle(Gui), callback( -> null) -> result[null]))]
+pub fn gui_on_frame<R: GuiStore>(cx: &mut R::Cx, handle: R::Value, function: R::Value) -> R::Value {
+    let id = match extract_handle::<R>(&handle, "gui_on_frame") {
+        Ok(id) => id,
+        Err(e) => return R::err(R::from_string(e)),
+    };
+
+    // `null` unsets a previous callback; otherwise a callable is required.
+    let callback = if R::type_name(&function) == "null" {
+        None
+    } else if R::is_callable(&function) {
+        Some(function)
+    } else {
+        return R::err(R::from_string(format!(
+            "gui_on_frame: expected function, lambda, or null, found {}",
+            R::type_name(&function)
+        )));
+    };
+
+    match R::gui_handles(cx).get_mut(&id) {
+        Some(GuiHandle::Window(w)) => {
+            w.on_frame = callback;
+            R::ok(R::null())
+        }
+        Some(_) => R::err(R::from_string(format!(
+            "gui_on_frame: handle {} is not a window",
+            id
+        ))),
+        None => R::err(R::from_string(format!(
+            "gui_on_frame: unknown handle {}",
             id
         ))),
     }
@@ -2362,13 +2405,16 @@ fn render_window<R: GuiStore>(cx: &mut R::Cx, ctx: &egui::Context, window_id: u6
                 let resp = egui::Area::new(egui::Id::new(("rl_gui_label", *id)))
                     .fixed_pos(egui::pos2(*x, *y))
                     .show(ctx, |ui| {
+                        // Never wrap: the area resizes to content, so wrapped
+                        // text would reflow every time the string changes.
+                        let widget = egui::Label::new(rich).wrap_mode(egui::TextWrapMode::Extend);
                         if let Some((r, g, b)) = bg_color {
                             egui::Frame::new()
                                 .fill(egui::Color32::from_rgb(*r, *g, *b))
                                 .inner_margin(4.0)
-                                .show(ui, |ui| ui.label(rich));
+                                .show(ui, |ui| ui.add(widget));
                         } else {
-                            ui.label(rich);
+                            ui.add(widget);
                         }
                     });
                 if let Some(tip) = tooltip {
@@ -2826,6 +2872,30 @@ fn take_viewport_state<R: GuiStore>(cx: &mut R::Cx, window_id: u64) -> Option<Vi
 }
 
 #[cfg(feature = "impls")]
+/// Fires a window's `on_frame` callback, if set. Called once per frame
+/// from the event loop; powers polling patterns (worker threads,
+/// animations) that must observe every frame.
+fn fire_frame_callback<R: GuiStore>(cx: &mut R::Cx, window_id: u64, span: R::Span) {
+    let on_frame = match R::gui_handles_ref(cx).get(&window_id) {
+        Some(GuiHandle::Window(w)) => w.on_frame.clone(),
+        _ => None,
+    };
+    if let Some(cb) = on_frame {
+        report_callback_err(R::call_value(cx, &cb, &[], span));
+    }
+}
+
+#[cfg(feature = "impls")]
+/// Whether any window wants per-frame callbacks. While true the event
+/// loop repaints continuously; otherwise it stays on-demand so idle
+/// windows cost nothing.
+fn any_frame_callback<R: GuiStore>(cx: &R::Cx) -> bool {
+    R::gui_handles_ref(cx)
+        .values()
+        .any(|h| matches!(h, GuiHandle::Window(w) if w.on_frame.is_some()))
+}
+
+#[cfg(feature = "impls")]
 struct RlGuiApp<'a, R: GuiStore> {
     cx: &'a mut R::Cx,
     window: u64,
@@ -2875,6 +2945,10 @@ impl<R: GuiStore> eframe::App for RlGuiApp<'_, R> {
         }
 
         render_window::<R>(cx, &ctx, self.window, span);
+        fire_frame_callback::<R>(cx, self.window, span);
+        if any_frame_callback::<R>(cx) {
+            ctx.request_repaint();
+        }
 
         // Every other open window becomes its own native viewport, spawned
         // fresh each frame (immediate viewports must be re-requested every
@@ -2918,6 +2992,10 @@ impl<R: GuiStore> eframe::App for RlGuiApp<'_, R> {
                     return;
                 }
                 render_window::<R>(&mut *cx, child_ctx, window_id, span);
+                fire_frame_callback::<R>(&mut *cx, window_id, span);
+                if any_frame_callback::<R>(&*cx) {
+                    child_ctx.request_repaint();
+                }
             });
         }
 
@@ -3251,6 +3329,7 @@ rl_std_core::native_module!("gui";
         gui_on_submit,
         gui_on_key,
         gui_on_close,
+        gui_on_frame,
         gui_is_checked,
         gui_set_checked,
         gui_get_selected_index,

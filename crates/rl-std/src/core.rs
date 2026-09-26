@@ -471,6 +471,41 @@ pub trait BufStore: Runtime {
     fn buf_remove(cx: &mut Self::Cx, id: u64) -> Option<Vec<u8>>;
 }
 
+/// Outcome of a finished worker thread: the displayed final value on
+/// success, or the displayed error on failure. Only strings cross the
+/// thread boundary; values never do (`Vm` is `!Send` by design).
+pub type JobOutcome = Result<String, String>;
+
+/// One message on a worker's channel: streamed progress, or the final
+/// outcome (after which the worker's sender is gone).
+pub enum ThreadMsg {
+    Progress(String),
+    Done(JobOutcome),
+}
+
+/// One poll of a worker thread: unknown id, nothing new, a progress
+/// message, or the finished outcome (which reaps the job).
+pub enum ThreadPoll {
+    Unknown,
+    Pending,
+    Message(String),
+    Done(JobOutcome),
+}
+
+/// Per-runtime access to the worker-thread table. Implemented by
+/// `VmRuntime`: each worker owns a fresh `Vm` on its own pooled thread,
+/// so no `Send` bounds leak into the VM itself.
+pub trait ThreadStore: BufStore {
+    /// Queue source on the shared pool. Err on nested spawn (workers
+    /// cannot spawn) or a saturated pool; the id is only valid on success.
+    fn thread_spawn(cx: &mut Self::Cx, source: String) -> Result<u64, String>;
+    fn thread_poll(cx: &mut Self::Cx, id: u64) -> ThreadPoll;
+    /// Sends a progress message from inside a worker. Returns false on a
+    /// main `Vm` (which has no worker channel).
+    fn thread_emit(cx: &mut Self::Cx, text: String) -> bool;
+    /// True when `cx` is a worker Vm (has a worker channel).
+    fn thread_is_worker(cx: &Self::Cx) -> bool;
+}
 /// Extracts a `Buffer` handle id from a value, or returns a type error.
 #[cfg(feature = "impls")]
 pub fn extract_buffer<R: Runtime>(v: &R::Value, name: &str) -> Result<u64, String> {
@@ -710,6 +745,48 @@ pub fn __buf_resize<R: BufStore>(
     Ok(R::null())
 }
 
+// ---- worker threads ---------------------------------------------------------------
+// Task parallelism without shared memory: `__spawn` runs RL source on a
+// fresh `Vm` on a new OS thread; only strings cross the boundary. Poll
+// protocol: `err("pending")` while running, `ok(text)` with the displayed
+// final value when done, `err(text)` when the worker failed. Unknown ids
+// abort, like bad buffer handles.
+
+#[native_fn(module = "core", bound = "ThreadStore", sig(string -> int))]
+pub fn __spawn<R: ThreadStore>(
+    cx: &mut R::Cx,
+    source: String,
+    span: R::Span,
+) -> Result<i64, Error> {
+    match R::thread_spawn(cx, source) {
+        Ok(id) => Ok(id as i64),
+        Err(e) => Err(R::error(cx, e, span)),
+    }
+}
+
+#[native_fn(module = "core", bound = "ThreadStore", sig(string -> null))]
+pub fn __emit<R: ThreadStore>(cx: &mut R::Cx, text: String) -> R::Value {
+    if R::thread_emit(cx, text) {
+        R::null()
+    } else {
+        R::err(R::from_string("__emit: only a worker thread can emit".to_string()))
+    }
+}
+
+#[native_fn(module = "core", bound = "ThreadStore", sig(int -> result[string]))]
+pub fn __poll<R: ThreadStore>(cx: &mut R::Cx, job: i64) -> R::Value {
+    if job < 0 {
+        return R::err(R::from_string(format!("__poll: invalid job {job}")));
+    }
+    match R::thread_poll(cx, job as u64) {
+        ThreadPoll::Unknown => R::err(R::from_string(format!("__poll: unknown job {job}"))),
+        ThreadPoll::Pending => R::err(R::from_string("pending".to_string())),
+        ThreadPoll::Message(text) => R::ok(R::from_string(text)),
+        ThreadPoll::Done(Ok(text)) => R::ok(R::from_string(text)),
+        ThreadPoll::Done(Err(text)) => R::err(R::from_string(text)),
+    }
+}
+
 // ---- raw syscall (Linux only) -------------------------------------------------------
 // Escape hatch for libc-free binaries and exotic ioctls. Portable code
 // uses std::fs / std::io; raw numbers are Linux-only by construction.
@@ -821,7 +898,7 @@ pub fn __result_err_value<R: Runtime>(
 // ---- module registration --------------------------------------------------
 
 rl_std_core::native_module!("core";
-    bound: BufStore;
+    bound: ThreadStore;
     funcs: [
         __arr_new, __arr_push, __arr_get, __arr_set, __arr_remove, __arr_len,
         __map_new, __map_get, __map_set, __map_remove, __map_has, __map_keys, __map_len,
@@ -830,6 +907,7 @@ rl_std_core::native_module!("core";
         __buf_new, __buf_len, __buf_push_byte, __buf_get_byte,
         __buf_set_byte, __buf_append, __buf_slice, __buf_clear,
         __buf_to_string, __buf_free, __buf_addr, __buf_resize,
+        __spawn, __emit, __poll,
         __syscall6,
         __abort, __type_of,
         __result_ok_value, __result_err_value,

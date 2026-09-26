@@ -980,6 +980,14 @@ impl<'a> CCodegen<'a> {
             "__buf_free" => return self::core::compile_buf_free(self, args),
             "__buf_addr" => return self::core::compile_buf_addr(self, args),
             "__buf_resize" => return self::core::compile_buf_resize(self, args),
+            // Worker threads need the interpreter; transpiled C has none.
+            "__spawn" | "__emit" | "__poll" => {
+                return Err(Error::at(
+                    Reason::Compile,
+                    format!("std::core::{func_name} is VM-only and cannot run in transpiled programs"),
+                    Span::dummy(),
+                ));
+            }
             "__syscall6" => return self::core::compile_syscall6(self, args),
             "__type_of" => return self::core::compile_type_of(self, args),
             "__result_ok_value" => return self::core::compile_result_ok_value(self, args),
