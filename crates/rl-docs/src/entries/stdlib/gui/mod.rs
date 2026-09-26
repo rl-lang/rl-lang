@@ -18,6 +18,13 @@ mod gui_get_z;
 mod gui_hyperlink;
 mod gui_image;
 mod gui_update_image;
+mod gui_vbox;
+mod gui_hbox;
+mod gui_add;
+mod gui_detach;
+mod gui_set_spacing;
+mod gui_set_padding;
+mod gui_set_align;
 mod gui_is_selected;
 mod gui_is_checked;
 mod gui_is_visible;
@@ -98,6 +105,13 @@ static FUNCTIONS: &[&FnEntry] = &[
         &gui_hyperlink::GUI_HYPERLINK,
 &gui_image::GUI_IMAGE,
     &gui_update_image::GUI_UPDATE_IMAGE,
+    &gui_set_align::GUI_SET_ALIGN,
+    &gui_set_padding::GUI_SET_PADDING,
+    &gui_set_spacing::GUI_SET_SPACING,
+    &gui_detach::GUI_DETACH,
+    &gui_add::GUI_ADD,
+    &gui_hbox::GUI_HBOX,
+    &gui_vbox::GUI_VBOX,
         &gui_is_selected::GUI_IS_SELECTED,
 &gui_is_checked::GUI_IS_CHECKED,
     &gui_is_visible::GUI_IS_VISIBLE,

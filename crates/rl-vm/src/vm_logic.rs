@@ -151,6 +151,8 @@ pub struct Vm {
     /// unchanged images. Plain `u64` pair (not `egui::TextureId`) because
     /// OS deps live in `rl-std`; all ids here are `Managed`.
     pub(crate) texture_cache: HashMap<u64, (u64, u64)>,
+    /// Last rendered size per widget id for the container layout pass.
+    pub(crate) widget_sizes: HashMap<u64, (f32, f32)>,
     /// Set by `gui_quit`; checked by `gui_run`'s frame loop after that frame's
     /// click callbacks have run, so the window closes on the next frame instead
     /// of being torn down mid-callback.
@@ -215,6 +217,7 @@ impl Vm {
             gui_handles: HashMap::new(),
             gui_next_handle: 1,
             texture_cache: HashMap::new(),
+            widget_sizes: HashMap::new(),
             gui_quit_requested: false,
             net_handles: HashMap::new(),
             net_next_handle: 1,

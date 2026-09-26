@@ -57,6 +57,35 @@ pub enum GuiHandle<V> {
     ProgressBar(ProgressState),
     Separator(SeparatorState),
     Image(ImageState),
+    Container(ContainerState),
+}
+
+/// Stacking direction plus cross-axis alignment for a container. `Start`
+/// means left in a vertical box, top in a horizontal one.
+#[cfg(feature = "impls")]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ContainerAlign {
+    Start,
+    Center,
+    End,
+}
+
+/// A layout container: stacks child widgets vertically or horizontally
+/// with spacing, starting at its origin plus padding. Children keep
+/// absolute coordinates recomputed every frame, so manual `gui_set_pos`
+/// on a contained widget loses to the next layout pass. Containers nest
+/// freely; cycles are refused at `gui_add` time.
+#[cfg(feature = "impls")]
+pub struct ContainerState {
+    pub window: u64,
+    pub x: f32,
+    pub y: f32,
+    pub horizontal: bool,
+    pub spacing: f32,
+    pub padding: f32,
+    pub align: ContainerAlign,
+    pub visible: bool,
+    pub children: Vec<u64>,
 }
 
 #[cfg(feature = "impls")]
@@ -351,6 +380,10 @@ pub trait GuiStore: Runtime {
     /// Plain ids (not `TextureId`) because the store side must stay
     /// egui-free; every id here comes from `load_texture` (`Managed`).
     fn texture_cache(cx: &mut Self::Cx) -> &mut HashMap<u64, (u64, u64)>;
+    /// Last rendered size per widget id: `(width, height)` in logical
+    /// pixels. Recorded every frame by the renderer, read by the layout
+    /// pass to position container children.
+    fn widget_sizes(cx: &mut Self::Cx) -> &mut HashMap<u64, (f32, f32)>;
 }
 
 // ============================================================================
@@ -1370,6 +1403,332 @@ pub fn gui_update_image<R: GuiStore>(
 }
 
 // ============================================================================
+// Layout containers.
+// ============================================================================
+
+/// Shared constructor for `gui_vbox`/`gui_hbox`.
+#[cfg(feature = "impls")]
+fn gui_container<R: GuiStore>(
+    cx: &mut R::Cx,
+    window: R::Value,
+    x: i64,
+    y: i64,
+    spacing: i64,
+    horizontal: bool,
+    name: &str,
+) -> R::Value {
+    let window_id = match extract_handle::<R>(&window, name) {
+        Ok(id) => id,
+        Err(e) => return R::err(R::from_string(e)),
+    };
+
+    if let Err(e) = require_window::<R>(cx, window_id, name) {
+        return R::err(R::from_string(e));
+    }
+
+    let handle = insert_handle::<R>(
+        cx,
+        GuiHandle::Container(ContainerState {
+            window: window_id,
+            x: x as f32,
+            y: y as f32,
+            horizontal,
+            spacing: (spacing.max(0)) as f32,
+            padding: 0.0,
+            align: ContainerAlign::Start,
+            visible: true,
+            children: Vec::new(),
+        }),
+    );
+
+    let container_id = R::as_handle(&handle, HandleKind::Gui).unwrap();
+    attach_child::<R>(cx, window_id, container_id);
+
+    R::ok(handle)
+}
+
+#[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui), int, int, int -> result[handle(Gui)]))]
+pub fn gui_vbox<R: GuiStore>(
+    cx: &mut R::Cx,
+    window: R::Value,
+    x: i64,
+    y: i64,
+    spacing: i64,
+) -> R::Value {
+    gui_container::<R>(cx, window, x, y, spacing, false, "gui_vbox")
+}
+
+#[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui), int, int, int -> result[handle(Gui)]))]
+pub fn gui_hbox<R: GuiStore>(
+    cx: &mut R::Cx,
+    window: R::Value,
+    x: i64,
+    y: i64,
+    spacing: i64,
+) -> R::Value {
+    gui_container::<R>(cx, window, x, y, spacing, true, "gui_hbox")
+}
+
+/// Moves a widget into a container. The widget leaves the window's
+/// top-level children and is positioned by the layout pass from then on.
+/// Containers nest freely, but cycles are refused: a container cannot
+/// hold itself or one of its own ancestors.
+#[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui), handle(Gui) -> result[null]))]
+pub fn gui_add<R: GuiStore>(
+    cx: &mut R::Cx,
+    container: R::Value,
+    widget: R::Value,
+) -> R::Value {
+    let container_id = match extract_handle::<R>(&container, "gui_add") {
+        Ok(id) => id,
+        Err(e) => return R::err(R::from_string(e)),
+    };
+    let widget_id = match extract_handle::<R>(&widget, "gui_add") {
+        Ok(id) => id,
+        Err(e) => return R::err(R::from_string(e)),
+    };
+
+    let window_id = match R::gui_handles_ref(cx).get(&container_id) {
+        Some(GuiHandle::Container(c)) => c.window,
+        Some(_) => {
+            return R::err(R::from_string(format!(
+                "gui_add: handle {} is not a container",
+                container_id
+            )));
+        }
+        None => {
+            return R::err(R::from_string(format!(
+                "gui_add: unknown handle {}",
+                container_id
+            )));
+        }
+    };
+    match R::gui_handles_ref(cx).get(&widget_id) {
+        Some(GuiHandle::Window(_)) => {
+            return R::err(R::from_string("gui_add: cannot add a window".to_string()));
+        }
+        None => {
+            return R::err(R::from_string(format!(
+                "gui_add: unknown handle {}",
+                widget_id
+            )));
+        }
+        _ => {}
+    }
+    // Cycle check: adding W into C is a cycle iff C is reachable from W.
+    if container_id == widget_id || reaches::<R>(cx, widget_id, container_id) {
+        return R::err(R::from_string(
+            "gui_add: containers cannot hold themselves or their ancestors".to_string(),
+        ));
+    }
+
+    if let Some(GuiHandle::Window(w)) = R::gui_handles(cx).get_mut(&window_id) {
+        w.children.retain(|c| *c != widget_id);
+    }
+    // A widget lives in exactly one place: evict from any other container.
+    let mut elsewhere = Vec::new();
+    for (id, h) in R::gui_handles(cx).iter_mut() {
+        if let GuiHandle::Container(c) = h
+            && *id != container_id
+            && c.children.contains(&widget_id)
+        {
+            elsewhere.push(*id);
+        }
+    }
+    for id in elsewhere {
+        if let Some(GuiHandle::Container(c)) = R::gui_handles(cx).get_mut(&id) {
+            c.children.retain(|c| *c != widget_id);
+        }
+    }
+    if let Some(GuiHandle::Container(c)) = R::gui_handles(cx).get_mut(&container_id)
+        && !c.children.contains(&widget_id)
+    {
+        c.children.push(widget_id);
+    }
+    R::ok(R::null())
+}
+
+/// Whether `target` is reachable from `root` through container children.
+#[cfg(feature = "impls")]
+fn reaches<R: GuiStore>(cx: &R::Cx, root: u64, target: u64) -> bool {
+    let mut stack = vec![root];
+    let mut seen = std::collections::HashSet::new();
+    while let Some(id) = stack.pop() {
+        if id == target {
+            return true;
+        }
+        if !seen.insert(id) {
+            continue;
+        }
+        if let Some(GuiHandle::Container(c)) = R::gui_handles_ref(cx).get(&id) {
+            stack.extend(c.children.iter().copied());
+        }
+    }
+    false
+}
+
+/// Moves a widget out of its container back to the window's top level, at
+/// its current (last laid-out) position.
+#[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui) -> result[null]))]
+pub fn gui_detach<R: GuiStore>(cx: &mut R::Cx, handle: R::Value) -> R::Value {
+    let id = match extract_handle::<R>(&handle, "gui_detach") {
+        Ok(id) => id,
+        Err(e) => return R::err(R::from_string(e)),
+    };
+
+    let window_id = match R::gui_handles_ref(cx).get(&id) {
+        Some(h) => widget_window_ref(h),
+        None => {
+            return R::err(R::from_string(format!(
+                "gui_detach: unknown handle {}",
+                id
+            )));
+        }
+    };
+    let Some(window_id) = window_id else {
+        return R::err(R::from_string(format!(
+            "gui_detach: handle {} is a window or container",
+            id
+        )));
+    };
+
+    let mut found = false;
+    for h in R::gui_handles(cx).values_mut() {
+        if let GuiHandle::Container(c) = h {
+            let before = c.children.len();
+            c.children.retain(|c| *c != id);
+            found = found || c.children.len() != before;
+        }
+    }
+    if !found {
+        return R::err(R::from_string(format!(
+            "gui_detach: handle {} is not in a container",
+            id
+        )));
+    }
+    if let Some(GuiHandle::Window(w)) = R::gui_handles(cx).get_mut(&window_id)
+        && !w.children.contains(&id)
+    {
+        w.children.push(id);
+    }
+    R::ok(R::null())
+}
+
+/// Reads a widget's owning window id. Windows and containers have none.
+#[cfg(feature = "impls")]
+fn widget_window_ref<V>(handle: &GuiHandle<V>) -> Option<u64> {
+    match handle {
+        GuiHandle::Window(_) | GuiHandle::Container(_) => None,
+        GuiHandle::Button(w) => Some(w.window),
+        GuiHandle::Hyperlink(w) => Some(w.window),
+        GuiHandle::Spinner(w) => Some(w.window),
+        GuiHandle::Selectable(w) => Some(w.window),
+        GuiHandle::Label(w) => Some(w.window),
+        GuiHandle::Checkbox(w) => Some(w.window),
+        GuiHandle::Textbox(w) => Some(w.window),
+        GuiHandle::Dropdown(w) => Some(w.window),
+        GuiHandle::RadioGroup(w) => Some(w.window),
+        GuiHandle::Slider(w) => Some(w.window),
+        GuiHandle::ProgressBar(w) => Some(w.window),
+        GuiHandle::Separator(w) => Some(w.window),
+        GuiHandle::Image(w) => Some(w.window),
+    }
+}
+
+#[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui), int -> result[null]))]
+pub fn gui_set_spacing<R: GuiStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    spacing: i64,
+) -> R::Value {
+    let id = match extract_handle::<R>(&handle, "gui_set_spacing") {
+        Ok(id) => id,
+        Err(e) => return R::err(R::from_string(e)),
+    };
+
+    match R::gui_handles(cx).get_mut(&id) {
+        Some(GuiHandle::Container(c)) => {
+            c.spacing = spacing.max(0) as f32;
+            R::ok(R::null())
+        }
+        Some(_) => R::err(R::from_string(format!(
+            "gui_set_spacing: handle {} is not a container",
+            id
+        ))),
+        None => R::err(R::from_string(format!(
+            "gui_set_spacing: unknown handle {}",
+            id
+        ))),
+    }
+}
+
+#[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui), int -> result[null]))]
+pub fn gui_set_padding<R: GuiStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    padding: i64,
+) -> R::Value {
+    let id = match extract_handle::<R>(&handle, "gui_set_padding") {
+        Ok(id) => id,
+        Err(e) => return R::err(R::from_string(e)),
+    };
+
+    match R::gui_handles(cx).get_mut(&id) {
+        Some(GuiHandle::Container(c)) => {
+            c.padding = padding.max(0) as f32;
+            R::ok(R::null())
+        }
+        Some(_) => R::err(R::from_string(format!(
+            "gui_set_padding: handle {} is not a container",
+            id
+        ))),
+        None => R::err(R::from_string(format!(
+            "gui_set_padding: unknown handle {}",
+            id
+        ))),
+    }
+}
+
+#[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui), string -> result[null]))]
+pub fn gui_set_align<R: GuiStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    align: String,
+) -> R::Value {
+    let id = match extract_handle::<R>(&handle, "gui_set_align") {
+        Ok(id) => id,
+        Err(e) => return R::err(R::from_string(e)),
+    };
+
+    let parsed = match align.as_str() {
+        "start" | "left" | "top" => ContainerAlign::Start,
+        "center" | "middle" => ContainerAlign::Center,
+        "end" | "right" | "bottom" => ContainerAlign::End,
+        _ => {
+            return R::err(R::from_string(format!(
+                "gui_set_align: expected start/center/end (left/top and right/bottom work too), got {}",
+                align
+            )));
+        }
+    };
+
+    match R::gui_handles(cx).get_mut(&id) {
+        Some(GuiHandle::Container(c)) => {
+            c.align = parsed;
+            R::ok(R::null())
+        }
+        Some(_) => R::err(R::from_string(format!(
+            "gui_set_align: handle {} is not a container",
+            id
+        ))),
+        None => R::err(R::from_string(format!(
+            "gui_set_align: unknown handle {}",
+            id
+        ))),
+    }
+}
+
+// ============================================================================
 // Getters / setters.
 // ============================================================================
 
@@ -1447,6 +1806,7 @@ pub fn gui_set_visible<R: GuiStore>(cx: &mut R::Cx, handle: R::Value, visible: b
         Some(GuiHandle::Window(w)) => w.visible = visible,
         Some(GuiHandle::Button(b)) => b.visible = visible,
         Some(GuiHandle::Hyperlink(h)) => h.visible = visible,
+        Some(GuiHandle::Container(c)) => c.visible = visible,
         Some(GuiHandle::Selectable(s)) => s.visible = visible,
         Some(GuiHandle::Spinner(s)) => s.visible = visible,
         Some(GuiHandle::Label(l)) => l.visible = visible,
@@ -1480,6 +1840,7 @@ pub fn gui_is_visible<R: GuiStore>(cx: &mut R::Cx, handle: R::Value) -> R::Value
         Some(GuiHandle::Window(w)) => R::ok(R::from_bool(w.visible)),
         Some(GuiHandle::Button(w)) => R::ok(R::from_bool(w.visible)),
         Some(GuiHandle::Hyperlink(h)) => R::ok(R::from_bool(h.visible)),
+        Some(GuiHandle::Container(c)) => R::ok(R::from_bool(c.visible)),
         Some(GuiHandle::Selectable(s)) => R::ok(R::from_bool(s.visible)),
         Some(GuiHandle::Spinner(s)) => R::ok(R::from_bool(s.visible)),
         Some(GuiHandle::Label(w)) => R::ok(R::from_bool(w.visible)),
@@ -2058,6 +2419,10 @@ pub fn gui_set_pos<R: GuiStore>(cx: &mut R::Cx, handle: R::Value, x: i64, y: i64
             h.x = x as f32;
             h.y = y as f32;
         }
+        Some(GuiHandle::Container(c)) => {
+            c.x = x as f32;
+            c.y = y as f32;
+        }
         Some(GuiHandle::Selectable(s)) => {
             s.x = x as f32;
             s.y = y as f32;
@@ -2129,6 +2494,7 @@ pub fn gui_get_pos<R: GuiStore>(cx: &mut R::Cx, handle: R::Value) -> R::Value {
     let (x, y) = match R::gui_handles_ref(cx).get(&id) {
         Some(GuiHandle::Button(w)) => (w.x, w.y),
         Some(GuiHandle::Hyperlink(h)) => (h.x, h.y),
+        Some(GuiHandle::Container(c)) => (c.x, c.y),
         Some(GuiHandle::Selectable(s)) => (s.x, s.y),
         Some(GuiHandle::Spinner(s)) => (s.x, s.y),
         Some(GuiHandle::Label(w)) => (w.x, w.y),
@@ -2173,6 +2539,9 @@ pub fn gui_set_z<R: GuiStore>(cx: &mut R::Cx, handle: R::Value, z: i64) -> R::Va
     match R::gui_handles(cx).get_mut(&id) {
         Some(GuiHandle::Button(w)) => w.z = z,
         Some(GuiHandle::Hyperlink(h)) => h.z = z,
+        Some(GuiHandle::Container(_)) => {
+            return R::err(R::from_string("gui_set_z: containers have no z-order".to_string()));
+        }
         Some(GuiHandle::Selectable(s)) => s.z = z,
         Some(GuiHandle::Spinner(s)) => s.z = z,
         Some(GuiHandle::Label(w)) => w.z = z,
@@ -2208,6 +2577,9 @@ pub fn gui_get_z<R: GuiStore>(cx: &mut R::Cx, handle: R::Value) -> R::Value {
     let z = match R::gui_handles_ref(cx).get(&id) {
         Some(GuiHandle::Button(w)) => w.z,
         Some(GuiHandle::Hyperlink(h)) => h.z,
+        Some(GuiHandle::Container(_)) => {
+            return R::err(R::from_string("gui_get_z: containers have no z-order".to_string()));
+        }
         Some(GuiHandle::Selectable(s)) => s.z,
         Some(GuiHandle::Spinner(s)) => s.z,
         Some(GuiHandle::Label(w)) => w.z,
@@ -2245,6 +2617,7 @@ pub fn gui_remove<R: GuiStore>(cx: &mut R::Cx, handle: R::Value) -> R::Value {
     let window_id = match R::gui_handles_ref(cx).get(&id) {
         Some(GuiHandle::Button(w)) => w.window,
         Some(GuiHandle::Hyperlink(h)) => h.window,
+        Some(GuiHandle::Container(c)) => c.window,
         Some(GuiHandle::Selectable(s)) => s.window,
         Some(GuiHandle::Spinner(s)) => s.window,
         Some(GuiHandle::Label(w)) => w.window,
@@ -2270,8 +2643,20 @@ pub fn gui_remove<R: GuiStore>(cx: &mut R::Cx, handle: R::Value) -> R::Value {
     if let Some(GuiHandle::Window(w)) = R::gui_handles(cx).get_mut(&window_id) {
         w.children.retain(|c| *c != id);
     }
+    // Removing a container cascades to its children (and their texture
+    // entries), so no orphaned handles or GPU uploads linger.
+    let orphans: Vec<u64> = match R::gui_handles_ref(cx).get(&id) {
+        Some(GuiHandle::Container(c)) => c.children.clone(),
+        _ => Vec::new(),
+    };
     R::gui_handles(cx).remove(&id);
     R::texture_cache(cx).remove(&id);
+    R::widget_sizes(cx).remove(&id);
+    for orphan in orphans {
+        R::gui_handles(cx).remove(&orphan);
+        R::texture_cache(cx).remove(&orphan);
+        R::widget_sizes(cx).remove(&orphan);
+    }
 
     R::ok(R::null())
 }
@@ -2765,6 +3150,29 @@ fn render_window<R: GuiStore>(cx: &mut R::Cx, ctx: &egui::Context, window_id: u6
     };
     let background = win.background;
     let children = win.children.clone();
+
+    // Splice visible containers' children into the flat walk, recursing
+    // through nested containers, so contained widgets snapshot and render
+    // exactly like top-level ones (at the positions the layout pass
+    // computed). Hidden containers hide their whole subtree.
+    let children: Vec<u64> = {
+        let mut flat = Vec::with_capacity(children.len());
+        let mut stack: Vec<u64> = children.into_iter().rev().collect();
+        let mut seen = std::collections::HashSet::new();
+        while let Some(id) = stack.pop() {
+            if !seen.insert(id) {
+                continue;
+            }
+            match R::gui_handles_ref(cx).get(&id) {
+                Some(GuiHandle::Container(c)) if c.visible => {
+                    stack.extend(c.children.iter().rev().copied());
+                }
+                Some(GuiHandle::Container(_)) => {}
+                _ => flat.push(id),
+            }
+        }
+        flat
+    };
     let enter_pressed = ctx.input(|i| i.key_pressed(egui::Key::Enter));
 
     // Read the actual viewport rect so we can sync size back to WindowState.
@@ -2989,6 +3397,7 @@ fn render_window<R: GuiStore>(cx: &mut R::Cx, ctx: &egui::Context, window_id: u6
                     .fixed_pos(egui::pos2(*x, *y))
                     .show(ctx, |ui| ui.add(btn))
                     .inner;
+                R::widget_sizes(cx).insert(*id, (resp.rect.width(), resp.rect.height()));
                 if let Some(text) = tooltip {
                     resp = resp.on_hover_text(text);
                 }
@@ -3026,6 +3435,7 @@ fn render_window<R: GuiStore>(cx: &mut R::Cx, ctx: &egui::Context, window_id: u6
                         }
                     })
                     .inner;
+                R::widget_sizes(cx).insert(*id, (resp.rect.width(), resp.rect.height()));
                 if let Some(text) = tooltip {
                     resp.on_hover_text(text);
                 }
@@ -3064,6 +3474,7 @@ fn render_window<R: GuiStore>(cx: &mut R::Cx, ctx: &egui::Context, window_id: u6
                         }
                     })
                     .inner;
+                R::widget_sizes(cx).insert(*id, (resp.rect.width(), resp.rect.height()));
                 if let Some(text) = tooltip {
                     resp = resp.on_hover_text(text);
                 }
@@ -3112,6 +3523,7 @@ fn render_window<R: GuiStore>(cx: &mut R::Cx, ctx: &egui::Context, window_id: u6
                         }
                     });
                 if let Some(tip) = tooltip {
+                    R::widget_sizes(cx).insert(*id, (resp.response.rect.width(), resp.response.rect.height()));
                     resp.response.on_hover_text(tip);
                 }
             }
@@ -3143,6 +3555,7 @@ fn render_window<R: GuiStore>(cx: &mut R::Cx, ctx: &egui::Context, window_id: u6
                         }
                     })
                     .inner;
+                R::widget_sizes(cx).insert(*id, (resp.rect.width(), resp.rect.height()));
                 let changed = resp.changed();
                 resp.on_hover_text(tooltip.clone().unwrap_or_default());
                 if changed {
@@ -3188,6 +3601,7 @@ fn render_window<R: GuiStore>(cx: &mut R::Cx, ctx: &egui::Context, window_id: u6
                         )
                     })
                     .inner;
+                R::widget_sizes(cx).insert(*id, (resp.rect.width(), resp.rect.height()));
                 if let Some(text) = tooltip {
                     resp = resp.on_hover_text(text);
                 }
@@ -3240,6 +3654,7 @@ fn render_window<R: GuiStore>(cx: &mut R::Cx, ctx: &egui::Context, window_id: u6
                         }
                     });
                 if let Some(text) = &tooltip_clone {
+                    R::widget_sizes(cx).insert(*id, (resp.response.rect.width(), resp.response.rect.height()));
                     resp.response.on_hover_text(text);
                 }
                 if sel != *selected {
@@ -3284,6 +3699,7 @@ fn render_window<R: GuiStore>(cx: &mut R::Cx, ctx: &egui::Context, window_id: u6
                         }
                     });
                 if let Some(text) = &tooltip_clone {
+                    R::widget_sizes(cx).insert(*id, (resp.response.rect.width(), resp.response.rect.height()));
                     resp.response.on_hover_text(text);
                 }
                 if sel != *selected {
@@ -3322,6 +3738,7 @@ fn render_window<R: GuiStore>(cx: &mut R::Cx, ctx: &egui::Context, window_id: u6
                         widget
                     })
                     .inner;
+                R::widget_sizes(cx).insert(*id, (resp.rect.width(), resp.rect.height()));
                 let changed = resp.changed();
                 resp.on_hover_text(tooltip_clone.unwrap_or_default());
                 if changed {
@@ -3352,6 +3769,7 @@ fn render_window<R: GuiStore>(cx: &mut R::Cx, ctx: &egui::Context, window_id: u6
                         widget
                     })
                     .inner;
+                R::widget_sizes(cx).insert(*id, (resp.rect.width(), resp.rect.height()));
                 if let Some(text) = &tooltip_clone {
                     resp.on_hover_text(text);
                 }
@@ -3385,6 +3803,7 @@ fn render_window<R: GuiStore>(cx: &mut R::Cx, ctx: &egui::Context, window_id: u6
                         });
                     });
                 if let Some(text) = &tooltip_clone {
+                    R::widget_sizes(cx).insert(*id, (resp.response.rect.width(), resp.response.rect.height()));
                     resp.response.on_hover_text(text);
                 }
             }
@@ -3438,6 +3857,7 @@ fn render_window<R: GuiStore>(cx: &mut R::Cx, ctx: &egui::Context, window_id: u6
                         widget
                     });
                 if let Some(text) = &tooltip_clone {
+                    R::widget_sizes(cx).insert(*id, (resp.response.rect.width(), resp.response.rect.height()));
                     resp.response.on_hover_text(text);
                 }
             }
@@ -3671,6 +4091,208 @@ fn take_viewport_state<R: GuiStore>(cx: &mut R::Cx, window_id: u64) -> Option<Vi
 }
 
 #[cfg(feature = "impls")]
+/// Reads a widget's absolute position. Returns `None` for windows (which
+/// position themselves via the viewport, not the layout pass).
+fn child_pos<V>(handle: &GuiHandle<V>) -> Option<(f32, f32)> {
+    match handle {
+        GuiHandle::Window(_) => None,
+        GuiHandle::Container(w) => Some((w.x, w.y)),
+        GuiHandle::Button(w) => Some((w.x, w.y)),
+        GuiHandle::Hyperlink(w) => Some((w.x, w.y)),
+        GuiHandle::Spinner(w) => Some((w.x, w.y)),
+        GuiHandle::Selectable(w) => Some((w.x, w.y)),
+        GuiHandle::Label(w) => Some((w.x, w.y)),
+        GuiHandle::Checkbox(w) => Some((w.x, w.y)),
+        GuiHandle::Textbox(w) => Some((w.x, w.y)),
+        GuiHandle::Dropdown(w) => Some((w.x, w.y)),
+        GuiHandle::RadioGroup(w) => Some((w.x, w.y)),
+        GuiHandle::Slider(w) => Some((w.x, w.y)),
+        GuiHandle::ProgressBar(w) => Some((w.x, w.y)),
+        GuiHandle::Separator(w) => Some((w.x, w.y)),
+        GuiHandle::Image(w) => Some((w.x, w.y)),
+    }
+}
+#[cfg(feature = "impls")]
+/// Writes a widget's absolute position. Containers position their
+/// children through here every frame; manual `gui_set_pos` on a
+/// contained widget loses to the next layout pass.
+fn set_widget_pos<V>(handle: &mut GuiHandle<V>, x: f32, y: f32) {
+    match handle {
+        GuiHandle::Window(w) => {
+            w.pending_position = Some((x, y));
+        }
+        GuiHandle::Button(w) => {
+            w.x = x;
+            w.y = y;
+        }
+        GuiHandle::Hyperlink(w) => {
+            w.x = x;
+            w.y = y;
+        }
+        GuiHandle::Spinner(w) => {
+            w.x = x;
+            w.y = y;
+        }
+        GuiHandle::Selectable(w) => {
+            w.x = x;
+            w.y = y;
+        }
+        GuiHandle::Label(w) => {
+            w.x = x;
+            w.y = y;
+        }
+        GuiHandle::Checkbox(w) => {
+            w.x = x;
+            w.y = y;
+        }
+        GuiHandle::Textbox(w) => {
+            w.x = x;
+            w.y = y;
+        }
+        GuiHandle::Dropdown(w) => {
+            w.x = x;
+            w.y = y;
+        }
+        GuiHandle::RadioGroup(w) => {
+            w.x = x;
+            w.y = y;
+        }
+        GuiHandle::Slider(w) => {
+            w.x = x;
+            w.y = y;
+        }
+        GuiHandle::ProgressBar(w) => {
+            w.x = x;
+            w.y = y;
+        }
+        GuiHandle::Separator(w) => {
+            w.x = x;
+            w.y = y;
+        }
+        GuiHandle::Image(w) => {
+            w.x = x;
+            w.y = y;
+        }
+        GuiHandle::Container(w) => {
+            w.x = x;
+            w.y = y;
+        }
+    }
+}
+
+#[cfg(feature = "impls")]
+/// Positions every container's children from last frame's rendered sizes
+/// (unknown sizes read as zero, so the first frame stacks at the origin
+/// and settles on the second). Vertical boxes flow top-down, horizontal
+/// ones left-to-right; alignment offsets the cross axis against the
+/// widest/tallest child. Recursion follows nesting (cycles are refused
+/// at `gui_add`, so this always terminates); parents lay out before
+/// children so nested origins are current.
+fn layout_containers<R: GuiStore>(cx: &mut R::Cx) {
+    struct Frame {
+        x: f32,
+        y: f32,
+        horizontal: bool,
+        spacing: f32,
+        padding: f32,
+        align: ContainerAlign,
+        children: Vec<u64>,
+    }
+    fn read_frame<R: GuiStore>(cx: &R::Cx, id: u64) -> Option<Frame> {
+        match R::gui_handles_ref(cx).get(&id) {
+            Some(GuiHandle::Container(c)) if c.visible => Some(Frame {
+                x: c.x,
+                y: c.y,
+                horizontal: c.horizontal,
+                spacing: c.spacing,
+                padding: c.padding,
+                align: c.align,
+                children: c.children.clone(),
+            }),
+            _ => None,
+        }
+    }
+    fn layout_one<R: GuiStore>(cx: &mut R::Cx, id: u64) {
+        let Some(frame) = read_frame::<R>(cx, id) else {
+            return;
+        };
+        let sizes = R::widget_sizes(cx).clone();
+        let mut cross_max = 0.0f32;
+        for child in &frame.children {
+            let (w, h) = sizes.get(child).copied().unwrap_or((0.0, 0.0));
+            cross_max = cross_max.max(if frame.horizontal { h } else { w });
+        }
+        let mut cursor = if frame.horizontal {
+            frame.x + frame.padding
+        } else {
+            frame.y + frame.padding
+        };
+        let mut plans: Vec<(u64, f32, f32)> = Vec::with_capacity(frame.children.len());
+        for child in &frame.children {
+            let (w, h) = sizes.get(child).copied().unwrap_or((0.0, 0.0));
+            let mine = if frame.horizontal { h } else { w };
+            let cross_off = match frame.align {
+                ContainerAlign::Start => 0.0,
+                ContainerAlign::Center => ((cross_max - mine) / 2.0).max(0.0),
+                ContainerAlign::End => (cross_max - mine).max(0.0),
+            };
+            let (x, y) = if frame.horizontal {
+                let x = cursor;
+                cursor += w + frame.spacing;
+                (x, frame.y + frame.padding + cross_off)
+            } else {
+                let y = cursor;
+                cursor += h + frame.spacing;
+                (frame.x + frame.padding + cross_off, y)
+            };
+            plans.push((*child, x, y));
+        }
+        for (child, x, y) in plans {
+            if let Some(handle) = R::gui_handles(cx).get_mut(&child) {
+                set_widget_pos(handle, x, y);
+            }
+            layout_one::<R>(cx, child);
+        }
+        // Container extents derive bottom-up from laid-out children, so
+        // parents stacking this container read a real size next frame.
+        // Without this, containers measure zero and their siblings overlap.
+        let sizes_now = R::widget_sizes(cx).clone();
+        let mut far_x = frame.x;
+        let mut far_y = frame.y;
+        for child in &frame.children {
+            let (w, h) = sizes_now.get(child).copied().unwrap_or((0.0, 0.0));
+            if let Some(pos) = R::gui_handles_ref(cx)
+                .get(child)
+                .and_then(child_pos)
+            {
+                far_x = far_x.max(pos.0 + w);
+                far_y = far_y.max(pos.1 + h);
+            }
+        }
+        R::widget_sizes(cx).insert(
+            id,
+            (
+                (far_x - frame.x + frame.padding).max(0.0),
+                (far_y - frame.y + frame.padding).max(0.0),
+            ),
+        );
+    }
+    // Entry points: containers sitting directly in a window. Nested ones
+    // are reached by recursion, so each lays out after its parent.
+    let roots: Vec<u64> = R::gui_handles_ref(cx)
+        .values()
+        .filter_map(|h| match h {
+            GuiHandle::Window(w) => Some(w.children.clone()),
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    for id in roots {
+        layout_one::<R>(cx, id);
+    }
+}
+
+#[cfg(feature = "impls")]
 /// Fires a window's `on_frame` callback, if set. Called once per frame
 /// from the event loop; powers polling patterns (worker threads,
 /// animations) that must observe every frame.
@@ -3710,6 +4332,10 @@ impl<R: GuiStore> eframe::App for RlGuiApp<'_, R> {
         let ctx = ui.ctx().clone();
         let cx = &mut *self.cx;
         let span = self.span;
+
+        // Position container children from last frame's sizes before
+        // snapshotting anything.
+        layout_containers::<R>(cx);
 
         // If the user clicked the native close button, clean up (and fire
         // `on_close`) now. eframe still closes the native window at the end
@@ -3968,6 +4594,9 @@ pub fn gui_set_font_size<R: GuiStore>(cx: &mut R::Cx, handle: R::Value, size: f6
     match R::gui_handles(cx).get_mut(&id) {
         Some(GuiHandle::Button(b)) => { b.font_size = Some(size as f32); }
         Some(GuiHandle::Hyperlink(h)) => { h.font_size = Some(size as f32); }
+        Some(GuiHandle::Container(_)) => {
+            return R::err(R::from_string("gui_set_font_size: containers have no text".to_string()));
+        }
         Some(GuiHandle::Selectable(s)) => { s.font_size = Some(size as f32); }
         Some(GuiHandle::Label(l)) => { l.font_size = Some(size as f32); }
         Some(GuiHandle::Checkbox(c)) => { c.font_size = Some(size as f32); }
@@ -4011,6 +4640,9 @@ pub fn gui_set_color<R: GuiStore>(
     match R::gui_handles(cx).get_mut(&id) {
         Some(GuiHandle::Button(bh)) => { bh.color = Some((r, g, b)); }
         Some(GuiHandle::Hyperlink(h)) => { h.color = Some((r, g, b)); }
+        Some(GuiHandle::Container(_)) => {
+            return R::err(R::from_string("gui_set_color: containers have no text".to_string()));
+        }
         Some(GuiHandle::Selectable(s)) => { s.color = Some((r, g, b)); }
         Some(GuiHandle::Label(l)) => { l.color = Some((r, g, b)); }
         Some(GuiHandle::Checkbox(c)) => { c.color = Some((r, g, b)); }
@@ -4054,6 +4686,9 @@ pub fn gui_set_bg_color<R: GuiStore>(
     match R::gui_handles(cx).get_mut(&id) {
         Some(GuiHandle::Button(bh)) => { bh.bg_color = Some((r, g, b)); }
         Some(GuiHandle::Hyperlink(h)) => { h.bg_color = Some((r, g, b)); }
+        Some(GuiHandle::Container(_)) => {
+            return R::err(R::from_string("gui_set_bg_color: containers have no background".to_string()));
+        }
         Some(GuiHandle::Selectable(s)) => { s.bg_color = Some((r, g, b)); }
         Some(GuiHandle::Label(l)) => { l.bg_color = Some((r, g, b)); }
         Some(GuiHandle::Checkbox(c)) => { c.bg_color = Some((r, g, b)); }
@@ -4095,6 +4730,9 @@ pub fn gui_set_tooltip<R: GuiStore>(
     match R::gui_handles(cx).get_mut(&id) {
         Some(GuiHandle::Button(bh)) => { bh.tooltip = Some(text); }
         Some(GuiHandle::Hyperlink(h)) => { h.tooltip = Some(text); }
+        Some(GuiHandle::Container(_)) => {
+            return R::err(R::from_string("gui_set_tooltip: containers show no tooltip".to_string()));
+        }
         Some(GuiHandle::Selectable(s)) => { s.tooltip = Some(text); }
         Some(GuiHandle::Label(l)) => { l.tooltip = Some(text); }
         Some(GuiHandle::Checkbox(c)) => { c.tooltip = Some(text); }
@@ -4186,6 +4824,13 @@ rl_std_core::native_module!("gui";
         gui_separator,
         gui_image,
         gui_update_image,
+        gui_vbox,
+        gui_hbox,
+        gui_add,
+        gui_detach,
+        gui_set_spacing,
+        gui_set_padding,
+        gui_set_align,
         gui_set_text,
         gui_get_text,
         gui_set_visible,

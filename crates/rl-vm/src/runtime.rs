@@ -564,6 +564,9 @@ impl rl_std::gui::GuiStore for VmRuntime {
     fn texture_cache(cx: &mut Vm) -> &mut std::collections::HashMap<u64, (u64, u64)> {
         &mut cx.texture_cache
     }
+    fn widget_sizes(cx: &mut Vm) -> &mut std::collections::HashMap<u64, (f32, f32)> {
+        &mut cx.widget_sizes
+    }
 }
 
 impl rl_std::io::IoStore for VmRuntime {
