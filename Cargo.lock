@@ -4075,6 +4075,7 @@ dependencies = [
 name = "rl-std"
 version = "2.3.0"
 dependencies = [
+ "arboard",
  "argon2",
  "base64",
  "cpal",

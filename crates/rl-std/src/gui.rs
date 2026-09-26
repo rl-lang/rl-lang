@@ -26,6 +26,8 @@ use eframe::egui;
 #[cfg(feature = "impls")]
 use rl_ast::statements::HandleKind;
 #[cfg(feature = "impls")]
+use rl_ast::statements::TypeAnnotation;
+#[cfg(feature = "impls")]
 use rl_std_core::Runtime;
 use rl_std_macros::native_fn;
 #[cfg(feature = "impls")]
@@ -43,6 +45,9 @@ use std::collections::HashMap;
 pub enum GuiHandle<V> {
     Window(WindowState<V>),
     Button(ButtonState<V>),
+    Hyperlink(HyperlinkState),
+    Spinner(SpinnerState),
+    Selectable(SelectableState<V>),
     Label(LabelState),
     Checkbox(CheckboxState<V>),
     Textbox(TextboxState<V>),
@@ -78,6 +83,12 @@ pub struct WindowState<V> {
     pub decorated: bool,
     /// Window icon as `(width, height, rgba bytes)`. `None` uses the OS default.
     pub icon: Option<(u32, u32, Vec<u8>)>,
+    /// One-shot requests from `gui_window_fullscreen/maximize/minimize`,
+    /// applied on the next frame then cleared (same pattern as
+    /// `pending_size`/`pending_position`).
+    pub pending_fullscreen: Option<bool>,
+    pub pending_maximized: Option<bool>,
+    pub pending_minimized: Option<bool>,
     /// Called with no arguments when this window closes, whether via
     /// `gui_close` or the native close button.
     pub on_close: Option<V>,
@@ -88,6 +99,12 @@ pub struct WindowState<V> {
     /// Called with `(x, y)` logical pixels on every mouse move while this
     /// window has focus.
     pub on_mouse_move: Option<V>,
+    /// Called with dropped file paths (`arr[string]`) when files are
+    /// dropped onto this window.
+    pub on_file_drop: Option<V>,
+    /// Called with `(dx, dy)` scroll delta when the wheel moves while this
+    /// window has focus.
+    pub on_scroll: Option<V>,
     /// Called with no arguments every frame while set. Enables polling
     /// patterns (worker threads, animations) and implies continuous
     /// repaint. Pass `null` to unset.
@@ -105,6 +122,54 @@ pub struct ButtonState<V> {
     /// Draw order among this window's widgets: higher draws on top of
     /// lower when positions overlap. Widgets with equal z draw in creation
     /// order (later created = on top).
+    pub z: i32,
+    pub font_size: Option<f32>,
+    pub color: Option<(u8, u8, u8)>,
+    pub bg_color: Option<(u8, u8, u8)>,
+    pub tooltip: Option<String>,
+}
+
+/// A hyperlink: text plus URL. Clicks open the URL in the system browser
+/// (egui built-in); no RL callback fires.
+#[cfg(feature = "impls")]
+pub struct HyperlinkState {
+    pub window: u64,
+    pub text: String,
+    pub url: String,
+    pub x: f32,
+    pub y: f32,
+    pub visible: bool,
+    pub z: i32,
+    pub font_size: Option<f32>,
+    pub color: Option<(u8, u8, u8)>,
+    pub bg_color: Option<(u8, u8, u8)>,
+    pub tooltip: Option<String>,
+}
+
+/// A loading spinner: pure animation, no text, no interaction. Shows
+/// while workers run; remove it when done.
+#[cfg(feature = "impls")]
+pub struct SpinnerState {
+    pub window: u64,
+    pub x: f32,
+    pub y: f32,
+    pub size: f32,
+    pub visible: bool,
+    pub z: i32,
+}
+
+/// One selectable row: highlighted when selected, fires `on_click` like a
+/// button. Selection state is RL-owned (read with `gui_is_selected`,
+/// written with `gui_set_selected`) so lists stay in charge.
+#[cfg(feature = "impls")]
+pub struct SelectableState<V> {
+    pub window: u64,
+    pub text: String,
+    pub selected: bool,
+    pub x: f32,
+    pub y: f32,
+    pub visible: bool,
+    pub on_click: Option<V>,
     pub z: i32,
     pub font_size: Option<f32>,
     pub color: Option<(u8, u8, u8)>,
@@ -485,9 +550,14 @@ pub fn gui_window<R: GuiStore>(cx: &mut R::Cx, title: String, width: i64, height
             position: (0.0, 0.0),
             decorated: true,
             icon: None,
+            pending_fullscreen: None,
+            pending_maximized: None,
+            pending_minimized: None,
             on_close: None,
             on_key: None,
             on_mouse_move: None,
+            on_file_drop: None,
+            on_scroll: None,
             on_frame: None,
         }),
     );
@@ -532,6 +602,170 @@ pub fn gui_button<R: GuiStore>(
     attach_child::<R>(cx, window_id, button_id);
 
     R::ok(handle)
+}
+
+#[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui), string, string, int, int -> result[handle(Gui)]))]
+pub fn gui_hyperlink<R: GuiStore>(
+    cx: &mut R::Cx,
+    window: R::Value,
+    text: String,
+    url: String,
+    x: i64,
+    y: i64,
+) -> R::Value {
+    let window_id = match extract_handle::<R>(&window, "gui_hyperlink") {
+        Ok(id) => id,
+        Err(e) => return R::err(R::from_string(e)),
+    };
+
+    if let Err(e) = require_window::<R>(cx, window_id, "gui_hyperlink") {
+        return R::err(R::from_string(e));
+    }
+
+    let handle = insert_handle::<R>(
+        cx,
+        GuiHandle::Hyperlink(HyperlinkState {
+            window: window_id,
+            text,
+            url,
+            x: x as f32,
+            y: y as f32,
+            visible: true,
+            z: 0,
+            font_size: None,
+            color: None,
+            bg_color: None,
+            tooltip: None,
+        }),
+    );
+
+    let link_id = R::as_handle(&handle, HandleKind::Gui).unwrap();
+    attach_child::<R>(cx, window_id, link_id);
+
+    R::ok(handle)
+}
+
+#[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui), int, int -> result[handle(Gui)]))]
+pub fn gui_spinner<R: GuiStore>(
+    cx: &mut R::Cx,
+    window: R::Value,
+    x: i64,
+    y: i64,
+) -> R::Value {
+    let window_id = match extract_handle::<R>(&window, "gui_spinner") {
+        Ok(id) => id,
+        Err(e) => return R::err(R::from_string(e)),
+    };
+
+    if let Err(e) = require_window::<R>(cx, window_id, "gui_spinner") {
+        return R::err(R::from_string(e));
+    }
+
+    let handle = insert_handle::<R>(
+        cx,
+        GuiHandle::Spinner(SpinnerState {
+            window: window_id,
+            x: x as f32,
+            y: y as f32,
+            size: 28.0,
+            visible: true,
+            z: 0,
+        }),
+    );
+
+    let spinner_id = R::as_handle(&handle, HandleKind::Gui).unwrap();
+    attach_child::<R>(cx, window_id, spinner_id);
+
+    R::ok(handle)
+}
+
+#[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui), string, bool, int, int -> result[handle(Gui)]))]
+pub fn gui_selectable<R: GuiStore>(
+    cx: &mut R::Cx,
+    window: R::Value,
+    text: String,
+    selected: bool,
+    x: i64,
+    y: i64,
+) -> R::Value {
+    let window_id = match extract_handle::<R>(&window, "gui_selectable") {
+        Ok(id) => id,
+        Err(e) => return R::err(R::from_string(e)),
+    };
+
+    if let Err(e) = require_window::<R>(cx, window_id, "gui_selectable") {
+        return R::err(R::from_string(e));
+    }
+
+    let handle = insert_handle::<R>(
+        cx,
+        GuiHandle::Selectable(SelectableState {
+            window: window_id,
+            text,
+            selected,
+            x: x as f32,
+            y: y as f32,
+            visible: true,
+            on_click: None,
+            z: 0,
+            font_size: None,
+            color: None,
+            bg_color: None,
+            tooltip: None,
+        }),
+    );
+
+    let selectable_id = R::as_handle(&handle, HandleKind::Gui).unwrap();
+    attach_child::<R>(cx, window_id, selectable_id);
+
+    R::ok(handle)
+}
+
+#[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui), bool -> result[null]))]
+pub fn gui_set_selected<R: GuiStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    selected: bool,
+) -> R::Value {
+    let id = match extract_handle::<R>(&handle, "gui_set_selected") {
+        Ok(id) => id,
+        Err(e) => return R::err(R::from_string(e)),
+    };
+
+    match R::gui_handles(cx).get_mut(&id) {
+        Some(GuiHandle::Selectable(s)) => {
+            s.selected = selected;
+            R::ok(R::null())
+        }
+        Some(_) => R::err(R::from_string(format!(
+            "gui_set_selected: handle {} is not selectable",
+            id
+        ))),
+        None => R::err(R::from_string(format!(
+            "gui_set_selected: unknown handle {}",
+            id
+        ))),
+    }
+}
+
+#[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui) -> result[bool]))]
+pub fn gui_is_selected<R: GuiStore>(cx: &mut R::Cx, handle: R::Value) -> R::Value {
+    let id = match extract_handle::<R>(&handle, "gui_is_selected") {
+        Ok(id) => id,
+        Err(e) => return R::err(R::from_string(e)),
+    };
+
+    match R::gui_handles_ref(cx).get(&id) {
+        Some(GuiHandle::Selectable(s)) => R::ok(R::from_bool(s.selected)),
+        Some(_) => R::err(R::from_string(format!(
+            "gui_is_selected: handle {} is not selectable",
+            id
+        ))),
+        None => R::err(R::from_string(format!(
+            "gui_is_selected: unknown handle {}",
+            id
+        ))),
+    }
 }
 
 #[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui), string, int, int -> result[handle(Gui)]))]
@@ -1151,6 +1385,14 @@ pub fn gui_set_text<R: GuiStore>(cx: &mut R::Cx, handle: R::Value, text: String)
             b.label = text;
             R::ok(R::null())
         }
+        Some(GuiHandle::Hyperlink(h)) => {
+            h.text = text;
+            R::ok(R::null())
+        }
+        Some(GuiHandle::Selectable(s)) => {
+            s.text = text;
+            R::ok(R::null())
+        }
         Some(GuiHandle::Label(l)) => {
             l.text = text;
             R::ok(R::null())
@@ -1159,6 +1401,7 @@ pub fn gui_set_text<R: GuiStore>(cx: &mut R::Cx, handle: R::Value, text: String)
             t.text = text;
             R::ok(R::null())
         }
+        Some(GuiHandle::Spinner(_)) => R::err(R::from_string("gui_set_text: spinners have no text".to_string())),
         Some(_) => R::err(R::from_string(format!(
             "gui_set_text: handle {} has no text",
             id
@@ -1179,6 +1422,7 @@ pub fn gui_get_text<R: GuiStore>(cx: &mut R::Cx, handle: R::Value) -> R::Value {
 
     match R::gui_handles_ref(cx).get(&id) {
         Some(GuiHandle::Button(b)) => R::ok(R::from_string(b.label.clone())),
+        Some(GuiHandle::Hyperlink(h)) => R::ok(R::from_string(h.text.clone())),
         Some(GuiHandle::Label(l)) => R::ok(R::from_string(l.text.clone())),
         Some(GuiHandle::Textbox(t)) => R::ok(R::from_string(t.text.clone())),
         Some(_) => R::err(R::from_string(format!(
@@ -1202,6 +1446,9 @@ pub fn gui_set_visible<R: GuiStore>(cx: &mut R::Cx, handle: R::Value, visible: b
     match R::gui_handles(cx).get_mut(&id) {
         Some(GuiHandle::Window(w)) => w.visible = visible,
         Some(GuiHandle::Button(b)) => b.visible = visible,
+        Some(GuiHandle::Hyperlink(h)) => h.visible = visible,
+        Some(GuiHandle::Selectable(s)) => s.visible = visible,
+        Some(GuiHandle::Spinner(s)) => s.visible = visible,
         Some(GuiHandle::Label(l)) => l.visible = visible,
         Some(GuiHandle::Checkbox(c)) => c.visible = visible,
         Some(GuiHandle::Textbox(t)) => t.visible = visible,
@@ -1232,6 +1479,9 @@ pub fn gui_is_visible<R: GuiStore>(cx: &mut R::Cx, handle: R::Value) -> R::Value
     match R::gui_handles_ref(cx).get(&id) {
         Some(GuiHandle::Window(w)) => R::ok(R::from_bool(w.visible)),
         Some(GuiHandle::Button(w)) => R::ok(R::from_bool(w.visible)),
+        Some(GuiHandle::Hyperlink(h)) => R::ok(R::from_bool(h.visible)),
+        Some(GuiHandle::Selectable(s)) => R::ok(R::from_bool(s.visible)),
+        Some(GuiHandle::Spinner(s)) => R::ok(R::from_bool(s.visible)),
         Some(GuiHandle::Label(w)) => R::ok(R::from_bool(w.visible)),
         Some(GuiHandle::Checkbox(w)) => R::ok(R::from_bool(w.visible)),
         Some(GuiHandle::Textbox(w)) => R::ok(R::from_bool(w.visible)),
@@ -1269,8 +1519,12 @@ pub fn gui_on_click<R: GuiStore>(cx: &mut R::Cx, handle: R::Value, function: R::
             b.on_click = Some(function);
             R::ok(R::null())
         }
+        Some(GuiHandle::Selectable(s)) => {
+            s.on_click = Some(function);
+            R::ok(R::null())
+        }
         Some(_) => R::err(R::from_string(format!(
-            "gui_on_click: handle {} is not a button",
+            "gui_on_click: handle {} is not clickable",
             id
         ))),
         None => R::err(R::from_string(format!(
@@ -1424,6 +1678,74 @@ pub fn gui_on_mouse_move<R: GuiStore>(
         ))),
         None => R::err(R::from_string(format!(
             "gui_on_mouse_move: unknown handle {}",
+            id
+        ))),
+    }
+}
+
+#[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui), callback(array[string] -> null) -> result[null]))]
+pub fn gui_on_file_drop<R: GuiStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    function: R::Value,
+) -> R::Value {
+    let id = match extract_handle::<R>(&handle, "gui_on_file_drop") {
+        Ok(id) => id,
+        Err(e) => return R::err(R::from_string(e)),
+    };
+
+    if !R::is_callable(&function) {
+        return R::err(R::from_string(format!(
+            "gui_on_file_drop: expected function or lambda, found {}",
+            R::type_name(&function)
+        )));
+    }
+
+    match R::gui_handles(cx).get_mut(&id) {
+        Some(GuiHandle::Window(w)) => {
+            w.on_file_drop = Some(function);
+            R::ok(R::null())
+        }
+        Some(_) => R::err(R::from_string(format!(
+            "gui_on_file_drop: handle {} is not a window",
+            id
+        ))),
+        None => R::err(R::from_string(format!(
+            "gui_on_file_drop: unknown handle {}",
+            id
+        ))),
+    }
+}
+
+#[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui), callback(int, int -> null) -> result[null]))]
+pub fn gui_on_scroll<R: GuiStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    function: R::Value,
+) -> R::Value {
+    let id = match extract_handle::<R>(&handle, "gui_on_scroll") {
+        Ok(id) => id,
+        Err(e) => return R::err(R::from_string(e)),
+    };
+
+    if !R::is_callable(&function) {
+        return R::err(R::from_string(format!(
+            "gui_on_scroll: expected function or lambda, found {}",
+            R::type_name(&function)
+        )));
+    }
+
+    match R::gui_handles(cx).get_mut(&id) {
+        Some(GuiHandle::Window(w)) => {
+            w.on_scroll = Some(function);
+            R::ok(R::null())
+        }
+        Some(_) => R::err(R::from_string(format!(
+            "gui_on_scroll: handle {} is not a window",
+            id
+        ))),
+        None => R::err(R::from_string(format!(
+            "gui_on_scroll: unknown handle {}",
             id
         ))),
     }
@@ -1732,6 +2054,18 @@ pub fn gui_set_pos<R: GuiStore>(cx: &mut R::Cx, handle: R::Value, x: i64, y: i64
             w.x = x as f32;
             w.y = y as f32;
         }
+        Some(GuiHandle::Hyperlink(h)) => {
+            h.x = x as f32;
+            h.y = y as f32;
+        }
+        Some(GuiHandle::Selectable(s)) => {
+            s.x = x as f32;
+            s.y = y as f32;
+        }
+        Some(GuiHandle::Spinner(s)) => {
+            s.x = x as f32;
+            s.y = y as f32;
+        }
         Some(GuiHandle::Label(w)) => {
             w.x = x as f32;
             w.y = y as f32;
@@ -1794,6 +2128,9 @@ pub fn gui_get_pos<R: GuiStore>(cx: &mut R::Cx, handle: R::Value) -> R::Value {
 
     let (x, y) = match R::gui_handles_ref(cx).get(&id) {
         Some(GuiHandle::Button(w)) => (w.x, w.y),
+        Some(GuiHandle::Hyperlink(h)) => (h.x, h.y),
+        Some(GuiHandle::Selectable(s)) => (s.x, s.y),
+        Some(GuiHandle::Spinner(s)) => (s.x, s.y),
         Some(GuiHandle::Label(w)) => (w.x, w.y),
         Some(GuiHandle::Checkbox(w)) => (w.x, w.y),
         Some(GuiHandle::Textbox(w)) => (w.x, w.y),
@@ -1835,6 +2172,9 @@ pub fn gui_set_z<R: GuiStore>(cx: &mut R::Cx, handle: R::Value, z: i64) -> R::Va
 
     match R::gui_handles(cx).get_mut(&id) {
         Some(GuiHandle::Button(w)) => w.z = z,
+        Some(GuiHandle::Hyperlink(h)) => h.z = z,
+        Some(GuiHandle::Selectable(s)) => s.z = z,
+        Some(GuiHandle::Spinner(s)) => s.z = z,
         Some(GuiHandle::Label(w)) => w.z = z,
         Some(GuiHandle::Checkbox(w)) => w.z = z,
         Some(GuiHandle::Textbox(w)) => w.z = z,
@@ -1867,6 +2207,9 @@ pub fn gui_get_z<R: GuiStore>(cx: &mut R::Cx, handle: R::Value) -> R::Value {
 
     let z = match R::gui_handles_ref(cx).get(&id) {
         Some(GuiHandle::Button(w)) => w.z,
+        Some(GuiHandle::Hyperlink(h)) => h.z,
+        Some(GuiHandle::Selectable(s)) => s.z,
+        Some(GuiHandle::Spinner(s)) => s.z,
         Some(GuiHandle::Label(w)) => w.z,
         Some(GuiHandle::Checkbox(w)) => w.z,
         Some(GuiHandle::Textbox(w)) => w.z,
@@ -1901,6 +2244,9 @@ pub fn gui_remove<R: GuiStore>(cx: &mut R::Cx, handle: R::Value) -> R::Value {
 
     let window_id = match R::gui_handles_ref(cx).get(&id) {
         Some(GuiHandle::Button(w)) => w.window,
+        Some(GuiHandle::Hyperlink(h)) => h.window,
+        Some(GuiHandle::Selectable(s)) => s.window,
+        Some(GuiHandle::Spinner(s)) => s.window,
         Some(GuiHandle::Label(w)) => w.window,
         Some(GuiHandle::Checkbox(w)) => w.window,
         Some(GuiHandle::Textbox(w)) => w.window,
@@ -2083,6 +2429,87 @@ pub fn gui_window_set_decorated<R: GuiStore>(
     }
 }
 
+#[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui), bool -> result[null]))]
+pub fn gui_window_fullscreen<R: GuiStore>(
+    cx: &mut R::Cx,
+    window: R::Value,
+    fullscreen: bool,
+) -> R::Value {
+    let id = match extract_handle::<R>(&window, "gui_window_fullscreen") {
+        Ok(id) => id,
+        Err(e) => return R::err(R::from_string(e)),
+    };
+
+    match R::gui_handles(cx).get_mut(&id) {
+        Some(GuiHandle::Window(w)) => {
+            w.pending_fullscreen = Some(fullscreen);
+            R::ok(R::null())
+        }
+        Some(_) => R::err(R::from_string(format!(
+            "gui_window_fullscreen: handle {} is not a window",
+            id
+        ))),
+        None => R::err(R::from_string(format!(
+            "gui_window_fullscreen: unknown handle {}",
+            id
+        ))),
+    }
+}
+
+#[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui), bool -> result[null]))]
+pub fn gui_window_maximize<R: GuiStore>(
+    cx: &mut R::Cx,
+    window: R::Value,
+    maximized: bool,
+) -> R::Value {
+    let id = match extract_handle::<R>(&window, "gui_window_maximize") {
+        Ok(id) => id,
+        Err(e) => return R::err(R::from_string(e)),
+    };
+
+    match R::gui_handles(cx).get_mut(&id) {
+        Some(GuiHandle::Window(w)) => {
+            w.pending_maximized = Some(maximized);
+            R::ok(R::null())
+        }
+        Some(_) => R::err(R::from_string(format!(
+            "gui_window_maximize: handle {} is not a window",
+            id
+        ))),
+        None => R::err(R::from_string(format!(
+            "gui_window_maximize: unknown handle {}",
+            id
+        ))),
+    }
+}
+
+#[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui), bool -> result[null]))]
+pub fn gui_window_minimize<R: GuiStore>(
+    cx: &mut R::Cx,
+    window: R::Value,
+    minimized: bool,
+) -> R::Value {
+    let id = match extract_handle::<R>(&window, "gui_window_minimize") {
+        Ok(id) => id,
+        Err(e) => return R::err(R::from_string(e)),
+    };
+
+    match R::gui_handles(cx).get_mut(&id) {
+        Some(GuiHandle::Window(w)) => {
+            w.pending_minimized = Some(minimized);
+            R::ok(R::null())
+        }
+        Some(_) => R::err(R::from_string(format!(
+            "gui_window_minimize: handle {} is not a window",
+            id
+        ))),
+        None => R::err(R::from_string(format!(
+            "gui_window_minimize: unknown handle {}",
+            id
+        ))),
+    }
+}
+
 #[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui), int, int, array[int] -> result[null]))]
 pub fn gui_window_set_icon<R: GuiStore>(
     cx: &mut R::Cx,
@@ -2154,6 +2581,37 @@ enum WidgetSnapshot {
         color: Option<(u8, u8, u8)>,
         bg_color: Option<(u8, u8, u8)>,
         tooltip: Option<String>,
+    },
+    Hyperlink {
+        id: u64,
+        text: String,
+        url: String,
+        x: f32,
+        y: f32,
+        z: i32,
+        font_size: Option<f32>,
+        color: Option<(u8, u8, u8)>,
+        bg_color: Option<(u8, u8, u8)>,
+        tooltip: Option<String>,
+    },
+    Selectable {
+        id: u64,
+        text: String,
+        selected: bool,
+        x: f32,
+        y: f32,
+        z: i32,
+        font_size: Option<f32>,
+        color: Option<(u8, u8, u8)>,
+        bg_color: Option<(u8, u8, u8)>,
+        tooltip: Option<String>,
+    },
+    Spinner {
+        id: u64,
+        x: f32,
+        y: f32,
+        size: f32,
+        z: i32,
     },
     Label {
         id: u64,
@@ -2276,6 +2734,9 @@ impl WidgetSnapshot {
     fn z(&self) -> i32 {
         match self {
             WidgetSnapshot::Button { z, .. }
+            | WidgetSnapshot::Hyperlink { z, .. }
+            | WidgetSnapshot::Selectable { z, .. }
+            | WidgetSnapshot::Spinner { z, .. }
             | WidgetSnapshot::Label { z, .. }
             | WidgetSnapshot::Checkbox { z, .. }
             | WidgetSnapshot::Textbox { z, .. }
@@ -2348,6 +2809,37 @@ fn render_window<R: GuiStore>(cx: &mut R::Cx, ctx: &egui::Context, window_id: u6
                 color: b.color,
                 bg_color: b.bg_color,
                 tooltip: b.tooltip.clone(),
+            }),
+            Some(GuiHandle::Hyperlink(h)) if h.visible => Some(WidgetSnapshot::Hyperlink {
+                id: *id,
+                text: h.text.clone(),
+                url: h.url.clone(),
+                x: h.x,
+                y: h.y,
+                z: h.z,
+                font_size: h.font_size,
+                color: h.color,
+                bg_color: h.bg_color,
+                tooltip: h.tooltip.clone(),
+            }),
+            Some(GuiHandle::Selectable(s)) if s.visible => Some(WidgetSnapshot::Selectable {
+                id: *id,
+                text: s.text.clone(),
+                selected: s.selected,
+                x: s.x,
+                y: s.y,
+                z: s.z,
+                font_size: s.font_size,
+                color: s.color,
+                bg_color: s.bg_color,
+                tooltip: s.tooltip.clone(),
+            }),
+            Some(GuiHandle::Spinner(s)) if s.visible => Some(WidgetSnapshot::Spinner {
+                id: *id,
+                x: s.x,
+                y: s.y,
+                size: s.size,
+                z: s.z,
             }),
             Some(GuiHandle::Label(l)) if l.visible => Some(WidgetSnapshot::Label {
                 id: *id,
@@ -2503,6 +2995,94 @@ fn render_window<R: GuiStore>(cx: &mut R::Cx, ctx: &egui::Context, window_id: u6
                 if resp.clicked() {
                     clicked.push(*id);
                 }
+            }
+            WidgetSnapshot::Hyperlink {
+                id,
+                text,
+                url,
+                x,
+                y,
+                font_size,
+                color,
+                bg_color,
+                tooltip,
+                ..
+            } => {
+                // Clicks open the URL in the system browser (egui
+                // built-in); no RL callback fires.
+                let link =
+                    egui::Hyperlink::from_label_and_url(styled_text(text, *font_size, *color), url);
+                let resp = egui::Area::new(egui::Id::new(("rl_gui_hyperlink", *id)))
+                    .fixed_pos(egui::pos2(*x, *y))
+                    .show(ctx, |ui| {
+                        if let Some((r, g, b)) = bg_color {
+                            egui::Frame::new()
+                                .fill(egui::Color32::from_rgb(*r, *g, *b))
+                                .inner_margin(4.0)
+                                .show(ui, |ui| ui.add(link))
+                                .inner
+                        } else {
+                            ui.add(link)
+                        }
+                    })
+                    .inner;
+                if let Some(text) = tooltip {
+                    resp.on_hover_text(text);
+                }
+            }
+            WidgetSnapshot::Selectable {
+                id,
+                text,
+                selected,
+                x,
+                y,
+                font_size,
+                color,
+                bg_color,
+                tooltip,
+                ..
+            } => {
+                let mut resp = egui::Area::new(egui::Id::new(("rl_gui_selectable", *id)))
+                    .fixed_pos(egui::pos2(*x, *y))
+                    .show(ctx, |ui| {
+                        if let Some((r, g, b)) = bg_color {
+                            egui::Frame::new()
+                                .fill(egui::Color32::from_rgb(*r, *g, *b))
+                                .inner_margin(4.0)
+                                .show(ui, |ui| {
+                                    ui.selectable_label(
+                                        *selected,
+                                        styled_text(text, *font_size, *color),
+                                    )
+                                })
+                                .inner
+                        } else {
+                            ui.selectable_label(
+                                *selected,
+                                styled_text(text, *font_size, *color),
+                            )
+                        }
+                    })
+                    .inner;
+                if let Some(text) = tooltip {
+                    resp = resp.on_hover_text(text);
+                }
+                if resp.clicked() {
+                    clicked.push(*id);
+                }
+            }
+            WidgetSnapshot::Spinner {
+                id,
+                x,
+                y,
+                size,
+                ..
+            } => {
+                egui::Area::new(egui::Id::new(("rl_gui_spinner", *id)))
+                    .fixed_pos(egui::pos2(*x, *y))
+                    .show(ctx, |ui| {
+                        ui.add(egui::Spinner::new().size(*size));
+                    });
             }
             WidgetSnapshot::Label {
                 id,
@@ -2929,6 +3509,7 @@ fn render_window<R: GuiStore>(cx: &mut R::Cx, ctx: &egui::Context, window_id: u6
     for id in clicked {
         let callback = match R::gui_handles_ref(cx).get(&id) {
             Some(GuiHandle::Button(b)) => b.on_click.clone(),
+            Some(GuiHandle::Selectable(s)) => s.on_click.clone(),
             _ => None,
         };
         if let Some(cb) = callback {
@@ -2996,6 +3577,46 @@ fn render_window<R: GuiStore>(cx: &mut R::Cx, ctx: &egui::Context, window_id: u6
             }
         }
     }
+
+    let dropped: Vec<String> = ctx
+        .input(|i| {
+            i.raw
+                .dropped_files
+                .iter()
+                .filter_map(|f| f.path.clone().map(|p| p.to_string_lossy().into_owned()))
+                .collect()
+        });
+    if !dropped.is_empty() {
+        let on_file_drop = match R::gui_handles_ref(cx).get(&window_id) {
+            Some(GuiHandle::Window(w)) => w.on_file_drop.clone(),
+            _ => None,
+        };
+        if let Some(cb) = on_file_drop {
+            let items: Vec<R::Value> =
+                dropped.into_iter().map(|p| R::from_string(p)).collect();
+            let paths = R::array(items, TypeAnnotation::String);
+            report_callback_err(R::call_value(cx, &cb, &[paths], span));
+        }
+    }
+
+    let scroll = ctx.input(|i| i.smooth_scroll_delta);
+    if scroll.x != 0.0 || scroll.y != 0.0 {
+        let on_scroll = match R::gui_handles_ref(cx).get(&window_id) {
+            Some(GuiHandle::Window(w)) => w.on_scroll.clone(),
+            _ => None,
+        };
+        if let Some(cb) = on_scroll {
+            report_callback_err(R::call_value(
+                cx,
+                &cb,
+                &[
+                    R::from_i64(scroll.x.round() as i64),
+                    R::from_i64(scroll.y.round() as i64),
+                ],
+                span,
+            ));
+        }
+    }
 }
 
 #[cfg(feature = "impls")]
@@ -3010,6 +3631,9 @@ struct ViewportState {
     icon: Option<(u32, u32, Vec<u8>)>,
     pending_size: Option<(f32, f32)>,
     pending_position: Option<(f32, f32)>,
+    pending_fullscreen: Option<bool>,
+    pending_maximized: Option<bool>,
+    pending_minimized: Option<bool>,
 }
 
 #[cfg(feature = "impls")]
@@ -3024,13 +3648,23 @@ fn take_viewport_state<R: GuiStore>(cx: &mut R::Cx, window_id: u64) -> Option<Vi
         icon: w.icon.clone(),
         pending_size: w.pending_size,
         pending_position: w.pending_position,
+        pending_fullscreen: w.pending_fullscreen,
+        pending_maximized: w.pending_maximized,
+        pending_minimized: w.pending_minimized,
     };
 
-    if (state.pending_size.is_some() || state.pending_position.is_some())
+    if (state.pending_size.is_some()
+        || state.pending_position.is_some()
+        || state.pending_fullscreen.is_some()
+        || state.pending_maximized.is_some()
+        || state.pending_minimized.is_some())
         && let Some(GuiHandle::Window(w)) = R::gui_handles(cx).get_mut(&window_id)
     {
         w.pending_size = None;
         w.pending_position = None;
+        w.pending_fullscreen = None;
+        w.pending_maximized = None;
+        w.pending_minimized = None;
     }
 
     Some(state)
@@ -3093,6 +3727,18 @@ impl<R: GuiStore> eframe::App for RlGuiApp<'_, R> {
         ctx.send_viewport_cmd(egui::ViewportCommand::Visible(state.visible));
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(state.title));
         ctx.send_viewport_cmd(egui::ViewportCommand::Decorations(state.decorated));
+        if let Some(fullscreen) = state.pending_fullscreen {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(fullscreen));
+        }
+        if let Some(maximized) = state.pending_maximized {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(maximized));
+        }
+        if let Some(minimized) = state.pending_minimized {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(minimized));
+        }
+        if let Some(minimized) = state.pending_minimized {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(minimized));
+        }
         if let Some((width, height)) = state.pending_size {
             ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(width, height)));
         }
@@ -3151,6 +3797,12 @@ impl<R: GuiStore> eframe::App for RlGuiApp<'_, R> {
                     height: icon_height,
                 });
             }
+            if let Some(fullscreen) = state.pending_fullscreen {
+                builder = builder.with_fullscreen(fullscreen);
+            }
+            if let Some(maximized) = state.pending_maximized {
+                builder = builder.with_maximized(maximized);
+            }
 
             let viewport_id = egui::ViewportId::from_hash_of(("rl_gui_window", window_id));
             ctx.show_viewport_immediate(viewport_id, builder, |child_ctx, _class| {
@@ -3160,6 +3812,9 @@ impl<R: GuiStore> eframe::App for RlGuiApp<'_, R> {
                 }
                 render_window::<R>(&mut *cx, child_ctx, window_id, span);
                 fire_frame_callback::<R>(&mut *cx, window_id, span);
+                if state.pending_minimized == Some(true) {
+                    child_ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+                }
                 if any_frame_callback::<R>(&*cx) {
                     child_ctx.request_repaint_after(std::time::Duration::from_millis(16));
                 }
@@ -3277,6 +3932,30 @@ pub fn gui_quit<R: GuiStore>(cx: &mut R::Cx) -> R::Value {
     R::null()
 }
 
+// ---- clipboard (system-wide, no window needed) --------------------------------------
+
+#[native_fn(module = "gui", bound = "GuiStore", sig(string -> result[null]))]
+pub fn gui_clipboard_copy<R: GuiStore>(text: String) -> R::Value {
+    match arboard::Clipboard::new() {
+        Ok(mut cb) => match cb.set_text(text) {
+            Ok(()) => R::ok(R::null()),
+            Err(e) => R::err(R::from_string(format!("gui_clipboard_copy: {e}"))),
+        },
+        Err(e) => R::err(R::from_string(format!("gui_clipboard_copy: {e}"))),
+    }
+}
+
+#[native_fn(module = "gui", bound = "GuiStore", sig( -> result[string]))]
+pub fn gui_clipboard_paste<R: GuiStore>() -> R::Value {
+    match arboard::Clipboard::new() {
+        Ok(mut cb) => match cb.get_text() {
+            Ok(text) => R::ok(R::from_string(text)),
+            Err(e) => R::err(R::from_string(format!("gui_clipboard_paste: {e}"))),
+        },
+        Err(e) => R::err(R::from_string(format!("gui_clipboard_paste: {e}"))),
+    }
+}
+
 // ---- style setters ----------------------------------------------------------
 
 #[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui), float -> result[null]))]
@@ -3288,6 +3967,8 @@ pub fn gui_set_font_size<R: GuiStore>(cx: &mut R::Cx, handle: R::Value, size: f6
 
     match R::gui_handles(cx).get_mut(&id) {
         Some(GuiHandle::Button(b)) => { b.font_size = Some(size as f32); }
+        Some(GuiHandle::Hyperlink(h)) => { h.font_size = Some(size as f32); }
+        Some(GuiHandle::Selectable(s)) => { s.font_size = Some(size as f32); }
         Some(GuiHandle::Label(l)) => { l.font_size = Some(size as f32); }
         Some(GuiHandle::Checkbox(c)) => { c.font_size = Some(size as f32); }
         Some(GuiHandle::Textbox(t)) => { t.font_size = Some(size as f32); }
@@ -3302,6 +3983,7 @@ pub fn gui_set_font_size<R: GuiStore>(cx: &mut R::Cx, handle: R::Value, size: f6
                 "gui_set_font_size: cannot set font size on a window".into(),
             ));
         }
+        Some(GuiHandle::Spinner(_)) => {}
         None => {
             return R::err(R::from_string(format!(
                 "gui_set_font_size: unknown handle {}",
@@ -3328,6 +4010,8 @@ pub fn gui_set_color<R: GuiStore>(
 
     match R::gui_handles(cx).get_mut(&id) {
         Some(GuiHandle::Button(bh)) => { bh.color = Some((r, g, b)); }
+        Some(GuiHandle::Hyperlink(h)) => { h.color = Some((r, g, b)); }
+        Some(GuiHandle::Selectable(s)) => { s.color = Some((r, g, b)); }
         Some(GuiHandle::Label(l)) => { l.color = Some((r, g, b)); }
         Some(GuiHandle::Checkbox(c)) => { c.color = Some((r, g, b)); }
         Some(GuiHandle::Textbox(t)) => { t.color = Some((r, g, b)); }
@@ -3342,6 +4026,7 @@ pub fn gui_set_color<R: GuiStore>(
                 "gui_set_color: cannot set color on a window".into(),
             ));
         }
+        Some(GuiHandle::Spinner(_)) => {}
         None => {
             return R::err(R::from_string(format!(
                 "gui_set_color: unknown handle {}",
@@ -3368,6 +4053,8 @@ pub fn gui_set_bg_color<R: GuiStore>(
 
     match R::gui_handles(cx).get_mut(&id) {
         Some(GuiHandle::Button(bh)) => { bh.bg_color = Some((r, g, b)); }
+        Some(GuiHandle::Hyperlink(h)) => { h.bg_color = Some((r, g, b)); }
+        Some(GuiHandle::Selectable(s)) => { s.bg_color = Some((r, g, b)); }
         Some(GuiHandle::Label(l)) => { l.bg_color = Some((r, g, b)); }
         Some(GuiHandle::Checkbox(c)) => { c.bg_color = Some((r, g, b)); }
         Some(GuiHandle::Textbox(t)) => { t.bg_color = Some((r, g, b)); }
@@ -3382,6 +4069,7 @@ pub fn gui_set_bg_color<R: GuiStore>(
                 "gui_set_bg_color: cannot set background color on a window".into(),
             ));
         }
+        Some(GuiHandle::Spinner(_)) => {}
         None => {
             return R::err(R::from_string(format!(
                 "gui_set_bg_color: unknown handle {}",
@@ -3406,6 +4094,8 @@ pub fn gui_set_tooltip<R: GuiStore>(
 
     match R::gui_handles(cx).get_mut(&id) {
         Some(GuiHandle::Button(bh)) => { bh.tooltip = Some(text); }
+        Some(GuiHandle::Hyperlink(h)) => { h.tooltip = Some(text); }
+        Some(GuiHandle::Selectable(s)) => { s.tooltip = Some(text); }
         Some(GuiHandle::Label(l)) => { l.tooltip = Some(text); }
         Some(GuiHandle::Checkbox(c)) => { c.tooltip = Some(text); }
         Some(GuiHandle::Textbox(t)) => { t.tooltip = Some(text); }
@@ -3420,6 +4110,7 @@ pub fn gui_set_tooltip<R: GuiStore>(
                 "gui_set_tooltip: cannot set tooltip on a window".into(),
             ));
         }
+        Some(GuiHandle::Spinner(_)) => {}
         None => {
             return R::err(R::from_string(format!(
                 "gui_set_tooltip: unknown handle {}",
@@ -3474,8 +4165,15 @@ pub fn gui_get_window_pos<R: GuiStore>(
 rl_std_core::native_module!("gui";
     bound: GuiStore;
     funcs: [
+        gui_clipboard_copy,
+        gui_clipboard_paste,
         gui_window,
         gui_button,
+        gui_hyperlink,
+        gui_spinner,
+        gui_selectable,
+        gui_set_selected,
+        gui_is_selected,
         gui_label,
         gui_checkbox,
         gui_textbox,
@@ -3497,6 +4195,8 @@ rl_std_core::native_module!("gui";
         gui_on_submit,
         gui_on_key,
         gui_on_mouse_move,
+        gui_on_file_drop,
+        gui_on_scroll,
         gui_on_close,
         gui_on_frame,
         gui_is_checked,
@@ -3518,6 +4218,9 @@ rl_std_core::native_module!("gui";
         gui_window_set_size,
         gui_window_set_pos,
         gui_window_set_decorated,
+        gui_window_fullscreen,
+        gui_window_maximize,
+        gui_window_minimize,
         gui_window_set_icon,
         gui_run,
         gui_close,
