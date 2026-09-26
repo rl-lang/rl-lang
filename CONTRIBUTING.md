@@ -7,8 +7,16 @@ Thanks for your interest in contributing!
 ```bash
 git clone https://github.com/MohamedGonem/rl-lang
 cd rl-lang
-cargo build
+./scripts/build-local.sh --dev && ./scripts/install-local.sh
 ```
+
+## Building
+
+```bash
+ ./scripts/build-local.sh --dev && ./scripts/install-local.sh
+```
+
+Run this from the project root to properly build the project, and install it on ~/.local/bin
 
 ## Before submitting a PR
 
