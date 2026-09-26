@@ -10,20 +10,23 @@ rlm install              # interactive install (TUI picker)
 rlm install latest       # install latest stable
 rlm install nightly      # install nightly
 rlm install v2.2.0       # install a specific version
-rlm install -b rl,rlc    # install specific binaries only
+rlm install -v rl,rlc    # install specific binaries only
+rlm install --variant all latest  # install all binaries
 rlm install --no-tui     # CLI-only mode, no TUI
 rlm update               # update rlm itself to the latest version
 rlm uninstall            # remove installed rl-lang binaries
 rlm list                 # list installed rl-lang binaries
 ```
 
-## Variants
+## Binaries
 
-Release artifacts come in variants (`rl`, `rl_vm`, `rl_debug`, ... with
-`_no_docs` / `_no_repl` trims). Pick them with `-b`:
+Release assets live at https://github.com/rl-lang/rl-lang/releases as
+`{binary}-{platform}-{arch}.tar.gz` (`.zip` on Windows), one archive per
+binary: `rl`, `rlc`, `rlt`, `rlrepl`, `rlsp`, `rldocs`, `rlm`.
+Pick them with `-v` / `--variant` (alias `--binaries`):
 
 ```bash
-rlm install --variant rl,rl_vm latest
+rlm install --variant rl,rlc latest
 ```
 
 ## Modules

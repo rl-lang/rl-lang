@@ -360,6 +360,57 @@ pub(super) fn compile_str_concat(cc: &mut CCodegen, args: &[ExprId]) -> Result<(
     two_args(cc, "rl_core_str_concat", args)
 }
 
+// Buffers are int64 ids into a C-side table, exactly like the VM side:
+// no reassignment needed, the table mutates behind the id.
+pub(super) fn compile_buf_new(cc: &mut CCodegen) -> Result<(), Error> {
+    cc.writer.write("rl_buf_new()");
+    Ok(())
+}
+
+pub(super) fn compile_buf_len(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    one_arg(cc, "rl_buf_len", args)
+}
+
+pub(super) fn compile_buf_push_byte(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    two_args(cc, "rl_buf_push_byte", args)
+}
+
+pub(super) fn compile_buf_get_byte(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    two_args(cc, "rl_buf_get_byte", args)
+}
+
+pub(super) fn compile_buf_set_byte(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    three_args(cc, "rl_buf_set_byte", args)
+}
+
+pub(super) fn compile_buf_append(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    two_args(cc, "rl_buf_append", args)
+}
+
+pub(super) fn compile_buf_slice(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    three_args(cc, "rl_buf_slice", args)
+}
+
+pub(super) fn compile_buf_clear(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    one_arg(cc, "rl_buf_clear", args)
+}
+
+pub(super) fn compile_buf_to_string(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    one_arg(cc, "rl_buf_to_string", args)
+}
+
+pub(super) fn compile_buf_free(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    one_arg(cc, "rl_buf_free", args)
+}
+
+pub(super) fn compile_buf_addr(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    one_arg(cc, "rl_buf_addr", args)
+}
+
+pub(super) fn compile_buf_resize(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
+    two_args(cc, "rl_buf_resize", args)
+}
+
 pub(super) fn compile_syscall6(cc: &mut CCodegen, args: &[ExprId]) -> Result<(), Error> {
     cc.writer.write("rl_core_syscall6(");
     for (i, arg) in args.iter().enumerate() {

@@ -268,6 +268,7 @@ impl VmValue {
                 HandleKind::Audio => "audio handle",
                 HandleKind::Gui => "gui handle",
                 HandleKind::File => "file handle",
+                HandleKind::Buffer => "buffer handle",
             },
         }
     }

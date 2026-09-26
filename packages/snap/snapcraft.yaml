@@ -1,5 +1,5 @@
 name: rl
-version: 2.1.0
+version: 2.3.0
 summary: Programming language with first-class VM and C transpiler
 description: |
   rl-lang is a modern programming language featuring a bytecode VM,
@@ -17,7 +17,7 @@ parts:
   rl:
     plugin: rust
     source: https://github.com/rl-lang/rl-lang.git
-    source-tag: v2.1.0
+    source-tag: v2.3.0
     build-packages:
       - pkg-config
       - libssl-dev

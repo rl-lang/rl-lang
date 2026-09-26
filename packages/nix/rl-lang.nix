@@ -9,7 +9,7 @@
 
 rustPlatform.buildRustPackage rec {
   pname = "rl-lang";
-  version = "2.1.0";
+  version = "2.3.0";
 
   src = fetchFromGitHub {
     owner = "rl-lang";

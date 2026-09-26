@@ -31,7 +31,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 @titlepage
 @title rl Programming Language Toolchain
-@subtitle Version 2.2.0
+@subtitle Version 2.3.0
 @author rl-lang contributors
 @page
 @insertcopying

@@ -116,12 +116,17 @@ entry = "src/main.rl"
         name,
         env!("CARGO_PKG_VERSION"),
     );
-    let main = r#"get println from std::io
-fn main() {
-    println("hello world")
+    // Escape backslashes and quotes so the project name stays a valid rl string.
+    let project_name = name.replace('\\', "\\\\").replace('"', "\\\"");
+    let main = r#"get * from std::io
+
+fn main()
+{
+    println("Hello, I am {!}")
 }
 main()
-"#;
+"#
+    .replace("{!}", &project_name);
     std::fs::create_dir(name)?;
     std::fs::create_dir(format!("{}/src", name))?;
     std::fs::write(format!("{}/rl.toml", name), toml)?;

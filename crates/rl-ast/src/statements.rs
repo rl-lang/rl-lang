@@ -36,6 +36,7 @@ pub enum HandleKind {
     Audio = 3,
     Gui = 4,
     File = 5,
+    Buffer = 6,
 }
 
 impl Statement {

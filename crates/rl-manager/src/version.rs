@@ -55,13 +55,16 @@ fn resolve_latest() -> Result<String> {
         .into_string()
         .map_err(|e| RlmError::Http(e.to_string()))?;
 
-    // Simple JSON parse for tag_name
-    if let Some(start) = body.find("\"tag_name\"") {
-        let slice = &body[start..];
-        if let Some(q1) = slice.find('"') {
-            let slice = &slice[q1 + 1..];
-            if let Some(q2) = slice.find('"') {
-                return Ok(slice[..q2].to_string());
+    // Parse `"tag_name": "<tag>"` — find the key, then the quoted value after ':'.
+    if let Some(key_pos) = body.find("\"tag_name\"") {
+        let after_key = &body[key_pos + "\"tag_name\"".len()..];
+        if let Some(colon) = after_key.find(':') {
+            let after_colon = &after_key[colon + 1..];
+            if let Some(q1) = after_colon.find('"') {
+                let after_q1 = &after_colon[q1 + 1..];
+                if let Some(q2) = after_q1.find('"') {
+                    return Ok(after_q1[..q2].to_string());
+                }
             }
         }
     }
@@ -70,5 +73,5 @@ fn resolve_latest() -> Result<String> {
 
 pub fn release_exists(tag: &str) -> bool {
     let url = format!("https://api.github.com/repos/{}/releases/tags/{}", REPO, tag);
-    ureq::head(&url).call().is_ok()
+    ureq::get(&url).call().is_ok()
 }

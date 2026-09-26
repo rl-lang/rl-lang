@@ -32,7 +32,7 @@ Step-by-step instructions for making rl-lang available through each package mana
    cp PKGBUILD rl-lang/
    cd rl-lang
    makepkg -si  # test
-   git add -A && git commit -m "v2.1.0"
+   git add -A && git commit -m "v2.3.0"
    git push
    ```
 5. Users install: `yay -S rl-lang` or `paru -S rl-lang`
@@ -45,7 +45,7 @@ Step-by-step instructions for making rl-lang available through each package mana
 4. Test: `emerge --pretend =rl-lang-9999`
 5. Push your overlay to GitHub.
 
-For a versioned release ebuild, copy the 9999 ebuild to `rl-lang-2.1.0.ebuild`, remove the git source, and use a tarball URL instead.
+For a versioned release ebuild, copy the 9999 ebuild to `rl-lang-2.3.0.ebuild`, remove the git source, and use a tarball URL instead.
 
 ## Nix
 
@@ -80,7 +80,7 @@ For a versioned release ebuild, copy the 9999 ebuild to `rl-lang-2.1.0.ebuild`, 
 2. Update the three YAML files in `packages/winget/` with the correct version and SHA256 hashes.
 3. Place them in the correct directory structure:
    ```
-   manifests/r/rl-lang/rl/2.1.0/
+   manifests/r/rl-lang/rl/2.3.0/
      rl-lang.rl.yaml              (version)
      rl-lang.rl.locale.en-US.yaml (locale)
      rl-lang.rl.installer.yaml    (installer)

@@ -23,7 +23,8 @@ const RL_STYLES: Styles = Styles::styled()
                    rlm install latest              # install latest stable\n    \
                    rlm install nightly             # install nightly\n    \
                    rlm install v2.2.0              # install specific version\n    \
-                   rlm install --variant rl,rl_vm  # install specific variants\n    \
+                   rlm install --variant rl,rlc    # install specific binaries\n    \
+                   rlm install --variant all latest # install all binaries\n    \
                    rlm install --no-tui            # CLI-only mode\n    \
                    rlm update                      # update rlm itself\n    \
                    rlm uninstall                   # remove installed binaries\n    \
@@ -41,8 +42,9 @@ enum Commands {
         /// Version to install (latest, nightly, or v2.2.0)
         version: Option<String>,
 
-        /// Comma-separated list of variants to install (or "all")
-        #[arg(short, long)]
+        /// Comma-separated list of binaries to install (or "all"):
+        /// rl, rlc, rlt, rlrepl, rlsp, rldocs, rlm
+        #[arg(short, long, visible_aliases = ["binaries", "binary"])]
         variant: Option<String>,
 
         /// Install directory (default: ~/.local/bin)
@@ -87,6 +89,77 @@ fn main() {
     }
 }
 
+fn fmt_bytes(n: u64) -> String {
+    const KB: f64 = 1024.0;
+    const MB: f64 = 1024.0 * 1024.0;
+    let f = n as f64;
+    if f >= MB {
+        format!("{:.1} MB", f / MB)
+    } else if f >= KB {
+        format!("{:.1} KB", f / KB)
+    } else {
+        format!("{} B", n)
+    }
+}
+
+/// CLI progress callback: log lines plus an inline `downloading` /
+/// `verifying sha256` bar (byte counts + percent) on one terminal line.
+fn cli_progress_callback(
+) -> Box<dyn FnMut(rl_manager::install::InstallEvent)> {
+    use rl_manager::install::{InstallEvent, PHASE_CHECKSUM, PHASE_DOWNLOAD};
+    let mut last_pct: Option<u64> = None;
+    let mut in_bar = false;
+    Box::new(move |ev| match ev {
+        InstallEvent::Message(m) => {
+            if in_bar {
+                println!();
+                in_bar = false;
+            }
+            println!("  {}", m);
+        }
+        InstallEvent::PhaseStart { .. } => {
+            last_pct = None;
+        }
+        InstallEvent::PhaseProgress { phase, done, total } => {
+            let label = if phase == PHASE_DOWNLOAD {
+                "downloading"
+            } else if phase == PHASE_CHECKSUM {
+                "verifying sha256"
+            } else {
+                return;
+            };
+            let pct = total
+                .filter(|t| *t > 0)
+                .map(|t| (done * 100 / t).min(100));
+            if pct == last_pct && in_bar {
+                return;
+            }
+            last_pct = pct;
+            let text = match (pct, total) {
+                (Some(p), Some(t)) => format!(
+                    "  {}... {}% ({}/{})",
+                    label,
+                    p,
+                    fmt_bytes(done),
+                    fmt_bytes(t)
+                ),
+                _ => format!("  {}... {}", label, fmt_bytes(done)),
+            };
+            // Pad to clear the previous (longer) line, then carriage-return.
+            print!("\r{:<72}", text);
+            std::io::Write::flush(&mut std::io::stdout()).ok();
+            in_bar = true;
+        }
+        InstallEvent::PhaseDone { .. } => {
+            if in_bar {
+                println!();
+                in_bar = false;
+            }
+            last_pct = None;
+        }
+    })
+}
+
 fn cmd_install(
     version: Option<String>,
     variant: Option<String>,
@@ -102,7 +175,7 @@ fn cmd_install(
     #[cfg(feature = "tui")]
     {
         if !no_tui && std::io::stdin().is_terminal() {
-            if let Err(e) = rl_manager::tui::run_tui() {
+            if let Err(e) = rl_manager::tui::run_tui(install_dir.clone(), force) {
                 eprintln!("TUI error: {}", e);
                 std::process::exit(1);
             }
@@ -150,9 +223,7 @@ fn cmd_install(
     let total = selected.len();
 
     for variant in &selected {
-        let mut progress_cb = |msg: &str| {
-            println!("  {}", msg);
-        };
+        let mut progress_cb = cli_progress_callback();
 
         match rl_manager::install::install_binary(
             variant,
@@ -161,7 +232,7 @@ fn cmd_install(
             arch,
             &install_dir,
             force,
-            Some(&mut progress_cb),
+            Some(progress_cb.as_mut()),
         ) {
             Ok(true) => installed += 1,
             Ok(false) => {}
@@ -208,26 +279,35 @@ fn cmd_update() {
 
     println!("  Updating rlm...");
 
-    // Use the rlm binary to install the latest rlm variant
-    // For now, download the latest release and replace
+    // Resolve "latest" to a real tag (e.g. v2.2.1): the release download
+    // URL needs https://github.com/rl-lang/rl-lang/releases/download/<tag>/...
+    let resolved = match rl_manager::version::resolve_version("latest") {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("  failed to resolve latest release: {}", e);
+            std::process::exit(1);
+        }
+    };
+    println!("  version: {}", resolved);
+
+    // The rlm release asset is rlm-{platform}-{arch}.tar.gz/.zip
+    // (see https://github.com/rl-lang/rl-lang/releases).
     let variant = rl_manager::variants::Variant {
         name: "rlm",
         actual: "rlm",
-        group: "Manager",
+        group: "Toolchain manager",
     };
 
-    let mut progress_cb = |msg: &str| {
-        println!("  {}", msg);
-    };
+    let mut progress_cb = cli_progress_callback();
 
     match rl_manager::install::install_binary(
         &variant,
-        "latest",
+        &resolved,
         platform,
         arch,
         &install_dir,
         true,
-        Some(&mut progress_cb),
+        Some(progress_cb.as_mut()),
     ) {
         Ok(_) => println!("  rlm updated successfully."),
         Err(e) => {
@@ -352,7 +432,7 @@ fn select_variants(variant_arg: Option<String>, no_tui: bool) -> Vec<rl_manager:
             .collect();
     }
 
-    if let Ok(env_var) = std::env::var("RL_VARIANT") {
+    if let Ok(env_var) = std::env::var("RL_VARIANT").or_else(|_| std::env::var("RL_BINARIES")) {
         if env_var.trim() == "all" {
             return all;
         }
@@ -364,7 +444,7 @@ fn select_variants(variant_arg: Option<String>, no_tui: bool) -> Vec<rl_manager:
 
     if no_tui || !std::io::stdin().is_terminal() {
         eprintln!("error: no TTY detected and RL_VARIANT is not set.");
-        eprintln!("       Non-interactive use requires: RL_VARIANT=rl,rl_vm rlm install");
+        eprintln!("       Non-interactive use requires: RL_VARIANT=rl,rlc rlm install --no-tui");
         std::process::exit(1);
     }
 

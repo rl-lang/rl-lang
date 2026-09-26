@@ -25,30 +25,30 @@ members = [
 ]
 
 [workspace.package]
-version = "2.2.0"
+version = "2.3.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/rl-lang/rl-lang"
 
 [workspace.dependencies]
-rl-commons = { path = "crates/rl-commons", version = "2.2.0" }
-rl-std-core = { path = "crates/rl-std-core", version = "2.2.0" }
-rl-std-macros = { path = "crates/rl-std-macros", version = "2.2.0" }
-rl-std = { path = "crates/rl-std", version = "2.2.0" }
-rl-utils = { path = "crates/rl-utils", version = "2.2.0" }
-rl-lexer = { path = "crates/rl-lexer", version = "2.2.0" }
-rl-ast = { path = "crates/rl-ast", version = "2.2.0" }
-rl-parser = { path = "crates/rl-parser", version = "2.2.0" }
-rl-resolver = { path = "crates/rl-resolver", version = "2.2.0" }
-rl-vm = { path = "crates/rl-vm", version = "2.2.0" }
-rl-checker = { path = "crates/rl-checker", version = "2.2.0" }
-rl-docs = { path = "crates/rl-docs", version = "2.2.0" }
-rl-tooling = { path = "crates/rl-tooling", version = "2.2.0" }
-rl-repl = { path = "crates/rl-repl", default-features = false, version = "2.2.0" }
-rl-lsp = { path = "crates/rl-lsp", version = "2.2.0" }
-rl-cc = { path = "crates/rl-cc", version = "2.2.0" }
-rl-pm = { path = "crates/rl-pm", version = "2.2.0" }
-rl-manager = { path = "crates/rl-manager", version = "2.2.0" }
+rl-commons = { path = "crates/rl-commons", version = "2.3.0" }
+rl-std-core = { path = "crates/rl-std-core", version = "2.3.0" }
+rl-std-macros = { path = "crates/rl-std-macros", version = "2.3.0" }
+rl-std = { path = "crates/rl-std", version = "2.3.0" }
+rl-utils = { path = "crates/rl-utils", version = "2.3.0" }
+rl-lexer = { path = "crates/rl-lexer", version = "2.3.0" }
+rl-ast = { path = "crates/rl-ast", version = "2.3.0" }
+rl-parser = { path = "crates/rl-parser", version = "2.3.0" }
+rl-resolver = { path = "crates/rl-resolver", version = "2.3.0" }
+rl-vm = { path = "crates/rl-vm", version = "2.3.0" }
+rl-checker = { path = "crates/rl-checker", version = "2.3.0" }
+rl-docs = { path = "crates/rl-docs", version = "2.3.0" }
+rl-tooling = { path = "crates/rl-tooling", version = "2.3.0" }
+rl-repl = { path = "crates/rl-repl", default-features = false, version = "2.3.0" }
+rl-lsp = { path = "crates/rl-lsp", version = "2.3.0" }
+rl-cc = { path = "crates/rl-cc", version = "2.3.0" }
+rl-pm = { path = "crates/rl-pm", version = "2.3.0" }
+rl-manager = { path = "crates/rl-manager", version = "2.3.0" }
 
 criterion = { version = "0.5", features = ["html_reports"] }
 syn = { version = "2", features = ["full"] }

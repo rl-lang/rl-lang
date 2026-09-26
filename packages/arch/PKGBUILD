@@ -1,6 +1,6 @@
 # Maintainer: rl-lang contributors <https://github.com/rl-lang/rl-lang>
 pkgname=rl-lang
-pkgver=2.1.0
+pkgver=2.3.0
 pkgrel=1
 pkgdesc="Programming language with first-class VM and C transpiler"
 arch=('x86_64' 'aarch64')

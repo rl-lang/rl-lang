@@ -1,7 +1,7 @@
 class RlLang < Formula
   desc "Programming language with first-class VM and C transpiler"
   homepage "https://github.com/rl-lang/rl-lang"
-  url "https://github.com/rl-lang/rl-lang/archive/refs/tags/v2.1.0.tar.gz"
+  url "https://github.com/rl-lang/rl-lang/archive/refs/tags/v2.3.0.tar.gz"
   sha256 "PLACEHOLDER" # update with actual sha256
   license "MIT"
 

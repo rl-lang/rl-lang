@@ -1,4 +1,4 @@
-rl-lang (2.1.0) unstable; urgency=medium
+rl-lang (2.3.0) unstable; urgency=medium
 
   * Parser delimiter error improvements
   * Man page and info page packaging

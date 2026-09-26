@@ -289,3 +289,302 @@ has1
     .unwrap();
     assert_eq!(result, VmValue::Bool(true));
 }
+
+#[test]
+fn buf_push_append_slice_to_string() {
+    let result = compile_and_run(
+        r#"
+get __buf_new, __buf_push_byte, __buf_append from core
+get __buf_get_byte, __buf_slice, __buf_to_string, __buf_len from core
+get to_int from std::types
+get result_unwrap from std::res
+dec b = __buf_new()
+__buf_push_byte(b, 72 as byte)
+__buf_push_byte(b, 105 as byte)
+__buf_append(b, "!")
+__buf_len(b) + result_unwrap(to_int(__buf_get_byte(b, 0)))
+"#,
+    )
+    .unwrap();
+    assert_eq!(result, VmValue::Int(75));
+}
+
+#[test]
+fn buf_set_clear_resize_addr() {
+    let result = compile_and_run(
+        r#"
+get __buf_new, __buf_push_byte, __buf_set_byte from core
+get __buf_get_byte, __buf_clear, __buf_len from core
+get __buf_resize, __buf_addr from core
+get to_int from std::types
+get result_unwrap from std::res
+dec b = __buf_new()
+__buf_push_byte(b, 72 as byte)
+__buf_set_byte(b, 0, 104 as byte)
+dec int g = result_unwrap(to_int(__buf_get_byte(b, 0)))
+__buf_clear(b)
+__buf_resize(b, 4)
+__buf_len(b) + g
+"#,
+    )
+    .unwrap();
+    assert_eq!(result, VmValue::Int(108));
+}
+
+#[test]
+fn buf_to_string_roundtrip() {
+    let result = compile_and_run(
+        r#"
+get __buf_new, __buf_append, __buf_to_string from core
+dec b = __buf_new()
+__buf_append(b, "hi")
+__buf_to_string(b)
+"#,
+    )
+    .unwrap();
+    assert_eq!(result, VmValue::Str(std::rc::Rc::from("hi")));
+}
+
+#[test]
+fn buf_get_out_of_bounds_aborts() {
+    let result = compile_and_run(
+        r#"
+get __buf_new, __buf_get_byte from core
+dec b = __buf_new()
+__buf_get_byte(b, 0)
+"#,
+    );
+    assert!(result.is_err());
+}
+
+#[test]
+fn buf_set_out_of_bounds_aborts() {
+    let result = compile_and_run(
+        r#"
+get __buf_new, __buf_set_byte from core
+dec b = __buf_new()
+__buf_set_byte(b, 3, 65 as byte)
+"#,
+    );
+    assert!(result.is_err());
+}
+
+#[test]
+fn buf_slice_bad_range_aborts() {
+    let result = compile_and_run(
+        r#"
+get __buf_new, __buf_append, __buf_slice from core
+dec b = __buf_new()
+__buf_append(b, "hi")
+__buf_slice(b, 1, 5)
+"#,
+    );
+    assert!(result.is_err());
+}
+
+#[test]
+fn buf_slice_split_codepoint_aborts() {
+    let result = compile_and_run(
+        r#"
+get __buf_new, __buf_append, __buf_slice from core
+dec b = __buf_new()
+__buf_append(b, "é")
+__buf_slice(b, 0, 1)
+"#,
+    );
+    assert!(result.is_err());
+}
+
+#[test]
+fn buf_use_after_free_aborts() {
+    let result = compile_and_run(
+        r#"
+get __buf_new, __buf_free, __buf_len from core
+dec b = __buf_new()
+__buf_free(b)
+__buf_len(b)
+"#,
+    );
+    assert!(result.is_err());
+}
+
+#[test]
+fn buf_resize_negative_aborts() {
+    let result = compile_and_run(
+        r#"
+get __buf_new, __buf_resize from core
+dec b = __buf_new()
+__buf_resize(b, -1)
+"#,
+    );
+    assert!(result.is_err());
+}
+
+#[test]
+fn spawn_poll_roundtrip() {
+    let result = compile_and_run(
+        r#"
+get __spawn, __poll from core
+get is_err, result_unwrap, result_unwrap_err from std::res
+dec int job = __spawn("40 + 2")
+dec string out = ""
+while (true) {
+    dec r = __poll(job)
+    if (is_err(r)) {
+        dec string e = result_unwrap_err(r)
+        if (e != "pending") {
+            out = e
+            break
+        }
+    } else {
+        out = result_unwrap(r)
+        break
+    }
+}
+out
+"#,
+    )
+    .unwrap();
+    assert_eq!(result, VmValue::Str(std::rc::Rc::from("42")));
+}
+
+#[test]
+fn spawn_emit_streams_progress() {
+    let result = compile_and_run(
+        r#"
+get __spawn, __poll from core
+get __str_concat from core
+get is_err, result_unwrap, result_unwrap_err from std::res
+dec int job = __spawn("get __emit from core\n__emit(\"a\")\n__emit(\"b\")\n\"done\"")
+dec string acc = ""
+dec int n = 0
+while (n < 10000) {
+    dec r = __poll(job)
+    if (is_err(r)) {
+        dec string e = result_unwrap_err(r)
+        if (e != "pending") {
+            break
+        }
+    } else {
+        acc = __str_concat(__str_concat(acc, result_unwrap(r)), ",")
+    }
+    n = n + 1
+}
+acc
+"#,
+    )
+    .unwrap();
+    assert_eq!(result, VmValue::Str(std::rc::Rc::from("a,b,done,")));
+}
+
+#[test]
+fn spawn_failure_reports_error() {
+    let result = compile_and_run(
+        r#"
+get __spawn, __poll from core
+get is_err, result_unwrap_err from std::res
+dec int job = __spawn("nosuchfn_xyz()")
+dec string out = "unfinished"
+while (true) {
+    dec r = __poll(job)
+    if (is_err(r)) {
+        dec string e = result_unwrap_err(r)
+        if (e != "pending") {
+            out = e
+            break
+        }
+    }
+}
+out != "unfinished"
+"#,
+    )
+    .unwrap();
+    assert_eq!(result, VmValue::Bool(true));
+}
+
+#[test]
+fn emit_outside_worker_fails() {
+    let result = compile_and_run(
+        r#"
+get __emit from core
+get is_err from std::res
+is_err(__emit("nope"))
+"#,
+    )
+    .unwrap();
+    assert_eq!(result, VmValue::Bool(true));
+}
+
+#[test]
+fn poll_unknown_job_errs() {
+    let result = compile_and_run(
+        r#"
+get __poll from core
+get is_err, result_unwrap_err from std::res
+result_unwrap_err(__poll(999999))
+"#,
+    )
+    .unwrap();
+    assert_eq!(result, VmValue::Str(std::rc::Rc::from("__poll: unknown job 999999")));
+}
+
+#[test]
+fn spawn_nested_refused() {
+    let result = compile_and_run(
+        r#"
+get __spawn, __poll from core
+get is_err, result_unwrap_err from std::res
+dec int outer = __spawn("get __spawn from core\n__spawn(\"1\")")
+dec string out = "unfinished"
+while (true) {
+    dec r = __poll(outer)
+    if (is_err(r)) {
+        dec string e = result_unwrap_err(r)
+        if (e != "pending") {
+            out = e
+            break
+        }
+    }
+}
+out
+"#,
+    )
+    .unwrap();
+    assert_eq!(
+        result,
+        VmValue::Str(std::rc::Rc::from(
+            "spawn: runtime failed: __spawn: workers cannot spawn"
+        ))
+    );
+}
+
+#[test]
+fn spawn_captures_worker_output() {
+    let result = compile_and_run(
+        r#"
+get __spawn, __poll from core
+get __str_concat from core
+get is_err, result_unwrap, result_unwrap_err from std::res
+dec int job = __spawn("get println from std::io\nprintln(\"logged\")\n\"val\"")
+dec string acc = ""
+while (true) {
+    dec r = __poll(job)
+    if (is_err(r)) {
+        dec string e = result_unwrap_err(r)
+        if (e != "pending") {
+            break
+        }
+    } else {
+        acc = __str_concat(acc, result_unwrap(r))
+        acc = __str_concat(acc, "|")
+    }
+}
+acc
+"#,
+    )
+    .unwrap();
+    assert_eq!(
+        result,
+        VmValue::Str(std::rc::Rc::from("logged\n|val|"))
+    );
+}
