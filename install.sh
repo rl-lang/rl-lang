@@ -2,11 +2,13 @@
 set -euo pipefail
 
 REPO="rl-lang/rl-lang"
+BINARY="rlm"
 INSTALL_DIR="${RL_INSTALL_DIR:-$HOME/.local/bin}"
 
 # --- Bootstrap note ---
-# This script is a one-time bootstrapper. Once installed, use `rlm` to manage
-# your rl-lang toolchain (install, update, uninstall).
+# Thin bootstrapper: downloads and SHA256-verifies only `rlm`,
+# the rl-lang toolchain manager, then hands off to `rlm install`
+# for the rest (rl, rlc, rlt, rlrepl, rlsp, rldocs).
 #   curl -fsSL https://raw.githubusercontent.com/rl-lang/rl-lang/main/install.sh | bash
 # Or install rlm directly from GitHub Releases and use:
 #   rlm install
@@ -31,11 +33,6 @@ else
   C_YELLOW=""
 fi
 
-# --- Binary definitions ---
-# 7 binaries: rl, rlc, rlt, rlrepl, rlsp, rldocs, rlm
-
-BINARIES=(rl rlc rlt rlrepl rlsp rldocs rlm)
-
 # --- Output helpers ---
 
 msg() { printf '%s\n' "$*"; }
@@ -50,108 +47,44 @@ usage() {
   cat <<EOF
 Usage: install.sh [OPTIONS] [VERSION]
 
-Install prebuilt rl-lang binaries from GitHub Releases.
+Thin bootstrapper: installs only the rlm toolchain manager from
+GitHub Releases (SHA256-verified), then hands off to rlm itself:
+
+  rlm install              # interactive binary picker
+  rlm install latest       # latest stable, no picker
 
 Arguments:
-  VERSION    Version to install (default: interactive picker)
+  VERSION    Version of rlm to install (default: interactive picker,
+             forwarded to 'rlm install' as well)
              Use "latest", "nightly", or a specific version like "v2.0.0"
 
 Options:
   -h, --help              Show this help message
-  -p, --prefix DIR        Install directory (default: ~/.local/bin)
-  -f, --force             Overwrite existing binaries without prompting
-  -b, --binaries BINS     Comma-separated list of binaries to install
-                          (default: interactive picker)
-                          Use "all" to install all binaries
-  --uninstall             Remove installed binaries
+  -p, --prefix DIR        Install directory (default: ~/.local/bin,
+                          forwarded to 'rlm install')
+  -f, --force             Overwrite existing binaries (forwarded to
+                          'rlm install')
+  -b, --binaries BINS     Comma-separated list for 'rlm install'
+                          (e.g. rl,rlc,rlt) or "all"
+  --variant BINS          Same as --binaries
+  --no-tui                Forwarded to 'rlm install' (CLI-only mode)
+  --bootstrapper-only     Only install rlm, skip the 'rlm install' handoff
+  --uninstall             Remove rlm (use 'rlm uninstall' for the rest)
 
 Environment variables:
   RL_INSTALL_DIR          Same as --prefix
   RL_VERSION              Same as VERSION argument
-  RL_BINARIES             Same as --binaries
 
 Examples:
   install.sh                          # interactive install
   install.sh latest                   # install latest stable
   install.sh nightly                  # install nightly build
   install.sh v2.0.0                   # install specific version
-  install.sh -b rl,rlc,rlm latest     # install specific binaries
-  install.sh -p /usr/local/bin -f v2.0.0  # force install to /usr/local/bin
-  install.sh --uninstall              # remove all installed binaries
+  install.sh -b rl,rlc,rlt latest     # rlm + specific binaries
+  install.sh --bootstrapper-only      # only rlm, no handoff
+  install.sh -p /usr/local/bin -f v2.0.0
+  install.sh --uninstall              # remove rlm
 EOF
-}
-
-# --- Binary selection ---
-
-print_menu() {
-  msg "  Select binaries to install:"
-  msg ""
-  printf '    %s1) rl%s        - core (run, check, new, dev, format, pm)\n' "${C_BOLD}" "${C_RESET}"
-  printf '    %s2) rlc%s       - compiler (VM backend)\n' "${C_BOLD}" "${C_RESET}"
-  printf '    %s3) rlt%s       - transpiler (to C99)\n' "${C_BOLD}" "${C_RESET}"
-  printf '    %s4) rlrepl%s    - interactive TUI REPL\n' "${C_BOLD}" "${C_RESET}"
-  printf '    %s5) rlsp%s      - LSP server\n' "${C_BOLD}" "${C_RESET}"
-  printf '    %s6) rldocs%s    - documentation viewer\n' "${C_BOLD}" "${C_RESET}"
-  printf '    %s7) rlm%s       - toolchain manager\n' "${C_BOLD}" "${C_RESET}"
-  msg ""
-  msg "  ${C_DIM}Enter number(s), comma-separated (e.g. 1,3,7), or 'all'.${C_RESET}"
-}
-
-select_binaries() {
-  if [ -n "${BINARIES_ARG:-}" ]; then
-    if [ "$BINARIES_ARG" = "all" ]; then
-      echo "${BINARIES[*]}"
-      return
-    fi
-    echo "$BINARIES_ARG" | tr ',' '\n' | sed 's/^ *//; s/ *$//'
-    return
-  fi
-
-  if [ -n "${RL_BINARIES:-}" ]; then
-    if [ "$RL_BINARIES" = "all" ]; then
-      echo "${BINARIES[*]}"
-      return
-    fi
-    echo "$RL_BINARIES" | tr ',' '\n' | sed 's/^ *//; s/ *$//'
-    return
-  fi
-
-  if [ ! -t 0 ]; then
-    err "No TTY detected and RL_BINARIES is not set."
-    err "Non-interactive use requires: RL_BINARIES=rl,rlc,rlm ./install.sh [version]"
-    exit 1
-  fi
-
-  print_menu >&2
-  local choices
-  read -rp "  Enter number(s), comma-separated (e.g. 1,3,7), or 'all': " choices >&2
-
-  if [ "$(echo "$choices" | tr -d '[:space:]')" = "all" ]; then
-    echo "${BINARIES[*]}"
-    return
-  fi
-
-  local IFS=','
-  local part
-
-  for part in $choices; do
-    part="$(echo "$part" | tr -d '[:space:]')"
-    [ -z "$part" ] && continue
-
-    case "$part" in
-      1) echo "rl" ;;
-      2) echo "rlc" ;;
-      3) echo "rlt" ;;
-      4) echo "rlrepl" ;;
-      5) echo "rlsp" ;;
-      6) echo "rldocs" ;;
-      7) echo "rlm" ;;
-      *)
-        echo "Invalid selection: $part" >&2
-        exit 1
-        ;;
-    esac
-  done
 }
 
 # --- Platform detection ---
@@ -275,127 +208,105 @@ select_version_picker() {
   esac
 }
 
-# --- Checksum verification ---
+# --- Checksum helpers ---
 
-verify_checksum() {
-  local file="$1" sha_file="${1}.sha256"
+# sha256sum (Linux) or shasum -a 256 (macOS fallback).
+sha256_of() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
 
-  if [ ! -f "$sha_file" ]; then
-    warn "No checksum file found for $(basename "$file"). Skipping verification."
+# --- Install rlm ---
+
+install_rlm() {
+  local arch="$1" version="$2" platform="$3" force="$4"
+  local url tmpdir asset sha_url
+
+  if [ -f "$INSTALL_DIR/${BINARY}" ] && [ "$force" != "1" ]; then
+    warn "${BINARY} already exists at $INSTALL_DIR/${BINARY}. Use --force to overwrite."
     return 0
   fi
 
-  local expected actual
-  expected="$(awk '{print $1}' "$sha_file")"
-  actual="$(sha256sum "$file" | awk '{print $1}')"
+  info "Installing ${BINARY} ${version} (${platform}-${arch})..."
 
-  if [ "$expected" = "$actual" ]; then
-    return 0
-  else
-    err "Checksum mismatch for $(basename "$file")!"
+  asset="${BINARY}-${platform}-${arch}.tar.gz"
+  url="https://github.com/${REPO}/releases/download/${version}/${asset}"
+
+  tmpdir=$(mktemp -d)
+  # shellcheck disable=SC2064
+  trap "rm -rf '$tmpdir'" EXIT
+
+  if ! curl -fsSL "$url" -o "$tmpdir/${asset}"; then
+    trap - EXIT
+    rm -rf "$tmpdir"
+    err "Failed to download $url"
+    err "Check that rlm was published for version '${version}'."
+    return 1
+  fi
+
+  # SHA256 verification is mandatory: abort if the checksum file is
+  # missing or the hash does not match.
+  sha_url="${url}.sha256"
+  if ! curl -fsSL "$sha_url" -o "$tmpdir/${asset}.sha256" 2>/dev/null; then
+    trap - EXIT
+    rm -rf "$tmpdir"
+    err "Failed to download checksum file ${sha_url}"
+    err "Aborting installation: rlm cannot be verified."
+    return 1
+  fi
+
+  local expected actual
+  expected="$(awk '{print $1}' "$tmpdir/${asset}.sha256")"
+  actual="$(sha256_of "$tmpdir/${asset}")"
+
+  if [ "$expected" != "$actual" ]; then
+    trap - EXIT
+    rm -rf "$tmpdir"
+    err "Checksum mismatch for ${asset}!"
     err "  Expected: $expected"
     err "  Got:      $actual"
     return 1
   fi
-}
+  info "SHA256 verified: ${asset}"
 
-# --- Install ---
-
-install_one() {
-  local binary="$1" arch="$2" version="$3" platform="$4" force="$5"
-  local url tmpdir asset sha_url
-
-  # Check if already installed
-  if [ -f "$INSTALL_DIR/${binary}" ] && [ "$force" != "1" ]; then
-    warn "${binary} already exists at $INSTALL_DIR/${binary}. Use --force to overwrite."
-    return 0
-  fi
-
-  info "Installing ${binary} ${version} (${platform}-${arch})..."
-
-  if [ "$platform" = "windows" ]; then
-    asset="${binary}-windows-${arch}.zip"
-  else
-    asset="${binary}-${platform}-${arch}.tar.gz"
-  fi
-  url="https://github.com/${REPO}/releases/download/${version}/${asset}"
-
-  tmpdir=$(mktemp -d)
-
-  # Download asset
-  if ! curl -fsSL "$url" -o "$tmpdir/${asset}"; then
-    rm -rf "$tmpdir"
-    err "Failed to download $url"
-    err "Check that this binary/version combination was published."
-    return 1
-  fi
-
-  # Download checksum if available
-  sha_url="${url}.sha256"
-  curl -fsSL "$sha_url" -o "$tmpdir/${asset}.sha256" 2>/dev/null || true
-
-  # Verify checksum
-  if ! verify_checksum "$tmpdir/${asset}"; then
-    rm -rf "$tmpdir"
-    err "Aborting installation due to checksum failure."
-    return 1
-  fi
-
-  # Extract
-  if [ "$platform" = "windows" ]; then
-    unzip -qo "$tmpdir/${asset}" -d "$tmpdir"
-  else
-    tar -xzf "$tmpdir/${asset}" -C "$tmpdir"
-  fi
+  tar -xzf "$tmpdir/${asset}" -C "$tmpdir"
 
   mkdir -p "$INSTALL_DIR"
+  cp "$tmpdir/${BINARY}" "$INSTALL_DIR/${BINARY}"
+  chmod +x "$INSTALL_DIR/${BINARY}"
 
-  if [ "$platform" = "windows" ]; then
-    cp "$tmpdir/${binary}.exe" "$INSTALL_DIR/${binary}.exe"
-  else
-    cp "$tmpdir/${binary}" "$INSTALL_DIR/${binary}"
-    chmod +x "$INSTALL_DIR/${binary}"
-  fi
-
+  trap - EXIT
   rm -rf "$tmpdir"
 
-  ok "Installed: $INSTALL_DIR/${binary}"
+  ok "Installed: $INSTALL_DIR/${BINARY}"
 }
 
 # --- Uninstall ---
 
 do_uninstall() {
-  local removed=0
-
   msg ""
-  msg "  ${C_BOLD}Uninstalling rl-lang binaries from ${INSTALL_DIR}...${C_RESET}"
+  msg "  ${C_BOLD}Uninstalling rlm from ${INSTALL_DIR}...${C_RESET}"
+  msg "  ${C_DIM}Use 'rlm uninstall' to remove the rest of the toolchain.${C_RESET}"
   msg ""
 
-  for binary in "${BINARIES[@]}"; do
-    for ext in "" ".exe"; do
-      local path="$INSTALL_DIR/${binary}${ext}"
-      if [ -f "$path" ]; then
-        rm -f "$path"
-        ok "Removed: $path"
-        removed=$((removed + 1))
-      fi
-    done
-  done
-
-  msg ""
-  if [ "$removed" -gt 0 ]; then
-    printf '  %sRemoved %s binary(ies).%s\n' "${C_GREEN}" "$removed" "${C_RESET}"
+  local path="$INSTALL_DIR/${BINARY}"
+  if [ -f "$path" ]; then
+    rm -f "$path"
+    ok "Removed: $path"
   else
-    msg "  ${C_DIM}No rl-lang binaries found in ${INSTALL_DIR}.${C_RESET}"
+    msg "  ${C_DIM}No rlm binary found in ${INSTALL_DIR}.${C_RESET}"
   fi
 }
 
 # --- Main ---
 
 main() {
-  local force=0 version requested binaries platform arch
+  local force=0 bootstrapper_only=0 requested=""
+  local binaries_arg="" no_tui=0
 
-  # Parse arguments
   while [ $# -gt 0 ]; do
     case "$1" in
       -h|--help)
@@ -410,9 +321,17 @@ main() {
         force=1
         shift
         ;;
-      -b|--binaries)
-        BINARIES_ARG="$2"
+      -b|--binaries|--variant)
+        binaries_arg="$2"
         shift 2
+        ;;
+      --no-tui)
+        no_tui=1
+        shift
+        ;;
+      --bootstrapper-only)
+        bootstrapper_only=1
+        shift
         ;;
       --uninstall)
         do_uninstall
@@ -430,10 +349,11 @@ main() {
     esac
   done
 
+  local platform arch
   platform="$(detect_platform)"
   arch="$(detect_arch)"
 
-  if [ -z "${requested:-}" ]; then
+  if [ -z "$requested" ]; then
     if [ -n "${RL_VERSION:-}" ]; then
       requested="$RL_VERSION"
     elif [ -t 0 ]; then
@@ -443,10 +363,11 @@ main() {
     fi
   fi
 
+  local version
   version="$(resolve_version "$requested")"
 
   msg ""
-  printf '  %srl-lang installer%s\n' "${C_BOLD}" "${C_RESET}"
+  printf '  %srlm bootstrapper%s\n' "${C_BOLD}" "${C_RESET}"
   msg "  ${C_DIM}repo:    ${C_RESET}${REPO}"
   msg "  ${C_DIM}arch:    ${C_RESET}${arch}"
   msg "  ${C_DIM}platform:${C_RESET} ${platform}"
@@ -455,24 +376,8 @@ main() {
   msg "  ${C_DIM}----------------------------------------${C_RESET}"
   msg ""
 
-  binaries="$(select_binaries)"
-
-  local failed=0 installed=0 total=0
-  while IFS= read -r binary; do
-    [ -z "$binary" ] && continue
-    total=$((total + 1))
-    if install_one "$binary" "$arch" "$version" "$platform" "$force"; then
-      installed=$((installed + 1))
-    else
-      failed=1
-    fi
-  done <<<"$binaries"
-
-  msg ""
-  if [ "$failed" = "1" ]; then
-    printf '  %sSummary:%s %s%s%s/%s installed, some failed.\n' "${C_BOLD}" "${C_RESET}" "${C_GREEN}" "$installed" "${C_RESET}" "$total"
-  else
-    printf '  %sSummary:%s %s%s%s/%s installed.\n' "${C_BOLD}" "${C_RESET}" "${C_GREEN}" "$installed" "${C_RESET}" "$total"
+  if ! install_rlm "$arch" "$version" "$platform" "$force"; then
+    exit 1
   fi
 
   if ! echo "$PATH" | grep -q "$INSTALL_DIR"; then
@@ -481,9 +386,34 @@ main() {
     msg "  ${C_BOLD}  export PATH=\"$INSTALL_DIR:\$PATH\"${C_RESET}"
   fi
 
-  if [ "$failed" = "1" ]; then
+  if [ "$bootstrapper_only" = "1" ]; then
+    msg ""
+    msg "  Next: rlm install   # pick the rest of the toolchain (rl, rlc, rlt, rlrepl, rlsp, rldocs)"
+    exit 0
+  fi
+
+  # Hand off to rlm for the rest of the toolchain. The version this
+  # script resolved, the install dir, and the force/binaries flags are
+  # forwarded so one invocation installs everything.
+  local rlm_bin="$INSTALL_DIR/${BINARY}"
+  if [ ! -x "$rlm_bin" ]; then
+    err "rlm binary not found at $rlm_bin after install."
     exit 1
   fi
+
+  msg ""
+  info "Handing off to rlm..."
+  local rlm_args=("$version" --prefix "$INSTALL_DIR")
+  if [ -n "$binaries_arg" ]; then
+    rlm_args+=(--variant "$binaries_arg")
+  fi
+  if [ "$force" = "1" ]; then
+    rlm_args+=(--force)
+  fi
+  if [ "$no_tui" = "1" ]; then
+    rlm_args+=(--no-tui)
+  fi
+  exec "$rlm_bin" install "${rlm_args[@]}"
 }
 
 main "$@"
