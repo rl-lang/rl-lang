@@ -71,14 +71,7 @@ The pipe operator `|>` chains function calls left-to-right. With `get to_upper f
 
 Prebuilt binaries are published for every [release](https://github.com/rl-lang/rl-lang/releases). The install script downloads the build you pick (or the latest stable) and puts it on your PATH.
 
-**Linux / WSL** (installs to `$HOME/.local/bin`; set `RL_INSTALL_DIR` to override):
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/rl-lang/rl-lang/main/install.sh -o install.sh
-bash install.sh
-```
-
-**Android (Termux)** - works the same way on aarch64 devices (install script detects Termux and downloads the Android build):
+**Linux / macOS / Android (Termux)** (installs to `$HOME/.local/bin`; set `RL_INSTALL_DIR` to override; Termux on aarch64 is auto-detected and gets the Android build):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/rl-lang/rl-lang/main/install.sh -o install.sh
@@ -105,7 +98,7 @@ Invoke-WebRequest https://raw.githubusercontent.com/rl-lang/rl-lang/main/install
 .\install.ps1
 ```
 
-The installer lets you pick which binaries to install: `rl`, `rlc`, `rlt`, `rlrepl`, `rlsp`, `rldocs`, `rlm`.
+The Linux script lets you pick which binaries to install: `rl`, `rlc`, `rlt`, `rlrepl`, `rlsp`, `rldocs`, `rlm`. The Windows script installs only the SHA256-verified `rlm` toolchain manager - then run `rlm install` to pick the rest.
 
 ### From source
 

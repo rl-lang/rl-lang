@@ -176,6 +176,7 @@ pub fn download_and_verify_with_progress(
     // Try to download checksum file (small; no bar needed)
     let sha_url = format!("{}.sha256", url);
     let sha_path = dest.with_file_name(format!("{}.sha256", dest.file_name().unwrap().to_string_lossy()));
+    let mut did_verify = false;
     if download_file(&sha_url, &sha_path).is_ok() {
         let expected = std::fs::read_to_string(&sha_path)?
             .lines()
@@ -193,7 +194,13 @@ pub fn download_and_verify_with_progress(
             if let Some(cb) = &mut progress {
                 cb(InstallEvent::PhaseDone { phase: PHASE_CHECKSUM });
             }
+            did_verify = true;
         }
+    }
+    if !did_verify && let Some(cb) = progress.as_mut() {
+        cb(InstallEvent::Message(
+            "no checksum file, skipping verification".to_string(),
+        ));
     }
     Ok(())
 }

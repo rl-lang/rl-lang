@@ -497,13 +497,11 @@ fn draw_installing(f: &mut Frame, area: Rect, live: &LiveState) {
             Style::default().add_modifier(Modifier::BOLD),
         ))
     } else {
-        Line::from(vec![
-            Span::styled(
-                format!(" Installing {}", live.title),
-                Style::default().add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("  q to quit", Style::default().fg(Color::DarkGray)),
-        ])
+        // No quit hint here: keypresses aren't read while the install runs.
+        Line::from(Span::styled(
+            format!(" Installing {}", live.title),
+            Style::default().add_modifier(Modifier::BOLD),
+        ))
     };
     f.render_widget(Paragraph::new(title), rows[0]);
 
