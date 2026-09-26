@@ -23,7 +23,8 @@ const RL_STYLES: Styles = Styles::styled()
                    rlm install latest              # install latest stable\n    \
                    rlm install nightly             # install nightly\n    \
                    rlm install v2.2.0              # install specific version\n    \
-                   rlm install --variant rl,rl_vm  # install specific variants\n    \
+                   rlm install --variant rl,rlc    # install specific binaries\n    \
+                   rlm install --variant all latest # install all binaries\n    \
                    rlm install --no-tui            # CLI-only mode\n    \
                    rlm update                      # update rlm itself\n    \
                    rlm uninstall                   # remove installed binaries\n    \
@@ -41,8 +42,9 @@ enum Commands {
         /// Version to install (latest, nightly, or v2.2.0)
         version: Option<String>,
 
-        /// Comma-separated list of variants to install (or "all")
-        #[arg(short, long)]
+        /// Comma-separated list of binaries to install (or "all"):
+        /// rl, rlc, rlt, rlrepl, rlsp, rldocs, rlm
+        #[arg(short, long, visible_aliases = ["binaries", "binary"])]
         variant: Option<String>,
 
         /// Install directory (default: ~/.local/bin)
@@ -208,12 +210,23 @@ fn cmd_update() {
 
     println!("  Updating rlm...");
 
-    // Use the rlm binary to install the latest rlm variant
-    // For now, download the latest release and replace
+    // Resolve "latest" to a real tag (e.g. v2.2.1): the release download
+    // URL needs https://github.com/rl-lang/rl-lang/releases/download/<tag>/...
+    let resolved = match rl_manager::version::resolve_version("latest") {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("  failed to resolve latest release: {}", e);
+            std::process::exit(1);
+        }
+    };
+    println!("  version: {}", resolved);
+
+    // The rlm release asset is rlm-{platform}-{arch}.tar.gz/.zip
+    // (see https://github.com/rl-lang/rl-lang/releases).
     let variant = rl_manager::variants::Variant {
         name: "rlm",
         actual: "rlm",
-        group: "Manager",
+        group: "Toolchain manager",
     };
 
     let mut progress_cb = |msg: &str| {
@@ -222,7 +235,7 @@ fn cmd_update() {
 
     match rl_manager::install::install_binary(
         &variant,
-        "latest",
+        &resolved,
         platform,
         arch,
         &install_dir,
@@ -352,7 +365,7 @@ fn select_variants(variant_arg: Option<String>, no_tui: bool) -> Vec<rl_manager:
             .collect();
     }
 
-    if let Ok(env_var) = std::env::var("RL_VARIANT") {
+    if let Ok(env_var) = std::env::var("RL_VARIANT").or_else(|_| std::env::var("RL_BINARIES")) {
         if env_var.trim() == "all" {
             return all;
         }
@@ -364,7 +377,7 @@ fn select_variants(variant_arg: Option<String>, no_tui: bool) -> Vec<rl_manager:
 
     if no_tui || !std::io::stdin().is_terminal() {
         eprintln!("error: no TTY detected and RL_VARIANT is not set.");
-        eprintln!("       Non-interactive use requires: RL_VARIANT=rl,rl_vm rlm install");
+        eprintln!("       Non-interactive use requires: RL_VARIANT=rl,rlc rlm install --no-tui");
         std::process::exit(1);
     }
 
