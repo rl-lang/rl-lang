@@ -4,6 +4,8 @@ mod gui_button;
 mod gui_clipboard_copy;
 mod gui_clipboard_paste;
 mod gui_canvas;
+mod gui_set_canvas_size;
+mod gui_get_canvas_size;
 mod gui_draw_line;
 mod gui_draw_rect;
 mod gui_draw_circle;
@@ -101,6 +103,8 @@ static FUNCTIONS: &[&FnEntry] = &[
     &gui_clipboard_paste::GUI_CLIPBOARD_PASTE,
 &gui_checkbox::GUI_CHECKBOX,
     &gui_canvas::GUI_CANVAS,
+    &gui_set_canvas_size::GUI_SET_CANVAS_SIZE,
+    &gui_get_canvas_size::GUI_GET_CANVAS_SIZE,
     &gui_draw_line::GUI_DRAW_LINE,
     &gui_draw_rect::GUI_DRAW_RECT,
     &gui_draw_circle::GUI_DRAW_CIRCLE,

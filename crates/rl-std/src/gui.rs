@@ -948,6 +948,62 @@ pub fn gui_draw_circle<R: GuiStore>(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui), int, int -> result[null]))]
+pub fn gui_set_canvas_size<R: GuiStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    width: i64,
+    height: i64,
+) -> R::Value {
+    let id = match extract_handle::<R>(&handle, "gui_set_canvas_size") {
+        Ok(id) => id,
+        Err(e) => return R::err(R::from_string(e)),
+    };
+
+    if width <= 0 || height <= 0 {
+        return R::err(R::from_string(format!(
+            "gui_set_canvas_size: width ({}) and height ({}) must be positive",
+            width, height
+        )));
+    }
+
+    match R::gui_handles(cx).get_mut(&id) {
+        Some(GuiHandle::Canvas(c)) => {
+            c.width = width as f32;
+            c.height = height as f32;
+            R::ok(R::null())
+        }
+        Some(_) => R::err(R::from_string(format!(
+            "gui_set_canvas_size: handle {} is not a canvas",
+            id
+        ))),
+        None => R::err(R::from_string(format!(
+            "gui_set_canvas_size: unknown handle {}",
+            id
+        ))),
+    }
+}
+
+#[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui) -> result[array[float]]))]
+pub fn gui_get_canvas_size<R: GuiStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+) -> Result<Vec<f64>, String> {
+    let id = extract_handle::<R>(&handle, "gui_get_canvas_size")?;
+    match R::gui_handles_ref(cx).get(&id) {
+        Some(GuiHandle::Canvas(c)) => Ok(vec![c.width as f64, c.height as f64]),
+        Some(_) => Err(format!(
+            "gui_get_canvas_size: handle {} is not a canvas",
+            id
+        )),
+        None => Err(format!(
+            "gui_get_canvas_size: unknown handle {}",
+            id
+        )),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 #[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui), string, int, int, int, int, int, int -> result[null]))]
 pub fn gui_draw_text<R: GuiStore>(
     cx: &mut R::Cx,
@@ -5655,6 +5711,8 @@ rl_std_core::native_module!("gui";
         gui_set_selected,
         gui_is_selected,
         gui_canvas,
+        gui_set_canvas_size,
+        gui_get_canvas_size,
         gui_draw_line,
         gui_draw_rect,
         gui_draw_circle,

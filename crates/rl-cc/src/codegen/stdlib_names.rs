@@ -248,6 +248,8 @@ pub fn namespace_provides(namespace: &str, name: &str) -> bool {
                 | "gui_set_selected"
                 | "gui_is_selected"
                 | "gui_canvas"
+                | "gui_set_canvas_size"
+                | "gui_get_canvas_size"
                 | "gui_draw_line"
                 | "gui_draw_rect"
                 | "gui_draw_circle"
