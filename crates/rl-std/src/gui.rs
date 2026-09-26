@@ -81,9 +81,13 @@ pub struct WindowState<V> {
     /// Called with no arguments when this window closes, whether via
     /// `gui_close` or the native close button.
     pub on_close: Option<V>,
-    /// Called with the pressed key's name (e.g. `"Enter"`, `"Escape"`) for
-    /// every non-repeat key press while this window has focus.
+    /// Called with the key's name (e.g. `"Enter"`, `"Escape"`) and whether
+    /// it was pressed (`true`) or released (`false`) for every non-repeat
+    /// key event while this window has focus.
     pub on_key: Option<V>,
+    /// Called with `(x, y)` logical pixels on every mouse move while this
+    /// window has focus.
+    pub on_mouse_move: Option<V>,
     /// Called with no arguments every frame while set. Enables polling
     /// patterns (worker threads, animations) and implies continuous
     /// repaint. Pass `null` to unset.
@@ -247,6 +251,9 @@ pub struct ImageState {
     /// `std::gui` has no image-decoding dependency. `Arc`-wrapped since this
     /// gets cloned every frame while rendering.
     pub rgba: (u32, u32, std::sync::Arc<Vec<u8>>),
+    /// Bumped by `gui_update_image`; the renderer skips the GPU upload
+    /// while the loaded version matches, so static images upload once.
+    pub version: u64,
     pub z: i32,
     pub font_size: Option<f32>,
     pub color: Option<(u8, u8, u8)>,
@@ -273,6 +280,12 @@ pub trait GuiStore: Runtime {
     /// Set by `gui_quit` to ask the running event loop to close on its next
     /// frame; cleared by the loop once acted upon.
     fn gui_quit_requested(cx: &mut Self::Cx) -> &mut bool;
+    /// Uploaded texture versions per image widget id: `(loaded_version,
+    /// managed texture id)`. The renderer skips the GPU upload while the
+    /// snapshot version matches, so static images upload once ever.
+    /// Plain ids (not `TextureId`) because the store side must stay
+    /// egui-free; every id here comes from `load_texture` (`Managed`).
+    fn texture_cache(cx: &mut Self::Cx) -> &mut HashMap<u64, (u64, u64)>;
 }
 
 // ============================================================================
@@ -474,6 +487,7 @@ pub fn gui_window<R: GuiStore>(cx: &mut R::Cx, title: String, width: i64, height
             icon: None,
             on_close: None,
             on_key: None,
+            on_mouse_move: None,
             on_frame: None,
         }),
     );
@@ -1045,6 +1059,7 @@ pub fn gui_image<R: GuiStore>(
             height: height as f32,
             visible: true,
             rgba: (width as u32, height as u32, std::sync::Arc::new(rgba_bytes)),
+            version: 0,
             z: 0,
             font_size: None,
             color: None,
@@ -1056,6 +1071,68 @@ pub fn gui_image<R: GuiStore>(
     attach_child::<R>(cx, window_id, id);
 
     R::ok(handle)
+}
+
+/// Replaces an image's pixels (and size), bumping its version so the next
+/// frame re-uploads the texture exactly once. Static images never call
+/// this, so they upload once ever.
+#[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui), int, int, array[int] -> result[null]))]
+pub fn gui_update_image<R: GuiStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    width: i64,
+    height: i64,
+    rgba: R::Value,
+) -> R::Value {
+    let id = match extract_handle::<R>(&handle, "gui_update_image") {
+        Ok(id) => id,
+        Err(e) => return R::err(R::from_string(e)),
+    };
+
+    if width <= 0 || height <= 0 {
+        return R::err(R::from_string(format!(
+            "gui_update_image: width ({}) and height ({}) must be positive",
+            width, height
+        )));
+    }
+
+    let rgba_bytes = match extract_byte_array::<R>(&rgba, "gui_update_image") {
+        Ok(bytes) => bytes,
+        Err(e) => return R::err(R::from_string(e)),
+    };
+
+    let expected_len = width as usize * height as usize * 4;
+    if rgba_bytes.len() != expected_len {
+        return R::err(R::from_string(format!(
+            "gui_update_image: expected {} rgba bytes for a {}x{} image, got {}",
+            expected_len,
+            width,
+            height,
+            rgba_bytes.len()
+        )));
+    }
+
+    match R::gui_handles(cx).get_mut(&id) {
+        Some(GuiHandle::Image(img)) => {
+            img.width = width as f32;
+            img.height = height as f32;
+            img.rgba = (
+                width as u32,
+                height as u32,
+                std::sync::Arc::new(rgba_bytes),
+            );
+            img.version += 1;
+            R::ok(R::null())
+        }
+        Some(_) => R::err(R::from_string(format!(
+            "gui_update_image: handle {} is not an image",
+            id
+        ))),
+        None => R::err(R::from_string(format!(
+            "gui_update_image: unknown handle {}",
+            id
+        ))),
+    }
 }
 
 // ============================================================================
@@ -1291,7 +1368,7 @@ pub fn gui_on_submit<R: GuiStore>(
     }
 }
 
-#[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui), callback(string -> null) -> result[null]))]
+#[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui), callback(string, bool -> null) -> result[null]))]
 pub fn gui_on_key<R: GuiStore>(cx: &mut R::Cx, handle: R::Value, function: R::Value) -> R::Value {
     let id = match extract_handle::<R>(&handle, "gui_on_key") {
         Ok(id) => id,
@@ -1315,6 +1392,40 @@ pub fn gui_on_key<R: GuiStore>(cx: &mut R::Cx, handle: R::Value, function: R::Va
             id
         ))),
         None => R::err(R::from_string(format!("gui_on_key: unknown handle {}", id))),
+    }
+}
+
+#[native_fn(module = "gui", bound = "GuiStore", sig(handle(Gui), callback(int, int -> null) -> result[null]))]
+pub fn gui_on_mouse_move<R: GuiStore>(
+    cx: &mut R::Cx,
+    handle: R::Value,
+    function: R::Value,
+) -> R::Value {
+    let id = match extract_handle::<R>(&handle, "gui_on_mouse_move") {
+        Ok(id) => id,
+        Err(e) => return R::err(R::from_string(e)),
+    };
+
+    if !R::is_callable(&function) {
+        return R::err(R::from_string(format!(
+            "gui_on_mouse_move: expected function or lambda, found {}",
+            R::type_name(&function)
+        )));
+    }
+
+    match R::gui_handles(cx).get_mut(&id) {
+        Some(GuiHandle::Window(w)) => {
+            w.on_mouse_move = Some(function);
+            R::ok(R::null())
+        }
+        Some(_) => R::err(R::from_string(format!(
+            "gui_on_mouse_move: handle {} is not a window",
+            id
+        ))),
+        None => R::err(R::from_string(format!(
+            "gui_on_mouse_move: unknown handle {}",
+            id
+        ))),
     }
 }
 
@@ -1814,6 +1925,7 @@ pub fn gui_remove<R: GuiStore>(cx: &mut R::Cx, handle: R::Value) -> R::Value {
         w.children.retain(|c| *c != id);
     }
     R::gui_handles(cx).remove(&id);
+    R::texture_cache(cx).remove(&id);
 
     R::ok(R::null())
 }
@@ -2148,6 +2260,7 @@ enum WidgetSnapshot {
         texture_width: u32,
         texture_height: u32,
         rgba: std::sync::Arc<Vec<u8>>,
+        version: u64,
         z: i32,
         bg_color: Option<(u8, u8, u8)>,
         tooltip: Option<String>,
@@ -2341,6 +2454,7 @@ fn render_window<R: GuiStore>(cx: &mut R::Cx, ctx: &egui::Context, window_id: u6
                 texture_width: img.rgba.0,
                 texture_height: img.rgba.1,
                 rgba: img.rgba.2.clone(),
+                version: img.version,
                 z: img.z,
                 bg_color: img.bg_color,
                 tooltip: img.tooltip.clone(),
@@ -2703,21 +2817,38 @@ fn render_window<R: GuiStore>(cx: &mut R::Cx, ctx: &egui::Context, window_id: u6
                 texture_width,
                 texture_height,
                 rgba,
+                version,
                 z: _,
                 bg_color,
                 tooltip,
             } => {
-                let color_image = egui::ColorImage::from_rgba_unmultiplied(
-                    [*texture_width as usize, *texture_height as usize],
-                    rgba,
-                );
-                let texture = ctx.load_texture(
-                    format!("rl_gui_image_{}", id),
-                    color_image,
-                    egui::TextureOptions::default(),
-                );
-                let sized =
-                    egui::load::SizedTexture::new(texture.id(), egui::vec2(*width, *height));
+                // Skip the GPU upload while the pixels are unchanged:
+                // static images pay for one upload ever, animated ones
+                // pay per changed frame only.
+                let cached: Option<(u64, u64)> =
+                    R::texture_cache(cx).get(id).copied();
+                let tid = match cached {
+                    Some((loaded, managed)) if loaded == *version => {
+                        egui::TextureId::Managed(managed)
+                    }
+                    _ => {
+                        let color_image = egui::ColorImage::from_rgba_unmultiplied(
+                            [*texture_width as usize, *texture_height as usize],
+                            rgba,
+                        );
+                        let texture = ctx.load_texture(
+                            format!("rl_gui_image_{}", id),
+                            color_image,
+                            egui::TextureOptions::default(),
+                        );
+                        let tid = texture.id();
+                        if let egui::TextureId::Managed(managed) = tid {
+                            R::texture_cache(cx).insert(*id, (*version, managed));
+                        }
+                        tid
+                    }
+                };
+                let sized = egui::load::SizedTexture::new(tid, egui::vec2(*width, *height));
                 let tooltip_clone = tooltip.clone();
                 let resp = egui::Area::new(egui::Id::new(("rl_gui_image", *id)))
                     .fixed_pos(egui::pos2(*x, *y))
@@ -2805,16 +2936,16 @@ fn render_window<R: GuiStore>(cx: &mut R::Cx, ctx: &egui::Context, window_id: u6
         }
     }
 
-    let key_names: Vec<String> = ctx.input(|i| {
+    let key_names: Vec<(String, bool)> = ctx.input(|i| {
         i.events
             .iter()
             .filter_map(|e| match e {
                 egui::Event::Key {
                     key,
-                    pressed: true,
+                    pressed,
                     repeat: false,
                     ..
-                } => Some(format!("{:?}", key)),
+                } => Some((format!("{:?}", key), *pressed)),
                 _ => None,
             })
             .collect()
@@ -2826,8 +2957,42 @@ fn render_window<R: GuiStore>(cx: &mut R::Cx, ctx: &egui::Context, window_id: u6
             _ => None,
         };
         if let Some(cb) = on_key {
-            for key_name in key_names {
-                report_callback_err(R::call_value(cx, &cb, &[R::from_string(key_name)], span));
+            for (key_name, pressed) in key_names {
+                report_callback_err(R::call_value(
+                    cx,
+                    &cb,
+                    &[R::from_string(key_name), R::from_bool(pressed)],
+                    span,
+                ));
+            }
+        }
+    }
+
+    let mouse_moves: Vec<(i64, i64)> = ctx.input(|i| {
+        i.events
+            .iter()
+            .filter_map(|e| match e {
+                egui::Event::PointerMoved(pos) => {
+                    Some((pos.x.round() as i64, pos.y.round() as i64))
+                }
+                _ => None,
+            })
+            .collect()
+    });
+
+    if !mouse_moves.is_empty() {
+        let on_mouse_move = match R::gui_handles_ref(cx).get(&window_id) {
+            Some(GuiHandle::Window(w)) => w.on_mouse_move.clone(),
+            _ => None,
+        };
+        if let Some(cb) = on_mouse_move {
+            for (x, y) in mouse_moves {
+                report_callback_err(R::call_value(
+                    cx,
+                    &cb,
+                    &[R::from_i64(x), R::from_i64(y)],
+                    span,
+                ));
             }
         }
     }
@@ -2947,7 +3112,9 @@ impl<R: GuiStore> eframe::App for RlGuiApp<'_, R> {
         render_window::<R>(cx, &ctx, self.window, span);
         fire_frame_callback::<R>(cx, self.window, span);
         if any_frame_callback::<R>(cx) {
-            ctx.request_repaint();
+            // Capped continuous repaint: polling UIs animate smoothly
+            // without spinning the event loop uncapped.
+            ctx.request_repaint_after(std::time::Duration::from_millis(16));
         }
 
         // Every other open window becomes its own native viewport, spawned
@@ -2994,7 +3161,7 @@ impl<R: GuiStore> eframe::App for RlGuiApp<'_, R> {
                 render_window::<R>(&mut *cx, child_ctx, window_id, span);
                 fire_frame_callback::<R>(&mut *cx, window_id, span);
                 if any_frame_callback::<R>(&*cx) {
-                    child_ctx.request_repaint();
+                    child_ctx.request_repaint_after(std::time::Duration::from_millis(16));
                 }
             });
         }
@@ -3320,6 +3487,7 @@ rl_std_core::native_module!("gui";
         gui_progress_bar,
         gui_separator,
         gui_image,
+        gui_update_image,
         gui_set_text,
         gui_get_text,
         gui_set_visible,
@@ -3328,6 +3496,7 @@ rl_std_core::native_module!("gui";
         gui_on_change,
         gui_on_submit,
         gui_on_key,
+        gui_on_mouse_move,
         gui_on_close,
         gui_on_frame,
         gui_is_checked,

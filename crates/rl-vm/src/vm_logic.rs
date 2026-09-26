@@ -146,6 +146,11 @@ pub struct Vm {
     pub(crate) gui_handles: HashMap<u64, GuiHandle<VmValue>>,
     /// Next handle id to hand out for `std::gui` resources; only ever increments.
     pub(crate) gui_next_handle: u64,
+    /// Uploaded texture versions per image widget id: `(loaded_version,
+    /// managed texture id)`. Lets the renderer skip GPU re-uploads of
+    /// unchanged images. Plain `u64` pair (not `egui::TextureId`) because
+    /// OS deps live in `rl-std`; all ids here are `Managed`.
+    pub(crate) texture_cache: HashMap<u64, (u64, u64)>,
     /// Set by `gui_quit`; checked by `gui_run`'s frame loop after that frame's
     /// click callbacks have run, so the window closes on the next frame instead
     /// of being torn down mid-callback.
@@ -209,6 +214,7 @@ impl Vm {
             audio_master_volume: 1.0,
             gui_handles: HashMap::new(),
             gui_next_handle: 1,
+            texture_cache: HashMap::new(),
             gui_quit_requested: false,
             net_handles: HashMap::new(),
             net_next_handle: 1,

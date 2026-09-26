@@ -14,6 +14,7 @@ mod gui_get_window_pos;
 mod gui_get_window_size;
 mod gui_get_z;
 mod gui_image;
+mod gui_update_image;
 mod gui_is_checked;
 mod gui_is_visible;
 mod gui_label;
@@ -23,6 +24,7 @@ mod gui_on_click;
 mod gui_on_close;
 mod gui_on_frame;
 mod gui_on_key;
+mod gui_on_mouse_move;
 mod gui_on_submit;
 mod gui_progress_bar;
 mod gui_quit;
@@ -80,6 +82,7 @@ static FUNCTIONS: &[&FnEntry] = &[
     &gui_get_window_size::GUI_GET_WINDOW_SIZE,
     &gui_get_z::GUI_GET_Z,
     &gui_image::GUI_IMAGE,
+    &gui_update_image::GUI_UPDATE_IMAGE,
     &gui_is_checked::GUI_IS_CHECKED,
     &gui_is_visible::GUI_IS_VISIBLE,
     &gui_label::GUI_LABEL,
@@ -89,6 +92,7 @@ static FUNCTIONS: &[&FnEntry] = &[
     &gui_on_close::GUI_ON_CLOSE,
     &gui_on_frame::GUI_ON_FRAME,
     &gui_on_key::GUI_ON_KEY,
+    &gui_on_mouse_move::GUI_ON_MOUSE_MOVE,
     &gui_on_submit::GUI_ON_SUBMIT,
     &gui_progress_bar::GUI_PROGRESS_BAR,
     &gui_quit::GUI_QUIT,
