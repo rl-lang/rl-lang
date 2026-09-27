@@ -13,7 +13,7 @@ fn clipboard_copy_returns_result() {
         r#"
 get gui_clipboard_copy from std::gui
 get is_ok from std::res
-dec result[null] r = gui_clipboard_copy("hello")
+dec r = gui_clipboard_copy("hello")
 dec bool x = is_ok(r)?
 x
 "#,
